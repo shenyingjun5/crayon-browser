@@ -1,0 +1,24 @@
+[package]
+name = "get-video-demo"
+version = "0.1.0"
+edition = "2021"
+description = "get-video L2 webview 嗅探 Tauri demo"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+get-video = { path = ".." }
+# tauri 钉 2.7.0：2.8+ 的 wry 0.53 无条件调用 webkit2gtk 2.40 符号
+# （uri_scheme_request_get_http_body / cookie_manager_get_all_cookies），
+# 本机系统 webkit2gtk 只有 2.38.2，链接不过；2.7 对应 wry 0.52 无此问题。
+tauri = { version = "=2.7.0", features = [] }
+axum = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+
+# 版本钉住：webkit2gtk-sys 2.0.2 起要求系统 webkit2gtk >= 2.40，
+# 本机（openEuler 24.03）为 2.38.2，钉回 2.0.1 兼容版。
+webkit2gtk = "=2.0.1"
+webkit2gtk-sys = "=2.0.1"

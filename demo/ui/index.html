@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>get-video 嗅探 demo</title>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
+<script>
+// webkit2gtk 2.38 兼容补丁：Tauri 的 IPC invoke 把参数放在 fetch body 里，
+// 而 2.38 没有 webkit_uri_scheme_request_get_http_body，Rust 侧读不到 body。
+// 这里把 ipc:// 请求的 body 挪到 x-tauri-body 请求头（vendor wry 补丁会读回）。
+(() => {
+  const orig = window.fetch;
+  window.fetch = function (input, init) {
+    try {
+      const url = typeof input === 'string' ? input : (input && input.url) || '';
+      if (url.startsWith('ipc://') && init && typeof init.body === 'string') {
+        const h = new Headers(init.headers || {});
+        h.set('x-tauri-body', encodeURIComponent(init.body));
+        init = Object.assign({}, init, { headers: h });
+        delete init.body;
+      }
+    } catch (e) {}
+    return orig.apply(this, arguments);
+  };
+})();
+</script>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, "PingFang SC", "Microsoft YaHei", sans-serif; margin: 0; background: #1e1f24; color: #e8e8ea; }
+  header { padding: 16px 20px 8px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: #8b8d94; font-size: 12px; }
+  .bar { display: flex; gap: 8px; padding: 12px 20px; }
+  input { flex: 1; padding: 10px 12px; border-radius: 8px; border: 1px solid #3a3b42; background: #14151a; color: #e8e8ea; font-size: 14px; }
+  button { padding: 10px 18px; border-radius: 8px; border: 0; background: #4a7dff; color: #fff; font-size: 14px; cursor: pointer; }
+  button:disabled { background: #3a3b42; cursor: not-allowed; }
+  #status { padding: 0 20px; font-size: 13px; color: #9fb4ff; min-height: 20px; }
+  #status.err { color: #ff8a8a; }
+  ul { list-style: none; margin: 8px 20px; padding: 0; }
+  li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; margin-bottom: 6px; background: #26272e; border-radius: 8px; cursor: pointer; font-size: 13px; }
+  li:hover { background: #2f3038; }
+  li.drm { opacity: .45; cursor: not-allowed; }
+  li .idx { color: #8b8d94; width: 22px; }
+  .tag { padding: 1px 7px; border-radius: 5px; font-size: 11px; background: #37415e; color: #9fb4ff; }
+  .tag.drm { background: #5e3737; color: #ff9f9f; }
+  .tag.q { background: #375e46; color: #9fffc3; }
+  li .url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; color: #b9bbc2; }
+  #playerBox { margin: 8px 20px 20px; }
+  video { width: 100%; max-height: 46vh; background: #000; border-radius: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>get-video · L2 webview 嗅探 demo</h1>
+  <div class="sub">输入网址 → 隐藏 webview 加载并嗅探媒体请求 → 点击结果经本地 relay 播放</div>
+</header>
+<div class="bar">
+  <input id="url" placeholder="https://example.com/page-with-video" autofocus>
+  <button id="go">嗅探</button>
+</div>
+<div id="status"></div>
+<ul id="list"></ul>
+<div id="playerBox"><video id="player" controls></video></div>
+<script>
+const $ = (id) => document.getElementById(id);
+const invoke = window.__TAURI__.core.invoke;
+let hls = null;
+let busy = false;
+
+function setStatus(t, isErr) {
+  $('status').textContent = t || '';
+  $('status').className = isErr ? 'err' : '';
+}
+
+function trunc(u) { return u.length > 90 ? u.slice(0, 60) + '…' + u.slice(-26) : u; }
+
+function render(resp) {
+  const list = $('list');
+  list.innerHTML = '';
+  document.title = 'results:' + resp.count;
+  try { window.__TAURI__.event.emit('ui-results', { count: resp.count }); } catch (e) {}
+  if (!resp.results.length) return;
+  for (const r of resp.results) {
+    const li = document.createElement('li');
+    li.innerHTML =
+      `<span class="idx">${r.index + 1}</span>` +
+      `<span class="tag">${r.protocol}</span>` +
+      (r.quality ? `<span class="tag q">${r.quality}</span>` : '') +
+      (r.drm ? `<span class="tag drm">DRM</span>` : '') +
+      `<span class="url" title="${r.url}">${trunc(r.url)}</span>`;
+    if (r.drm) {
+      li.className = 'drm';
+      li.title = 'DRM 内容，标记拒播';
+    } else {
+      li.onclick = () => play(r);
+    }
+    list.appendChild(li);
+  }
+}
+
+function play(r) {
+  const v = $('player');
+  if (hls) { hls.destroy(); hls = null; }
+  setStatus('播放: ' + trunc(r.url));
+  if (r.protocol === 'hls') {
+    if (Hls.isSupported()) {
+      hls = new Hls();
+      hls.loadSource(r.relay_url);
+      hls.attachMedia(v);
+      hls.on(Hls.Events.ERROR, (_, d) => { if (d.fatal) setStatus('播放错误: ' + d.details, true); });
+    } else if (v.canPlayType('application/vnd.apple.mpegurl')) {
+      v.src = r.relay_url;
+    } else {
+      setStatus('当前 webview 不支持 HLS 播放', true); return;
+    }
+  } else if (r.protocol === 'mp4') {
+    v.src = r.relay_url;
+  } else {
+    setStatus('demo 播放器暂不支持 ' + r.protocol + '（地址已复制到控制台）', true);
+    console.log(r.relay_url); return;
+  }
+  v.play().catch(() => {});
+}
+
+async function go() {
+  const url = $('url').value.trim();
+  if (!url) { setStatus('请输入网址', true); return; }
+  if (busy) return;
+  busy = true;
+  $('go').disabled = true;
+  $('list').innerHTML = '';
+  setStatus('嗅探中（最长约 15 秒）…');
+  try {
+    const resp = await invoke('sniff', { url });
+    if (resp.note) setStatus(resp.note, true);
+    else setStatus(`嗅探到 ${resp.count} 条结果`);
+    render(resp);
+  } catch (e) {
+    setStatus('嗅探失败: ' + e, true);
+    document.title = 'results:0';
+  } finally {
+    busy = false;
+    $('go').disabled = false;
+  }
+}
+$('go').onclick = go;
+$('url').addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+try { window.__TAURI__.event.emit('ui-ready', {}); } catch (e) {}
+</script>
+</body>
+</html>

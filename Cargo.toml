@@ -1,0 +1,49 @@
+[package]
+name = "get-video"
+version = "0.1.0"
+edition = "2021"
+description = "视频地址解析 + 本地 relay 流服务模块"
+
+[workspace]
+members = ["demo"]
+
+# webkit2gtk 2.38 兼容：vendor 版 wry 0.52.1 补丁（body 为空时改读
+# x-tauri-body 请求头），详见 demo/README 与 vendor/wry 内 [get-video demo patch] 注释。
+[patch.crates-io]
+wry = { path = "demo/vendor/wry" }
+
+[lib]
+name = "get_video"
+path = "src/lib.rs"
+
+[[bin]]
+name = "get-video"
+path = "src/main.rs"
+
+[dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", default-features = false, features = [
+    "rustls-tls",
+    "stream",
+    "gzip",
+] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+regex = "1"
+url = "2"
+clap = { version = "4", features = ["derive", "env"] }
+futures-util = "0.3"
+percent-encoding = "2"
+base64 = "0.22"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", default-features = false, features = [
+    "rustls-tls",
+    "stream",
+    "gzip",
+] }
+axum = "0.8"
