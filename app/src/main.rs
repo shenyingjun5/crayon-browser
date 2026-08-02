@@ -187,6 +187,9 @@ struct SniffResultItem {
     restriction: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     relay_url: Option<String>,
+    /// 编码/封装标签（如 `H.264+AAC · TS`），供投屏接收端判断兼容性。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    codec: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -362,6 +365,12 @@ async fn do_sniff(app: &AppHandle, url: &str) -> Result<SniffResponse, String> {
         } else {
             Some(extractor.relay_url(&hit.url, &headers))
         };
+        // 编码/封装识别：仅对可播候选做，失败不影响结果
+        let codec = if relay_url.is_some() {
+            extractor.probe_codec(&hit.url, protocol, &headers).await
+        } else {
+            None
+        };
         results.push(SniffResultItem {
             index: i,
             url: hit.url.clone(),
@@ -370,6 +379,7 @@ async fn do_sniff(app: &AppHandle, url: &str) -> Result<SniffResponse, String> {
             drm,
             restriction,
             relay_url,
+            codec,
         });
     }
 

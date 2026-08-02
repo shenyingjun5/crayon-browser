@@ -30,6 +30,9 @@ pub struct Format {
     /// DRM 内容不产出 relay 地址（docs/test-cases.md D1）。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub relay_url: Option<String>,
+    /// 编码/封装标签（如 `H.264+AAC · TS`），供投屏接收端判断兼容性；识别不出为 None。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub codec: Option<String>,
 }
 
 /// HLS 流检测结论（`Extractor::inspect_hls`）。
@@ -218,6 +221,18 @@ impl Extractor {
             let id = dash_doc_id(&cand.url, audio);
             let xml = build_mpd(cand, &v_proxy, &a_proxy);
             self.dash_store.lock().unwrap().insert(id.clone(), xml);
+            // 编码标签：上游 API（B 站）已告知视频 codecs 时直接用，否则拉双轨 init 段解析
+            let codec = match &cand.codecs {
+                Some(c) => crate::codec::CodecInfo {
+                    video: Some(crate::codec::codec_name(c)),
+                    audio: Some("AAC".into()),
+                    container: Some("DASH(fMP4)".into()),
+                }
+                .label(),
+                None => {
+                    crate::codec::inspect_dash_dual(&self.client, &cand.url, audio, headers).await
+                }
+            };
             return Format {
                 url: cand.url.clone(),
                 protocol: cand.protocol.as_str().to_string(),
@@ -226,6 +241,7 @@ impl Extractor {
                 restriction: None,
                 headers: headers.clone(),
                 relay_url: Some(format!("{}/dashmpd/{id}", self.relay_base)),
+                codec,
             };
         }
         // 受限站点（全站 DRM 名单）：直接打标，不再拉流检测
@@ -248,6 +264,12 @@ impl Extractor {
         } else {
             Some(self.relay_url(&cand.url, headers))
         };
+        // 编码/封装识别：仅对可播候选（有 relay 地址）做，失败不影响结果
+        let codec = if relay_url.is_some() {
+            crate::codec::inspect(&self.client, &cand.url, cand.protocol, headers).await
+        } else {
+            None
+        };
         Format {
             url: cand.url.clone(),
             protocol: cand.protocol.as_str().to_string(),
@@ -256,7 +278,18 @@ impl Extractor {
             restriction,
             headers: headers.clone(),
             relay_url,
+            codec,
         }
+    }
+
+    /// 编码/封装识别（供 app 嗅探归一化复用）：返回 UI 标签，识别不出为 None。
+    pub async fn probe_codec(
+        &self,
+        url: &str,
+        protocol: Protocol,
+        headers: &HashMap<String, String>,
+    ) -> Option<String> {
+        crate::codec::inspect(&self.client, url, protocol, headers).await
     }
 
     /// DRM 检测：HLS 拉取播放列表（master 时再下一层），DASH 拉取 mpd。

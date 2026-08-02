@@ -27,6 +27,7 @@
   .tag.drm { background: #5e3737; color: #ff9f9f; }
   .tag.q { background: #375e46; color: #9fffc3; }
   .tag.cast { background: #5e4a37; color: #ffd89f; }
+  .tag.cx { background: #2e4a5e; color: #9fd8ff; }
   li .url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; color: #b9bbc2; }
   #playerBox { margin: 8px 20px 20px; }
   video { width: 100%; max-height: 46vh; background: #000; border-radius: 8px; }
@@ -103,6 +104,7 @@ function render(resp) {
       `<span class="idx">${r.index + 1}</span>` +
       `<span class="tag">${r.protocol}</span>` +
       (r.quality ? `<span class="tag q">${r.quality}</span>` : '') +
+      (r.codec ? `<span class="tag cx" title="编码/封装：投屏接收端需支持对应编码（如 HEVC 需设备支持 H.265）">${r.codec}</span>` : '') +
       (blocked ? `<span class="tag drm">受限，不能播放</span>` : '') +
       `<span class="url" title="${r.url}">${trunc(r.url)}</span>`;
     if (blocked) {

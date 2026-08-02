@@ -4,6 +4,7 @@
 //! - `relay`：axum 本地代理服务（m3u8 重写、Range 透传、防盗链伪造、SSRF 防护）；
 //! - `drm`：DRM 特征检测（只检测标记，不解密）。
 
+pub mod codec;
 pub mod drm;
 pub mod extract;
 pub mod probe;
