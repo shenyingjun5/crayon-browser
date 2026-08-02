@@ -25,6 +25,7 @@
   .tag { padding: 1px 7px; border-radius: 5px; font-size: 11px; background: #37415e; color: #9fb4ff; }
   .tag.drm { background: #5e3737; color: #ff9f9f; }
   .tag.q { background: #375e46; color: #9fffc3; }
+  .tag.cast { background: #5e4a37; color: #ffd89f; }
   li .url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; color: #b9bbc2; }
   #playerBox { margin: 8px 20px 20px; }
   video { width: 100%; max-height: 46vh; background: #000; border-radius: 8px; }
@@ -49,6 +50,9 @@ const $ = (id) => document.getElementById(id);
 const invoke = window.__TAURI__.core.invoke;
 let hls = null;
 let busy = false;
+// 局域网 relay 基地址（投屏用），启动后从 Rust 侧取
+let lanBase = '';
+invoke('lan_addr').then((b) => { lanBase = b; }).catch(() => {});
 
 function setStatus(t, isErr) {
   $('status').textContent = t || '';
@@ -84,6 +88,22 @@ function render(resp) {
       li.title = 'DRM 内容，标记拒播';
     } else {
       li.onclick = () => play(r);
+    }
+    if (r.relay_url) {
+      // 「投屏」：复制局域网 relay 地址，手机/电视同 Wi-Fi 下用浏览器或播放器打开
+      const cast = document.createElement('span');
+      cast.className = 'tag cast';
+      cast.textContent = '投屏';
+      cast.title = '复制局域网播放地址（手机/电视需与电脑同一 Wi-Fi）';
+      cast.onclick = (e) => {
+        e.stopPropagation();
+        const u = r.relay_url.replace(/^http:\/\/127\.0\.0\.1:\d+/, lanBase);
+        navigator.clipboard.writeText(u).then(
+          () => setStatus('投屏地址已复制，手机/电视打开即可播: ' + trunc(u)),
+          () => setStatus('投屏地址（复制失败请手动记录）: ' + u, true)
+        );
+      };
+      li.appendChild(cast);
     }
     list.appendChild(li);
   }

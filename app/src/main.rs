@@ -2,7 +2,7 @@
 //!
 //! 架构：主窗口 UI（输入网址/展示结果/播放） + L1/L3 提取（get-video Extractor）
 //! + 隐藏 WebviewWindow（加载目标页、注入嗅探 JS，L2） + get-video relay
-//! （127.0.0.1:8321，播放地址中转）。
+//! （0.0.0.0:8321，播放地址中转；局域网设备可访问投屏地址）。
 //!
 //! 嗅探结果上报双通道（去重合并）：
 //! 1. `window.__TAURI__.event.emit('sniff-found', ...)`（IPC，需 capabilities 放行 remote）；
@@ -198,6 +198,8 @@ struct SniffResponse {
 struct AppState {
     hits: Mutex<Vec<SniffHit>>,
     relay_base: String,
+    /// 局域网可访问的 relay 基地址（投屏给手机/电视用），如 `http://192.168.1.8:8321`。
+    lan_base: String,
     busy: AtomicBool,
     _relay: Mutex<Option<RelayHandle>>,
 }
@@ -383,6 +385,57 @@ fn report_log(msg: String) {
     println!("[page] {msg}");
 }
 
+/// 本机局域网 IP（投屏地址用）。
+/// UDP 路由探测（不产生实际流量）；VPN 接管默认路由时会拿到 utun 的
+/// 198.18.x.x 这类假地址，因此 Unix 上优先枚举网卡取 RFC1918 私网地址。
+fn lan_ip() -> Option<std::net::IpAddr> {
+    #[cfg(unix)]
+    if let Some(ip) = lan_ip_ifaddrs() {
+        return Some(ip);
+    }
+    let s = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
+    s.connect("8.8.8.8:80").ok()?;
+    Some(s.local_addr().ok()?.ip())
+}
+
+/// 枚举网卡，取第一个「启用、非回环、RFC1918 私网」的 IPv4（跳过 VPN 虚拟网卡）。
+#[cfg(unix)]
+fn lan_ip_ifaddrs() -> Option<std::net::IpAddr> {
+    use std::net::Ipv4Addr;
+    unsafe {
+        let mut ifaddrs: *mut libc::ifaddrs = std::ptr::null_mut();
+        if libc::getifaddrs(&mut ifaddrs) != 0 {
+            return None;
+        }
+        let mut cur = ifaddrs;
+        let mut found = None;
+        while !cur.is_null() {
+            let ifa = &*cur;
+            let flags = ifa.ifa_flags as libc::c_int;
+            let up = flags & libc::IFF_UP != 0;
+            let loopback = flags & libc::IFF_LOOPBACK != 0;
+            let is_v4 = !ifa.ifa_addr.is_null()
+                && (*ifa.ifa_addr).sa_family as libc::c_int == libc::AF_INET;
+            if up && !loopback && is_v4 {
+                let sin = &*(ifa.ifa_addr as *const libc::sockaddr_in);
+                let ip = Ipv4Addr::from(u32::from_be(sin.sin_addr.s_addr));
+                if ip.is_private() {
+                    found = Some(std::net::IpAddr::V4(ip));
+                    break;
+                }
+            }
+            cur = ifa.ifa_next;
+        }
+        libc::freeifaddrs(ifaddrs);
+        found
+    }
+}
+
+#[tauri::command]
+fn lan_addr(app: AppHandle) -> String {
+    app.state::<Arc<AppState>>().lan_base.clone()
+}
+
 #[tauri::command]
 async fn sniff(app: AppHandle, url: String) -> Result<SniffResponse, String> {
     let state = app.state::<Arc<AppState>>();
@@ -532,7 +585,8 @@ fn main() {
             extract,
             report_log,
             open_login,
-            close_login
+            close_login,
+            lan_addr
         ])
         .setup(move |app| {
             // 前端渲染回执（无头验证 UI 链路用）
@@ -545,10 +599,11 @@ fn main() {
             app.listen_any("ui-probe", |ev| {
                 println!("[probe] {}", ev.payload());
             });
-            // 启动 get-video relay（8321 被占则退回随机端口）
+            // 启动 get-video relay：绑定 0.0.0.0 让局域网设备（手机/电视投屏）可访问；
+            // 本机播放仍走 127.0.0.1（8321 被占则退回随机端口）
             let handle = tauri::async_runtime::block_on(async {
                 match relay::start(RelayConfig {
-                    host: "127.0.0.1".into(),
+                    host: "0.0.0.0".into(),
                     port: 8321,
                     allow_private_hosts: false,
                     rules_path: None,
@@ -559,7 +614,7 @@ fn main() {
                     Err(e) => {
                         eprintln!("[relay] 8321 绑定失败（{e}），退回随机端口");
                         relay::start(RelayConfig {
-                            host: "127.0.0.1".into(),
+                            host: "0.0.0.0".into(),
                             port: 0,
                             allow_private_hosts: false,
                             rules_path: None,
@@ -569,11 +624,17 @@ fn main() {
                     }
                 }
             });
-            let base = handle.base_url();
-            println!("[relay] 已启动: {base}");
+            let port = handle.addr.port();
+            let base = format!("http://127.0.0.1:{port}");
+            let lan_base = match lan_ip() {
+                Some(ip) => format!("http://{ip}:{port}"),
+                None => base.clone(),
+            };
+            println!("[relay] 已启动: {base}（局域网: {lan_base}）");
             let state = Arc::new(AppState {
                 hits: Mutex::new(Vec::new()),
                 relay_base: base,
+                lan_base,
                 busy: AtomicBool::new(false),
                 _relay: Mutex::new(Some(handle)),
             });

@@ -144,7 +144,18 @@ ffmpeg -i "http://127.0.0.1:8321/proxy/$(python3 -c "import urllib.parse;print(u
 
 - **L1/L3 提取**：前端「提取」按钮 → `invoke('extract')` → `get_video::extract::Extractor`（规则包从环境变量 `GET_VIDEO_RULES` 指向的本地 JSON 加载，未设置用空包），秒级返回 `VideoInfo`；
 - **L2 webview 嗅探**：前端「嗅探」按钮 → `invoke('sniff')` → 隐藏 WebviewWindow + 六路 hook 注入脚本（与 `demo/` 同款，含 Worker hook），最长约 15 秒；
-- **本地 relay**：启动时拉起 `127.0.0.1:8321`（被占退回随机端口），结果经 `relay_url` 在页面内播放（hls.js / `<video>`）。
+- **本地 relay**：启动时拉起 `0.0.0.0:8321`（被占退回随机端口），结果经 `relay_url` 在页面内播放（HLS 走 WebKit 原生、其他平台 hls.js / `<video>`）；绑定全网卡是为了让局域网设备（手机/电视）能直接访问投屏地址。
+
+## 投屏到局域网设备（2026-08-02）
+
+每条结果旁的「**投屏**」标签一键复制**局域网播放地址**（如 `http://192.168.1.68:8321/proxy/...`）：手机/电视与电脑连同一 Wi-Fi，用浏览器或支持网络串流的播放器（VLC、Infuse、电视盒子）打开即可播放。relay 转发时自动带防盗链 Referer，远程设备无需也不能直接访问原始签名地址。
+
+实现要点与已实证结论：
+
+- relay 绑定 `0.0.0.0`，本机播放仍走 `127.0.0.1`，投屏地址由 `lan_addr` 命令给出（网卡枚举取 RFC1918 私网 IPv4，规避 VPN utun 的 198.18.x.x 假地址干扰）；
+- 已实测：经局域网地址（模拟远程设备）拉央视频直播 8 秒，音视频完整；
+- 注意：macOS 首次接受入站连接可能弹防火墙授权；央视签名地址有时效，投屏地址放久了失效需重新嗅探；
+- relay 的 `/proxy` 与 `/api/extract` 对局域网开放（SSRF 黑名单仍生效），请勿在不可信网络使用。
 
 ```bash
 cargo build -p get-video-app
