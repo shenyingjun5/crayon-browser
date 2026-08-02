@@ -140,11 +140,21 @@ ffmpeg -i "http://127.0.0.1:8321/proxy/$(python3 -c "import urllib.parse;print(u
 
 # 正式 Tauri 壳（`app/`）
 
-`get-video-app` 是把三条能力合入正式产品的 Tauri 2 壳：
+`get-video-app` 是把三条能力合入正式产品的 Tauri 2 壳。用户侧只有一个「**解析**」按钮：内部自动先走第一层、未命中自动转第二层，两层区别对用户不可见：
 
-- **L1/L3 提取**：前端「提取」按钮 → `invoke('extract')` → `get_video::extract::Extractor`（规则包从环境变量 `GET_VIDEO_RULES` 指向的本地 JSON 加载，未设置用空包），秒级返回 `VideoInfo`；
-- **L2 webview 嗅探**：前端「嗅探」按钮 → `invoke('sniff')` → 隐藏 WebviewWindow + 六路 hook 注入脚本（与 `demo/` 同款，含 Worker hook），最长约 15 秒；
+- **第一层 · L1/L3 快速提取**（秒级）：`get_video::extract::Extractor`。L1 规则包从环境变量 `GET_VIDEO_RULES` 指向的本地 JSON 加载（未设置用空包，加站点不用重编译）；L3 站点解析器按域名分发（`src/extract/sites.rs`），目前已适配央视 cntv/cctv 点播与 B 站（番剧 ep/ss、BV 页），各自调站点公开 API；
+- **第二层 · L2 webview 嗅探**（最长约 15 秒）：隐藏 WebviewWindow + 六路 hook 注入脚本（fetch/XHR/media src/MutationObserver/PerformanceObserver/Worker）。**完全通用**，不含任何站点特判——任何在 webview 里播媒体的页面都能抓；
 - **本地 relay**：启动时拉起 `0.0.0.0:8321`（被占退回随机端口），结果经 `relay_url` 在页面内播放（HLS 走 WebKit 原生、其他平台 hls.js / `<video>`）；绑定全网卡是为了让局域网设备（手机/电视）能直接访问投屏地址。
+
+## ⚠️ 央视系内容目前无法真正播放（2026-08-02 查实）
+
+央视频直播与 CCTV 点播的 HLS 流**视频 ES 流被私有加密**：TS 容器正常、无 `EXT-X-KEY`，但 slice 数据加扰，ffmpeg/WebKit 解码出来是灰屏/黑屏花屏 + 正常音频；解密逻辑在网页播放器的 WASM 里（`CNTVH5PlayerModule`），有控制流混淆。实证过程：直播与点播各抽帧解码（第 90/150/500 帧），全程 `concealing ... errors in B frame`，画面为灰色块+碎片；直连原始地址与经 relay 结果一致——**不是 relay 或播放器链路的 bug**。
+
+结论与边界：
+
+- 嗅探/提取拿到的央视地址**能抓到但播不了**，B 站等其他站点不受影响（B 站番剧/普通视频已验证可播）；
+- 社区口径一致：央视 dhls/dh5 流完全花屏、解密在客户端 WASM，2025-08 后新算法无公开解法；要支持只能逆向集成解密器（脆弱且易失效），或寻找未加扰源；
+- 教训：验证「可播放」必须**抽帧看画面**，ffmpeg 能 stream-copy 不代表能解码。本仓库早期的「央视 ffmpeg 拉流通过」结论按此标准不成立，特此更正。
 
 ## 投屏到局域网设备（2026-08-02）
 
@@ -153,7 +163,7 @@ ffmpeg -i "http://127.0.0.1:8321/proxy/$(python3 -c "import urllib.parse;print(u
 实现要点与已实证结论：
 
 - relay 绑定 `0.0.0.0`，本机播放仍走 `127.0.0.1`，投屏地址由 `lan_addr` 命令给出（网卡枚举取 RFC1918 私网 IPv4，规避 VPN utun 的 198.18.x.x 假地址干扰）；
-- 已实测：经局域网地址（模拟远程设备）拉央视频直播 8 秒，音视频完整；
+- 已实测：经局域网地址（模拟远程设备）拉流 8 秒字节完整、播放链路通（注：央视频直播流本身 ES 层加密花屏，见上节——该实测验证的是链路而非央视内容可播）；
 - 注意：macOS 首次接受入站连接可能弹防火墙授权；央视签名地址有时效，投屏地址放久了失效需重新嗅探；
 - relay 的 `/proxy` 与 `/api/extract` 对局域网开放（SSRF 黑名单仍生效），请勿在不可信网络使用。
 

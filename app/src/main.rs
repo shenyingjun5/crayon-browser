@@ -696,12 +696,12 @@ fn main() {
                             Ok(()) => println!("[ui-test] eval ok"),
                             Err(e) => println!("[ui-test] eval 失败: {e}"),
                         }
-                        // 嗅探收尾后点击第一条结果，验证页面内播放
-                        tokio::time::sleep(Duration::from_secs(10)).await;
+                        // 统一解析链路：快速提取 + 深度嗅探最长约 20s，等结果渲染后再点第一条
+                        tokio::time::sleep(Duration::from_secs(19)).await;
                         let _ = w.eval(
                             "try{const v=document.getElementById('player');v.muted=true;document.querySelector('#list li').click();window.__TAURI__.core.invoke('report_log',{msg:'已点击第一条结果'});}catch(e){window.__TAURI__.core.invoke('report_log',{msg:'点击失败: '+e});}",
                         );
-                        tokio::time::sleep(Duration::from_secs(15)).await;
+                        tokio::time::sleep(Duration::from_secs(12)).await;
                         let _ = w.eval(
                             "try{const v=document.getElementById('player');window.__TAURI__.core.invoke('report_log',{msg:'播放器状态: currentTime='+v.currentTime.toFixed(2)+' paused='+v.paused+' error='+(v.error&&v.error.message||'none')+' readyState='+v.readyState+' networkState='+v.networkState});}catch(e){window.__TAURI__.core.invoke('report_log',{msg:'状态读取失败: '+e});}",
                         );

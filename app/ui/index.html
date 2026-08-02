@@ -33,13 +33,12 @@
 </head>
 <body>
 <header>
-  <h1>get-video · 视频地址提取与嗅探</h1>
-  <div class="sub">提取：L1/L3 静态解析（秒级） · 嗅探：L2 隐藏 webview 加载页面抓媒体请求（最长约 15 秒） · 登录：打开站点登录页，登录态全应用共享 · 点击结果经本地 relay 播放</div>
+  <h1>get-video · 视频解析与投屏</h1>
+  <div class="sub">输入视频页网址点「解析」：先秒级快速解析，未命中自动深度解析（最长约 15 秒） · 点击结果本机播放 · 点「投屏」复制局域网地址给手机/电视 · 「登录」用于需登录的站点</div>
 </header>
 <div class="bar">
   <input id="url" placeholder="https://example.com/page-with-video" autofocus>
-  <button id="btnExtract" class="alt">提取</button>
-  <button id="btnSniff">嗅探</button>
+  <button id="btnGo">解析</button>
   <button id="btnLogin" class="alt">登录</button>
 </div>
 <div id="status"></div>
@@ -136,51 +135,57 @@ function play(r) {
   v.play().catch(() => {});
 }
 
-async function run(kind) {
+// 统一解析：先 L1/L3 快速提取，未命中（或失败）自动转 L2 深度嗅探。
+// 用户不需要知道两层的区别——对外的语义只有「解析」。
+async function run() {
   const url = $('url').value.trim();
   if (!url) { setStatus('请输入网址', true); return; }
   if (busy) return;
   busy = true;
-  $('btnExtract').disabled = true;
-  $('btnSniff').disabled = true;
+  $('btnGo').disabled = true;
   $('list').innerHTML = '';
-  setStatus(kind === 'extract' ? '提取中…' : '嗅探中（最长约 15 秒）…');
+  setStatus('解析中…');
   try {
-    const resp = await invoke(kind, { url });
+    // 第一层：快速提取（秒级）；返回 0 条或出错都自动转第二层
+    let resp = null;
+    try {
+      const r0 = await invoke('extract', { url });
+      if (normalize(r0).length) resp = r0;
+    } catch (e) { /* 提取失败不报错，直接转嗅探 */ }
+    if (!resp) {
+      setStatus('快速解析未命中，自动深度解析（最长约 15 秒）…');
+      resp = await invoke('sniff', { url });
+    }
     const items = normalize(resp);
     const count = resp.count !== undefined ? resp.count : items.length;
-    if (resp.note && !count) {
-      setStatus(resp.note, true);
+    if (!count) {
+      setStatus(resp.note || '未解析到可播放的视频地址', true);
     } else {
-      const verb = kind === 'extract' ? '提取' : '嗅探';
-      const src = resp.source ? `（${resp.source}）` : '';
       const title = resp.title ? `《${resp.title}》` : '';
-      setStatus(`${verb}到 ${count} 条结果${src} ${title}`.trim());
+      setStatus(`解析到 ${count} 条结果 ${title}`.trim());
     }
     render(resp);
   } catch (e) {
-    setStatus((kind === 'extract' ? '提取失败: ' : '嗅探失败: ') + e, true);
+    setStatus('解析失败: ' + e, true);
     document.title = 'results:0';
   } finally {
     busy = false;
-    $('btnExtract').disabled = false;
-    $('btnSniff').disabled = false;
+    $('btnGo').disabled = false;
   }
 }
 
-// go() 保留给 --ui-test 注入调用（走「嗅探」完整 IPC 链路）
-function go() { run('sniff'); }
-$('btnExtract').onclick = () => run('extract');
-$('btnSniff').onclick = go;
+// go() 保留给 --ui-test 注入调用（走完整 IPC 链路）
+function go() { run(); }
+$('btnGo').onclick = go;
 $('btnLogin').onclick = async () => {
   const url = $('url').value.trim();
   if (!url) { setStatus('先输入要登录的站点网址', true); return; }
   try {
     await invoke('open_login', { url });
-    setStatus('登录窗口已打开：完成登录后关闭它，再点「嗅探」');
+    setStatus('登录窗口已打开：完成登录后关闭它，再点「解析」');
   } catch (e) { setStatus('打开登录窗口失败: ' + e, true); }
 };
-$('url').addEventListener('keydown', (e) => { if (e.key === 'Enter') run('extract'); });
+$('url').addEventListener('keydown', (e) => { if (e.key === 'Enter') run(); });
 try { window.__TAURI__.event.emit('ui-ready', {}); } catch (e) {}
 </script>
 </body>
