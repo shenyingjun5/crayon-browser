@@ -74,6 +74,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/extract", get(api_extract))
         .route("/health", get(health))
         .route("/player", get(player_page))
+        .route("/probeplayer", get(probeplayer_page))
         .with_state(state)
 }
 
@@ -153,6 +154,77 @@ async fn api_extract(
         Ok(info) => Json(info).into_response(),
         Err(e) => (StatusCode::BAD_GATEWAY, format!("extract failed: {e}")).into_response(),
     }
+}
+
+/// 解码探针播放页：同源加载 `/proxy` 流（canvas 无跨域污染），抽帧统计
+/// 灰度均值/方差后经 Image beacon 回传给 app 侧上报服务。
+/// 供 app 层隐藏 webview 探测「播放列表正常但解码画面异常」的私有加扰流
+/// （`src/probe.rs` 有判定逻辑与实证背景）。参数：src=同源流地址（必填）、
+/// id=探针编号、report=上报服务基地址。
+async fn probeplayer_page(Query(params): Query<HashMap<String, String>>) -> Html<String> {
+    let src = serde_json::to_string(params.get("src").map(|s| s.as_str()).unwrap_or(""))
+        .unwrap_or_else(|_| "\"\"".into());
+    let id = serde_json::to_string(params.get("id").map(|s| s.as_str()).unwrap_or(""))
+        .unwrap_or_else(|_| "\"\"".into());
+    let report = serde_json::to_string(params.get("report").map(|s| s.as_str()).unwrap_or(""))
+        .unwrap_or_else(|_| "\"\"".into());
+    Html(format!(
+        r#"<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>probe</title></head>
+<body style="margin:0;background:#000">
+<video id="v" muted autoplay style="width:2px;height:2px"></video>
+<script>
+const SRC = {src};
+const ID = {id};
+const REPORT = {report};
+const v = document.getElementById('v');
+const stats = [];
+let done = false;
+function sample() {{
+  try {{
+    if (!v.videoWidth) return;
+    const c = document.createElement('canvas');
+    c.width = v.videoWidth; c.height = v.videoHeight;
+    const x = c.getContext('2d');
+    x.drawImage(v, 0, 0);
+    const d = x.getImageData(0, 0, c.width, c.height).data;
+    let s = 0, sq = 0;
+    const n = d.length / 4;
+    for (let i = 0; i < d.length; i += 4) {{
+      const l = (d[i] + d[i+1] + d[i+2]) / 3;
+      s += l; sq += l * l;
+    }}
+    const mean = s / n;
+    stats.push(mean.toFixed(2) + ',' + Math.sqrt(Math.max(0, sq / n - mean * mean)).toFixed(2));
+  }} catch (e) {{}}
+}}
+function report(err) {{
+  if (done) return; done = true;
+  try {{
+    new Image().src = REPORT + '/probe-report?id=' + encodeURIComponent(ID)
+      + '&f=' + encodeURIComponent(stats.join(';'))
+      + '&ct=' + v.currentTime.toFixed(1)
+      + (err ? '&err=' + encodeURIComponent(String(err)) : '');
+  }} catch (e) {{}}
+  document.title = 'probe-done';
+}}
+if (SRC && REPORT) {{
+  v.src = SRC;
+  v.play().catch(() => {{}});
+  v.addEventListener('canplay', () => {{
+    setTimeout(sample, 1200);
+    setTimeout(sample, 2500);
+    setTimeout(sample, 4000);
+    setTimeout(() => report(), 5000);
+  }});
+  v.addEventListener('error', () => report(v.error && v.error.message || 'video error'));
+  setTimeout(() => report('timeout'), 12000);
+}} else {{
+  report('missing params');
+}}
+</script>
+</body></html>"#
+    ))
 }
 
 /// 极简 hls.js 测试页（仅联调验收用，不是产品 UI）。

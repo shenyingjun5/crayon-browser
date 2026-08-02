@@ -29,17 +29,16 @@ const DRM_KEYFORMAT_MARKERS: &[&str] = &[
     "fairplay",
 ];
 
-/// 已知「WASM 私有加扰」站点名单：流的 ES 数据被站点私有算法加扰
-/// （解密在网页播放器的 WASM 里，无公开解法），抓到地址也无法播放。
-/// 央视频直播 + 央视网点播实测确认（README「央视频/CCTV 流加扰」节）。
-const WASM_SCRAMBLED_SITES: &[&str] = &[
+/// 央视频家族域名：这个家族的**直播流**被 WASM 私有加扰（无公开解法），
+/// 但**点播流正常可播**（2026-08-02 抽帧实证，README「受限标注」节）。
+/// 命中名单不直接判受限，只触发「拉播放列表实测直播/点播」的探测。
+const CCTV_FAMILY: &[&str] = &[
     "cctv.com",
     "cctv.cn",
     "cntv.cn",
     "cntv.com",
     "yangshipin.cn",
-    // 央视系流实际走 CDN 域名（hls.cntv.lxdns.com、newcntv.qcloudcdn.com 等），
-    // 流地址自身也要匹配
+    // 央视系流实际走 CDN 域名（hls.cntv.lxdns.com、newcntv.qcloudcdn.com 等）
     "cntv.lxdns.com",
     "newcntv.qcloudcdn.com",
 ];
@@ -47,6 +46,16 @@ const WASM_SCRAMBLED_SITES: &[&str] = &[
 /// 按站点名单做前置 DRM 判断。
 pub fn is_known_drm_site(url: &str) -> bool {
     host_matches(url, DRM_SITES)
+}
+
+/// 是否央视频家族域名。
+///
+/// 注意：命中**不代表受限**——该家族部分流被 WASM 私有加扰、部分正常
+/// （2026-08-02 实证：点播干净可播、直播加扰黑屏；两者码流结构一致，
+/// 无法静态区分）。此判定仅作为 app 层解码探针的触发器， verdict 由
+/// `crate::probe` 的真实抽帧给出。
+pub fn is_cctv_family(url: &str) -> bool {
+    host_matches(url, CCTV_FAMILY)
 }
 
 /// URL 的 host 是否命中名单（精确或后缀匹配）。
@@ -60,17 +69,10 @@ fn host_matches(url: &str, sites: &[&str]) -> bool {
         .any(|s| host == *s || host.ends_with(&format!(".{s}")))
 }
 
-/// 受限判定：命中已知 WASM 加扰站点或全 DRM 站点时返回中文原因。
-///
-/// `page_url` 与 `stream_url` 任一命中即受限——央视系的流地址在 CDN
-/// 域名下（`hls.cntv.lxdns.com`），仅看页面域名会漏判，仅看流域名也会
-/// 漏掉页面明确但流走通用 CDN 的情况，两个都查。
+/// 受限判定（同步部分）：仅全 DRM 站点可直接定性。
+/// 央视频家族不在此判死——直播/点播需拉播放列表实测，
+/// 见 `Extractor::detect_restriction`。
 pub fn restricted_reason(page_url: &str, stream_url: &str) -> Option<&'static str> {
-    if host_matches(page_url, WASM_SCRAMBLED_SITES)
-        || host_matches(stream_url, WASM_SCRAMBLED_SITES)
-    {
-        return Some("站点 WASM 私有加扰，抓到地址也无法解码播放");
-    }
     if is_known_drm_site(page_url) || is_known_drm_site(stream_url) {
         return Some("全站 DRM 加密");
     }
@@ -190,37 +192,31 @@ mod tests {
     }
 
     #[test]
-    fn cctv_page_is_restricted() {
-        // 页面命中央视系：流地址在通用 CDN 也要判受限
-        let r = restricted_reason(
-            "https://tv.cctv.com/2026/07/30/VIDE.shtml",
-            "https://cdn.example.com/x/main.m3u8",
-        );
-        assert!(r.unwrap().contains("WASM"));
+    fn cctv_family_detection() {
+        assert!(is_cctv_family("https://tv.cctv.com/2026/07/30/VIDE.shtml"));
+        assert!(is_cctv_family("https://www.yangshipin.cn/tv/home"));
+        assert!(is_cctv_family(
+            "https://hls.cntv.lxdns.com/asp/hls/main.m3u8"
+        ));
+        assert!(is_cctv_family(
+            "https://newcntv.qcloudcdn.com/asp/hls/main.m3u8"
+        ));
+        assert!(!is_cctv_family("https://www.bilibili.com/bangumi/play/ep1"));
+        assert!(!is_cctv_family("https://example.com/"));
     }
 
     #[test]
-    fn cntv_cdn_stream_is_restricted() {
-        // 页面域名不明确、但流命中央视 CDN 域名
-        let r = restricted_reason(
-            "https://example.com/page",
-            "https://hls.cntv.lxdns.com/asp/hls/main.m3u8",
-        );
-        assert!(r.unwrap().contains("WASM"));
-    }
-
-    #[test]
-    fn yangshipin_live_is_restricted() {
-        let r = restricted_reason("https://www.yangshipin.cn/tv/home", "");
-        assert!(r.is_some());
-    }
-
-    #[test]
-    fn bilibili_is_not_restricted() {
+    fn restricted_reason_only_covers_drm_sites() {
+        // 央视频家族不做静态受限判定（需解码探针实测）
         assert!(restricted_reason(
-            "https://www.bilibili.com/bangumi/play/ep733316",
-            "https://upos-sz-mirror.bilivideo.com/x.m4s"
+            "https://tv.cctv.com/2026/07/30/VIDE.shtml",
+            "https://newcntv.qcloudcdn.com/x/main.m3u8"
         )
         .is_none());
+        // 全 DRM 站点静态判受限
+        assert_eq!(
+            restricted_reason("https://www.netflix.com/watch/1", ""),
+            Some("全站 DRM 加密")
+        );
     }
 }

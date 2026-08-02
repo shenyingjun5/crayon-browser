@@ -21,7 +21,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Listener, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Listener, Manager, WebviewUrl, WebviewWindowBuilder};
 
 /// 嗅探收集窗口：最长 12s；首个命中后再等 3s 收尾。
 const SNIFF_MAX_WAIT: Duration = Duration::from_secs(12);
@@ -197,6 +197,14 @@ struct SniffResponse {
     note: Option<String>,
 }
 
+/// 探针回传：抽帧统计（mean/std 序列）+ 播放进度 + 可选错误。
+#[derive(Debug, Clone, Default)]
+struct ProbeReport {
+    /// (mean, std) 采样序列。
+    frames: Vec<(f64, f64)>,
+    err: Option<String>,
+}
+
 /// 共享状态：嗅探命中收集 + relay 基地址 + 防重入锁。
 struct AppState {
     hits: Mutex<Vec<SniffHit>>,
@@ -205,6 +213,8 @@ struct AppState {
     lan_base: String,
     /// 与 relay 共享的 DASH MPD 仓库（提取器写入，/dashmpd/{id} 读出）。
     dash_store: get_video::relay::DashStore,
+    /// 解码探针回传（probeplayer 页 → /probe-report beacon）。
+    probe_reports: Mutex<HashMap<String, ProbeReport>>,
     busy: AtomicBool,
     _relay: Mutex<Option<RelayHandle>>,
 }
@@ -367,6 +377,105 @@ async fn do_sniff(app: &AppHandle, url: &str) -> Result<SniffResponse, String> {
     })
 }
 
+/// 解码探针目标：候选流地址 + 它的 relay 地址。
+struct ProbeTarget {
+    url: String,
+    relay_url: String,
+}
+
+/// 单流解码探针：隐藏 webview 加载 relay 的 /probeplayer 页（与 /proxy 同源，
+/// canvas 可读），抽帧统计经 beacon 回传后判定画面是否退化。
+/// 返回 Some(true)=实测异常（加扰）；Some(false)=实测可播；None=超时/无结论。
+async fn probe_one(app: &AppHandle, relay_url: &str) -> Option<bool> {
+    let state = app.state::<Arc<AppState>>();
+    let id = format!(
+        "p{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()?
+            .as_millis()
+    );
+    let page = format!(
+        "{}/probeplayer?src={}&id={}&report={}",
+        state.relay_base,
+        get_video::encode_url_component(relay_url),
+        id,
+        get_video::encode_url_component("http://127.0.0.1:8377")
+    );
+    // 隐藏窗口须主线程创建（GTK 约束，macOS 同样保险）
+    let label = format!("probe-{id}");
+    let app2 = app.clone();
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.run_on_main_thread(move || {
+        let r =
+            WebviewWindowBuilder::new(&app2, &label, WebviewUrl::External(page.parse().unwrap()))
+                .title("probe")
+                .visible(false)
+                .build();
+        let _ = tx.send(r);
+    })
+    .map_err(|e| format!("dispatch main thread: {e}"))
+    .ok()?;
+    let win = rx.await.ok()?.ok()?;
+
+    // 轮询回传（probeplayer 正常 ~7s 上报，12s 自超时；这里 16s 兜底）
+    let mut report = None;
+    for _ in 0..80 {
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        let r = state.probe_reports.lock().unwrap().remove(&id);
+        if r.is_some() {
+            report = r;
+            break;
+        }
+    }
+    let app3 = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        let _ = win.close();
+        let _ = app3;
+    });
+
+    let rep = report?;
+    if rep.frames.is_empty() {
+        // 没采到帧（加载失败/超时）：不下结论，避免误标
+        println!("[probe] {relay_url} 无帧数据（{:?}），无结论", rep.err);
+        return None;
+    }
+    let stats: Vec<get_video::probe::FrameStat> = rep
+        .frames
+        .iter()
+        .map(|&(mean, std)| get_video::probe::FrameStat { mean, std })
+        .collect();
+    Some(get_video::probe::frames_degenerate(&stats))
+}
+
+/// 对命中央视家族的候选逐个跑解码探针（顺序执行，避免并发拉流）。
+/// 实测异常的流：向前端发 `probe-restriction` 事件（UI 异步打标），
+/// 并返回异常流地址集合（CLI 模式据此在打印前直接改结果）。
+async fn probe_scrambled(app: &AppHandle, page_ctx: &str, targets: &[ProbeTarget]) -> Vec<String> {
+    let mut bad = Vec::new();
+    for t in targets {
+        if !get_video::drm::is_cctv_family(page_ctx) && !get_video::drm::is_cctv_family(&t.url) {
+            continue;
+        }
+        match probe_one(app, &t.relay_url).await {
+            Some(true) => {
+                println!("[probe] 实测画面异常（WASM 加扰）: {}", t.url);
+                bad.push(t.url.clone());
+                let _ = app.emit(
+                    "probe-restriction",
+                    serde_json::json!({
+                        "url": t.url,
+                        "reason": get_video::probe::SCRAMBLED_REASON,
+                    }),
+                );
+            }
+            Some(false) => println!("[probe] 实测可播: {}", t.url),
+            None => println!("[probe] 探测无结论: {}", t.url),
+        }
+    }
+    bad
+}
+
 /// 加载 L3 规则包：环境变量 GET_VIDEO_RULES 指向本地 JSON；未设置/加载失败用空包。
 fn load_rule_pack() -> RulePack {
     match std::env::var("GET_VIDEO_RULES") {
@@ -489,11 +598,38 @@ async fn sniff(app: AppHandle, url: String) -> Result<SniffResponse, String> {
     println!("[sniff] IPC 调用: {url}");
     let r = do_sniff(&app, &url).await;
     state.busy.store(false, Ordering::SeqCst);
-    match &r {
-        Ok(resp) => println!("[sniff] 返回 {} 条结果给前端", resp.count),
-        Err(e) => println!("[sniff] 失败: {e}"),
+    if let Ok(resp) = &r {
+        println!("[sniff] 返回 {} 条结果给前端", resp.count);
+        // 后台解码探针：央视家族候选逐个实测画面，异常者经事件异步打标
+        let targets = sniff_probe_targets(resp);
+        if !targets.is_empty() {
+            let ah = app.clone();
+            let page = url.clone();
+            tauri::async_runtime::spawn(async move {
+                probe_scrambled(&ah, &page, &targets).await;
+            });
+        }
+    }
+    if let Err(e) = &r {
+        println!("[sniff] 失败: {e}");
     }
     r
+}
+
+/// 嗅探结果中需要跑解码探针的候选（未受限、非 DRM、原生可播协议）。
+fn sniff_probe_targets(resp: &SniffResponse) -> Vec<ProbeTarget> {
+    resp.results
+        .iter()
+        .filter(|r| {
+            r.restriction.is_none() && !r.drm && (r.protocol == "hls" || r.protocol == "mp4")
+        })
+        .filter_map(|r| {
+            r.relay_url.clone().map(|relay_url| ProbeTarget {
+                url: r.url.clone(),
+                relay_url,
+            })
+        })
+        .collect()
 }
 
 #[tauri::command]
@@ -506,15 +642,42 @@ async fn extract(app: AppHandle, url: String) -> Result<VideoInfo, String> {
     let relay_base = state.relay_base.clone();
     let r = do_extract(&app, &relay_base, &url).await;
     state.busy.store(false, Ordering::SeqCst);
-    match &r {
-        Ok(info) => println!(
+    if let Ok(info) = &r {
+        println!(
             "[extract] 返回 {} 个格式给前端（source={}）",
             info.formats.len(),
             info.source
-        ),
-        Err(e) => println!("[extract] 失败: {e}"),
+        );
+        // 后台解码探针：同嗅探链路
+        let targets = extract_probe_targets(info);
+        if !targets.is_empty() {
+            let ah = app.clone();
+            let page = url.clone();
+            tauri::async_runtime::spawn(async move {
+                probe_scrambled(&ah, &page, &targets).await;
+            });
+        }
+    }
+    if let Err(e) = &r {
+        println!("[extract] 失败: {e}");
     }
     r
+}
+
+/// 提取结果中需要跑解码探针的候选（同嗅探链路的筛选口径）。
+fn extract_probe_targets(info: &VideoInfo) -> Vec<ProbeTarget> {
+    info.formats
+        .iter()
+        .filter(|f| {
+            f.restriction.is_none() && !f.drm && (f.protocol == "hls" || f.protocol == "mp4")
+        })
+        .filter_map(|f| {
+            f.relay_url.clone().map(|relay_url| ProbeTarget {
+                url: f.url.clone(),
+                relay_url,
+            })
+        })
+        .collect()
 }
 
 /// 打开站点登录窗口（可见 webview）。
@@ -576,29 +739,67 @@ async fn close_login(app: AppHandle) -> Result<(), String> {
 async fn start_beacon_server(state: Arc<AppState>) {
     use axum::{extract::Query, response::IntoResponse, routing::get, Router};
     let st = state.clone();
-    let app = Router::new().route(
-        "/sniff",
-        get(move |Query(q): Query<HashMap<String, String>>| {
-            let st = st.clone();
-            async move {
-                if let Some(data) = q.get("data") {
-                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(data) {
-                        let u = v.get("url").and_then(|x| x.as_str()).unwrap_or("");
-                        let p = v.get("page").and_then(|x| x.as_str()).unwrap_or("");
-                        push_hit(&st.hits, u.to_string(), p.to_string());
+    let st2 = state.clone();
+    let app = Router::new()
+        .route(
+            "/sniff",
+            get(move |Query(q): Query<HashMap<String, String>>| {
+                let st = st.clone();
+                async move {
+                    if let Some(data) = q.get("data") {
+                        if let Ok(v) = serde_json::from_str::<serde_json::Value>(data) {
+                            let u = v.get("url").and_then(|x| x.as_str()).unwrap_or("");
+                            let p = v.get("page").and_then(|x| x.as_str()).unwrap_or("");
+                            push_hit(&st.hits, u.to_string(), p.to_string());
+                        }
                     }
+                    // 1x1 gif
+                    let gif: &[u8] = &[
+                        0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00,
+                        0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0x21, 0xf9, 0x04, 0x00, 0x00,
+                        0x00, 0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00,
+                        0x00, 0x02, 0x02, 0x44, 0x01, 0x00, 0x3b,
+                    ];
+                    ([(axum::http::header::CONTENT_TYPE, "image/gif")], gif).into_response()
                 }
-                // 1x1 gif
-                let gif: &[u8] = &[
-                    0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00, 0x00,
-                    0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0x21, 0xf9, 0x04, 0x00, 0x00, 0x00, 0x00,
-                    0x00, 0x2c, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x02, 0x02,
-                    0x44, 0x01, 0x00, 0x3b,
-                ];
-                ([(axum::http::header::CONTENT_TYPE, "image/gif")], gif).into_response()
-            }
-        }),
-    );
+            }),
+        )
+        // 解码探针回传：probeplayer 页抽帧统计（f=mean,std;mean,std）
+        .route(
+            "/probe-report",
+            get(move |Query(q): Query<HashMap<String, String>>| {
+                let st = st2.clone();
+                async move {
+                    if let Some(id) = q.get("id") {
+                        let frames = q
+                            .get("f")
+                            .map(|f| {
+                                f.split(';')
+                                    .filter_map(|pair| {
+                                        let mut it = pair.split(',');
+                                        Some((
+                                            it.next()?.parse::<f64>().ok()?,
+                                            it.next()?.parse::<f64>().ok()?,
+                                        ))
+                                    })
+                                    .collect::<Vec<_>>()
+                            })
+                            .unwrap_or_default();
+                        let rep = ProbeReport {
+                            frames,
+                            err: q.get("err").cloned(),
+                        };
+                        println!(
+                            "[probe] 收到回传 id={id} 帧数={} err={:?}",
+                            rep.frames.len(),
+                            rep.err
+                        );
+                        st.probe_reports.lock().unwrap().insert(id.clone(), rep);
+                    }
+                    ([(axum::http::header::CONTENT_TYPE, "image/gif")], &[][..]).into_response()
+                }
+            }),
+        );
     if let Ok(listener) = tokio::net::TcpListener::bind("127.0.0.1:8377").await {
         println!("[beacon] 上报服务: http://127.0.0.1:8377/sniff");
         let _ = axum::serve(listener, app).await;
@@ -685,6 +886,7 @@ fn main() {
                 relay_base: base,
                 lan_base,
                 dash_store,
+                probe_reports: Mutex::new(HashMap::new()),
                 busy: AtomicBool::new(false),
                 _relay: Mutex::new(Some(handle)),
             });
@@ -700,10 +902,22 @@ fn main() {
                 tauri::async_runtime::spawn(async move {
                     let r = do_sniff(&ah, &u).await;
                     match r {
-                        Ok(resp) => println!(
-                            "SNIFF_RESULT_JSON: {}",
-                            serde_json::to_string(&resp).unwrap()
-                        ),
+                        Ok(mut resp) => {
+                            // CLI 同步跑解码探针，打印前直接把异常流标受限
+                            let targets = sniff_probe_targets(&resp);
+                            let bad = probe_scrambled(&ah, &u, &targets).await;
+                            for item in resp.results.iter_mut() {
+                                if bad.contains(&item.url) {
+                                    item.restriction =
+                                        Some(get_video::probe::SCRAMBLED_REASON.to_string());
+                                    item.relay_url = None;
+                                }
+                            }
+                            println!(
+                                "SNIFF_RESULT_JSON: {}",
+                                serde_json::to_string(&resp).unwrap()
+                            );
+                        }
                         Err(e) => println!("SNIFF_RESULT_JSON: {{\"error\": \"{e}\"}}"),
                     }
                     ah.exit(0);
@@ -721,10 +935,22 @@ fn main() {
                 tauri::async_runtime::spawn(async move {
                     let r = do_extract(&ah2, &relay_base, &u).await;
                     match r {
-                        Ok(info) => println!(
-                            "EXTRACT_RESULT_JSON: {}",
-                            serde_json::to_string(&info).unwrap()
-                        ),
+                        Ok(mut info) => {
+                            // CLI 同步跑解码探针（同 sniff CLI）
+                            let targets = extract_probe_targets(&info);
+                            let bad = probe_scrambled(&ah, &u, &targets).await;
+                            for f in info.formats.iter_mut() {
+                                if bad.contains(&f.url) {
+                                    f.restriction =
+                                        Some(get_video::probe::SCRAMBLED_REASON.to_string());
+                                    f.relay_url = None;
+                                }
+                            }
+                            println!(
+                                "EXTRACT_RESULT_JSON: {}",
+                                serde_json::to_string(&info).unwrap()
+                            );
+                        }
                         Err(e) => println!("EXTRACT_RESULT_JSON: {{\"error\": \"{e}\"}}"),
                     }
                     ah.exit(0);

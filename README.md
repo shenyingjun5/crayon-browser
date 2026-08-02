@@ -92,9 +92,14 @@ relay 代理媒体流量时一律不携带任何 Cookie。请勿把含 Cookie �
 - 已知 DRM 站点名单（netflix 等）前置标记。
 - 提取 HLS 时若是 master 列表，会再下一层取第一个子列表检测。
 
-## 受限标注（`restricted_reason`）
+## 受限标注（按具体视频实测，不按站点一刀切）
 
-除流级 DRM 外，还有一类「抓到地址也播不了」的站点：央视频/央视网系列的流被 **WASM 私有加扰**（无 `EXT-X-KEY`、ffmpeg 可解容器但画面花屏，解密在播放器 WASM 里，无公开解法）。`src/drm.rs` 的 `restricted_reason(page_url, stream_url)` 对这类站点（cctv.com / cctv.cn / cntv / yangshipin 及其 CDN 域名 `cntv.lxdns.com`、`newcntv.qcloudcdn.com` 等）与全 DRM 站点做**页面+流地址双向匹配**，命中即给结果打 `restriction` 原因、不产出 relay 地址；UI 在链接后直接注明「**受限，不能播放**」（置灰禁点，悬停显示原因）。提取与嗅探两条链路统一打标。
+两类「不能播」分开判：
+
+- **DRM**：流级结构检测（播放列表 `KEYFORMAT` / MPD `ContentProtection`）+ 全 DRM 站点名单（netflix 等）前置标记，`restriction` 直接注明。
+- **WASM 私有加扰**（央视频直播是唯一已知案例）：这类流**码流结构与干净流完全一致**——2026-08-02 逐项对比实证：TS 容器、PAT/PMT、SPS/PPS（重复 GOP 字节一致）、slice 头 Exp-Golomb 全部合法，无法静态区分；唯一可靠判定是**真实解码后看画面**（加扰流实测纯黑 mean=0/std=0，正常内容 std 一般 >25）。
+
+因此 WASM 判定走**解码探针**（`src/probe.rs` 判定 + relay `/probeplayer` 探测页 + app 隐藏 webview）：解析结果出来后**不阻塞列表**，对命中央视家族域名（`drm::is_cctv_family`，仅作触发器不作结论）的候选后台逐个实测，异常者经 `probe-restriction` 事件异步给链接打上「受限，不能播放」（置灰禁点、不出投屏）；实测可播的（如央视纪录片点播）保持正常。另外播放时还有一层**通用兜底**：任何站点播放 6s 后抽一帧，画面平坦（std<1.5）且进度在走即标注受限——覆盖未知加扰站点。探针超时/无帧一律**不下结论**，宁可漏标不误标。
 
 ## 测试
 

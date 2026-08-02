@@ -401,7 +401,8 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn cctv_candidate_marked_restricted() {
+    async fn cctv_candidate_not_statically_restricted() {
+        // 央视频家族不做静态受限判定（加扰与否需解码探针实测，见 probe 模块）
         let ex = Extractor::new("http://127.0.0.1:8321", RulePack::empty());
         let cand = Candidate::single(
             "https://hls.cntv.lxdns.com/asp/hls/main.m3u8".into(),
@@ -415,9 +416,22 @@ mod tests {
                 &HashMap::new(),
             )
             .await;
-        assert!(f.restriction.is_some(), "央视页面应标记受限");
+        assert!(f.restriction.is_none(), "央视候选不应静态标受限");
+    }
+
+    #[tokio::test]
+    async fn drm_site_candidate_restricted() {
+        let ex = Extractor::new("http://127.0.0.1:8321", RulePack::empty());
+        let cand = Candidate::single(
+            "https://www.netflix.com/watch/123.m3u8".into(),
+            Protocol::Hls,
+            None,
+        );
+        let f = ex
+            .build_format("https://www.netflix.com/watch/123", &cand, &HashMap::new())
+            .await;
+        assert!(f.restriction.is_some(), "全 DRM 站点应静态标受限");
         assert!(f.relay_url.is_none(), "受限内容不产出 relay 地址");
-        assert!(!f.drm);
     }
 
     #[tokio::test]

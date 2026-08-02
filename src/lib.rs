@@ -6,6 +6,7 @@
 
 pub mod drm;
 pub mod extract;
+pub mod probe;
 pub mod relay;
 
 /// 默认桌面浏览器 UA。

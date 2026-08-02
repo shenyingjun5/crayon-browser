@@ -53,7 +53,23 @@ let dash = null;
 let busy = false;
 // 局域网 relay 基地址（投屏用），启动后从 Rust 侧取
 let lanBase = '';
+// 最近一批解析结果（探针异步打标/播放自检时更新）
+let lastItems = [];
+let lastResp = null;
 invoke('lan_addr').then((b) => { lanBase = b; }).catch(() => {});
+
+// 解码探针异步回标：后台实测画面异常的流，收到事件后给对应链接打「受限，不能播放」
+try {
+  window.__TAURI__.event.listen('probe-restriction', (e) => {
+    const { url, reason } = e.payload || {};
+    const it = lastItems.find((r) => r.url === url);
+    if (!it || it.restriction) return;
+    it.restriction = reason || 'WASM 私有加扰，实测解码画面异常，无法播放';
+    it.relay_url = null;
+    if (lastResp) render(lastResp);
+    setStatus('探针实测：1 条流画面异常（私有加扰），已标注受限');
+  });
+} catch (e) {}
 
 function setStatus(t, isErr) {
   $('status').textContent = t || '';
@@ -70,6 +86,8 @@ function normalize(resp) {
 
 function render(resp) {
   const items = normalize(resp);
+  lastItems = items;
+  lastResp = resp;
   const count = resp.count !== undefined ? resp.count : items.length;
   const list = $('list');
   list.innerHTML = '';
@@ -118,6 +136,8 @@ function play(r) {
   if (hls) { hls.destroy(); hls = null; }
   if (dash) { dash.reset(); dash = null; }
   if (!r.relay_url) { setStatus('该格式无 relay 地址，无法播放', true); return; }
+  // relay 带 CORS：开 anonymous 让 canvas 抽帧自检可读
+  v.crossOrigin = 'anonymous';
   setStatus('播放: ' + trunc(r.url));
   if (r.protocol === 'hls') {
     if (v.canPlayType('application/vnd.apple.mpegurl')) {
@@ -145,6 +165,33 @@ function play(r) {
     console.log(r.relay_url); return;
   }
   v.play().catch(() => {});
+  // 播放自检（对所有站点生效的兜底网）：6s 后抽一帧，画面平坦（std<1.5，
+  // 纯黑/纯色）且进度确实在走 → 疑似私有加扰，给该条打受限标注。
+  // 阈值取自央视频直播实测（mean=0, std=0）；正常内容 std 一般 >25。
+  setTimeout(() => {
+    try {
+      if (v.paused || !v.videoWidth || v.currentTime < 3) return;
+      const c = document.createElement('canvas');
+      c.width = v.videoWidth; c.height = v.videoHeight;
+      const x = c.getContext('2d');
+      x.drawImage(v, 0, 0);
+      const d = x.getImageData(0, 0, c.width, c.height).data;
+      let s = 0, sq = 0;
+      const n = d.length / 4;
+      for (let i = 0; i < d.length; i += 4) {
+        const l = (d[i] + d[i+1] + d[i+2]) / 3;
+        s += l; sq += l * l;
+      }
+      const mean = s / n;
+      const std = Math.sqrt(Math.max(0, sq / n - mean * mean));
+      if (std < 1.5) {
+        r.restriction = 'WASM 私有加扰，实测解码画面异常，无法播放';
+        r.relay_url = null;
+        if (lastResp) render(lastResp);
+        setStatus('该流实测画面异常（疑似私有加扰），已标注受限', true);
+      }
+    } catch (e) {}
+  }, 6000);
 }
 
 // 统一解析：先 L1/L3 快速提取，未命中（或失败）自动转 L2 深度嗅探。
