@@ -63,7 +63,9 @@ L1 静态提取 + L3 规则包 + DRM 检测，返回统一 JSON：
 - **L1 静态快路径**（`src/extract/static_parse.rs`）：正则扫 `.m3u8/.mp4/.mpd`（含 `https:\/\/` 转义还原、`%3A%2F` 解码还原三种文本形态）→ `<video src>/<source src>/data-src` → JSON-LD `VideoObject` → maccms 风格 `player_aaaa` 配置（encrypt 0/1/2）。去重、协议分类、清晰度推测并降序排列，相对地址转绝对。
 - **L2 webview 嗅探**：已在 `app/`（正式 Tauri 壳）与 `demo/`（验证 demo）实现。隐藏 webview 加载目标页，注入六路 hook（fetch/XHR/media src/MutationObserver/PerformanceObserver/Worker）脚本抓媒体请求（design.md §3 L2）。
 - **L3 站点规则包**（`src/extract/rules.rs`）：**最小骨架**——从本地 JSON 文件加载（域名后缀匹配 + 带 `(?<url>...)` 命名分组的正则模板，可附 referer/ua）。**远程热更未实现**，后续里程碑 M3 再做（含签名校验）。
-- **L3 站点专用解析器**（`src/extract/sites.rs`）：地址不在 HTML 文本里、需「提取视频 ID → 调站点公开 API → 解析 JSON」的站点，用 Rust 代码实现。首批支持**央视网（tv.cctv.com / cntv.cn）点播**：页面提 `guid` → `vdn.apps.cntv.cn/api/getHttpVideoInfo.do?pid=<guid>` → 取 `hls_url` 与分段 mp4（`is_invalid_copyright=1` 版权受限不出结果）；夹具测试 E8 + 在线测试覆盖。
+- **L3 站点专用解析器**（`src/extract/sites.rs`）：地址不在 HTML 文本里、需「提取视频 ID → 调站点公开 API → 解析 JSON」的站点，用 Rust 代码实现。已支持：
+  - **央视网（tv.cctv.com / cntv.cn）点播**：页面提 `guid` → `vdn.apps.cntv.cn/api/getHttpVideoInfo.do?pid=<guid>` → 取 `hls_url` 与分段 mp4（`is_invalid_copyright=1` 版权受限不出结果）；夹具测试 E8 + 在线测试覆盖。
+  - **B 站番剧（bilibili.com/bangumi/play/ep\<id\>）**：`pgc/player/web/playurl` → **fnval=1 整段 mp4 优先**（音画合一，未登录 360P）；durl 为空时**兜底 fnval=16 DASH 分轨**（视频轨无声/音频轨无画面，note 提示需双轨合并）。`is_drm=true` 按红线不出地址；Referer 固定 `https://www.bilibili.com` 过 bilivideo 防盗链；可选环境变量 `GET_VIDEO_BILI_COOKIE` 携带用户自己的登录 Cookie 解锁更高清晰度（会员内容仍按其权限返回）。夹具测试 E9a/E9b + 在线测试覆盖。
 
 ## DRM 检测（`src/drm.rs`）
 

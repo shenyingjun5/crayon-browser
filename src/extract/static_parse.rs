@@ -36,7 +36,8 @@ impl Protocol {
             Protocol::Hls
         } else if path.ends_with(".mpd") {
             Protocol::Dash
-        } else if path.ends_with(".mp4") {
+        } else if path.ends_with(".mp4") || path.ends_with(".m4s") {
+            // .m4s：B 站等 DASH 分轨文件自带 init 段，单体即完整可播 fMP4
             Protocol::Mp4
         } else {
             Protocol::Other
@@ -309,6 +310,10 @@ mod tests {
             Protocol::Hls
         );
         assert_eq!(Protocol::from_url("https://a.com/x.mp4"), Protocol::Mp4);
+        assert_eq!(
+            Protocol::from_url("https://a.com/x_da2-1-30032.m4s?upsig=a"),
+            Protocol::Mp4
+        );
         assert_eq!(Protocol::from_url("https://a.com/x.mpd"), Protocol::Dash);
         assert_eq!(Protocol::from_url("https://a.com/x.html"), Protocol::Other);
     }

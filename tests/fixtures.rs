@@ -13,6 +13,7 @@ use axum::{
 use futures_util::StreamExt;
 use get_video::extract::{parse_html, Extractor, Format, Protocol, RulePack};
 use get_video::relay::{self, RelayConfig};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -55,6 +56,9 @@ async fn spawn_upstream() -> String {
         .route("/page/clean_dash.html", get(clean_dash_page))
         // E8：央视站点解析器夹具（模拟 getHttpVideoInfo.do）
         .route("/cntv/getHttpVideoInfo.do", get(cntv_video_info))
+        // E9：B 站番剧夹具（模拟 pgc/playurl；dash_only 版 durl 为空走 DASH 兜底）
+        .route("/bili/pgc/playurl", get(bili_playurl))
+        .route("/bili_dash/pgc/playurl", get(bili_playurl_dash_only))
         .with_state(state);
 
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
@@ -338,6 +342,45 @@ async fn cntv_video_info(State(state): State<Arc<UpstreamState>>) -> Response {
         "video": { "validChapterNum": 4, "chapters": [{"duration": "300.00", "url": ""}] }
     }))
     .into_response()
+}
+
+/// E9 夹具：模拟 api.bilibili.com/pgc/player/web/playurl。
+/// fnval=1 → 整段 mp4（durl）；fnval=16 → DASH 音画分轨。
+fn bili_dash_json(base: &str) -> serde_json::Value {
+    serde_json::json!({"code":0,"result":{"is_preview":0,"is_drm":false,"quality":32,
+    "durl": [],
+    "dash": {
+        "video": [{"id":32,"baseUrl": format!("{base}/v_da2-1-30032.m4s?upsig=x"),"height":480}],
+        "audio": [{"id":30216,"baseUrl": format!("{base}/a_da2-1-30216.m4s?upsig=y")}]
+    }}})
+}
+
+async fn bili_playurl(
+    Query(q): Query<HashMap<String, String>>,
+    State(state): State<Arc<UpstreamState>>,
+) -> Response {
+    let fnval = q.get("fnval").map(String::as_str).unwrap_or("");
+    let body = if fnval == "1" {
+        serde_json::json!({"code":0,"result":{"is_preview":0,"is_drm":false,"quality":16,
+            "durl":[{"url": format!("{}/video.mp4?upsig=z", state.base)}]}})
+    } else {
+        bili_dash_json(&state.base)
+    };
+    axum::Json(body).into_response()
+}
+
+/// E9 夹具（DASH 兜底分支）：fnval=1 时 durl 为空，迫使解析器走 fnval=16。
+async fn bili_playurl_dash_only(
+    Query(q): Query<HashMap<String, String>>,
+    State(state): State<Arc<UpstreamState>>,
+) -> Response {
+    let fnval = q.get("fnval").map(String::as_str).unwrap_or("");
+    let body = if fnval == "1" {
+        serde_json::json!({"code":0,"result":{"is_preview":0,"is_drm":false,"quality":16,"durl":[]}})
+    } else {
+        bili_dash_json(&state.base)
+    };
+    axum::Json(body).into_response()
 }
 
 struct Html;
@@ -885,4 +928,55 @@ async fn e8_cntv_site_extractor() {
     )
     .await
     .is_none());
+}
+
+// ---------------------------------------------------------------------------
+// E9：站点专用解析器（B 站番剧）夹具
+// ---------------------------------------------------------------------------
+
+/// E9a：durl 整段优先——fnval=1 返回音画合一 mp4，单 URL 可播。
+#[tokio::test]
+async fn e9a_bilibili_durl_preferred() {
+    let upstream = spawn_upstream().await;
+    let client = reqwest::Client::new();
+    let r = get_video::extract::sites::extract_bilibili(
+        &client,
+        "https://www.bilibili.com/bangumi/play/ep733316?spm_id_from=333.337.0.0",
+        &format!("{upstream}/bili/pgc/playurl"),
+    )
+    .await
+    .expect("应命中 B 站解析器");
+    assert_eq!(r.candidates.len(), 1, "durl 非空时不再走 DASH");
+    assert_eq!(r.candidates[0].url, format!("{upstream}/video.mp4?upsig=z"));
+    assert_eq!(r.candidates[0].protocol, Protocol::Mp4);
+    assert_eq!(r.candidates[0].quality, Some(360));
+    assert_eq!(r.referer.as_deref(), Some("https://www.bilibili.com"));
+    assert!(r.note.is_none());
+    // 非番剧页 URL（无 ep_id）不命中
+    assert!(get_video::extract::sites::extract_bilibili(
+        &client,
+        "https://www.bilibili.com/video/BV1xx411c7mD",
+        &format!("{upstream}/bili/pgc/playurl"),
+    )
+    .await
+    .is_none());
+}
+
+/// E9b：durl 为空时兜底 DASH 分轨，附「音画分离」说明。
+#[tokio::test]
+async fn e9b_bilibili_dash_fallback() {
+    let upstream = spawn_upstream().await;
+    let client = reqwest::Client::new();
+    let r = get_video::extract::sites::extract_bilibili(
+        &client,
+        "https://www.bilibili.com/bangumi/play/ep733316",
+        &format!("{upstream}/bili_dash/pgc/playurl"),
+    )
+    .await
+    .expect("应命中 B 站解析器");
+    assert_eq!(r.candidates.len(), 2, "视频轨 + 音频轨");
+    assert_eq!(r.candidates[0].quality, Some(480));
+    assert_eq!(r.candidates[1].quality, None, "音频轨无清晰度");
+    assert!(r.candidates.iter().all(|c| c.protocol == Protocol::Mp4));
+    assert!(r.note.unwrap().contains("音画分离"));
 }

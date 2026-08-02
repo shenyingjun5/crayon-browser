@@ -357,3 +357,27 @@ async fn cctv_documentary_site_extractor() {
     assert!(f.relay_url.is_some(), "应产出 relay 地址");
     relay.shutdown().await;
 }
+
+/// B 站番剧：ep 页无直链，站点解析器经 pgc/playurl 拿整段 mp4（未登录 360P）。
+#[tokio::test]
+#[ignore]
+async fn bilibili_bangumi_site_extractor() {
+    let relay = spawn_relay().await;
+    let extractor = Extractor::new(&relay.base_url(), RulePack::empty());
+    let info = extractor
+        .extract("https://www.bilibili.com/bangumi/play/ep733316")
+        .await
+        .unwrap();
+    assert_eq!(info.source, "site-api", "应走站点解析器");
+    assert!(!info.formats.is_empty(), "应有可用格式");
+    let f = &info.formats[0];
+    assert_eq!(f.protocol, "mp4", "durl 整段应为 mp4: {:?}", info.formats);
+    assert!(!f.drm, "is_drm=false 的内容不应标记 DRM");
+    assert!(f.relay_url.is_some(), "应产出 relay 地址");
+    assert_eq!(
+        f.headers.get("Referer").map(String::as_str),
+        Some("https://www.bilibili.com"),
+        "bilivideo 防盗链需要 B 站 Referer"
+    );
+    relay.shutdown().await;
+}

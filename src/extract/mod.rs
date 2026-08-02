@@ -135,12 +135,14 @@ impl Extractor {
             formats.push(self.build_format(&cand, &headers).await);
         }
 
-        // 站点专用解析器（首批：央视网 tv.cctv.com / cntv，见 sites.rs）
+        // 站点专用解析器（首批：央视网 tv.cctv.com / cntv、B 站番剧，见 sites.rs）
         let mut site_hit = false;
         let mut site_title: Option<String> = None;
+        let mut site_note: Option<String> = None;
         if let Some(site) = sites::extract(&self.client, &final_url, &html).await {
             site_hit = !site.candidates.is_empty();
             site_title = site.title;
+            site_note = site.note;
             for cand in &site.candidates {
                 if seen.contains_key(&cand.url) {
                     continue;
@@ -165,7 +167,7 @@ impl Extractor {
                 "static".into()
             },
             formats,
-            note: None,
+            note: site_note,
         })
     }
 
