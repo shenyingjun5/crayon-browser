@@ -36,7 +36,7 @@ pub async fn extract(client: &reqwest::Client, page_url: &str, html: &str) -> Op
         return extract_cntv(client, html, CNTV_API).await;
     }
     if host == "bilibili.com" || host.ends_with(".bilibili.com") {
-        return extract_bilibili(client, page_url, BILI_PGC_API).await;
+        return extract_bilibili(client, page_url, html, &BiliEndpoints::production()).await;
     }
     None
 }
@@ -129,20 +129,57 @@ fn result_from_cntv(data: &CntvResponse) -> SiteResult {
 }
 
 // ---------------------------------------------------------------------------
-// B 站（bilibili）番剧
+// B 站（bilibili）：番剧 ep/ss 页 + 普通视频 BV 页
 // ---------------------------------------------------------------------------
 
-/// B 站番剧播放 API（pgc = professional generated content）。
+/// B 站播放/稿件 API。
 pub const BILI_PGC_API: &str = "https://api.bilibili.com/pgc/player/web/playurl";
+pub const BILI_UGC_API: &str = "https://api.bilibili.com/x/player/playurl";
+pub const BILI_VIEW_API: &str = "https://api.bilibili.com/x/web-interface/view";
 
-/// 番剧页 URL 提 ep_id：`/bangumi/play/ep733316`。
+/// B 站 API 端点（生产用 `BiliEndpoints::production()`；夹具测试注入 mock 地址）。
+#[derive(Debug, Clone)]
+pub struct BiliEndpoints {
+    pub pgc: String,
+    pub ugc: String,
+    pub view: String,
+}
+
+impl BiliEndpoints {
+    pub fn production() -> Self {
+        Self {
+            pgc: BILI_PGC_API.into(),
+            ugc: BILI_UGC_API.into(),
+            view: BILI_VIEW_API.into(),
+        }
+    }
+}
+
+/// 番剧页 URL：`/bangumi/play/ep733316`（单集）/ `ss28747`（整季）。
 static EP_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"/bangumi/play/ep(\d+)").unwrap());
+static SS_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"/bangumi/play/ss(\d+)").unwrap());
+/// ss 季页 HTML 内含默认集的 `"ep_id":733316`（playurl 不接受 season_id，需转 ep）。
+static EPID_JSON_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#""ep_id":(\d+)"#).unwrap());
+/// 普通视频页：`/video/BV1xx411c7mD`。
+static BV_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"/video/(BV[0-9A-Za-z]+)").unwrap());
 
 #[derive(Debug, Deserialize)]
 struct BiliPlayurl {
     #[serde(default)]
     code: i64,
+    /// pgc（番剧）包裹字段。
     result: Option<BiliResult>,
+    /// ugc（普通视频）包裹字段。
+    data: Option<BiliResult>,
+}
+
+impl BiliPlayurl {
+    fn into_result(self) -> Option<BiliResult> {
+        if self.code != 0 {
+            return None;
+        }
+        self.result.or(self.data)
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -189,57 +226,194 @@ struct BiliStream {
     height: Option<u32>,
 }
 
-/// B 站番剧：URL 提 ep_id → pgc/playurl → 整段 mp4（优先）或 DASH 分轨（兜底）。
-/// `api_base` 参数化以便夹具测试注入 mock 地址。
+#[derive(Debug, Deserialize)]
+struct BiliView {
+    #[serde(default)]
+    code: i64,
+    data: Option<BiliViewData>,
+}
+
+#[derive(Debug, Deserialize)]
+struct BiliViewData {
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    pages: Vec<BiliPage>,
+}
+
+#[derive(Debug, Deserialize)]
+struct BiliPage {
+    #[serde(default)]
+    cid: i64,
+    #[serde(default)]
+    page: i64,
+    #[serde(default)]
+    part: String,
+}
+
+/// B 站：番剧 ep/ss 页走 pgc/playurl(ep_id)，普通 BV 页走 view(bvid) →
+/// x/player/playurl(bvid+cid)。整段 mp4（fnval=1）优先，DASH 分轨（fnval=16）兜底。
+/// `html` 仅 ss 季页用于提取默认集 ep_id 时需要，其余入口可传空串。
 /// 可选环境变量 `GET_VIDEO_BILI_COOKIE`：携带用户自己的登录 Cookie 解锁
-/// 更高清晰度（未登录仅 360P 整段 / 480P 分轨；会员内容仍按其权限返回）。
+/// 更高清晰度（会员内容仍按其权限返回）。
 pub async fn extract_bilibili(
     client: &reqwest::Client,
     page_url: &str,
-    api_base: &str,
+    html: &str,
+    api: &BiliEndpoints,
 ) -> Option<SiteResult> {
-    let ep_id = EP_RE.captures(page_url)?.get(1)?.as_str().to_string();
     let cookie = std::env::var("GET_VIDEO_BILI_COOKIE")
         .ok()
         .filter(|c| !c.is_empty());
-    let get = |fnval: u32| {
-        let fv = fnval.to_string();
-        let mut req = client.get(api_base).query(&[
-            ("ep_id", ep_id.as_str()),
-            ("qn", "116"),
-            ("fourk", "1"),
-            ("fnval", fv.as_str()),
-        ]);
-        if let Some(c) = &cookie {
-            req = req.header(reqwest::header::COOKIE, c.as_str());
-        }
-        req
-    };
     let mut out = SiteResult {
         referer: Some("https://www.bilibili.com".into()),
         ..Default::default()
     };
+    // 定位入口 → 构造 fnval=1 / fnval=16 两个 playurl 请求
+    let (req1, req16) = if let Some(cap) = EP_RE.captures(page_url) {
+        let ep = cap[1].to_string();
+        (
+            pgc_req(client, api, &ep, 1, &cookie),
+            pgc_req(client, api, &ep, 16, &cookie),
+        )
+    } else if SS_RE.is_match(page_url) {
+        // ss 季页：playurl 不认 season_id，从 HTML 取默认集 ep_id
+        let cap = EPID_JSON_RE
+            .captures(html)
+            .or_else(|| EP_RE.captures(html))?;
+        let ep = cap[1].to_string();
+        (
+            pgc_req(client, api, &ep, 1, &cookie),
+            pgc_req(client, api, &ep, 16, &cookie),
+        )
+    } else {
+        let cap = BV_RE.captures(page_url)?;
+        let bvid = cap[1].to_string();
+        let (cid, title) = fetch_view(client, api, &bvid, query_p(page_url), &cookie).await?;
+        out.title = title;
+        (
+            ugc_req(client, api, &bvid, cid, 1, &cookie),
+            ugc_req(client, api, &bvid, cid, 16, &cookie),
+        )
+    };
+    fill_from_playurls(&mut out, req1, req16).await;
+    Some(out)
+}
+
+fn bili_req(
+    client: &reqwest::Client,
+    base: &str,
+    params: &[(&str, String)],
+    cookie: &Option<String>,
+) -> reqwest::RequestBuilder {
+    let mut req = client.get(base).query(params);
+    if let Some(c) = cookie {
+        req = req.header(reqwest::header::COOKIE, c.as_str());
+    }
+    req
+}
+
+fn pgc_req(
+    client: &reqwest::Client,
+    api: &BiliEndpoints,
+    ep_id: &str,
+    fnval: u32,
+    cookie: &Option<String>,
+) -> reqwest::RequestBuilder {
+    bili_req(
+        client,
+        &api.pgc,
+        &[
+            ("ep_id", ep_id.to_string()),
+            ("qn", "116".into()),
+            ("fourk", "1".into()),
+            ("fnval", fnval.to_string()),
+        ],
+        cookie,
+    )
+}
+
+fn ugc_req(
+    client: &reqwest::Client,
+    api: &BiliEndpoints,
+    bvid: &str,
+    cid: i64,
+    fnval: u32,
+    cookie: &Option<String>,
+) -> reqwest::RequestBuilder {
+    bili_req(
+        client,
+        &api.ugc,
+        &[
+            ("bvid", bvid.to_string()),
+            ("cid", cid.to_string()),
+            ("qn", "116".into()),
+            ("fourk", "1".into()),
+            ("fnval", fnval.to_string()),
+        ],
+        cookie,
+    )
+}
+
+/// view API → (cid, title)：BV 号换 cid，多分 P 按 URL 的 ?p=N 选集。
+async fn fetch_view(
+    client: &reqwest::Client,
+    api: &BiliEndpoints,
+    bvid: &str,
+    p: i64,
+    cookie: &Option<String>,
+) -> Option<(i64, Option<String>)> {
+    let req = bili_req(client, &api.view, &[("bvid", bvid.to_string())], cookie);
+    let text = req.send().await.ok()?.text().await.ok()?;
+    let v: BiliView = serde_json::from_str(&text).ok()?;
+    if v.code != 0 {
+        return None;
+    }
+    let data = v.data?;
+    if data.pages.is_empty() {
+        return None;
+    }
+    let idx = usize::try_from(p.max(1) - 1)
+        .ok()?
+        .min(data.pages.len() - 1);
+    let page = &data.pages[idx];
+    let title = if data.title.is_empty() {
+        None
+    } else if idx > 0 && !page.part.is_empty() {
+        Some(format!("{} P{} {}", data.title, page.page, page.part))
+    } else {
+        Some(data.title.clone())
+    };
+    Some((page.cid, title))
+}
+
+/// 播放地址两段式：fnval=1 整段优先，空则 fnval=16 DASH 兜底。
+async fn fill_from_playurls(
+    out: &mut SiteResult,
+    req1: reqwest::RequestBuilder,
+    req16: reqwest::RequestBuilder,
+) {
     // 优先 fnval=1：durl 渐进式整段（音画合一）
-    if let Some(r) = fetch_bili(get(1)).await {
+    if let Some(r) = fetch_bili(req1).await {
         if r.is_drm {
             out.note = Some("B站：该内容标记为 DRM，按红线不出地址".into());
-            return Some(out);
+            return;
         }
-        push_durl(&mut out, &r);
+        push_durl(out, &r);
         if !out.candidates.is_empty() {
             if r.is_preview == 1 {
                 out.note = Some("B站：仅试看片段，完整内容需登录/会员".into());
             }
-            return Some(out);
+            return;
         }
     }
     // 兜底 fnval=16：DASH 音画分轨（视频轨无声、音频轨无画面）
-    if let Some(r) = fetch_bili(get(16)).await {
+    if let Some(r) = fetch_bili(req16).await {
         if r.is_drm {
             out.note = Some("B站：该内容标记为 DRM，按红线不出地址".into());
-            return Some(out);
+            return;
         }
-        push_dash(&mut out, &r);
+        push_dash(out, &r);
         if !out.candidates.is_empty() {
             out.note =
                 Some("B站 DASH 音画分离：视频轨无声、音频轨无画面，需应用侧双轨合并后播放".into());
@@ -247,16 +421,25 @@ pub async fn extract_bilibili(
             out.note = Some("B站：仅试看片段，完整内容需登录/会员".into());
         }
     }
-    Some(out)
 }
 
 async fn fetch_bili(req: reqwest::RequestBuilder) -> Option<BiliResult> {
     let text = req.send().await.ok()?.text().await.ok()?;
     let data: BiliPlayurl = serde_json::from_str(&text).ok()?;
-    if data.code != 0 {
-        return None;
-    }
-    data.result
+    data.into_result()
+}
+
+/// URL query 的 ?p=N（多分 P 选集，缺省 1）。
+fn query_p(page_url: &str) -> i64 {
+    url::Url::parse(page_url)
+        .ok()
+        .and_then(|u| {
+            u.query_pairs()
+                .find(|(k, _)| k == "p")
+                .and_then(|(_, v)| v.parse::<i64>().ok())
+        })
+        .filter(|&p| p >= 1)
+        .unwrap_or(1)
 }
 
 fn push_durl(out: &mut SiteResult, r: &BiliResult) {
@@ -372,6 +555,31 @@ mod tests {
         assert!(EP_RE
             .captures("https://www.bilibili.com/video/BV1xx")
             .is_none());
+    }
+
+    #[test]
+    fn bili_ss_bv_regex() {
+        assert!(SS_RE.is_match("https://www.bilibili.com/bangumi/play/ss28747"));
+        assert!(!SS_RE.is_match("https://www.bilibili.com/bangumi/play/ep733316"));
+        let cap = EPID_JSON_RE
+            .captures(r#"{"epInfo":{"ep_id":733316}}"#)
+            .unwrap();
+        assert_eq!(&cap[1], "733316");
+        let bv = BV_RE
+            .captures("https://www.bilibili.com/video/BV1xx411c7mD?p=2")
+            .unwrap();
+        assert_eq!(&bv[1], "BV1xx411c7mD");
+        assert!(BV_RE
+            .captures("https://www.bilibili.com/bangumi/play/ep1")
+            .is_none());
+    }
+
+    #[test]
+    fn bili_query_p() {
+        assert_eq!(query_p("https://www.bilibili.com/video/BV1xx?p=2"), 2);
+        assert_eq!(query_p("https://www.bilibili.com/video/BV1xx"), 1);
+        assert_eq!(query_p("https://www.bilibili.com/video/BV1xx?p=0"), 1);
+        assert_eq!(query_p("https://www.bilibili.com/video/BV1xx?p=abc"), 1);
     }
 
     #[test]

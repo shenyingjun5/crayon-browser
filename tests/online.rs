@@ -381,3 +381,41 @@ async fn bilibili_bangumi_site_extractor() {
     );
     relay.shutdown().await;
 }
+
+/// B 站普通视频页：BV → view 换 cid → x/player/playurl 出整段 mp4。
+#[tokio::test]
+#[ignore]
+async fn bilibili_ugc_video_site_extractor() {
+    let relay = spawn_relay().await;
+    let extractor = Extractor::new(&relay.base_url(), RulePack::empty());
+    let info = extractor
+        .extract("https://www.bilibili.com/video/BV1xx411c7mD")
+        .await
+        .unwrap();
+    assert_eq!(info.source, "site-api", "应走站点解析器");
+    assert!(!info.formats.is_empty(), "应有可用格式");
+    let f = &info.formats[0];
+    assert_eq!(f.protocol, "mp4", "durl 整段应为 mp4: {:?}", info.formats);
+    assert!(!f.drm);
+    assert!(f.relay_url.is_some());
+    relay.shutdown().await;
+}
+
+/// B 站番剧 ss 季页：HTML 默认集 ep_id 转 pgc/playurl。
+#[tokio::test]
+#[ignore]
+async fn bilibili_bangumi_ss_site_extractor() {
+    let relay = spawn_relay().await;
+    let extractor = Extractor::new(&relay.base_url(), RulePack::empty());
+    let info = extractor
+        .extract("https://www.bilibili.com/bangumi/play/ss28747")
+        .await
+        .unwrap();
+    assert_eq!(info.source, "site-api");
+    assert!(
+        !info.formats.is_empty(),
+        "ss 页应经默认集拿到格式: {:?}",
+        info.note
+    );
+    relay.shutdown().await;
+}

@@ -65,7 +65,7 @@ L1 静态提取 + L3 规则包 + DRM 检测，返回统一 JSON：
 - **L3 站点规则包**（`src/extract/rules.rs`）：**最小骨架**——从本地 JSON 文件加载（域名后缀匹配 + 带 `(?<url>...)` 命名分组的正则模板，可附 referer/ua）。**远程热更未实现**，后续里程碑 M3 再做（含签名校验）。
 - **L3 站点专用解析器**（`src/extract/sites.rs`）：地址不在 HTML 文本里、需「提取视频 ID → 调站点公开 API → 解析 JSON」的站点，用 Rust 代码实现。已支持：
   - **央视网（tv.cctv.com / cntv.cn）点播**：页面提 `guid` → `vdn.apps.cntv.cn/api/getHttpVideoInfo.do?pid=<guid>` → 取 `hls_url` 与分段 mp4（`is_invalid_copyright=1` 版权受限不出结果）；夹具测试 E8 + 在线测试覆盖。
-  - **B 站番剧（bilibili.com/bangumi/play/ep\<id\>）**：`pgc/player/web/playurl` → **fnval=1 整段 mp4 优先**（音画合一，未登录 360P）；durl 为空时**兜底 fnval=16 DASH 分轨**（视频轨无声/音频轨无画面，note 提示需双轨合并）。`is_drm=true` 按红线不出地址；Referer 固定 `https://www.bilibili.com` 过 bilivideo 防盗链；可选环境变量 `GET_VIDEO_BILI_COOKIE` 携带用户自己的登录 Cookie 解锁更高清晰度（会员内容仍按其权限返回）。夹具测试 E9a/E9b + 在线测试覆盖。
+  - **B 站（bilibili.com）**：番剧 **ep 单集页 / ss 季页**（ss 从 HTML 取默认集 `ep_id`，playurl 不认 season_id）与**普通视频 BV 页**（`x/web-interface/view` 换 cid，多分 P 按 `?p=N` 选集，标题含分 P 名）。播放地址统一走 **fnval=1 整段 mp4 优先**（音画合一）；durl 为空时**兜底 fnval=16 DASH 分轨**（视频轨无声/音频轨无画面，note 提示需双轨合并）。`is_drm=true` 按红线不出地址；Referer 固定 `https://www.bilibili.com` 过 bilivideo 防盗链；可选环境变量 `GET_VIDEO_BILI_COOKIE` 携带用户自己的登录 Cookie 解锁更高清晰度（会员内容仍按其权限返回）。夹具测试 E9a-E9d + 在线测试覆盖。
 
 ## DRM 检测（`src/drm.rs`）
 

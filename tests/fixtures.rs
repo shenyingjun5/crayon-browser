@@ -59,6 +59,9 @@ async fn spawn_upstream() -> String {
         // E9：B 站番剧夹具（模拟 pgc/playurl；dash_only 版 durl 为空走 DASH 兜底）
         .route("/bili/pgc/playurl", get(bili_playurl))
         .route("/bili_dash/pgc/playurl", get(bili_playurl_dash_only))
+        // E9c：B 站普通视频夹具（view 换 cid + ugc playurl）
+        .route("/bili/x/web-interface/view", get(bili_view))
+        .route("/bili/x/player/playurl", get(bili_ugc_playurl))
         .with_state(state);
 
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
@@ -381,6 +384,31 @@ async fn bili_playurl_dash_only(
         bili_dash_json(&state.base)
     };
     axum::Json(body).into_response()
+}
+
+/// E9c 夹具：B 站 x/web-interface/view（两分 P 稿件）。
+async fn bili_view() -> Response {
+    axum::Json(serde_json::json!({"code":0,"data":{
+        "title": "夹具视频",
+        "pages": [
+            {"cid": 111, "page": 1, "part": "上"},
+            {"cid": 222, "page": 2, "part": "下"}
+        ]
+    }}))
+    .into_response()
+}
+
+/// E9c 夹具：B 站 x/player/playurl——cid 回显进 durl URL，供断言选集正确。
+async fn bili_ugc_playurl(
+    Query(q): Query<HashMap<String, String>>,
+    State(state): State<Arc<UpstreamState>>,
+) -> Response {
+    let cid = q.get("cid").cloned().unwrap_or_default();
+    axum::Json(
+        serde_json::json!({"code":0,"data":{"is_preview":0,"is_drm":false,"quality":64,
+        "durl":[{"url": format!("{}/ugc_{cid}.mp4?upsig=z", state.base)}]}}),
+    )
+    .into_response()
 }
 
 struct Html;
@@ -931,10 +959,18 @@ async fn e8_cntv_site_extractor() {
 }
 
 // ---------------------------------------------------------------------------
-// E9：站点专用解析器（B 站番剧）夹具
+// E9：站点专用解析器（B 站：番剧 ep/ss + 普通 BV 页）夹具
 // ---------------------------------------------------------------------------
 
-/// E9a：durl 整段优先——fnval=1 返回音画合一 mp4，单 URL 可播。
+fn bili_endpoints(upstream: &str, pgc_path: &str) -> get_video::extract::sites::BiliEndpoints {
+    get_video::extract::sites::BiliEndpoints {
+        pgc: format!("{upstream}{pgc_path}"),
+        ugc: format!("{upstream}/bili/x/player/playurl"),
+        view: format!("{upstream}/bili/x/web-interface/view"),
+    }
+}
+
+/// E9a：番剧 ep 页——durl 整段优先，fnval=1 返回音画合一 mp4，单 URL 可播。
 #[tokio::test]
 async fn e9a_bilibili_durl_preferred() {
     let upstream = spawn_upstream().await;
@@ -942,7 +978,8 @@ async fn e9a_bilibili_durl_preferred() {
     let r = get_video::extract::sites::extract_bilibili(
         &client,
         "https://www.bilibili.com/bangumi/play/ep733316?spm_id_from=333.337.0.0",
-        &format!("{upstream}/bili/pgc/playurl"),
+        "",
+        &bili_endpoints(&upstream, "/bili/pgc/playurl"),
     )
     .await
     .expect("应命中 B 站解析器");
@@ -952,17 +989,18 @@ async fn e9a_bilibili_durl_preferred() {
     assert_eq!(r.candidates[0].quality, Some(360));
     assert_eq!(r.referer.as_deref(), Some("https://www.bilibili.com"));
     assert!(r.note.is_none());
-    // 非番剧页 URL（无 ep_id）不命中
+    // 既非番剧也非视频页的 URL 不命中
     assert!(get_video::extract::sites::extract_bilibili(
         &client,
-        "https://www.bilibili.com/video/BV1xx411c7mD",
-        &format!("{upstream}/bili/pgc/playurl"),
+        "https://www.bilibili.com/",
+        "",
+        &bili_endpoints(&upstream, "/bili/pgc/playurl"),
     )
     .await
     .is_none());
 }
 
-/// E9b：durl 为空时兜底 DASH 分轨，附「音画分离」说明。
+/// E9b：番剧 ep 页——durl 为空时兜底 DASH 分轨，附「音画分离」说明。
 #[tokio::test]
 async fn e9b_bilibili_dash_fallback() {
     let upstream = spawn_upstream().await;
@@ -970,7 +1008,8 @@ async fn e9b_bilibili_dash_fallback() {
     let r = get_video::extract::sites::extract_bilibili(
         &client,
         "https://www.bilibili.com/bangumi/play/ep733316",
-        &format!("{upstream}/bili_dash/pgc/playurl"),
+        "",
+        &bili_endpoints(&upstream, "/bili_dash/pgc/playurl"),
     )
     .await
     .expect("应命中 B 站解析器");
@@ -979,4 +1018,54 @@ async fn e9b_bilibili_dash_fallback() {
     assert_eq!(r.candidates[1].quality, None, "音频轨无清晰度");
     assert!(r.candidates.iter().all(|c| c.protocol == Protocol::Mp4));
     assert!(r.note.unwrap().contains("音画分离"));
+}
+
+/// E9c：普通 BV 视频页——view 换 cid，?p=2 选第二集，ugc playurl 出整段。
+#[tokio::test]
+async fn e9c_bilibili_bv_multi_page() {
+    let upstream = spawn_upstream().await;
+    let client = reqwest::Client::new();
+    let r = get_video::extract::sites::extract_bilibili(
+        &client,
+        "https://www.bilibili.com/video/BV1xx411c7mD?p=2",
+        "",
+        &bili_endpoints(&upstream, "/bili/pgc/playurl"),
+    )
+    .await
+    .expect("应命中 BV 页解析");
+    assert_eq!(r.candidates.len(), 1);
+    assert!(
+        r.candidates[0].url.contains("ugc_222"),
+        "?p=2 应选 cid=222 的分 P: {}",
+        r.candidates[0].url
+    );
+    assert_eq!(r.candidates[0].quality, Some(720));
+    assert_eq!(r.title.as_deref(), Some("夹具视频 P2 下"));
+}
+
+/// E9d：番剧 ss 季页——HTML 里的默认集 ep_id 转 pgc/playurl。
+#[tokio::test]
+async fn e9d_bilibili_ss_season_page() {
+    let upstream = spawn_upstream().await;
+    let client = reqwest::Client::new();
+    let html = r#"<script>window.__INITIAL_STATE__={"epInfo":{"ep_id":733316}};</script>"#;
+    let r = get_video::extract::sites::extract_bilibili(
+        &client,
+        "https://www.bilibili.com/bangumi/play/ss28747",
+        html,
+        &bili_endpoints(&upstream, "/bili/pgc/playurl"),
+    )
+    .await
+    .expect("ss 页应经默认集 ep_id 命中");
+    assert_eq!(r.candidates.len(), 1);
+    assert_eq!(r.candidates[0].url, format!("{upstream}/video.mp4?upsig=z"));
+    // ss 页 HTML 无 ep_id 时不命中
+    assert!(get_video::extract::sites::extract_bilibili(
+        &client,
+        "https://www.bilibili.com/bangumi/play/ss28747",
+        "<html>nothing</html>",
+        &bili_endpoints(&upstream, "/bili/pgc/playurl"),
+    )
+    .await
+    .is_none());
 }

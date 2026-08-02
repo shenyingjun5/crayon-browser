@@ -9,6 +9,7 @@ pub enum Protocol {
     Hls,
     Dash,
     Mp4,
+    Flv,
     Other,
 }
 
@@ -18,6 +19,7 @@ impl Protocol {
             Protocol::Hls => "hls",
             Protocol::Dash => "dash",
             Protocol::Mp4 => "mp4",
+            Protocol::Flv => "flv",
             Protocol::Other => "other",
         }
     }
@@ -39,6 +41,8 @@ impl Protocol {
         } else if path.ends_with(".mp4") || path.ends_with(".m4s") {
             // .m4s：B 站等 DASH 分轨文件自带 init 段，单体即完整可播 fMP4
             Protocol::Mp4
+        } else if path.ends_with(".flv") {
+            Protocol::Flv
         } else {
             Protocol::Other
         }
@@ -314,6 +318,7 @@ mod tests {
             Protocol::from_url("https://a.com/x_da2-1-30032.m4s?upsig=a"),
             Protocol::Mp4
         );
+        assert_eq!(Protocol::from_url("https://a.com/x.flv"), Protocol::Flv);
         assert_eq!(Protocol::from_url("https://a.com/x.mpd"), Protocol::Dash);
         assert_eq!(Protocol::from_url("https://a.com/x.html"), Protocol::Other);
     }
