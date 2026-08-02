@@ -339,15 +339,23 @@ async fn do_sniff(app: &AppHandle, url: &str) -> Result<SniffResponse, String> {
             },
         );
         headers.insert("User-Agent".to_string(), get_video::DEFAULT_UA.to_string());
-        // 受限站点（WASM 私有加扰 / 全站 DRM）：页面与流地址任一命中即打标，
+        // 受限站点（全站 DRM 名单）：页面与流地址任一命中即打标，
         // 不再拉流做 DRM 检测，也不产出 relay 地址
         let page_ctx = if hit.page.is_empty() { url } else { &hit.page };
-        let restriction = get_video::drm::restricted_reason(page_ctx, &hit.url).map(str::to_string);
-        let drm = if restriction.is_some() {
-            false
-        } else {
-            extractor.detect_drm(&cand, &headers).await
-        };
+        let mut restriction =
+            get_video::drm::restricted_reason(page_ctx, &hit.url).map(str::to_string);
+        let mut drm = false;
+        if restriction.is_none() {
+            match protocol {
+                // HLS：一次拉取同时判 DRM 与活性（变体 404 即失效）
+                Protocol::Hls => match extractor.inspect_hls(&cand, &headers).await {
+                    get_video::extract::HlsVerdict::Dead(reason) => restriction = Some(reason),
+                    get_video::extract::HlsVerdict::Drm => drm = true,
+                    get_video::extract::HlsVerdict::Unknown => {}
+                },
+                _ => drm = extractor.detect_drm(&cand, &headers).await,
+            }
+        }
         let relay_url = if drm || restriction.is_some() {
             None
         } else {
@@ -384,9 +392,9 @@ struct ProbeTarget {
 }
 
 /// 单流解码探针：隐藏 webview 加载 relay 的 /probeplayer 页（与 /proxy 同源，
-/// canvas 可读），抽帧统计经 beacon 回传后判定画面是否退化。
-/// 返回 Some(true)=实测异常（加扰）；Some(false)=实测可播；None=超时/无结论。
-async fn probe_one(app: &AppHandle, relay_url: &str) -> Option<bool> {
+/// canvas 可读），抽帧统计经 beacon 回传后综合判定。
+/// 返回 Some(受限原因)=实测不可播（加扰黑屏 / 加载失败）；None=可播或无结论。
+async fn probe_one(app: &AppHandle, relay_url: &str) -> Option<&'static str> {
     let state = app.state::<Arc<AppState>>();
     let id = format!(
         "p{}",
@@ -435,42 +443,50 @@ async fn probe_one(app: &AppHandle, relay_url: &str) -> Option<bool> {
     });
 
     let rep = report?;
-    if rep.frames.is_empty() {
-        // 没采到帧（加载失败/超时）：不下结论，避免误标
-        println!("[probe] {relay_url} 无帧数据（{:?}），无结论", rep.err);
-        return None;
-    }
     let stats: Vec<get_video::probe::FrameStat> = rep
         .frames
         .iter()
         .map(|&(mean, std)| get_video::probe::FrameStat { mean, std })
         .collect();
-    Some(get_video::probe::frames_degenerate(&stats))
+    // 超时不算加载失败（可能是网络慢），播放器 error 事件才算确定性失败
+    let load_error = matches!(rep.err.as_deref(), Some(e) if e != "timeout");
+    match get_video::probe::probe_verdict(&stats, load_error) {
+        get_video::probe::ProbeVerdict::Scrambled => Some(get_video::probe::SCRAMBLED_REASON),
+        get_video::probe::ProbeVerdict::LoadFailed => Some(get_video::probe::LOAD_FAILED_REASON),
+        get_video::probe::ProbeVerdict::Playable => None,
+        get_video::probe::ProbeVerdict::Inconclusive => {
+            println!("[probe] {relay_url} 无结论（err={:?}）", rep.err);
+            None
+        }
+    }
 }
 
 /// 对命中央视家族的候选逐个跑解码探针（顺序执行，避免并发拉流）。
-/// 实测异常的流：向前端发 `probe-restriction` 事件（UI 异步打标），
-/// 并返回异常流地址集合（CLI 模式据此在打印前直接改结果）。
-async fn probe_scrambled(app: &AppHandle, page_ctx: &str, targets: &[ProbeTarget]) -> Vec<String> {
+/// 实测不可播的流：向前端发 `probe-restriction` 事件（UI 异步打标），
+/// 并返回 (流地址, 受限原因) 集合（CLI 模式据此在打印前直接改结果）。
+async fn probe_scrambled(
+    app: &AppHandle,
+    page_ctx: &str,
+    targets: &[ProbeTarget],
+) -> Vec<(String, &'static str)> {
     let mut bad = Vec::new();
     for t in targets {
         if !get_video::drm::is_cctv_family(page_ctx) && !get_video::drm::is_cctv_family(&t.url) {
             continue;
         }
         match probe_one(app, &t.relay_url).await {
-            Some(true) => {
-                println!("[probe] 实测画面异常（WASM 加扰）: {}", t.url);
-                bad.push(t.url.clone());
+            Some(reason) => {
+                println!("[probe] 实测不可播（{reason}）: {}", t.url);
+                bad.push((t.url.clone(), reason));
                 let _ = app.emit(
                     "probe-restriction",
                     serde_json::json!({
                         "url": t.url,
-                        "reason": get_video::probe::SCRAMBLED_REASON,
+                        "reason": reason,
                     }),
                 );
             }
-            Some(false) => println!("[probe] 实测可播: {}", t.url),
-            None => println!("[probe] 探测无结论: {}", t.url),
+            None => println!("[probe] 实测可播或无结论: {}", t.url),
         }
     }
     bad
@@ -907,9 +923,10 @@ fn main() {
                             let targets = sniff_probe_targets(&resp);
                             let bad = probe_scrambled(&ah, &u, &targets).await;
                             for item in resp.results.iter_mut() {
-                                if bad.contains(&item.url) {
-                                    item.restriction =
-                                        Some(get_video::probe::SCRAMBLED_REASON.to_string());
+                                if let Some((_, reason)) =
+                                    bad.iter().find(|(url, _)| url == &item.url)
+                                {
+                                    item.restriction = Some(reason.to_string());
                                     item.relay_url = None;
                                 }
                             }
@@ -940,9 +957,9 @@ fn main() {
                             let targets = extract_probe_targets(&info);
                             let bad = probe_scrambled(&ah, &u, &targets).await;
                             for f in info.formats.iter_mut() {
-                                if bad.contains(&f.url) {
-                                    f.restriction =
-                                        Some(get_video::probe::SCRAMBLED_REASON.to_string());
+                                if let Some((_, reason)) = bad.iter().find(|(url, _)| url == &f.url)
+                                {
+                                    f.restriction = Some(reason.to_string());
                                     f.relay_url = None;
                                 }
                             }

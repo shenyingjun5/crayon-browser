@@ -54,6 +54,10 @@ async fn spawn_upstream() -> String {
         .route("/page/drm_fps.html", get(drm_fps_page))
         .route("/page/drm_wv.html", get(drm_wv_page))
         .route("/page/clean_dash.html", get(clean_dash_page))
+        // D5：流失效夹具——主列表 200 但变体 404（央视 4K 专区老片实测场景）
+        .route("/dead/master.m3u8", get(dead_master_playlist))
+        .route("/dead/variant.m3u8", get(dead_variant_404))
+        .route("/page/dead_hls.html", get(dead_hls_page))
         // E8：央视站点解析器夹具（模拟 getHttpVideoInfo.do）
         .route("/cntv/getHttpVideoInfo.do", get(cntv_video_info))
         // E9：B 站番剧夹具（模拟 pgc/playurl；dash_only 版 durl 为空走 DASH 兜底）
@@ -331,6 +335,26 @@ async fn drm_wv_page(State(state): State<Arc<UpstreamState>>) -> Response {
 async fn clean_dash_page(State(state): State<Arc<UpstreamState>>) -> Response {
     Html::from(format!(
         "<html><body><video src=\"{}/drm/clean.mpd\"></video></body></html>",
+        state.base
+    ))
+}
+
+// --- D5：流失效夹具（主列表 200、变体 404；央视 4K 专区老片实测场景） ---
+
+async fn dead_master_playlist(State(state): State<Arc<UpstreamState>>) -> Response {
+    playlist_response_owned(format!(
+        "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=2048000,RESOLUTION=1280x720\n{}/dead/variant.m3u8\n",
+        state.base
+    ))
+}
+
+async fn dead_variant_404() -> Response {
+    (StatusCode::NOT_FOUND, "NoSuchKey").into_response()
+}
+
+async fn dead_hls_page(State(state): State<Arc<UpstreamState>>) -> Response {
+    Html::from(format!(
+        "<html><body><script>var src=\"{}/dead/master.m3u8\";</script></body></html>",
         state.base
     ))
 }
@@ -925,6 +949,17 @@ async fn d4_dash_vod_no_drm() {
     assert!(!f.drm, "无 ContentProtection 的 DASH 应为 drm:false");
     assert!(f.relay_url.is_some());
     assert_eq!(f.protocol, "dash");
+}
+
+/// D5：主列表 200 但变体 404 → 标受限「流地址已失效」，不产出 relay 地址。
+/// （央视 4K 专区老片实测场景：CDN 清档只剩主列表）
+#[tokio::test]
+async fn d5_dead_variant_marked_restricted() {
+    let f = extract_format_for("dead_hls.html").await;
+    assert!(!f.drm, "失效不是 DRM");
+    let reason = f.restriction.expect("变体 404 应标受限");
+    assert!(reason.contains("HTTP 404"), "原因应含状态码: {reason}");
+    assert!(f.relay_url.is_none(), "失效流不产出 relay 地址");
 }
 
 // ---------------------------------------------------------------------------

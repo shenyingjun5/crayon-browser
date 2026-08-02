@@ -25,6 +25,36 @@ pub fn frames_degenerate(stats: &[FrameStat]) -> bool {
 
 /// 探针结论的中文原因文案（UI 标注与日志共用）。
 pub const SCRAMBLED_REASON: &str = "WASM 私有加扰，实测解码画面异常，无法播放";
+/// 流加载失败（404/拒绝等确定性错误）的原因文案。
+pub const LOAD_FAILED_REASON: &str = "流地址失效或加载失败，无法播放";
+
+/// 探针综合结论。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProbeVerdict {
+    /// 采到帧且画面正常。
+    Playable,
+    /// 采到帧且全部平坦（纯黑/纯色）——私有加扰。
+    Scrambled,
+    /// 播放器报确定性错误（变体 404、被拒绝等），一帧没采到。
+    LoadFailed,
+    /// 超时/无数据——不下结论（宁漏不误）。
+    Inconclusive,
+}
+
+/// 探针综合判定：`load_error` 为播放器 error 事件（不含超时）。
+pub fn probe_verdict(frames: &[FrameStat], load_error: bool) -> ProbeVerdict {
+    if !frames.is_empty() {
+        return if frames_degenerate(frames) {
+            ProbeVerdict::Scrambled
+        } else {
+            ProbeVerdict::Playable
+        };
+    }
+    if load_error {
+        return ProbeVerdict::LoadFailed;
+    }
+    ProbeVerdict::Inconclusive
+}
 
 #[cfg(test)]
 mod tests {
@@ -93,5 +123,33 @@ mod tests {
             std: 1.2,
         }];
         assert!(frames_degenerate(&stats));
+    }
+
+    #[test]
+    fn verdict_load_failure() {
+        // 变体 404 → 播放器报错、零帧 → 受限（4K 专区老片实测场景）
+        assert_eq!(probe_verdict(&[], true), ProbeVerdict::LoadFailed);
+    }
+
+    #[test]
+    fn verdict_timeout_inconclusive() {
+        // 超时零帧 → 不下结论
+        assert_eq!(probe_verdict(&[], false), ProbeVerdict::Inconclusive);
+    }
+
+    #[test]
+    fn verdict_scrambled_and_playable() {
+        let black = [FrameStat {
+            mean: 0.0,
+            std: 0.0,
+        }];
+        assert_eq!(probe_verdict(&black, false), ProbeVerdict::Scrambled);
+        let normal = [FrameStat {
+            mean: 70.3,
+            std: 52.1,
+        }];
+        assert_eq!(probe_verdict(&normal, false), ProbeVerdict::Playable);
+        // 有帧时忽略 error 标志（以画面为准）
+        assert_eq!(probe_verdict(&normal, true), ProbeVerdict::Playable);
     }
 }

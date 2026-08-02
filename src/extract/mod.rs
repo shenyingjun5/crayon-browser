@@ -32,6 +32,17 @@ pub struct Format {
     pub relay_url: Option<String>,
 }
 
+/// HLS 流检测结论（`Extractor::inspect_hls`）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HlsVerdict {
+    /// 未见异常（不代表必然可播——画面层异常由解码探针兜底）。
+    Unknown,
+    /// DRM 加密（KEYFORMAT/SAMPLE-AES）。
+    Drm,
+    /// 流地址已失效（播放列表/变体 HTTP 4xx/5xx），附中文原因。
+    Dead(String),
+}
+
 /// 提取结果。
 #[derive(Debug, Clone, Serialize)]
 pub struct VideoInfo {
@@ -217,13 +228,21 @@ impl Extractor {
                 relay_url: Some(format!("{}/dashmpd/{id}", self.relay_base)),
             };
         }
-        // 受限站点（WASM 私有加扰 / 全站 DRM）：直接打标，不再拉流检测
-        let restriction = crate::drm::restricted_reason(page_url, &cand.url).map(str::to_string);
-        let drm = if restriction.is_some() {
-            false
-        } else {
-            self.detect_drm(cand, headers).await
-        };
+        // 受限站点（全站 DRM 名单）：直接打标，不再拉流检测
+        let mut restriction =
+            crate::drm::restricted_reason(page_url, &cand.url).map(str::to_string);
+        let mut drm = false;
+        if restriction.is_none() {
+            match cand.protocol {
+                // HLS：一次拉取同时判 DRM 与活性（主列表/变体 404 即失效）
+                Protocol::Hls => match self.inspect_hls(cand, headers).await {
+                    HlsVerdict::Dead(reason) => restriction = Some(reason),
+                    HlsVerdict::Drm => drm = true,
+                    HlsVerdict::Unknown => {}
+                },
+                _ => drm = self.detect_drm(cand, headers).await,
+            }
+        }
         let relay_url = if drm || restriction.is_some() {
             None
         } else {
@@ -245,23 +264,7 @@ impl Extractor {
     /// （pub：供 Tauri demo 的 L2 webview 嗅探流程复用）
     pub async fn detect_drm(&self, cand: &Candidate, headers: &HashMap<String, String>) -> bool {
         match cand.protocol {
-            Protocol::Hls => {
-                let Some(text) = self.fetch_text(&cand.url, headers).await else {
-                    return false;
-                };
-                if crate::drm::hls_is_drm(&text) {
-                    return true;
-                }
-                // master 列表：取第一个子列表再检测一层
-                if text.contains("#EXT-X-STREAM-INF") {
-                    if let Some(variant) = first_variant_url(&text, &cand.url) {
-                        if let Some(sub) = self.fetch_text(&variant, headers).await {
-                            return crate::drm::hls_is_drm(&sub);
-                        }
-                    }
-                }
-                false
-            }
+            Protocol::Hls => matches!(self.inspect_hls(cand, headers).await, HlsVerdict::Drm),
             Protocol::Dash => self
                 .fetch_text(&cand.url, headers)
                 .await
@@ -269,6 +272,55 @@ impl Extractor {
                 .unwrap_or(false),
             _ => false,
         }
+    }
+
+    /// HLS 综合检测：拉主列表（master 时下钻第一个变体），一次拉取判两件事——
+    /// 是否 DRM、流是否已失效（HTTP 4xx/5xx，如央视 4K 专区老片 CDN 清档）。
+    /// 网络层错误（超时/DNS）一律 Unknown 不下结论，留给解码探针兜底。
+    pub async fn inspect_hls(
+        &self,
+        cand: &Candidate,
+        headers: &HashMap<String, String>,
+    ) -> HlsVerdict {
+        let Some((status, text)) = self.fetch_status(&cand.url, headers).await else {
+            return HlsVerdict::Unknown;
+        };
+        if status >= 400 {
+            return HlsVerdict::Dead(format!("播放列表 HTTP {status}，流地址已失效"));
+        }
+        if crate::drm::hls_is_drm(&text) {
+            return HlsVerdict::Drm;
+        }
+        // master 列表：下钻第一个变体再判一层
+        if text.contains("#EXT-X-STREAM-INF") {
+            if let Some(variant) = first_variant_url(&text, &cand.url) {
+                if let Some((vstatus, sub)) = self.fetch_status(&variant, headers).await {
+                    if vstatus >= 400 {
+                        return HlsVerdict::Dead(format!("分片列表 HTTP {vstatus}，流地址已失效"));
+                    }
+                    if crate::drm::hls_is_drm(&sub) {
+                        return HlsVerdict::Drm;
+                    }
+                }
+            }
+        }
+        HlsVerdict::Unknown
+    }
+
+    /// 带状态码的文本拉取；网络错误返回 None。
+    async fn fetch_status(
+        &self,
+        url: &str,
+        headers: &HashMap<String, String>,
+    ) -> Option<(u16, String)> {
+        let mut req = self.client.get(url);
+        for (k, v) in headers {
+            req = req.header(k, v);
+        }
+        let resp = req.send().await.ok()?;
+        let status = resp.status().as_u16();
+        let text = resp.text().await.ok()?;
+        Some((status, text))
     }
 
     async fn fetch_text(&self, url: &str, headers: &HashMap<String, String>) -> Option<String> {
@@ -402,10 +454,11 @@ mod tests {
 
     #[tokio::test]
     async fn cctv_candidate_not_statically_restricted() {
-        // 央视频家族不做静态受限判定（加扰与否需解码探针实测，见 probe 模块）
+        // 央视频家族不做静态受限判定（加扰与否需解码探针实测，见 probe 模块）。
+        // 用 .invalid 域名保证离线确定性：拉取失败 → 活性检测不下结论。
         let ex = Extractor::new("http://127.0.0.1:8321", RulePack::empty());
         let cand = Candidate::single(
-            "https://hls.cntv.lxdns.com/asp/hls/main.m3u8".into(),
+            "https://nonexistent.invalid/asp/hls/main.m3u8".into(),
             Protocol::Hls,
             None,
         );
