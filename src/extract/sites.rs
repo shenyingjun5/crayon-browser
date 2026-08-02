@@ -24,7 +24,14 @@ pub struct SiteResult {
 pub const CNTV_API: &str = "https://vdn.apps.cntv.cn/api/getHttpVideoInfo.do";
 
 /// 入口：按页面域名分发到具体站点解析器。不匹配任何站点返回 None。
-pub async fn extract(client: &reqwest::Client, page_url: &str, html: &str) -> Option<SiteResult> {
+/// `cookie` 为可选的站点登录态（来自应用 webview Cookie 存储），
+/// 目前仅 B 站解析器使用（解锁更高清晰度）。
+pub async fn extract(
+    client: &reqwest::Client,
+    page_url: &str,
+    html: &str,
+    cookie: Option<&str>,
+) -> Option<SiteResult> {
     let host = url::Url::parse(page_url)
         .ok()
         .and_then(|u| u.host_str().map(|h| h.to_ascii_lowercase()))?;
@@ -36,7 +43,8 @@ pub async fn extract(client: &reqwest::Client, page_url: &str, html: &str) -> Op
         return extract_cntv(client, html, CNTV_API).await;
     }
     if host == "bilibili.com" || host.ends_with(".bilibili.com") {
-        return extract_bilibili(client, page_url, html, &BiliEndpoints::production()).await;
+        return extract_bilibili(client, page_url, html, &BiliEndpoints::production(), cookie)
+            .await;
     }
     None
 }
@@ -254,16 +262,19 @@ struct BiliPage {
 /// B 站：番剧 ep/ss 页走 pgc/playurl(ep_id)，普通 BV 页走 view(bvid) →
 /// x/player/playurl(bvid+cid)。整段 mp4（fnval=1）优先，DASH 分轨（fnval=16）兜底。
 /// `html` 仅 ss 季页用于提取默认集 ep_id 时需要，其余入口可传空串。
-/// 可选环境变量 `GET_VIDEO_BILI_COOKIE`：携带用户自己的登录 Cookie 解锁
-/// 更高清晰度（会员内容仍按其权限返回）。
+/// 登录 Cookie 解锁更高清晰度（会员内容仍按其权限返回）：
+/// 优先用调用方传入的 `cookie`（应用 webview 登录态），
+/// 否则回退环境变量 `GET_VIDEO_BILI_COOKIE`（无头/CLI 调试用）。
 pub async fn extract_bilibili(
     client: &reqwest::Client,
     page_url: &str,
     html: &str,
     api: &BiliEndpoints,
+    cookie: Option<&str>,
 ) -> Option<SiteResult> {
-    let cookie = std::env::var("GET_VIDEO_BILI_COOKIE")
-        .ok()
+    let cookie = cookie
+        .map(|c| c.to_string())
+        .or_else(|| std::env::var("GET_VIDEO_BILI_COOKIE").ok())
         .filter(|c| !c.is_empty());
     let mut out = SiteResult {
         referer: Some("https://www.bilibili.com".into()),

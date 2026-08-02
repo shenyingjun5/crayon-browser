@@ -66,6 +66,16 @@ impl Extractor {
 
     /// 提取入口：网页 URL → 统一视频流列表。
     pub async fn extract(&self, page_url: &str) -> Result<VideoInfo, String> {
+        self.extract_with_cookie(page_url, None).await
+    }
+
+    /// 带站点登录态的提取：`cookie` 为「name=value; ...」形式的 Cookie 头，
+    /// 目前仅传给 B 站解析器（解锁更高清晰度）。
+    pub async fn extract_with_cookie(
+        &self,
+        page_url: &str,
+        cookie: Option<&str>,
+    ) -> Result<VideoInfo, String> {
         // 已知 DRM 站点前置标记
         if crate::drm::is_known_drm_site(page_url) {
             return Ok(VideoInfo {
@@ -139,7 +149,7 @@ impl Extractor {
         let mut site_hit = false;
         let mut site_title: Option<String> = None;
         let mut site_note: Option<String> = None;
-        if let Some(site) = sites::extract(&self.client, &final_url, &html).await {
+        if let Some(site) = sites::extract(&self.client, &final_url, &html, cookie).await {
             site_hit = !site.candidates.is_empty();
             site_title = site.title;
             site_note = site.note;

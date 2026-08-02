@@ -980,6 +980,7 @@ async fn e9a_bilibili_durl_preferred() {
         "https://www.bilibili.com/bangumi/play/ep733316?spm_id_from=333.337.0.0",
         "",
         &bili_endpoints(&upstream, "/bili/pgc/playurl"),
+        None,
     )
     .await
     .expect("应命中 B 站解析器");
@@ -995,6 +996,7 @@ async fn e9a_bilibili_durl_preferred() {
         "https://www.bilibili.com/",
         "",
         &bili_endpoints(&upstream, "/bili/pgc/playurl"),
+        None,
     )
     .await
     .is_none());
@@ -1010,6 +1012,7 @@ async fn e9b_bilibili_dash_fallback() {
         "https://www.bilibili.com/bangumi/play/ep733316",
         "",
         &bili_endpoints(&upstream, "/bili_dash/pgc/playurl"),
+        None,
     )
     .await
     .expect("应命中 B 站解析器");
@@ -1030,6 +1033,7 @@ async fn e9c_bilibili_bv_multi_page() {
         "https://www.bilibili.com/video/BV1xx411c7mD?p=2",
         "",
         &bili_endpoints(&upstream, "/bili/pgc/playurl"),
+        None,
     )
     .await
     .expect("应命中 BV 页解析");
@@ -1054,6 +1058,7 @@ async fn e9d_bilibili_ss_season_page() {
         "https://www.bilibili.com/bangumi/play/ss28747",
         html,
         &bili_endpoints(&upstream, "/bili/pgc/playurl"),
+        None,
     )
     .await
     .expect("ss 页应经默认集 ep_id 命中");
@@ -1065,6 +1070,7 @@ async fn e9d_bilibili_ss_season_page() {
         "https://www.bilibili.com/bangumi/play/ss28747",
         "<html>nothing</html>",
         &bili_endpoints(&upstream, "/bili/pgc/playurl"),
+        None,
     )
     .await
     .is_none());

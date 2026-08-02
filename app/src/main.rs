@@ -375,9 +375,14 @@ fn load_rule_pack() -> RulePack {
 }
 
 /// L1/L3 提取：静态解析 + 站点专用解析器 + 规则包 + DRM 检测（秒级，无 webview）。
-async fn do_extract(relay_base: &str, url: &str) -> Result<VideoInfo, String> {
+async fn do_extract(app: &AppHandle, relay_base: &str, url: &str) -> Result<VideoInfo, String> {
     let extractor = Extractor::new(relay_base, load_rule_pack());
-    extractor.extract(url).await
+    // webview 登录态（B 站等）→ 传给 L3 站点解析器解锁高清晰度
+    let cookie = site_cookie_header(app, url);
+    if cookie.is_some() {
+        println!("[extract] 携带站点登录 Cookie");
+    }
+    extractor.extract_with_cookie(url, cookie.as_deref()).await
 }
 
 #[tauri::command]
@@ -436,6 +441,34 @@ fn lan_addr(app: AppHandle) -> String {
     app.state::<Arc<AppState>>().lan_base.clone()
 }
 
+/// 从 webview Cookie 存储（含 HttpOnly）取目标站点的登录 Cookie，
+/// 按域名后缀匹配拼成 `name=value; ...` 形式的 Cookie 头。
+/// 应用内所有窗口共享同一 Cookie 存储，登录窗口种的会话这里能拿到。
+fn site_cookie_header(app: &AppHandle, url: &str) -> Option<String> {
+    let host = tauri::Url::parse(url)
+        .ok()?
+        .host_str()?
+        .to_ascii_lowercase();
+    let w = app.get_webview_window("main")?;
+    let cookies = w.cookies().ok()?;
+    let mut pairs = Vec::new();
+    for c in cookies {
+        let dom = c
+            .domain()
+            .unwrap_or("")
+            .trim_start_matches('.')
+            .to_ascii_lowercase();
+        if !dom.is_empty() && (host == dom || host.ends_with(&format!(".{dom}"))) {
+            pairs.push(format!("{}={}", c.name(), c.value()));
+        }
+    }
+    if pairs.is_empty() {
+        None
+    } else {
+        Some(pairs.join("; "))
+    }
+}
+
 #[tauri::command]
 async fn sniff(app: AppHandle, url: String) -> Result<SniffResponse, String> {
     let state = app.state::<Arc<AppState>>();
@@ -460,7 +493,7 @@ async fn extract(app: AppHandle, url: String) -> Result<VideoInfo, String> {
     }
     println!("[extract] IPC 调用: {url}");
     let relay_base = state.relay_base.clone();
-    let r = do_extract(&relay_base, &url).await;
+    let r = do_extract(&app, &relay_base, &url).await;
     state.busy.store(false, Ordering::SeqCst);
     match &r {
         Ok(info) => println!(
@@ -667,8 +700,9 @@ fn main() {
                 }
                 let relay_base = state.relay_base.clone();
                 let ah = app.handle().clone();
+                let ah2 = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
-                    let r = do_extract(&relay_base, &u).await;
+                    let r = do_extract(&ah2, &relay_base, &u).await;
                     match r {
                         Ok(info) => println!(
                             "EXTRACT_RESULT_JSON: {}",

@@ -185,6 +185,10 @@ cargo build -p get-video-app
 
 注意：仅 Cookie 形态的登录态有效；站点若把会话只放在 `localStorage`/内存 token，隐藏嗅探窗同样共享存储（同一数据目录），但纯内存 token 不在此列。
 
+**登录态同时贯通 L3 站点解析器**（2026-08-02）：`extract` 命令从 webview Cookie 存储（含 HttpOnly，Tauri `cookies()` API，按域名后缀匹配）取目标站点 Cookie 传给解析器，无需再设 `GET_VIDEO_BILI_COOKIE` 环境变量（该变量保留为 CLI/无头调试回退）。实测：登录后 B 站普通视频页解析从 720P 提升到 **1080P**。
+
+已知边界（B 站产品策略，非登录态问题）：番剧 PGC 内容的高清只提供 DASH 分轨（视频/音频分离的 m4s），整段 mp4 接口（durl）封顶 360P——网页端 1080P 是 DASH 播出来的。要支持番剧高清需抓 DASH 双轨并本地合并，尚未实现。
+
 ---
 
 # Tauri 2 demo：L2 webview 嗅探闭环（`demo/`）
