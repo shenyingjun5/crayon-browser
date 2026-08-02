@@ -335,3 +335,25 @@ async fn d4_online_dash_vod_no_drm() {
         .unwrap();
     assert!(!get_video::drm::mpd_is_drm(&text), "应标记 drm:false");
 }
+
+/// 央视纪录片：HTML 无直链，站点解析器经 guid → getHttpVideoInfo 拿到 hls。
+#[tokio::test]
+#[ignore]
+async fn cctv_documentary_site_extractor() {
+    let relay = spawn_relay().await;
+    let extractor = Extractor::new(&relay.base_url(), RulePack::empty());
+    let info = extractor
+        .extract("https://tv.cctv.com/2026/07/30/VIDEVUdpLU5FN93bTJDFAfwM260730.shtml")
+        .await
+        .unwrap();
+    assert_eq!(info.source, "site-api", "应走站点解析器");
+    let f = info
+        .formats
+        .iter()
+        .find(|f| f.protocol == "hls")
+        .unwrap_or_else(|| panic!("应有 hls 格式: {:?}", info.formats));
+    assert!(f.url.contains(".m3u8"), "hls 地址异常: {}", f.url);
+    assert!(!f.drm, "公开纪录片不应标记 DRM");
+    assert!(f.relay_url.is_some(), "应产出 relay 地址");
+    relay.shutdown().await;
+}

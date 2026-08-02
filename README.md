@@ -63,6 +63,7 @@ L1 静态提取 + L3 规则包 + DRM 检测，返回统一 JSON：
 - **L1 静态快路径**（`src/extract/static_parse.rs`）：正则扫 `.m3u8/.mp4/.mpd`（含 `https:\/\/` 转义还原、`%3A%2F` 解码还原三种文本形态）→ `<video src>/<source src>/data-src` → JSON-LD `VideoObject` → maccms 风格 `player_aaaa` 配置（encrypt 0/1/2）。去重、协议分类、清晰度推测并降序排列，相对地址转绝对。
 - **L2 webview 嗅探**：**本轮未实现**。隐藏 webview 需要 Tauri GUI 环境，后续在 Tauri 壳内实现（design.md §3 L2 / 里程碑 M2）。
 - **L3 站点规则包**（`src/extract/rules.rs`）：**最小骨架**——从本地 JSON 文件加载（域名后缀匹配 + 带 `(?<url>...)` 命名分组的正则模板，可附 referer/ua）。**远程热更未实现**，后续里程碑 M3 再做（含签名校验）。
+- **L3 站点专用解析器**（`src/extract/sites.rs`）：地址不在 HTML 文本里、需「提取视频 ID → 调站点公开 API → 解析 JSON」的站点，用 Rust 代码实现。首批支持**央视网（tv.cctv.com / cntv.cn）点播**：页面提 `guid` → `vdn.apps.cntv.cn/api/getHttpVideoInfo.do?pid=<guid>` → 取 `hls_url` 与分段 mp4（`is_invalid_copyright=1` 版权受限不出结果）；夹具测试 E8 + 在线测试覆盖。
 
 ## DRM 检测（`src/drm.rs`）
 
@@ -112,7 +113,7 @@ ffmpeg -i "http://127.0.0.1:8321/proxy/$(python3 -c "import urllib.parse;print(u
 ## 待办
 
 - L2 隐藏 webview 嗅探：已在 `demo/` 的 Tauri 2 demo 中验证（见下章）；合入正式 Tauri 壳时可直接搬 `demo/src/main.rs` 的 `do_sniff` 与注入脚本。
-- L3 规则包远程热更 + 签名校验 + 首批站点专用解析器（M3）。
+- L3 规则包远程热更 + 签名校验（M3）。首批站点专用解析器已起步：央视网 cntv/cctv 点播（`src/extract/sites.rs`）。
 - relay_url 在绑定 `0.0.0.0` 时用局域网 IP 生成（当前按请求 Host 头生成，design.md §6 的自动化未做）。
 
 ---

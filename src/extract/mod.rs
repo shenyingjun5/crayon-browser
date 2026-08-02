@@ -2,9 +2,11 @@
 //! （L2 webview 嗅探需 Tauri GUI 环境，本轮不实现，见 README。）
 
 mod rules;
+pub mod sites;
 mod static_parse;
 
 pub use rules::{RuleMatch, RulePack, SiteRule};
+pub use sites::SiteResult;
 pub use static_parse::{
     guess_quality, parse_html, resolve_url, Candidate, Protocol, StaticParseResult,
 };
@@ -133,10 +135,31 @@ impl Extractor {
             formats.push(self.build_format(&cand, &headers).await);
         }
 
+        // 站点专用解析器（首批：央视网 tv.cctv.com / cntv，见 sites.rs）
+        let mut site_hit = false;
+        let mut site_title: Option<String> = None;
+        if let Some(site) = sites::extract(&self.client, &final_url, &html).await {
+            site_hit = !site.candidates.is_empty();
+            site_title = site.title;
+            for cand in &site.candidates {
+                if seen.contains_key(&cand.url) {
+                    continue;
+                }
+                seen.insert(cand.url.clone(), ());
+                let mut headers = HashMap::new();
+                headers.insert(
+                    "Referer".to_string(),
+                    site.referer.clone().unwrap_or_else(|| page_origin.clone()),
+                );
+                headers.insert("User-Agent".to_string(), crate::DEFAULT_UA.to_string());
+                formats.push(self.build_format(cand, &headers).await);
+            }
+        }
+
         Ok(VideoInfo {
-            title: parsed.title,
+            title: parsed.title.or(site_title),
             webpage: page_url.to_string(),
-            source: if rule_hit {
+            source: if rule_hit || site_hit {
                 "site-api".into()
             } else {
                 "static".into()

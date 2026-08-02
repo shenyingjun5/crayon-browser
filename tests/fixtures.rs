@@ -53,6 +53,8 @@ async fn spawn_upstream() -> String {
         .route("/page/drm_fps.html", get(drm_fps_page))
         .route("/page/drm_wv.html", get(drm_wv_page))
         .route("/page/clean_dash.html", get(clean_dash_page))
+        // E8：央视站点解析器夹具（模拟 getHttpVideoInfo.do）
+        .route("/cntv/getHttpVideoInfo.do", get(cntv_video_info))
         .with_state(state);
 
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
@@ -323,6 +325,19 @@ async fn clean_dash_page(State(state): State<Arc<UpstreamState>>) -> Response {
         "<html><body><video src=\"{}/drm/clean.mpd\"></video></body></html>",
         state.base
     ))
+}
+
+/// E8 夹具：模拟 vdn.apps.cntv.cn/api/getHttpVideoInfo.do 的 JSON 响应。
+async fn cntv_video_info(State(state): State<Arc<UpstreamState>>) -> Response {
+    axum::Json(serde_json::json!({
+        "ack": "yes",
+        "title": "夹具纪录片",
+        "hls_url": format!("{}/m3u8/plain.m3u8", state.base),
+        "is_protected": "0",
+        "is_invalid_copyright": "0",
+        "video": { "validChapterNum": 4, "chapters": [{"duration": "300.00", "url": ""}] }
+    }))
+    .into_response()
 }
 
 struct Html;
@@ -838,4 +853,36 @@ async fn d4_dash_vod_no_drm() {
     assert!(!f.drm, "无 ContentProtection 的 DASH 应为 drm:false");
     assert!(f.relay_url.is_some());
     assert_eq!(f.protocol, "dash");
+}
+
+// ---------------------------------------------------------------------------
+// E8：站点专用解析器（央视 cntv）夹具
+// ---------------------------------------------------------------------------
+
+/// E8：央视纪录片页面 HTML 只有 guid，播放地址经「guid → 站点 API → JSON」
+/// 两步拿到——L1 正则扫不到，站点解析器补齐。
+#[tokio::test]
+async fn e8_cntv_site_extractor() {
+    let upstream = spawn_upstream().await;
+    let html = r#"<html><head><script>var guid = "4646c21e429d43a08eac19d18704c4e9";</script></head></html>"#;
+    let client = reqwest::Client::new();
+    let r = get_video::extract::sites::extract_cntv(
+        &client,
+        html,
+        &format!("{upstream}/cntv/getHttpVideoInfo.do"),
+    )
+    .await
+    .expect("应命中央视站点解析器");
+    assert_eq!(r.title.as_deref(), Some("夹具纪录片"));
+    assert_eq!(r.candidates.len(), 1, "空 chapter 地址应被过滤");
+    assert_eq!(r.candidates[0].url, format!("{upstream}/m3u8/plain.m3u8"));
+    assert_eq!(r.candidates[0].protocol, Protocol::Hls);
+    // guid 缺失时不命中
+    assert!(get_video::extract::sites::extract_cntv(
+        &client,
+        "<html>no guid here</html>",
+        &format!("{upstream}/cntv/getHttpVideoInfo.do"),
+    )
+    .await
+    .is_none());
 }
