@@ -56,6 +56,16 @@ pub struct Candidate {
     pub protocol: Protocol,
     /// 数值化清晰度（如 1080），未知为 None。
     pub quality: Option<u32>,
+    /// DASH 音画分轨时的音频轨地址（url 为视频轨）；单流格式为 None。
+    pub audio_url: Option<String>,
+    /// 时长（毫秒），用于生成 DASH MPD；未知为 None。
+    pub duration_ms: Option<u64>,
+    /// 视频轨 codecs（如 avc1.640028），用于 MPD；未知为 None。
+    pub codecs: Option<String>,
+    /// 视频宽高/码率，用于 MPD。
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub bandwidth: Option<u64>,
 }
 
 /// L1 解析结果。
@@ -63,6 +73,23 @@ pub struct Candidate {
 pub struct StaticParseResult {
     pub title: Option<String>,
     pub candidates: Vec<Candidate>,
+}
+
+impl Candidate {
+    /// 单流格式（无 DASH 音频轨、无 MPD 元数据）。
+    pub fn single(url: String, protocol: Protocol, quality: Option<u32>) -> Self {
+        Self {
+            url,
+            protocol,
+            quality,
+            audio_url: None,
+            duration_ms: None,
+            codecs: None,
+            width: None,
+            height: None,
+            bandwidth: None,
+        }
+    }
 }
 
 static MEDIA_URL_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -147,11 +174,7 @@ fn push_candidate(out: &mut Vec<Candidate>, raw: &str, page_url: &str, context: 
         return;
     }
     let quality = guess_quality(&abs).or_else(|| context.and_then(guess_quality));
-    out.push(Candidate {
-        url: abs,
-        protocol,
-        quality,
-    });
+    out.push(Candidate::single(abs, protocol, quality));
 }
 
 fn looks_like_media(src: &str) -> bool {

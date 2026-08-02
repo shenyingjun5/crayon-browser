@@ -29,6 +29,7 @@ async fn spawn_relay() -> relay::RelayHandle {
         port: 0,
         allow_private_hosts: false,
         rules_path: None,
+        dash_store: None,
     })
     .await
     .unwrap()

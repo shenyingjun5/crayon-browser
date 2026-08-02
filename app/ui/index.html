@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <title>get-video</title>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
+<script src="https://cdn.jsdelivr.net/npm/dashjs@4/dist/dash.all.min.js"></script>
 <style>
   * { box-sizing: border-box; }
   body { font-family: system-ui, "PingFang SC", "Microsoft YaHei", sans-serif; margin: 0; background: #1e1f24; color: #e8e8ea; }
@@ -48,6 +49,7 @@
 const $ = (id) => document.getElementById(id);
 const invoke = window.__TAURI__.core.invoke;
 let hls = null;
+let dash = null;
 let busy = false;
 // 局域网 relay 基地址（投屏用），启动后从 Rust 侧取
 let lanBase = '';
@@ -111,6 +113,7 @@ function render(resp) {
 function play(r) {
   const v = $('player');
   if (hls) { hls.destroy(); hls = null; }
+  if (dash) { dash.reset(); dash = null; }
   if (!r.relay_url) { setStatus('该格式无 relay 地址，无法播放', true); return; }
   setStatus('播放: ' + trunc(r.url));
   if (r.protocol === 'hls') {
@@ -126,6 +129,12 @@ function play(r) {
     } else {
       setStatus('当前 webview 不支持 HLS 播放', true); return;
     }
+  } else if (r.protocol === 'dash') {
+    // DASH 音画分轨：relay 侧已合成 MPD，dash.js 负责音画同步
+    if (typeof dashjs === 'undefined') { setStatus('dash.js 未加载（需联网取 CDN）', true); return; }
+    dash = dashjs.MediaPlayer().create();
+    dash.initialize(v, r.relay_url, true);
+    dash.on('error', (e) => setStatus('播放错误: ' + (e.error && e.error.message || e.error || e), true));
   } else if (r.protocol === 'mp4') {
     v.src = r.relay_url;
   } else {

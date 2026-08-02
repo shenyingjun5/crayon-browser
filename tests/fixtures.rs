@@ -75,6 +75,7 @@ async fn spawn_relay(allow_private: bool) -> relay::RelayHandle {
         port: 0,
         allow_private_hosts: allow_private,
         rules_path: None,
+        dash_store: None,
     })
     .await
     .unwrap()
@@ -970,7 +971,7 @@ fn bili_endpoints(upstream: &str, pgc_path: &str) -> get_video::extract::sites::
     }
 }
 
-/// E9a：番剧 ep 页——durl 整段优先，fnval=1 返回音画合一 mp4，单 URL 可播。
+/// E9a：番剧 ep 页——DASH 480P 高于整段 360P 时 dash 合成候选在前，整段保留为低清备选。
 #[tokio::test]
 async fn e9a_bilibili_durl_preferred() {
     let upstream = spawn_upstream().await;
@@ -984,10 +985,20 @@ async fn e9a_bilibili_durl_preferred() {
     )
     .await
     .expect("应命中 B 站解析器");
-    assert_eq!(r.candidates.len(), 1, "durl 非空时不再走 DASH");
-    assert_eq!(r.candidates[0].url, format!("{upstream}/video.mp4?upsig=z"));
-    assert_eq!(r.candidates[0].protocol, Protocol::Mp4);
-    assert_eq!(r.candidates[0].quality, Some(360));
+    assert_eq!(r.candidates.len(), 2, "dash 高清合成候选 + 整段低清备选");
+    assert_eq!(r.candidates[0].protocol, Protocol::Dash);
+    assert_eq!(r.candidates[0].quality, Some(480));
+    assert_eq!(
+        r.candidates[0].url,
+        format!("{upstream}/v_da2-1-30032.m4s?upsig=x")
+    );
+    assert_eq!(
+        r.candidates[0].audio_url.as_deref(),
+        Some(format!("{upstream}/a_da2-1-30216.m4s?upsig=y").as_str())
+    );
+    assert_eq!(r.candidates[1].url, format!("{upstream}/video.mp4?upsig=z"));
+    assert_eq!(r.candidates[1].protocol, Protocol::Mp4);
+    assert_eq!(r.candidates[1].quality, Some(360));
     assert_eq!(r.referer.as_deref(), Some("https://www.bilibili.com"));
     assert!(r.note.is_none());
     // 既非番剧也非视频页的 URL 不命中
@@ -1002,7 +1013,7 @@ async fn e9a_bilibili_durl_preferred() {
     .is_none());
 }
 
-/// E9b：番剧 ep 页——durl 为空时兜底 DASH 分轨，附「音画分离」说明。
+/// E9b：番剧 ep 页——durl 为空时输出 DASH 合成候选（视频轨+音频轨一体，经 relay 出 MPD）。
 #[tokio::test]
 async fn e9b_bilibili_dash_fallback() {
     let upstream = spawn_upstream().await;
@@ -1016,11 +1027,12 @@ async fn e9b_bilibili_dash_fallback() {
     )
     .await
     .expect("应命中 B 站解析器");
-    assert_eq!(r.candidates.len(), 2, "视频轨 + 音频轨");
-    assert_eq!(r.candidates[0].quality, Some(480));
-    assert_eq!(r.candidates[1].quality, None, "音频轨无清晰度");
-    assert!(r.candidates.iter().all(|c| c.protocol == Protocol::Mp4));
-    assert!(r.note.unwrap().contains("音画分离"));
+    assert_eq!(r.candidates.len(), 1, "无整段时仅 dash 合成候选");
+    let c = &r.candidates[0];
+    assert_eq!(c.protocol, Protocol::Dash);
+    assert_eq!(c.quality, Some(480));
+    assert!(c.audio_url.is_some(), "合成候选携带音频轨地址");
+    assert!(r.note.is_none());
 }
 
 /// E9c：普通 BV 视频页——view 换 cid，?p=2 选第二集，ugc playurl 出整段。
@@ -1062,8 +1074,8 @@ async fn e9d_bilibili_ss_season_page() {
     )
     .await
     .expect("ss 页应经默认集 ep_id 命中");
-    assert_eq!(r.candidates.len(), 1);
-    assert_eq!(r.candidates[0].url, format!("{upstream}/video.mp4?upsig=z"));
+    assert_eq!(r.candidates.len(), 2, "dash 合成候选 + 整段备选");
+    assert_eq!(r.candidates[1].url, format!("{upstream}/video.mp4?upsig=z"));
     // ss 页 HTML 无 ep_id 时不命中
     assert!(get_video::extract::sites::extract_bilibili(
         &client,

@@ -187,7 +187,9 @@ cargo build -p get-video-app
 
 **登录态同时贯通 L3 站点解析器**（2026-08-02）：`extract` 命令从 webview Cookie 存储（含 HttpOnly，Tauri `cookies()` API，按域名后缀匹配）取目标站点 Cookie 传给解析器，无需再设 `GET_VIDEO_BILI_COOKIE` 环境变量（该变量保留为 CLI/无头调试回退）。实测：登录后 B 站普通视频页解析从 720P 提升到 **1080P**。
 
-已知边界（B 站产品策略，非登录态问题）：番剧 PGC 内容的高清只提供 DASH 分轨（视频/音频分离的 m4s），整段 mp4 接口（durl）封顶 360P——网页端 1080P 是 DASH 播出来的。要支持番剧高清需抓 DASH 双轨并本地合并，尚未实现。
+**番剧 DASH 双轨高清（2026-08-02）**：B 站番剧（PGC）高清只提供 DASH 音画分轨（视频/音频分离的 m4s），整段 mp4（durl）封顶 360P。解法不引入 ffmpeg：解析器把「最佳视频轨 + 最佳音频轨」合成一条 dash 候选（`fnval=1` 与 `fnval=16` 两路响应择优，DASH 更高清时前置、整段保留为低清备选）；Extractor 生成 MPD 清单写入与 relay 共享的内存仓库，relay 经 `/dashmpd/{id}` 提供（带 CORS），本机页面用 dash.js 播放、投屏直接把这个 MPD 局域网地址给支持 DASH 的播放器（VLC 等），音画同步全在播放端标准协议栈完成。已像素级实证：番剧 ep733316 播放 480P 出真实画面（480 是当前账号该片的 API 上限，已用 fnval=16/976/4048 三种位掩码验证——更高清晰度需更高账号权限，非解析器问题）。
+
+踩过的坑（留档）：B 站 playurl 响应里 `base_url` 与 `baseUrl` **同时出现**，serde `alias` 会判重复字段导致整个 DASH 响应反序列化失败——拆成两个可选字段取值解决。
 
 ---
 

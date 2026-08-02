@@ -200,6 +200,8 @@ struct AppState {
     relay_base: String,
     /// 局域网可访问的 relay 基地址（投屏给手机/电视用），如 `http://192.168.1.8:8321`。
     lan_base: String,
+    /// 与 relay 共享的 DASH MPD 仓库（提取器写入，/dashmpd/{id} 读出）。
+    dash_store: get_video::relay::DashStore,
     busy: AtomicBool,
     _relay: Mutex<Option<RelayHandle>>,
 }
@@ -312,11 +314,7 @@ async fn do_sniff(app: &AppHandle, url: &str) -> Result<SniffResponse, String> {
     let mut results = Vec::new();
     for (i, hit) in found.iter().enumerate() {
         let protocol = Protocol::from_url(&hit.url);
-        let cand = Candidate {
-            url: hit.url.clone(),
-            protocol,
-            quality: guess_quality(&hit.url),
-        };
+        let cand = Candidate::single(hit.url.clone(), protocol, guess_quality(&hit.url));
         let mut headers = HashMap::new();
         let hit_page_origin = origin_of(&hit.page);
         headers.insert(
@@ -376,7 +374,8 @@ fn load_rule_pack() -> RulePack {
 
 /// L1/L3 提取：静态解析 + 站点专用解析器 + 规则包 + DRM 检测（秒级，无 webview）。
 async fn do_extract(app: &AppHandle, relay_base: &str, url: &str) -> Result<VideoInfo, String> {
-    let extractor = Extractor::new(relay_base, load_rule_pack());
+    let mut extractor = Extractor::new(relay_base, load_rule_pack());
+    extractor.set_dash_store(app.state::<Arc<AppState>>().dash_store.clone());
     // webview 登录态（B 站等）→ 传给 L3 站点解析器解锁高清晰度
     let cookie = site_cookie_header(app, url);
     if cookie.is_some() {
@@ -634,12 +633,16 @@ fn main() {
             });
             // 启动 get-video relay：绑定 0.0.0.0 让局域网设备（手机/电视投屏）可访问；
             // 本机播放仍走 127.0.0.1（8321 被占则退回随机端口）
+            let dash_store: get_video::relay::DashStore = Default::default();
+            let ds1 = dash_store.clone();
+            let ds2 = dash_store.clone();
             let handle = tauri::async_runtime::block_on(async {
                 match relay::start(RelayConfig {
                     host: "0.0.0.0".into(),
                     port: 8321,
                     allow_private_hosts: false,
                     rules_path: None,
+                    dash_store: Some(ds1),
                 })
                 .await
                 {
@@ -651,6 +654,7 @@ fn main() {
                             port: 0,
                             allow_private_hosts: false,
                             rules_path: None,
+                            dash_store: Some(ds2),
                         })
                         .await
                         .expect("relay 启动失败")
@@ -668,6 +672,7 @@ fn main() {
                 hits: Mutex::new(Vec::new()),
                 relay_base: base,
                 lan_base,
+                dash_store,
                 busy: AtomicBool::new(false),
                 _relay: Mutex::new(Some(handle)),
             });

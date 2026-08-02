@@ -35,6 +35,7 @@ async fn main() {
         port: cli.port,
         allow_private_hosts: cli.allow_private_hosts,
         rules_path: cli.rules,
+        dash_store: None,
     };
     if config.allow_private_hosts {
         tracing::warn!("SSRF 黑名单已关闭（--allow-private-hosts），仅限本地调试！");

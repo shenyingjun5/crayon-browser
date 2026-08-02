@@ -11,12 +11,17 @@ use axum::{
 };
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+
+/// DASH MPD 清单内存仓库：提取器生成 MPD（B 站音画分轨合成）按键存入，
+/// relay 经 `/dashmpd/{id}` 提供给播放器/投屏设备。
+pub type DashStore = Arc<Mutex<HashMap<String, String>>>;
 
 #[derive(Clone)]
 pub struct AppState {
     pub proxy: Arc<proxy::ProxyState>,
     pub rules: crate::extract::RulePack,
+    pub dash_docs: DashStore,
 }
 
 #[derive(Debug, Clone)]
@@ -27,6 +32,8 @@ pub struct RelayConfig {
     pub allow_private_hosts: bool,
     /// L3 规则包本地 JSON 路径。
     pub rules_path: Option<std::path::PathBuf>,
+    /// 应用侧注入的共享 MPD 仓库（提取器写入）；缺省独立空仓库。
+    pub dash_store: Option<DashStore>,
 }
 
 impl Default for RelayConfig {
@@ -36,6 +43,7 @@ impl Default for RelayConfig {
             port: 8321,
             allow_private_hosts: false,
             rules_path: None,
+            dash_store: None,
         }
     }
 }
@@ -62,10 +70,33 @@ pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/proxy/{*rest}", get(proxy::proxy_handler))
         .route("/proxy/{*rest}", options(proxy::options_handler))
+        .route("/dashmpd/{id}", get(dashmpd_handler))
         .route("/api/extract", get(api_extract))
         .route("/health", get(health))
         .route("/player", get(player_page))
         .with_state(state)
+}
+
+/// 提供提取器生成的 DASH MPD（B 站音画分轨合成清单）。
+/// 与 /proxy 一样带 CORS——页面（tauri:// 源）和投屏设备都要跨源读取。
+async fn dashmpd_handler(
+    State(state): State<AppState>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> Response {
+    let doc = state.dash_docs.lock().unwrap().get(&id).cloned();
+    let mut resp = match doc {
+        Some(xml) => (
+            [(axum::http::header::CONTENT_TYPE, "application/dash+xml")],
+            xml,
+        )
+            .into_response(),
+        None => (StatusCode::NOT_FOUND, "dash doc not found").into_response(),
+    };
+    resp.headers_mut().insert(
+        axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN,
+        axum::http::HeaderValue::from_static("*"),
+    );
+    resp
 }
 
 /// 启动 relay 服务；port=0 时绑定随机端口（测试用）。
@@ -78,6 +109,7 @@ pub async fn start(config: RelayConfig) -> std::io::Result<RelayHandle> {
     let state = AppState {
         proxy: proxy::ProxyState::new(config.allow_private_hosts),
         rules,
+        dash_docs: config.dash_store.unwrap_or_default(),
     };
     let listener =
         tokio::net::TcpListener::bind(format!("{}:{}", config.host, config.port)).await?;

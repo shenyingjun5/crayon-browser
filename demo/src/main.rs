@@ -305,11 +305,7 @@ async fn do_sniff(app: &AppHandle, url: &str) -> Result<SniffResponse, String> {
     let mut results = Vec::new();
     for (i, hit) in found.iter().enumerate() {
         let protocol = Protocol::from_url(&hit.url);
-        let cand = Candidate {
-            url: hit.url.clone(),
-            protocol,
-            quality: guess_quality(&hit.url),
-        };
+        let cand = Candidate::single(hit.url.clone(), protocol, guess_quality(&hit.url));
         let mut headers = HashMap::new();
         let hit_page_origin = origin_of(&hit.page);
         headers.insert(
@@ -437,6 +433,7 @@ fn main() {
                     port: 8321,
                     allow_private_hosts: false,
                     rules_path: None,
+                    dash_store: None,
                 })
                 .await
                 {
@@ -448,6 +445,7 @@ fn main() {
                             port: 0,
                             allow_private_hosts: false,
                             rules_path: None,
+                            dash_store: None,
                         })
                         .await
                         .expect("relay 启动失败")

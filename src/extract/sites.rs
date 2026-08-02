@@ -121,11 +121,8 @@ fn result_from_cntv(data: &CntvResponse) -> SiteResult {
         if out.candidates.iter().any(|c| c.url == url) {
             return;
         }
-        out.candidates.push(Candidate {
-            url: url.to_string(),
-            protocol,
-            quality: None,
-        });
+        out.candidates
+            .push(Candidate::single(url.to_string(), protocol, None));
     };
     push(&data.hls_url, &mut out);
     if let Some(video) = &data.video {
@@ -201,6 +198,9 @@ struct BiliResult {
     /// 实际清晰度 qn 编号（经 qn_to_height 换算）。
     #[serde(default)]
     quality: i64,
+    /// 时长（毫秒），生成 MPD 用。
+    #[serde(default)]
+    timelength: Option<u64>,
     /// fnval=1：渐进式整段（音画合一，单 URL 可播）。
     #[serde(default)]
     durl: Vec<BiliDurl>,
@@ -228,10 +228,29 @@ struct BiliStream {
     /// 清晰度 qn 编号。
     #[serde(default)]
     id: i64,
-    #[serde(default, alias = "baseUrl")]
-    base_url: String,
+    /// B 站响应里 base_url 与 baseUrl 会同时出现，alias 会被 serde 判重复，
+    /// 因此拆成两个可选字段取值（见 base()）。
+    #[serde(default)]
+    base_url: Option<String>,
+    #[serde(default, rename = "baseUrl")]
+    base_url_camel: Option<String>,
     #[serde(default)]
     height: Option<u32>,
+    #[serde(default)]
+    width: Option<u32>,
+    #[serde(default)]
+    bandwidth: Option<u64>,
+    #[serde(default)]
+    codecs: Option<String>,
+}
+
+impl BiliStream {
+    fn base(&self) -> String {
+        self.base_url
+            .clone()
+            .or_else(|| self.base_url_camel.clone())
+            .unwrap_or_default()
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -276,6 +295,11 @@ pub async fn extract_bilibili(
         .map(|c| c.to_string())
         .or_else(|| std::env::var("GET_VIDEO_BILI_COOKIE").ok())
         .filter(|c| !c.is_empty());
+    // 测试钩子：fnval=16 拿不到高清时，用网页端同款位掩码（如 4048）重试
+    let fnval16: u32 = std::env::var("GET_VIDEO_BILI_FNVAL")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(16);
     let mut out = SiteResult {
         referer: Some("https://www.bilibili.com".into()),
         ..Default::default()
@@ -285,7 +309,7 @@ pub async fn extract_bilibili(
         let ep = cap[1].to_string();
         (
             pgc_req(client, api, &ep, 1, &cookie),
-            pgc_req(client, api, &ep, 16, &cookie),
+            pgc_req(client, api, &ep, fnval16, &cookie),
         )
     } else if SS_RE.is_match(page_url) {
         // ss 季页：playurl 不认 season_id，从 HTML 取默认集 ep_id
@@ -295,7 +319,7 @@ pub async fn extract_bilibili(
         let ep = cap[1].to_string();
         (
             pgc_req(client, api, &ep, 1, &cookie),
-            pgc_req(client, api, &ep, 16, &cookie),
+            pgc_req(client, api, &ep, fnval16, &cookie),
         )
     } else {
         let cap = BV_RE.captures(page_url)?;
@@ -304,7 +328,7 @@ pub async fn extract_bilibili(
         out.title = title;
         (
             ugc_req(client, api, &bvid, cid, 1, &cookie),
-            ugc_req(client, api, &bvid, cid, 16, &cookie),
+            ugc_req(client, api, &bvid, cid, fnval16, &cookie),
         )
     };
     fill_from_playurls(&mut out, req1, req16).await;
@@ -339,6 +363,7 @@ fn pgc_req(
             ("qn", "116".into()),
             ("fourk", "1".into()),
             ("fnval", fnval.to_string()),
+            ("fnver", "0".into()),
         ],
         cookie,
     )
@@ -398,39 +423,69 @@ async fn fetch_view(
     Some((page.cid, title))
 }
 
-/// 播放地址两段式：fnval=1 整段优先，空则 fnval=16 DASH 兜底。
+/// 播放地址两段式：fnval=1 整段 + fnval=16 DASH 都取回，择优输出。
+/// DASH 最高视频轨清晰度超过整段（番剧高清只有 DASH）时，
+/// 把「视频轨+音频轨」合成一条 dash 候选放最前（应用侧经 relay 出 MPD 播放）。
 async fn fill_from_playurls(
     out: &mut SiteResult,
     req1: reqwest::RequestBuilder,
     req16: reqwest::RequestBuilder,
 ) {
-    // 优先 fnval=1：durl 渐进式整段（音画合一）
-    if let Some(r) = fetch_bili(req1).await {
+    let r1 = fetch_bili(req1).await;
+    let r16 = fetch_bili(req16).await;
+    merge_playurls(out, r1.as_ref(), r16.as_ref());
+}
+
+/// 两段响应合并决策（纯函数，可单测）：DRM 拦截 → 高清 DASH 合成 → 整段补入 → 试看提示。
+fn merge_playurls(out: &mut SiteResult, r1: Option<&BiliResult>, r16: Option<&BiliResult>) {
+    for r in [&r1, &r16].into_iter().flatten() {
         if r.is_drm {
             out.note = Some("B站：该内容标记为 DRM，按红线不出地址".into());
-            return;
-        }
-        push_durl(out, &r);
-        if !out.candidates.is_empty() {
-            if r.is_preview == 1 {
-                out.note = Some("B站：仅试看片段，完整内容需登录/会员".into());
-            }
             return;
         }
     }
-    // 兜底 fnval=16：DASH 音画分轨（视频轨无声、音频轨无画面）
-    if let Some(r) = fetch_bili(req16).await {
-        if r.is_drm {
-            out.note = Some("B站：该内容标记为 DRM，按红线不出地址".into());
-            return;
+    let durl_h = r1
+        .as_ref()
+        .filter(|r| !r.durl.is_empty())
+        .and_then(|r| qn_to_height(r.quality));
+    // DASH 最佳视频轨（按高度）与最佳音频轨（按码率）
+    let best_pair = r16.as_ref().and_then(|r| {
+        let dash = r.dash.as_ref()?;
+        let v = dash
+            .video
+            .iter()
+            .filter(|v| !v.base().trim().is_empty())
+            .max_by_key(|v| v.height.or_else(|| qn_to_height(v.id)).unwrap_or(0))?;
+        let a = dash
+            .audio
+            .iter()
+            .filter(|a| !a.base().trim().is_empty())
+            .max_by_key(|a| a.bandwidth.unwrap_or(0));
+        let vh = v.height.or_else(|| qn_to_height(v.id));
+        Some((v, a, vh, r.timelength))
+    });
+    if let Some((v, a, Some(vh), tl)) = best_pair {
+        if durl_h.is_none_or(|dh| vh > dh) {
+            // 高清只在 DASH：合成双轨候选（url=视频轨，audio_url=音频轨）
+            out.candidates.push(Candidate {
+                url: v.base(),
+                protocol: Protocol::Dash,
+                quality: Some(vh),
+                audio_url: a.map(|a| a.base()),
+                duration_ms: tl,
+                codecs: v.codecs.clone(),
+                width: v.width,
+                height: Some(vh),
+                bandwidth: v.bandwidth,
+            });
         }
-        push_dash(out, &r);
-        if !out.candidates.is_empty() {
-            out.note =
-                Some("B站 DASH 音画分离：视频轨无声、音频轨无画面，需应用侧双轨合并后播放".into());
-        } else if r.is_preview == 1 {
-            out.note = Some("B站：仅试看片段，完整内容需登录/会员".into());
-        }
+    }
+    if let Some(r) = &r1 {
+        push_durl(out, r);
+    }
+    let preview = [&r1, &r16].into_iter().flatten().any(|r| r.is_preview == 1);
+    if preview {
+        out.note = Some("B站：仅试看片段，完整内容需登录/会员".into());
     }
 }
 
@@ -459,16 +514,6 @@ fn push_durl(out: &mut SiteResult, r: &BiliResult) {
     }
 }
 
-fn push_dash(out: &mut SiteResult, r: &BiliResult) {
-    let Some(dash) = &r.dash else { return };
-    for v in &dash.video {
-        push_stream(out, &v.base_url, v.height.or_else(|| qn_to_height(v.id)));
-    }
-    for a in &dash.audio {
-        push_stream(out, &a.base_url, None);
-    }
-}
-
 fn push_stream(out: &mut SiteResult, url: &str, quality: Option<u32>) {
     let url = url.trim();
     let protocol = Protocol::from_url(url);
@@ -478,11 +523,8 @@ fn push_stream(out: &mut SiteResult, url: &str, quality: Option<u32>) {
     if out.candidates.iter().any(|c| c.url == url) {
         return;
     }
-    out.candidates.push(Candidate {
-        url: url.to_string(),
-        protocol,
-        quality,
-    });
+    out.candidates
+        .push(Candidate::single(url.to_string(), protocol, quality));
 }
 
 /// B 站 qn 清晰度编号 → 高度像素（用于清晰度展示与排序）。
@@ -627,11 +669,53 @@ mod tests {
         let data: BiliPlayurl = serde_json::from_str(json).unwrap();
         let r = data.result.unwrap();
         let mut out = SiteResult::default();
-        push_dash(&mut out, &r);
-        assert_eq!(out.candidates.len(), 3);
+        merge_playurls(&mut out, None, Some(&r));
+        // 无整段时：最佳视频轨+最佳音频轨合成一条 dash 候选
+        assert_eq!(out.candidates.len(), 1);
+        let c = &out.candidates[0];
+        assert_eq!(c.protocol, Protocol::Dash);
+        assert_eq!(c.quality, Some(480));
+        assert_eq!(c.url, "https://upos.bilivideo.com/v.m4s?upsig=a");
+        assert_eq!(
+            c.audio_url.as_deref(),
+            Some("https://upos.bilivideo.com/a.m4s?upsig=c")
+        );
+    }
+
+    #[test]
+    fn bili_dash_preferred_when_higher() {
+        // 整段 360P + DASH 480P：dash 合成候选在前，整段保留为低清选项
+        let j1 = r#"{"code":0,"result":{"is_preview":0,"is_drm":false,"quality":16,
+            "durl":[{"url":"https://upos.bilivideo.com/full.mp4?upsig=d"}]}}"#;
+        let j16 = r#"{"code":0,"result":{"is_preview":0,"is_drm":false,"quality":32,"durl":[],
+            "timelength":596000,
+            "dash":{
+                "video":[{"id":32,"baseUrl":"https://upos.bilivideo.com/v.m4s?upsig=a","height":480,"codecs":"avc1.64001F","width":852,"bandwidth":900000}],
+                "audio":[{"id":30216,"baseUrl":"https://upos.bilivideo.com/a.m4s?upsig=c","bandwidth":128000}]
+            }}}"#;
+        let r1: BiliPlayurl = serde_json::from_str(j1).unwrap();
+        let r16: BiliPlayurl = serde_json::from_str(j16).unwrap();
+        let r1 = r1.result.unwrap();
+        let r16 = r16.result.unwrap();
+        let mut out = SiteResult::default();
+        merge_playurls(&mut out, Some(&r1), Some(&r16));
+        assert_eq!(out.candidates.len(), 2);
+        assert_eq!(out.candidates[0].protocol, Protocol::Dash);
         assert_eq!(out.candidates[0].quality, Some(480));
-        assert_eq!(out.candidates[2].quality, None, "音频轨无清晰度");
-        assert!(out.candidates.iter().all(|c| c.protocol == Protocol::Mp4));
+        assert_eq!(out.candidates[0].duration_ms, Some(596000));
+        assert_eq!(out.candidates[0].codecs.as_deref(), Some("avc1.64001F"));
+        assert_eq!(out.candidates[1].protocol, Protocol::Mp4);
+        assert_eq!(out.candidates[1].quality, Some(360));
+        // 整段清晰度不低于 DASH 时不出 dash 候选
+        let j1_hd = r#"{"code":0,"result":{"is_preview":0,"is_drm":false,"quality":80,
+            "durl":[{"url":"https://upos.bilivideo.com/full.mp4?upsig=d"}]}}"#;
+        let r1_hd: BiliPlayurl = serde_json::from_str(j1_hd).unwrap();
+        let r1_hd = r1_hd.result.unwrap();
+        let mut out2 = SiteResult::default();
+        merge_playurls(&mut out2, Some(&r1_hd), Some(&r16));
+        assert_eq!(out2.candidates.len(), 1);
+        assert_eq!(out2.candidates[0].protocol, Protocol::Mp4);
+        assert_eq!(out2.candidates[0].quality, Some(1080));
     }
 
     #[test]

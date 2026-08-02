@@ -47,6 +47,8 @@ pub struct Extractor {
     rules: RulePack,
     /// 生成 relay_url 用的基地址，如 `http://127.0.0.1:8321`。
     relay_base: String,
+    /// DASH MPD 内存仓库（与 relay 共享）；独立使用时为空仓库。
+    dash_store: crate::relay::DashStore,
 }
 
 impl Extractor {
@@ -61,7 +63,14 @@ impl Extractor {
             client,
             rules,
             relay_base: relay_base.trim_end_matches('/').to_string(),
+            dash_store: Default::default(),
         }
+    }
+
+    /// 注入与 relay 共享的 MPD 仓库（应用启动时调用），
+    /// 之后 DASH 双轨候选的 relay_url 指向 `/dashmpd/{id}`。
+    pub fn set_dash_store(&mut self, store: crate::relay::DashStore) {
+        self.dash_store = store;
     }
 
     /// 提取入口：网页 URL → 统一视频流列表。
@@ -127,11 +136,11 @@ impl Extractor {
                 continue;
             }
             seen.insert(m.url.clone(), ());
-            let cand = Candidate {
-                url: m.url.clone(),
-                protocol: static_parse::Protocol::from_url(&m.url),
-                quality: static_parse::guess_quality(&m.url),
-            };
+            let cand = Candidate::single(
+                m.url.clone(),
+                static_parse::Protocol::from_url(&m.url),
+                static_parse::guess_quality(&m.url),
+            );
             let mut headers = HashMap::new();
             headers.insert(
                 "Referer".to_string(),
@@ -182,6 +191,23 @@ impl Extractor {
     }
 
     async fn build_format(&self, cand: &Candidate, headers: &HashMap<String, String>) -> Format {
+        // DASH 音画分轨合成候选：上游（B 站）已过滤 DRM，跳过检测，
+        // 生成 MPD 写入共享仓库，relay_url 指向 /dashmpd/{id}
+        if let Some(audio) = &cand.audio_url {
+            let v_proxy = self.relay_url(&cand.url, headers);
+            let a_proxy = self.relay_url(audio, headers);
+            let id = dash_doc_id(&cand.url, audio);
+            let xml = build_mpd(cand, &v_proxy, &a_proxy);
+            self.dash_store.lock().unwrap().insert(id.clone(), xml);
+            return Format {
+                url: cand.url.clone(),
+                protocol: cand.protocol.as_str().to_string(),
+                quality: cand.quality.map(|q| format!("{q}p")),
+                drm: false,
+                headers: headers.clone(),
+                relay_url: Some(format!("{}/dashmpd/{id}", self.relay_base)),
+            };
+        }
         let drm = self.detect_drm(cand, headers).await;
         let relay_url = if drm {
             None
@@ -297,4 +323,59 @@ fn first_variant_url(master_text: &str, base: &str) -> Option<String> {
         }
     }
     None
+}
+
+/// DASH 文档 id：视频轨+音频轨地址的稳定散列（进程内有效即可）。
+fn dash_doc_id(v_url: &str, a_url: &str) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    v_url.hash(&mut h);
+    a_url.hash(&mut h);
+    format!("{:016x}", h.finish())
+}
+
+/// XML 转义（MPD 的 BaseURL 里 query 参数含 `&`）。
+fn xml_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+}
+
+/// 由 DASH 双轨候选生成 MPD 清单（on-demand 单文件 fMP4 profile，
+/// B 站 m4s 自带 init 段与 sidx，播放器经 Range 自行定位分片）。
+fn build_mpd(cand: &Candidate, v_proxy: &str, a_proxy: &str) -> String {
+    let dur_attr = cand
+        .duration_ms
+        .map(|ms| format!("PT{}.{:03}S", ms / 1000, ms % 1000));
+    let dur_mpd = dur_attr
+        .as_deref()
+        .map(|d| format!(" mediaPresentationDuration=\"{d}\""))
+        .unwrap_or_default();
+    let dur_period = dur_attr
+        .as_deref()
+        .map(|d| format!(" duration=\"{d}\""))
+        .unwrap_or_default();
+    let v_codecs = cand.codecs.clone().unwrap_or_else(|| "avc1.640028".into());
+    let w = cand.width.unwrap_or(1920);
+    let h = cand.height.unwrap_or(1080);
+    let vbw = cand.bandwidth.unwrap_or(2_000_000);
+    let (v_proxy, a_proxy) = (xml_escape(v_proxy), xml_escape(a_proxy));
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="static" minBufferTime="PT2S" profiles="urn:mpeg:dash:profile:isoff-on-demand:2011"{dur_mpd}>
+  <Period{dur_period}>
+    <AdaptationSet mimeType="video/mp4" segmentAlignment="true" startWithSAP="1">
+      <Representation id="v" codecs="{v_codecs}" width="{w}" height="{h}" bandwidth="{vbw}">
+        <BaseURL>{v_proxy}</BaseURL>
+      </Representation>
+    </AdaptationSet>
+    <AdaptationSet mimeType="audio/mp4" segmentAlignment="true" startWithSAP="1">
+      <Representation id="a" codecs="mp4a.40.2" bandwidth="192000">
+        <BaseURL>{a_proxy}</BaseURL>
+      </Representation>
+    </AdaptationSet>
+  </Period>
+</MPD>"#
+    )
 }
