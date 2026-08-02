@@ -1,10 +1,11 @@
 //! get-video 正式 Tauri 壳（Tauri 2）。
 //!
-//! 架构：主窗口 UI（输入网址/展示结果/播放） + L1/L3 提取（get-video Extractor）
-//! + 隐藏 WebviewWindow（加载目标页、注入嗅探 JS，L2） + get-video relay
+//! 架构：主窗口 UI（输入网址/展示结果/播放），叠加 L1/L3 提取（get-video Extractor）、
+//! 隐藏 WebviewWindow（加载目标页、注入嗅探 JS，L2）、get-video relay
 //! （0.0.0.0:8321，播放地址中转；局域网设备可访问投屏地址）。
 //!
 //! 嗅探结果上报双通道（去重合并）：
+//!
 //! 1. `window.__TAURI__.event.emit('sniff-found', ...)`（IPC，需 capabilities 放行 remote）；
 //! 2. Image beacon → 本应用自建的 127.0.0.1:8377 上报服务（兜底，跨域无预检）。
 //!

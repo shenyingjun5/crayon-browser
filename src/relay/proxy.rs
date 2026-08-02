@@ -153,6 +153,9 @@ pub async fn proxy_handler(
 
     let status =
         StatusCode::from_u16(resp.status().as_u16()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+    if !status.is_success() {
+        tracing::warn!(target, %status, range=?client_range, "relay upstream non-2xx");
+    }
     let resp_headers = resp.headers().clone();
     let ct = resp_headers
         .get(header::CONTENT_TYPE)
