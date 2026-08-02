@@ -1220,6 +1220,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "get-video-app"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "get-video",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tokio",
+]
+
+[[package]]
 name = "get-video-demo"
 version = "0.1.0"
 dependencies = [

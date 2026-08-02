@@ -5,7 +5,7 @@ edition = "2021"
 description = "视频地址解析 + 本地 relay 流服务模块"
 
 [workspace]
-members = ["demo"]
+members = ["demo", "app"]
 
 [lib]
 name = "get_video"

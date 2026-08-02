@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>get-video</title>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, "PingFang SC", "Microsoft YaHei", sans-serif; margin: 0; background: #1e1f24; color: #e8e8ea; }
+  header { padding: 16px 20px 8px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: #8b8d94; font-size: 12px; }
+  .bar { display: flex; gap: 8px; padding: 12px 20px; }
+  input { flex: 1; padding: 10px 12px; border-radius: 8px; border: 1px solid #3a3b42; background: #14151a; color: #e8e8ea; font-size: 14px; }
+  button { padding: 10px 18px; border-radius: 8px; border: 0; background: #4a7dff; color: #fff; font-size: 14px; cursor: pointer; }
+  button.alt { background: #3d5bb5; }
+  button:disabled { background: #3a3b42; cursor: not-allowed; }
+  #status { padding: 0 20px; font-size: 13px; color: #9fb4ff; min-height: 20px; }
+  #status.err { color: #ff8a8a; }
+  ul { list-style: none; margin: 8px 20px; padding: 0; }
+  li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; margin-bottom: 6px; background: #26272e; border-radius: 8px; cursor: pointer; font-size: 13px; }
+  li:hover { background: #2f3038; }
+  li.drm { opacity: .45; cursor: not-allowed; }
+  li .idx { color: #8b8d94; width: 22px; }
+  .tag { padding: 1px 7px; border-radius: 5px; font-size: 11px; background: #37415e; color: #9fb4ff; }
+  .tag.drm { background: #5e3737; color: #ff9f9f; }
+  .tag.q { background: #375e46; color: #9fffc3; }
+  li .url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; color: #b9bbc2; }
+  #playerBox { margin: 8px 20px 20px; }
+  video { width: 100%; max-height: 46vh; background: #000; border-radius: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>get-video · 视频地址提取与嗅探</h1>
+  <div class="sub">提取：L1/L3 静态解析（秒级） · 嗅探：L2 隐藏 webview 加载页面抓媒体请求（最长约 15 秒） · 点击结果经本地 relay 播放</div>
+</header>
+<div class="bar">
+  <input id="url" placeholder="https://example.com/page-with-video" autofocus>
+  <button id="btnExtract" class="alt">提取</button>
+  <button id="btnSniff">嗅探</button>
+</div>
+<div id="status"></div>
+<ul id="list"></ul>
+<div id="playerBox"><video id="player" controls></video></div>
+<script>
+const $ = (id) => document.getElementById(id);
+const invoke = window.__TAURI__.core.invoke;
+let hls = null;
+let busy = false;
+
+function setStatus(t, isErr) {
+  $('status').textContent = t || '';
+  $('status').className = isErr ? 'err' : '';
+}
+
+function trunc(u) { return u.length > 90 ? u.slice(0, 60) + '…' + u.slice(-26) : u; }
+
+// 归一化两种响应：extract 返回 VideoInfo（formats 数组），sniff 返回 SniffResponse（results 数组）
+function normalize(resp) {
+  if (resp.formats) return resp.formats.map((f, i) => ({ ...f, index: i }));
+  return resp.results || [];
+}
+
+function render(resp) {
+  const items = normalize(resp);
+  const count = resp.count !== undefined ? resp.count : items.length;
+  const list = $('list');
+  list.innerHTML = '';
+  document.title = 'results:' + count;
+  try { window.__TAURI__.event.emit('ui-results', { count }); } catch (e) {}
+  if (!items.length) return;
+  for (const r of items) {
+    const li = document.createElement('li');
+    li.innerHTML =
+      `<span class="idx">${r.index + 1}</span>` +
+      `<span class="tag">${r.protocol}</span>` +
+      (r.quality ? `<span class="tag q">${r.quality}</span>` : '') +
+      (r.drm ? `<span class="tag drm">DRM</span>` : '') +
+      `<span class="url" title="${r.url}">${trunc(r.url)}</span>`;
+    if (r.drm) {
+      li.className = 'drm';
+      li.title = 'DRM 内容，标记拒播';
+    } else {
+      li.onclick = () => play(r);
+    }
+    list.appendChild(li);
+  }
+}
+
+function play(r) {
+  const v = $('player');
+  if (hls) { hls.destroy(); hls = null; }
+  if (!r.relay_url) { setStatus('该格式无 relay 地址，无法播放', true); return; }
+  setStatus('播放: ' + trunc(r.url));
+  if (r.protocol === 'hls') {
+    if (Hls.isSupported()) {
+      hls = new Hls();
+      hls.loadSource(r.relay_url);
+      hls.attachMedia(v);
+      hls.on(Hls.Events.ERROR, (_, d) => { if (d.fatal) setStatus('播放错误: ' + d.details, true); });
+    } else if (v.canPlayType('application/vnd.apple.mpegurl')) {
+      v.src = r.relay_url;
+    } else {
+      setStatus('当前 webview 不支持 HLS 播放', true); return;
+    }
+  } else if (r.protocol === 'mp4') {
+    v.src = r.relay_url;
+  } else {
+    setStatus('播放器暂不支持 ' + r.protocol + '（地址已复制到控制台）', true);
+    console.log(r.relay_url); return;
+  }
+  v.play().catch(() => {});
+}
+
+async function run(kind) {
+  const url = $('url').value.trim();
+  if (!url) { setStatus('请输入网址', true); return; }
+  if (busy) return;
+  busy = true;
+  $('btnExtract').disabled = true;
+  $('btnSniff').disabled = true;
+  $('list').innerHTML = '';
+  setStatus(kind === 'extract' ? '提取中…' : '嗅探中（最长约 15 秒）…');
+  try {
+    const resp = await invoke(kind, { url });
+    const items = normalize(resp);
+    const count = resp.count !== undefined ? resp.count : items.length;
+    if (resp.note && !count) {
+      setStatus(resp.note, true);
+    } else {
+      const verb = kind === 'extract' ? '提取' : '嗅探';
+      const src = resp.source ? `（${resp.source}）` : '';
+      const title = resp.title ? `《${resp.title}》` : '';
+      setStatus(`${verb}到 ${count} 条结果${src} ${title}`.trim());
+    }
+    render(resp);
+  } catch (e) {
+    setStatus((kind === 'extract' ? '提取失败: ' : '嗅探失败: ') + e, true);
+    document.title = 'results:0';
+  } finally {
+    busy = false;
+    $('btnExtract').disabled = false;
+    $('btnSniff').disabled = false;
+  }
+}
+
+// go() 保留给 --ui-test 注入调用（走「嗅探」完整 IPC 链路）
+function go() { run('sniff'); }
+$('btnExtract').onclick = () => run('extract');
+$('btnSniff').onclick = go;
+$('url').addEventListener('keydown', (e) => { if (e.key === 'Enter') run('extract'); });
+try { window.__TAURI__.event.emit('ui-ready', {}); } catch (e) {}
+</script>
+</body>
+</html>

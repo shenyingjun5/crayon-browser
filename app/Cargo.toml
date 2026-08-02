@@ -1,0 +1,16 @@
+[package]
+name = "get-video-app"
+version = "0.1.0"
+edition = "2021"
+description = "get-video 正式 Tauri 壳：L1/L3 提取 + L2 webview 嗅探 + 本地 relay"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+get-video = { path = ".." }
+tauri = { version = "2.11.5", features = [] }
+axum = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }

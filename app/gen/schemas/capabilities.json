@@ -1,0 +1,1 @@
+{"default":{"identifier":"default","description":"正式壳默认能力：本地 UI 全量 + 任意 http/https 远程页允许 event（L2 嗅探注入脚本上报用）","remote":{"urls":["http://*","https://*","http://*:*","https://*:*"]},"local":true,"windows":["*"],"permissions":["core:default"]}}
