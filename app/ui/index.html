@@ -95,13 +95,15 @@ function play(r) {
   if (!r.relay_url) { setStatus('该格式无 relay 地址，无法播放', true); return; }
   setStatus('播放: ' + trunc(r.url));
   if (r.protocol === 'hls') {
-    if (Hls.isSupported()) {
+    if (v.canPlayType('application/vnd.apple.mpegurl')) {
+      // WebKit 原生 HLS 优先：对直播流（中途加 GOP、超大 PTS）容错远好于 hls.js/MSE，
+      // 实测央视签名直播流 hls.js 报 bufferAppendError，原生播放正常
+      v.src = r.relay_url;
+    } else if (Hls.isSupported()) {
       hls = new Hls();
       hls.loadSource(r.relay_url);
       hls.attachMedia(v);
       hls.on(Hls.Events.ERROR, (_, d) => { if (d.fatal) setStatus('播放错误: ' + d.details, true); });
-    } else if (v.canPlayType('application/vnd.apple.mpegurl')) {
-      v.src = r.relay_url;
     } else {
       setStatus('当前 webview 不支持 HLS 播放', true); return;
     }
