@@ -133,7 +133,8 @@ ffmpeg -i "http://127.0.0.1:8321/proxy/$(python3 -c "import urllib.parse;print(u
 │   do_sniff：                   │ 创建隐藏 WebviewWindow 加载目标页
 │   ├─ 注入嗅探 JS（fetch/XHR/   │   （initialization_script，document start）
 │   │   media src/Mutation/      │
-│   │   Performance 五路 hook）  │
+│   │   Performance/Worker 六路  │
+│   │   hook）                   │
 │   ├─ 双通道回收命中：           │◄── event.emit('sniff-found') + Image beacon
 │   │   IPC event + 127.0.0.1:8377│   （beacon 是远程页 IPC 受限时的兜底）
 │   ├─ 12s 上限 / 首命中后 3s 收尾│
@@ -169,7 +170,14 @@ DISPLAY=:99 WEBKIT_DISABLE_DMABUF_RENDERER=1 WEBKIT_DISABLE_COMPOSITING_MODE=1 \
 # 有显示环境直接 ./target/debug/get-video-demo 即可
 ```
 
-测试页：`http://127.0.0.1:8890/a.html`（2s 后 JS 动态插入 `<video src=公网mp4>`）、`http://127.0.0.1:8890/b.html`（hls.js 动态加载公网 m3u8）。
+测试页：`http://127.0.0.1:8890/a.html`（2s 后 JS 动态插入 `<video src=公网mp4>`）、`http://127.0.0.1:8890/b.html`（hls.js 动态加载公网 m3u8）、`http://127.0.0.1:8890/c.html`（**Web Worker 内 fetch m3u8**，验证 Worker hook——模拟央视频 `cmg.worker.js` 这类 worker 内拉流的站点）。
+
+## Worker hook（2026-08-02）
+
+主线程的 fetch/XHR hook 与 PerformanceObserver 都看不到 dedicated Worker 内的请求，央视频这类「WASM + Worker 拉流」的站点因此是嗅探盲区。解法：包装 `window.Worker` 构造器——classic worker（非 module、http(s) 脚本）改为「嗅探 shim + `importScripts(原脚本)`」的 blob worker，shim 在 worker 作用域 hook `fetch`/`XHR.open`，命中经 `postMessage` 回主线程复用双通道上报；module worker、blob: 脚本与构造异常一律回退原构造器（不破坏页面）。已验证：
+
+- 测试页 `/c.html`（worker 内 fetch m3u8）：成功嗅出；
+- **央视频直播 `yangshipin.cn/tv/home`**：成功嗅出 CCTV 频道签名 HLS 地址（`hlslive-tx-cdn.ysp.cctv.cn/...m3u8?ysign=...`），ffmpeg 经 relay 拉流 8s 通过（中途插入直播流的 h264 解码告警属正常现象）。
 
 ## 无头验证入口
 

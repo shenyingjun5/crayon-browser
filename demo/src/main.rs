@@ -100,6 +100,61 @@ const SNIFF_JS: &str = r#"
       for (const e of list.getEntries()) report(e.name);
     }).observe({ type: 'resource', buffered: true });
   } catch (e) {}
+  // Worker hook：包装 Worker 构造器，往 classic worker 脚本前注入嗅探 shim——
+  // 覆盖央视频这类在 Worker 内 fetch/XHR 拉流的站点（主线程 hook 与
+  // PerformanceObserver 都看不到 dedicated worker 内的请求）。
+  // module worker 与 blob: 脚本不包装（importScripts 方案不适用），异常回退原构造器。
+  try {
+    const OrigWorker = window.Worker;
+    if (OrigWorker) {
+      // worker 内 shim：hook fetch/XHR，命中 postMessage 回主线程（复用主线程双通道上报）。
+      // __BASE__ 占位符替换为原始脚本地址，保持 worker 内相对 URL 解析基准不变。
+      const SHIM = `
+var __sniffBase='__BASE__';
+(function(){
+  const RE=/\\.(m3u8|mp4|mpd)(\\?|#|$)/i;
+  const seen=new Set();
+  function abs(u){try{return new URL(u,__sniffBase).href;}catch(e){return null;}}
+  function report(u){try{
+    if(!u||typeof u!=='string')return;
+    u=abs(u);
+    if(!u||!/^https?:\\/\\//.test(u)||!RE.test(u)||seen.has(u))return;
+    seen.add(u);
+    postMessage({__getVideoSniff:u});
+  }catch(e){}}
+  const of=self.fetch;
+  if(of){self.fetch=function(input,init){try{report(typeof input==='string'?input:(input&&input.url));}catch(e){}return of.apply(this,arguments);};}
+  if(self.XMLHttpRequest){
+    const oo=self.XMLHttpRequest.prototype.open;
+    self.XMLHttpRequest.prototype.open=function(m,u){try{report(u);}catch(e){}return oo.apply(this,arguments);};
+  }
+})();
+`;
+      window.Worker = function (scriptURL, options) {
+        try {
+          if (options && options.type === 'module') throw 0;
+          const abs = new URL(scriptURL, location.href).href;
+          if (!/^https?:\/\//.test(abs)) throw 0;
+          const src = SHIM.replace('__BASE__', abs.replace(/\\/g, '\\\\').replace(/'/g, "\\'"))
+            + '\ntry{importScripts(' + JSON.stringify(abs) + ');}catch(e){}\n';
+          const w = new OrigWorker(
+            URL.createObjectURL(new Blob([src], { type: 'application/javascript' })),
+            options
+          );
+          w.addEventListener('message', (ev) => {
+            try {
+              const u = ev.data && ev.data.__getVideoSniff;
+              if (u) report(u);
+            } catch (e) {}
+          });
+          return w;
+        } catch (e) {
+          return new OrigWorker(scriptURL, options);
+        }
+      };
+      window.Worker.prototype = OrigWorker.prototype;
+    }
+  } catch (e) {}
   // 已有的 video/source
   try {
     for (const n of document.querySelectorAll('video,source')) report(n.src || n.getAttribute('data-src'));

@@ -49,6 +49,8 @@
 - 嗅探超时（如 15s）未抓到媒体请求 → 判定该页无公开视频或需登录，如实返回。
 
 > 2026-08-01 实现备注（demo/ 已验证）：注入方式为 `initialization_script`（document start），五路 hook：`fetch`、`XMLHttpRequest.open`、`HTMLMediaElement.src` setter、`MutationObserver`（video/source 的 src/data-src）、`PerformanceObserver` 兜底；命中经 `event.emit('sniff-found')` 上报（远程页 IPC 需在 capabilities 配 `remote.urls` 放行），另有 Image beacon 兜底通道；收集窗口 12s 上限、首个命中后再等 3s 收尾；结束后关窗，对每条结果跑 DRM 检测与清晰度推测并生成 relay_url。Linux 构建基线为 WebKitGTK 2.40+，使用 Tauri/wry 官方依赖链，不再保留 2.38 兼容层。
+>
+> 2026-08-02 追加：第六路 **Worker hook**——包装 `window.Worker`，classic worker 改为「嗅探 shim + importScripts(原脚本)」的 blob worker（shim 在 worker 作用域 hook fetch/XHR，命中 postMessage 回主线程）；module worker / blob: 脚本 / 异常回退原构造器。解决央视频类「WASM + Worker 内拉流」站点主线程 hook 不可见的盲区；`yangshipin.cn/tv/home` 直播流已实测嗅出并经 relay 播放验证。
 
 ### L3 站点专用解析器 + 规则热更新
 
