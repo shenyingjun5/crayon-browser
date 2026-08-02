@@ -22,6 +22,7 @@ cargo build --release
 | `--port` | `GET_VIDEO_PORT` | `8321` | 监听端口 |
 | `--rules` | `GET_VIDEO_RULES` | 无 | L3 站点规则包本地 JSON 路径 |
 | `--allow-private-hosts` | `GET_VIDEO_ALLOW_PRIVATE` | 关 | **测试钩子**：关闭 SSRF 黑名单，仅本地调试用 |
+| 无（仅环境变量） | `GET_VIDEO_BILI_COOKIE` | 无 | B 站登录态 Cookie 整串，解锁登录/会员清晰度（见下「站点登录态」） |
 
 ## HTTP API
 
@@ -43,6 +44,23 @@ L1 静态提取 + L3 规则包 + DRM 检测，返回统一 JSON：
   }]
 }
 ```
+
+### 站点登录态（Cookie）
+
+部分站点的清晰度/内容权限依赖登录态。当前支持 **B 站**：设置环境变量
+`GET_VIDEO_BILI_COOKIE` 后，B 站解析器在调 `api.bilibili.com` 播放 API 时
+携带该 Cookie，可解锁登录清晰度（1080P）与你账号的会员内容（按你自己账号的权限）：
+
+```bash
+# 浏览器登录 bilibili.com → 开发者工具 → Network → 任一 api 请求 →
+# 复制请求头 Cookie 整串（至少含 SESSDATA）
+export GET_VIDEO_BILI_COOKIE='SESSDATA=xxxx; bili_jct=yyyy; DedeUserID=zzzz'
+./target/release/get-video   # 重新启动生效
+```
+
+安全口径：Cookie 是敏感凭据——它**只随提取请求发往 `api.bilibili.com`**，
+不会写入返回结果，不会经 relay 转发到任何媒体 CDN，也不会发往其他站点；
+relay 代理媒体流量时一律不携带任何 Cookie。请勿把含 Cookie 的环境共享给他人。
 
 ### `GET /proxy/<urlencoded目标URL>[/<文件名>]?referer=...&ua=...`
 
