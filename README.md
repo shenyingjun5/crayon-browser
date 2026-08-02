@@ -92,6 +92,10 @@ relay 代理媒体流量时一律不携带任何 Cookie。请勿把含 Cookie �
 - 已知 DRM 站点名单（netflix 等）前置标记。
 - 提取 HLS 时若是 master 列表，会再下一层取第一个子列表检测。
 
+## 受限标注（`restricted_reason`）
+
+除流级 DRM 外，还有一类「抓到地址也播不了」的站点：央视频/央视网系列的流被 **WASM 私有加扰**（无 `EXT-X-KEY`、ffmpeg 可解容器但画面花屏，解密在播放器 WASM 里，无公开解法）。`src/drm.rs` 的 `restricted_reason(page_url, stream_url)` 对这类站点（cctv.com / cctv.cn / cntv / yangshipin 及其 CDN 域名 `cntv.lxdns.com`、`newcntv.qcloudcdn.com` 等）与全 DRM 站点做**页面+流地址双向匹配**，命中即给结果打 `restriction` 原因、不产出 relay 地址；UI 在链接后直接注明「**受限，不能播放**」（置灰禁点，悬停显示原因）。提取与嗅探两条链路统一打标。
+
 ## 测试
 
 ```bash

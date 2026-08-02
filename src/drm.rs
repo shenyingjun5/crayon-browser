@@ -29,15 +29,52 @@ const DRM_KEYFORMAT_MARKERS: &[&str] = &[
     "fairplay",
 ];
 
+/// 已知「WASM 私有加扰」站点名单：流的 ES 数据被站点私有算法加扰
+/// （解密在网页播放器的 WASM 里，无公开解法），抓到地址也无法播放。
+/// 央视频直播 + 央视网点播实测确认（README「央视频/CCTV 流加扰」节）。
+const WASM_SCRAMBLED_SITES: &[&str] = &[
+    "cctv.com",
+    "cctv.cn",
+    "cntv.cn",
+    "cntv.com",
+    "yangshipin.cn",
+    // 央视系流实际走 CDN 域名（hls.cntv.lxdns.com、newcntv.qcloudcdn.com 等），
+    // 流地址自身也要匹配
+    "cntv.lxdns.com",
+    "newcntv.qcloudcdn.com",
+];
+
 /// 按站点名单做前置 DRM 判断。
 pub fn is_known_drm_site(url: &str) -> bool {
+    host_matches(url, DRM_SITES)
+}
+
+/// URL 的 host 是否命中名单（精确或后缀匹配）。
+fn host_matches(url: &str, sites: &[&str]) -> bool {
     let host = url::Url::parse(url)
         .ok()
         .and_then(|u| u.host_str().map(|h| h.to_ascii_lowercase()))
         .unwrap_or_default();
-    DRM_SITES
+    sites
         .iter()
         .any(|s| host == *s || host.ends_with(&format!(".{s}")))
+}
+
+/// 受限判定：命中已知 WASM 加扰站点或全 DRM 站点时返回中文原因。
+///
+/// `page_url` 与 `stream_url` 任一命中即受限——央视系的流地址在 CDN
+/// 域名下（`hls.cntv.lxdns.com`），仅看页面域名会漏判，仅看流域名也会
+/// 漏掉页面明确但流走通用 CDN 的情况，两个都查。
+pub fn restricted_reason(page_url: &str, stream_url: &str) -> Option<&'static str> {
+    if host_matches(page_url, WASM_SCRAMBLED_SITES)
+        || host_matches(stream_url, WASM_SCRAMBLED_SITES)
+    {
+        return Some("站点 WASM 私有加扰，抓到地址也无法解码播放");
+    }
+    if is_known_drm_site(page_url) || is_known_drm_site(stream_url) {
+        return Some("全站 DRM 加密");
+    }
+    None
 }
 
 /// 检测 HLS（m3u8）文本是否为 DRM 加密。
@@ -150,5 +187,40 @@ mod tests {
     fn known_drm_sites() {
         assert!(is_known_drm_site("https://www.netflix.com/watch/123"));
         assert!(!is_known_drm_site("https://example.com/watch"));
+    }
+
+    #[test]
+    fn cctv_page_is_restricted() {
+        // 页面命中央视系：流地址在通用 CDN 也要判受限
+        let r = restricted_reason(
+            "https://tv.cctv.com/2026/07/30/VIDE.shtml",
+            "https://cdn.example.com/x/main.m3u8",
+        );
+        assert!(r.unwrap().contains("WASM"));
+    }
+
+    #[test]
+    fn cntv_cdn_stream_is_restricted() {
+        // 页面域名不明确、但流命中央视 CDN 域名
+        let r = restricted_reason(
+            "https://example.com/page",
+            "https://hls.cntv.lxdns.com/asp/hls/main.m3u8",
+        );
+        assert!(r.unwrap().contains("WASM"));
+    }
+
+    #[test]
+    fn yangshipin_live_is_restricted() {
+        let r = restricted_reason("https://www.yangshipin.cn/tv/home", "");
+        assert!(r.is_some());
+    }
+
+    #[test]
+    fn bilibili_is_not_restricted() {
+        assert!(restricted_reason(
+            "https://www.bilibili.com/bangumi/play/ep733316",
+            "https://upos-sz-mirror.bilivideo.com/x.m4s"
+        )
+        .is_none());
     }
 }

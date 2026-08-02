@@ -77,16 +77,19 @@ function render(resp) {
   try { window.__TAURI__.event.emit('ui-results', { count }); } catch (e) {}
   if (!items.length) return;
   for (const r of items) {
+    // 受限（WASM 加扰 / 全站 DRM）或流级 DRM：链接后注明「受限，不能播放」
+    const blocked = !!r.restriction || r.drm;
+    const reason = r.restriction || 'DRM 加密内容，无法播放';
     const li = document.createElement('li');
     li.innerHTML =
       `<span class="idx">${r.index + 1}</span>` +
       `<span class="tag">${r.protocol}</span>` +
       (r.quality ? `<span class="tag q">${r.quality}</span>` : '') +
-      (r.drm ? `<span class="tag drm">DRM</span>` : '') +
+      (blocked ? `<span class="tag drm">受限，不能播放</span>` : '') +
       `<span class="url" title="${r.url}">${trunc(r.url)}</span>`;
-    if (r.drm) {
+    if (blocked) {
       li.className = 'drm';
-      li.title = 'DRM 内容，标记拒播';
+      li.title = reason;
     } else {
       li.onclick = () => play(r);
     }

@@ -23,6 +23,9 @@ pub struct Format {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub quality: Option<String>,
     pub drm: bool,
+    /// 受限原因（WASM 私有加扰 / 全站 DRM）：命中即不可播，不产出 relay 地址。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub restriction: Option<String>,
     pub headers: HashMap<String, String>,
     /// DRM 内容不产出 relay 地址（docs/test-cases.md D1）。
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -122,7 +125,7 @@ impl Extractor {
             let mut headers = HashMap::new();
             headers.insert("Referer".to_string(), page_origin.clone());
             headers.insert("User-Agent".to_string(), crate::DEFAULT_UA.to_string());
-            formats.push(self.build_format(cand, &headers).await);
+            formats.push(self.build_format(&final_url, cand, &headers).await);
         }
 
         // L3 规则包
@@ -151,7 +154,7 @@ impl Extractor {
                 m.ua.clone()
                     .unwrap_or_else(|| crate::DEFAULT_UA.to_string()),
             );
-            formats.push(self.build_format(&cand, &headers).await);
+            formats.push(self.build_format(&final_url, &cand, &headers).await);
         }
 
         // 站点专用解析器（首批：央视网 tv.cctv.com / cntv、B 站番剧，见 sites.rs）
@@ -173,7 +176,7 @@ impl Extractor {
                     site.referer.clone().unwrap_or_else(|| page_origin.clone()),
                 );
                 headers.insert("User-Agent".to_string(), crate::DEFAULT_UA.to_string());
-                formats.push(self.build_format(cand, &headers).await);
+                formats.push(self.build_format(&final_url, cand, &headers).await);
             }
         }
 
@@ -190,7 +193,12 @@ impl Extractor {
         })
     }
 
-    async fn build_format(&self, cand: &Candidate, headers: &HashMap<String, String>) -> Format {
+    async fn build_format(
+        &self,
+        page_url: &str,
+        cand: &Candidate,
+        headers: &HashMap<String, String>,
+    ) -> Format {
         // DASH 音画分轨合成候选：上游（B 站）已过滤 DRM，跳过检测，
         // 生成 MPD 写入共享仓库，relay_url 指向 /dashmpd/{id}
         if let Some(audio) = &cand.audio_url {
@@ -204,12 +212,19 @@ impl Extractor {
                 protocol: cand.protocol.as_str().to_string(),
                 quality: cand.quality.map(|q| format!("{q}p")),
                 drm: false,
+                restriction: None,
                 headers: headers.clone(),
                 relay_url: Some(format!("{}/dashmpd/{id}", self.relay_base)),
             };
         }
-        let drm = self.detect_drm(cand, headers).await;
-        let relay_url = if drm {
+        // 受限站点（WASM 私有加扰 / 全站 DRM）：直接打标，不再拉流检测
+        let restriction = crate::drm::restricted_reason(page_url, &cand.url).map(str::to_string);
+        let drm = if restriction.is_some() {
+            false
+        } else {
+            self.detect_drm(cand, headers).await
+        };
+        let relay_url = if drm || restriction.is_some() {
             None
         } else {
             Some(self.relay_url(&cand.url, headers))
@@ -219,6 +234,7 @@ impl Extractor {
             protocol: cand.protocol.as_str().to_string(),
             quality: cand.quality.map(|q| format!("{q}p")),
             drm,
+            restriction,
             headers: headers.clone(),
             relay_url,
         }
@@ -378,4 +394,40 @@ fn build_mpd(cand: &Candidate, v_proxy: &str, a_proxy: &str) -> String {
   </Period>
 </MPD>"#
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn cctv_candidate_marked_restricted() {
+        let ex = Extractor::new("http://127.0.0.1:8321", RulePack::empty());
+        let cand = Candidate::single(
+            "https://hls.cntv.lxdns.com/asp/hls/main.m3u8".into(),
+            Protocol::Hls,
+            None,
+        );
+        let f = ex
+            .build_format(
+                "https://tv.cctv.com/2026/07/30/VIDE.shtml",
+                &cand,
+                &HashMap::new(),
+            )
+            .await;
+        assert!(f.restriction.is_some(), "央视页面应标记受限");
+        assert!(f.relay_url.is_none(), "受限内容不产出 relay 地址");
+        assert!(!f.drm);
+    }
+
+    #[tokio::test]
+    async fn normal_candidate_not_restricted() {
+        let ex = Extractor::new("http://127.0.0.1:8321", RulePack::empty());
+        let cand = Candidate::single("https://example.com/v.mp4".into(), Protocol::Mp4, None);
+        let f = ex
+            .build_format("https://example.com/p", &cand, &HashMap::new())
+            .await;
+        assert!(f.restriction.is_none());
+        assert!(f.relay_url.is_some());
+    }
 }

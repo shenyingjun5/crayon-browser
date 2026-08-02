@@ -181,6 +181,9 @@ struct SniffResultItem {
     #[serde(skip_serializing_if = "Option::is_none")]
     quality: Option<String>,
     drm: bool,
+    /// 受限原因（WASM 私有加扰 / 全站 DRM）：命中即不可播。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    restriction: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     relay_url: Option<String>,
 }
@@ -326,8 +329,16 @@ async fn do_sniff(app: &AppHandle, url: &str) -> Result<SniffResponse, String> {
             },
         );
         headers.insert("User-Agent".to_string(), get_video::DEFAULT_UA.to_string());
-        let drm = extractor.detect_drm(&cand, &headers).await;
-        let relay_url = if drm {
+        // 受限站点（WASM 私有加扰 / 全站 DRM）：页面与流地址任一命中即打标，
+        // 不再拉流做 DRM 检测，也不产出 relay 地址
+        let page_ctx = if hit.page.is_empty() { url } else { &hit.page };
+        let restriction = get_video::drm::restricted_reason(page_ctx, &hit.url).map(str::to_string);
+        let drm = if restriction.is_some() {
+            false
+        } else {
+            extractor.detect_drm(&cand, &headers).await
+        };
+        let relay_url = if drm || restriction.is_some() {
             None
         } else {
             Some(extractor.relay_url(&hit.url, &headers))
@@ -338,6 +349,7 @@ async fn do_sniff(app: &AppHandle, url: &str) -> Result<SniffResponse, String> {
             protocol: protocol.as_str().to_string(),
             quality: cand.quality.map(|q| format!("{q}p")),
             drm,
+            restriction,
             relay_url,
         });
     }
