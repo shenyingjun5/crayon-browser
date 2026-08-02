@@ -156,6 +156,14 @@ cargo build -p get-video-app
 ./target/debug/get-video-app --ui-test <url>          # GUI 自动点击「嗅探」走完整 IPC 链路
 ```
 
+## 站点登录窗口（2026-08-02）
+
+前端「登录」按钮 → `invoke('open_login', {url})` → 弹出**可见**的登录 WebviewWindow 加载目标站点，用户在其中完成登录后直接关窗即可；之后再点「嗅探」，隐藏嗅探窗会自动携带登录态。重复点「登录」复用同一窗口并导航到新地址。
+
+已实证（本地 cookie 测试服务器两轮验证）：应用内所有 webview（主窗 / 登录窗 / 隐藏嗅探窗）共享同一 Cookie 存储，且持久 Cookie（带 `Max-Age`/`Expires`）落盘于应用数据目录，**重启应用后登录态仍有效**——A 进程登录窗种下 Cookie，B 进程 `--sniff-cli` 的页面请求与媒体请求均自动携带该 Cookie。
+
+注意：仅 Cookie 形态的登录态有效；站点若把会话只放在 `localStorage`/内存 token，隐藏嗅探窗同样共享存储（同一数据目录），但纯内存 token 不在此列。
+
 ---
 
 # Tauri 2 demo：L2 webview 嗅探闭环（`demo/`）

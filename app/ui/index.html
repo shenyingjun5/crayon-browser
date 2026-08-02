@@ -33,12 +33,13 @@
 <body>
 <header>
   <h1>get-video · 视频地址提取与嗅探</h1>
-  <div class="sub">提取：L1/L3 静态解析（秒级） · 嗅探：L2 隐藏 webview 加载页面抓媒体请求（最长约 15 秒） · 点击结果经本地 relay 播放</div>
+  <div class="sub">提取：L1/L3 静态解析（秒级） · 嗅探：L2 隐藏 webview 加载页面抓媒体请求（最长约 15 秒） · 登录：打开站点登录页，登录态全应用共享 · 点击结果经本地 relay 播放</div>
 </header>
 <div class="bar">
   <input id="url" placeholder="https://example.com/page-with-video" autofocus>
   <button id="btnExtract" class="alt">提取</button>
   <button id="btnSniff">嗅探</button>
+  <button id="btnLogin" class="alt">登录</button>
 </div>
 <div id="status"></div>
 <ul id="list"></ul>
@@ -149,6 +150,14 @@ async function run(kind) {
 function go() { run('sniff'); }
 $('btnExtract').onclick = () => run('extract');
 $('btnSniff').onclick = go;
+$('btnLogin').onclick = async () => {
+  const url = $('url').value.trim();
+  if (!url) { setStatus('先输入要登录的站点网址', true); return; }
+  try {
+    await invoke('open_login', { url });
+    setStatus('登录窗口已打开：完成登录后关闭它，再点「嗅探」');
+  } catch (e) { setStatus('打开登录窗口失败: ' + e, true); }
+};
 $('url').addEventListener('keydown', (e) => { if (e.key === 'Enter') run('extract'); });
 try { window.__TAURI__.event.emit('ui-ready', {}); } catch (e) {}
 </script>

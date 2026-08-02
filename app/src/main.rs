@@ -420,6 +420,61 @@ async fn extract(app: AppHandle, url: String) -> Result<VideoInfo, String> {
     r
 }
 
+/// 打开站点登录窗口（可见 webview）。
+///
+/// 应用内所有 webview 共享同一 Cookie 存储：用户在此窗口登录后，
+/// 后续隐藏嗅探窗口自动携带登录会话；Cookie 持久化在应用数据目录，
+/// 重启应用后仍有效。已打开时复用并导航到新地址。
+#[tauri::command]
+async fn open_login(app: AppHandle, url: String) -> Result<(), String> {
+    let parsed: tauri::Url = url.parse().map_err(|e| format!("URL 无效: {e}"))?;
+    let app2 = app.clone();
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.run_on_main_thread(move || {
+        let r = if let Some(w) = app2.get_webview_window("login") {
+            let js = format!(
+                "location.href = {};",
+                serde_json::to_string(parsed.as_str()).unwrap()
+            );
+            w.eval(&js)
+                .and_then(|_| w.set_focus())
+                .map_err(|e| e.to_string())
+        } else {
+            WebviewWindowBuilder::new(&app2, "login", WebviewUrl::External(parsed))
+                .title("站点登录（登录完成后直接关闭本窗口）")
+                .inner_size(1100.0, 760.0)
+                .visible(true)
+                .build()
+                .map(|_| ())
+                .map_err(|e| e.to_string())
+        };
+        let _ = tx.send(r);
+    })
+    .map_err(|e| format!("dispatch main thread: {e}"))?;
+    let r = rx.await.map_err(|_| "main thread dropped".to_string())?;
+    println!(
+        "[login] 登录窗口就绪: {url}（结果: {}）",
+        if r.is_ok() { "ok" } else { "复用/失败" }
+    );
+    r
+}
+
+/// 关闭站点登录窗口（未打开时静默成功）。
+#[tauri::command]
+async fn close_login(app: AppHandle) -> Result<(), String> {
+    let app2 = app.clone();
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.run_on_main_thread(move || {
+        let r = match app2.get_webview_window("login") {
+            Some(w) => w.close().map_err(|e| e.to_string()),
+            None => Ok(()),
+        };
+        let _ = tx.send(r);
+    })
+    .map_err(|e| format!("dispatch main thread: {e}"))?;
+    rx.await.map_err(|_| "main thread dropped".to_string())?
+}
+
 /// beacon 上报服务（127.0.0.1:8377）：注入脚本的兜底上报通道 + 前端验证回执。
 async fn start_beacon_server(state: Arc<AppState>) {
     use axum::{extract::Query, response::IntoResponse, routing::get, Router};
@@ -472,7 +527,13 @@ fn main() {
         .map(|w| w[1].clone());
 
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![sniff, extract, report_log])
+        .invoke_handler(tauri::generate_handler![
+            sniff,
+            extract,
+            report_log,
+            open_login,
+            close_login
+        ])
         .setup(move |app| {
             // 前端渲染回执（无头验证 UI 链路用）
             app.listen_any("ui-results", |ev| {
