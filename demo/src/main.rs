@@ -18,39 +18,6 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Listener, Manager, WebviewUrl, WebviewWindowBuilder};
 
-// ---------------------------------------------------------------------------
-// webkit2gtk 2.38 兼容 shim（仅限本 demo！）
-// wry 0.52/tauri 2.7 无条件引用了三个 webkit2gtk 2.40 才有的符号，
-// 系统只有 2.38.2，链接报 undefined reference。这三个符号对应的代码路径
-// （自定义协议读取 POST body、wry cookies() API、CookieManager.get_all_cookies）
-// 本 demo 完全不使用，因此提供返回 NULL 的桩满足链接。
-// 升级系统 webkit2gtk 到 >= 2.40 后应删除此段。
-// ---------------------------------------------------------------------------
-#[no_mangle]
-pub extern "C" fn webkit_uri_scheme_request_get_http_body(
-    _request: *mut std::ffi::c_void,
-) -> *mut std::ffi::c_void {
-    std::ptr::null_mut()
-}
-
-#[no_mangle]
-pub extern "C" fn webkit_cookie_manager_get_all_cookies(
-    _manager: *mut std::ffi::c_void,
-    _cancellable: *mut std::ffi::c_void,
-    _callback: *mut std::ffi::c_void,
-    _user_data: *mut std::ffi::c_void,
-) {
-}
-
-#[no_mangle]
-pub extern "C" fn webkit_cookie_manager_get_all_cookies_finish(
-    _manager: *mut std::ffi::c_void,
-    _result: *mut std::ffi::c_void,
-    _error: *mut std::ffi::c_void,
-) -> *mut std::ffi::c_void {
-    std::ptr::null_mut()
-}
-
 /// 嗅探收集窗口：最长 12s；首个命中后再等 3s 收尾。
 const SNIFF_MAX_WAIT: Duration = Duration::from_secs(12);
 const SNIFF_TAIL: Duration = Duration::from_secs(3);
@@ -252,11 +219,13 @@ async fn do_sniff(app: &AppHandle, url: &str) -> Result<SniffResponse, String> {
             drop(local);
             drop(shared);
             if n > 0 {
-                if first_hit_at.is_none() {
-                    first_hit_at = Some(Instant::now());
-                    println!("[sniff] 首个命中，进入 3s 收尾");
-                } else if first_hit_at.unwrap().elapsed() >= SNIFF_TAIL {
-                    break;
+                match first_hit_at {
+                    None => {
+                        first_hit_at = Some(Instant::now());
+                        println!("[sniff] 首个命中，进入 3s 收尾");
+                    }
+                    Some(first) if first.elapsed() >= SNIFF_TAIL => break,
+                    Some(_) => {}
                 }
             }
         }
@@ -277,7 +246,7 @@ async fn do_sniff(app: &AppHandle, url: &str) -> Result<SniffResponse, String> {
 
     // 归一化：协议/清晰度/DRM/relay_url（复用 get-video crate 逻辑）
     let extractor = Extractor::new(&relay_base, RulePack::empty());
-    let page_origin = origin_of(url);
+    let fallback_page_origin = origin_of(url);
     let mut results = Vec::new();
     for (i, hit) in found.iter().enumerate() {
         let protocol = Protocol::from_url(&hit.url);
@@ -287,7 +256,15 @@ async fn do_sniff(app: &AppHandle, url: &str) -> Result<SniffResponse, String> {
             quality: guess_quality(&hit.url),
         };
         let mut headers = HashMap::new();
-        headers.insert("Referer".to_string(), page_origin.clone());
+        let hit_page_origin = origin_of(&hit.page);
+        headers.insert(
+            "Referer".to_string(),
+            if hit_page_origin.is_empty() {
+                fallback_page_origin.clone()
+            } else {
+                hit_page_origin
+            },
+        );
         headers.insert("User-Agent".to_string(), get_video::DEFAULT_UA.to_string());
         let drm = extractor.detect_drm(&cand, &headers).await;
         let relay_url = if drm {

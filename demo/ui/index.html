@@ -4,26 +4,6 @@
 <meta charset="utf-8">
 <title>get-video 嗅探 demo</title>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
-<script>
-// webkit2gtk 2.38 兼容补丁：Tauri 的 IPC invoke 把参数放在 fetch body 里，
-// 而 2.38 没有 webkit_uri_scheme_request_get_http_body，Rust 侧读不到 body。
-// 这里把 ipc:// 请求的 body 挪到 x-tauri-body 请求头（vendor wry 补丁会读回）。
-(() => {
-  const orig = window.fetch;
-  window.fetch = function (input, init) {
-    try {
-      const url = typeof input === 'string' ? input : (input && input.url) || '';
-      if (url.startsWith('ipc://') && init && typeof init.body === 'string') {
-        const h = new Headers(init.headers || {});
-        h.set('x-tauri-body', encodeURIComponent(init.body));
-        init = Object.assign({}, init, { headers: h });
-        delete init.body;
-      }
-    } catch (e) {}
-    return orig.apply(this, arguments);
-  };
-})();
-</script>
 <style>
   * { box-sizing: border-box; }
   body { font-family: system-ui, "PingFang SC", "Microsoft YaHei", sans-serif; margin: 0; background: #1e1f24; color: #e8e8ea; }

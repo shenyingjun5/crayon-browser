@@ -143,21 +143,17 @@ ffmpeg -i "http://127.0.0.1:8321/proxy/$(python3 -c "import urllib.parse;print(u
 └───────────────────────────────┘
 ```
 
-## 构建（webkit2gtk 2.38 环境的三个补丁，缺一不可）
+## 跨平台构建
 
-本机 openEuler 24.03 的 webkit2gtk 只有 **2.38.2**，而所有正式版 Tauri 2 都按 2.40 编译。demo 通过三层适配跑通：
+demo 的业务代码在 macOS、Windows 和 Linux 共用，WebView 后端由 Tauri 按目标平台选择：
 
-1. **tauri 钉 `=2.7.0`**（对应 wry 0.52）；2.8+ 的 wry 0.53 增加更多 2.40 符号引用。`tauri-runtime` 需 `cargo update -p tauri-runtime --precise 2.7.1` 对齐（tauri 语义化版本坑：runtime 有独立版本线，错配会编译报 trait 缺方法）。
-2. **构建期 pkg-config shim**：`scripts/fake-pkgconfig/*.pc` 把版本号虚报为 2.40.0，只用于通过 gtk-rs 构建期版本检查。构建命令：
-   ```bash
-   PKG_CONFIG_PATH=$PWD/scripts/fake-pkgconfig cargo build -p get-video-demo
-   ```
-3. **运行期 IPC body 补丁**：Tauri 的 `invoke` 参数放在自定义协议 POST body 里，读 body 的 `webkit_uri_scheme_request_get_http_body` 是 2.40 新增——2.38 上参数静默丢失（报 `missing required key`）。适配：
-   - `demo/src/main.rs` 顶部提供 3 个 2.40 符号桩（满足链接）；
-   - `demo/ui/index.html` 包装 `window.fetch`，把 `ipc://` 请求的 body 挪进 `x-tauri-body` 请求头；
-   - `[patch.crates-io]` 指向 `demo/vendor/wry`（wry 0.52.1 + 补丁：body 为空时改读该请求头，见文件内 `[get-video demo patch]` 注释）。
+| 目标平台 | WebView 后端 | 构建方式 |
+|---|---|---|
+| macOS | WKWebView | `cargo build --workspace` |
+| Windows | WebView2 | `cargo build --workspace` |
+| Linux | WebKitGTK 2.40+ | `cargo build --workspace` |
 
-系统 webkit2gtk 升到 ≥ 2.40 后，以上全部可删，tauri 也可升回最新。
+Linux 的最低基线是 WebKitGTK **2.40**（`webkit2gtk-4.1`）。项目直接使用 Tauri/wry 官方依赖链，不提供、也不会绕过系统库版本检查。WebKitGTK 2.38 及更旧系统需先升级系统库。macOS 与 Windows 不引入 GTK 依赖。
 
 ## 运行
 
@@ -165,7 +161,7 @@ ffmpeg -i "http://127.0.0.1:8321/proxy/$(python3 -c "import urllib.parse;print(u
 # 无显示环境（Xvfb）：
 Xvfb :99 -screen 0 1280x800x24 &
 python3 scripts/test_pages_server.py &     # 本地测试页 :8890（JS 动态加载视频）
-PKG_CONFIG_PATH=$PWD/scripts/fake-pkgconfig cargo build -p get-video-demo
+cargo build -p get-video-demo
 DISPLAY=:99 WEBKIT_DISABLE_DMABUF_RENDERER=1 WEBKIT_DISABLE_COMPOSITING_MODE=1 \
   ./target/debug/get-video-demo
 
@@ -184,8 +180,6 @@ DISPLAY=:99 WEBKIT_DISABLE_DMABUF_RENDERER=1 WEBKIT_DISABLE_COMPOSITING_MODE=1 \
 
 日志关键行：`[relay] 已启动`、`[ui] 前端页面已加载`、`[sniff] IPC 调用`、`[sniff] 命中`、`[ui] 前端已渲染结果`、`[page] 播放器状态`。
 
-## 已知限制（如实）
+## 已知限制
 
-- **本环境 webview 内播放不可用**：实测 WebKitGTK 的媒体后端在此系统上整个坏掉——`gst-launch-1.0 playbin` 对标准 h264/aac mp4 都无法 preroll（GStreamer 插件版本混杂：core 1.22.5 / plugins-good 1.20.3 / bad-free 1.16.2，且 Xvfb 无 GL/音频服务），`<video>` 报 MEDIA_ERR_SRC_NOT_SUPPORTED，与 demo 代码无关。**播放闭环以 ffmpeg 验证为准**（见下方「已验证结论」）；正常桌面环境（版本一致的 GStreamer + 有显示/音频）不受影响。
-- webkit2gtk 2.38 下远程页的 Tauri **event 上报可用**（`event.emit` 走另一通道），demo 仍保留了 beacon 兜底以策万全。
-
+- Linux 内嵌播放依赖系统 GStreamer 的编解码器与图形/音频环境；无头 Xvfb 环境仍建议以 ffmpeg 验证播放闭环。

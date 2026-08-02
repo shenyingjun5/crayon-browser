@@ -7,11 +7,6 @@ description = "视频地址解析 + 本地 relay 流服务模块"
 [workspace]
 members = ["demo"]
 
-# webkit2gtk 2.38 兼容：vendor 版 wry 0.52.1 补丁（body 为空时改读
-# x-tauri-body 请求头），详见 demo/README 与 vendor/wry 内 [get-video demo patch] 注释。
-[patch.crates-io]
-wry = { path = "demo/vendor/wry" }
-
 [lib]
 name = "get_video"
 path = "src/lib.rs"
