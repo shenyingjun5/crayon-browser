@@ -28,6 +28,17 @@ pub const SCRAMBLED_REASON: &str = "WASM 私有加扰，实测解码画面异常
 /// 流加载失败（404/拒绝等确定性错误）的原因文案。
 pub const LOAD_FAILED_REASON: &str = "流地址失效或加载失败，无法播放";
 
+/// webview 解码探针是否可信：探针靠 WKWebView 真实解码抽帧判定，
+/// 但 WKWebView 解不了 HEVC/AV1/VP9 等编码（没画面 ≠ 流坏了）——
+/// 这类候选跑探针只会得到误导结论，应跳过。
+/// codec 标签形如 `HEVC+AAC · TS`、`H.264+AAC · MP4`；None 或未知编码 → 可信（跑）。
+pub fn webview_can_judge(codec: Option<&str>) -> bool {
+    let Some(label) = codec else { return true };
+    // 视频编码在 '+' 或 ' · ' 之前
+    let video = label.split(['+', '·']).next().unwrap_or("").trim();
+    !matches!(video, "HEVC" | "H.265" | "AV1" | "VP9" | "VP8" | "AV01")
+}
+
 /// 探针综合结论。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProbeVerdict {
@@ -151,5 +162,19 @@ mod tests {
         assert_eq!(probe_verdict(&normal, false), ProbeVerdict::Playable);
         // 有帧时忽略 error 标志（以画面为准）
         assert_eq!(probe_verdict(&normal, true), ProbeVerdict::Playable);
+    }
+
+    #[test]
+    fn webview_can_judge_by_codec() {
+        // H.264 / 未知 / None → 跑探针
+        assert!(webview_can_judge(Some("H.264+AAC · TS")));
+        assert!(webview_can_judge(Some("H.264+AAC · MP4")));
+        assert!(webview_can_judge(Some("· fMP4")));
+        assert!(webview_can_judge(None));
+        // webview 解不了的编码 → 跳过（没画面 ≠ 流坏）
+        assert!(!webview_can_judge(Some("HEVC+AAC · TS")));
+        assert!(!webview_can_judge(Some("HEVC+AAC · DASH(fMP4)")));
+        assert!(!webview_can_judge(Some("AV1+AAC · fMP4")));
+        assert!(!webview_can_judge(Some("VP9+AAC · fMP4")));
     }
 }

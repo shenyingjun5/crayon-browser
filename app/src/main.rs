@@ -592,19 +592,12 @@ async fn probe_one(app: &AppHandle, relay_url: &str) -> Option<&'static str> {
     }
 }
 
-/// 对命中央视家族的候选逐个跑解码探针（顺序执行，避免并发拉流）。
+/// 对全部可播候选逐个跑解码探针（顺序执行，避免并发拉流）。
 /// 实测不可播的流：向前端发 `probe-restriction` 事件（UI 异步打标），
 /// 并返回 (流地址, 受限原因) 集合（CLI 模式据此在打印前直接改结果）。
-async fn probe_scrambled(
-    app: &AppHandle,
-    page_ctx: &str,
-    targets: &[ProbeTarget],
-) -> Vec<(String, &'static str)> {
+async fn probe_scrambled(app: &AppHandle, targets: &[ProbeTarget]) -> Vec<(String, &'static str)> {
     let mut bad = Vec::new();
     for t in targets {
-        if !get_video::drm::is_cctv_family(page_ctx) && !get_video::drm::is_cctv_family(&t.url) {
-            continue;
-        }
         match probe_one(app, &t.relay_url).await {
             Some(reason) => {
                 println!("[probe] 实测不可播（{reason}）: {}", t.url);
@@ -747,13 +740,12 @@ async fn sniff(app: AppHandle, url: String) -> Result<SniffResponse, String> {
     state.busy.store(false, Ordering::SeqCst);
     if let Ok(resp) = &r {
         println!("[sniff] 返回 {} 条结果给前端", resp.count);
-        // 后台解码探针：央视家族候选逐个实测画面，异常者经事件异步打标
+        // 后台解码探针：全部可播候选逐个实测画面，异常者经事件异步打标
         let targets = sniff_probe_targets(resp);
         if !targets.is_empty() {
             let ah = app.clone();
-            let page = url.clone();
             tauri::async_runtime::spawn(async move {
-                probe_scrambled(&ah, &page, &targets).await;
+                probe_scrambled(&ah, &targets).await;
             });
         }
     }
@@ -763,12 +755,16 @@ async fn sniff(app: AppHandle, url: String) -> Result<SniffResponse, String> {
     r
 }
 
-/// 嗅探结果中需要跑解码探针的候选（未受限、非 DRM、原生可播协议）。
+/// 嗅探结果中需要跑解码探针的候选（未受限、非 DRM、原生可播协议，
+/// 且编码是 webview 能解码的——HEVC/AV1 等跳过，避免「没画面 ≠ 流坏」误判）。
 fn sniff_probe_targets(resp: &SniffResponse) -> Vec<ProbeTarget> {
     resp.results
         .iter()
         .filter(|r| {
-            r.restriction.is_none() && !r.drm && (r.protocol == "hls" || r.protocol == "mp4")
+            r.restriction.is_none()
+                && !r.drm
+                && (r.protocol == "hls" || r.protocol == "mp4")
+                && get_video::probe::webview_can_judge(r.codec.as_deref())
         })
         .filter_map(|r| {
             r.relay_url.clone().map(|relay_url| ProbeTarget {
@@ -799,9 +795,8 @@ async fn extract(app: AppHandle, url: String) -> Result<VideoInfo, String> {
         let targets = extract_probe_targets(info);
         if !targets.is_empty() {
             let ah = app.clone();
-            let page = url.clone();
             tauri::async_runtime::spawn(async move {
-                probe_scrambled(&ah, &page, &targets).await;
+                probe_scrambled(&ah, &targets).await;
             });
         }
     }
@@ -816,7 +811,10 @@ fn extract_probe_targets(info: &VideoInfo) -> Vec<ProbeTarget> {
     info.formats
         .iter()
         .filter(|f| {
-            f.restriction.is_none() && !f.drm && (f.protocol == "hls" || f.protocol == "mp4")
+            f.restriction.is_none()
+                && !f.drm
+                && (f.protocol == "hls" || f.protocol == "mp4")
+                && get_video::probe::webview_can_judge(f.codec.as_deref())
         })
         .filter_map(|f| {
             f.relay_url.clone().map(|relay_url| ProbeTarget {
@@ -1063,7 +1061,7 @@ fn main() {
                         Ok(mut resp) => {
                             // CLI 同步跑解码探针，打印前直接把异常流标受限
                             let targets = sniff_probe_targets(&resp);
-                            let bad = probe_scrambled(&ah, &u, &targets).await;
+                            let bad = probe_scrambled(&ah, &targets).await;
                             for item in resp.results.iter_mut() {
                                 if let Some((_, reason)) =
                                     bad.iter().find(|(url, _)| url == &item.url)
@@ -1097,7 +1095,7 @@ fn main() {
                         Ok(mut info) => {
                             // CLI 同步跑解码探针（同 sniff CLI）
                             let targets = extract_probe_targets(&info);
-                            let bad = probe_scrambled(&ah, &u, &targets).await;
+                            let bad = probe_scrambled(&ah, &targets).await;
                             for f in info.formats.iter_mut() {
                                 if let Some((_, reason)) = bad.iter().find(|(url, _)| url == &f.url)
                                 {
