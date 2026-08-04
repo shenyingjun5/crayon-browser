@@ -38,37 +38,101 @@ const SNIFF_JS: &str = r#"
   function abs(u) {
     try { return new URL(u, location.href).href; } catch (e) { return null; }
   }
-  function report(u) {
+  // force=true：凭内容判定为 m3u8（响应体以 #EXTM3U 开头），URL 无扩展名也收
+  function report(u, force) {
     try {
       if (!u || typeof u !== 'string') return;
       u = abs(u);
-      if (!u || !/^https?:\/\//.test(u) || !RE.test(u) || seen.has(u)) return;
+      if (!u || !/^https?:\/\//.test(u) || seen.has(u)) return;
+      if (!force && !RE.test(u)) return;
+      // DASH/HLS 的 init 段（_init.mp4）不是独立可播流，过滤（1905 实测）
+      if (/_init\.mp4(\?|#|$)/i.test(u)) return;
       seen.add(u);
-      const payload = JSON.stringify({ url: u, page: location.href });
+      const proto = force ? 'hls' : undefined;
+      const payload = JSON.stringify({ url: u, page: location.href, proto });
       // 通道 1：Tauri IPC event
       try {
         if (window.__TAURI__ && window.__TAURI__.event) {
-          window.__TAURI__.event.emit('sniff-found', { url: u, page: location.href });
+          window.__TAURI__.event.emit('sniff-found', { url: u, page: location.href, proto });
         }
       } catch (e) {}
       // 通道 2：Image beacon 兜底（无 CORS 预检）
       try { new Image().src = 'http://127.0.0.1:8377/sniff?data=' + encodeURIComponent(payload); } catch (e) {}
     } catch (e) {}
   }
-  // hook fetch
+  // 响应体以 #EXTM3U 开头 → 按内容判定为 HLS（kazumi 思路：hook fetch/XHR 看响应体，
+  // 抓不走 video 标签、URL 无 .m3u8 扩展名的清单接口）。只读首块即断流，避免大文件。
+  function checkM3u8Body(u, getReader) {
+    try {
+      const rd = getReader();
+      if (!rd) return;
+      rd.read().then(({ value }) => {
+        try { rd.cancel(); } catch (e) {}
+        try {
+          if (!value || !value.length) return;
+          const head = new TextDecoder().decode(value.slice(0, 4096)).trimStart();
+          if (head.startsWith('#EXTM3U')) report(u, true);
+        } catch (e) {}
+      }).catch(() => {});
+    } catch (e) {}
+  }
+  // 嵌套解析页：iframe src 的 query 里藏着真实流地址（url=xxx.m3u8 模式，
+  // 可能再 percent-encode 一层），正则抠出明文与编码两种形态。
+  const NEST_RE = /https?:\/\/[^\s"'<>]+?\.(?:m3u8|mp4|mpd)(?:\?[^\s"'<>]*)?/gi;
+  const NEST_ENC_RE = /https?%3A%2F%2F[^\s"'<>]+?\.(?:m3u8|mp4|mpd)(?:%3F[^\s"'<>]*)?/gi;
+  function digIframe(u) {
+    try {
+      if (!u || typeof u !== 'string') return;
+      for (const m of u.match(NEST_RE) || []) report(m);
+      for (const m of u.match(NEST_ENC_RE) || []) {
+        try { report(decodeURIComponent(m)); } catch (e) {}
+      }
+    } catch (e) {}
+  }
+  // hook fetch：URL 匹配即报；同时克隆响应读首块，响应体是 m3u8 的也报
   const origFetch = window.fetch;
   if (origFetch) {
     window.fetch = function (input, init) {
-      try { report(typeof input === 'string' ? input : (input && input.url)); } catch (e) {}
-      return origFetch.apply(this, arguments);
+      const reqUrl = typeof input === 'string' ? input : (input && input.url);
+      try { report(reqUrl); } catch (e) {}
+      const p = origFetch.apply(this, arguments);
+      try {
+        p.then((resp) => {
+          try {
+            if (!resp || !resp.clone) return;
+            const c = resp.clone();
+            if (!c.body || !c.body.getReader) return;
+            checkM3u8Body(resp.url || reqUrl, () => c.body.getReader());
+          } catch (e) {}
+        }).catch(() => {});
+      } catch (e) {}
+      return p;
     };
   }
-  // hook XHR
+  // hook XHR：open 记 URL，load 时查 responseText 是否 m3u8 清单
   const origOpen = XMLHttpRequest.prototype.open;
   XMLHttpRequest.prototype.open = function (method, url) {
     try { report(url); } catch (e) {}
+    try { this.__gvUrl = url; } catch (e) {}
     return origOpen.apply(this, arguments);
   };
+  try {
+    const origSend = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.send = function () {
+      try {
+        this.addEventListener('load', function () {
+          try {
+            // responseType 非文本时取 responseText 会抛，直接跳过
+            const t = this.responseText;
+            if (typeof t === 'string' && t.slice(0, 65536).trimStart().startsWith('#EXTM3U')) {
+              report(this.__gvUrl || this.responseURL, true);
+            }
+          } catch (e) {}
+        });
+      } catch (e) {}
+      return origSend.apply(this, arguments);
+    };
+  } catch (e) {}
   // hook HTMLMediaElement.src setter
   try {
     const desc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'src');
@@ -80,15 +144,18 @@ const SNIFF_JS: &str = r#"
       });
     }
   } catch (e) {}
-  // MutationObserver：<video>/<source> 的 src/data-src 变化与新增节点
+  // MutationObserver：<video>/<source> 的 src/data-src 变化与新增节点；
+  // <iframe> src 变化时抠 query 里的嵌套流地址
   try {
     const scanEl = (el) => {
       if (!el || !el.getAttribute) return;
       for (const a of ['src', 'data-src']) { const v = el.getAttribute(a); if (v) report(v); }
+      if (el.tagName === 'IFRAME') digIframe(el.getAttribute('src'));
       if (el.querySelectorAll) {
         for (const n of el.querySelectorAll('video,source')) {
           for (const a of ['src', 'data-src']) { const v = n.getAttribute(a); if (v) report(v); }
         }
+        for (const f of el.querySelectorAll('iframe')) digIframe(f.getAttribute('src'));
       }
     };
     new MutationObserver((muts) => {
@@ -161,9 +228,32 @@ var __sniffBase='__BASE__';
       window.Worker.prototype = OrigWorker.prototype;
     }
   } catch (e) {}
-  // 已有的 video/source
+  // 自动播放推进：多数站点（西瓜/1905 等）播放器要等用户点播放键才拉流，
+  // 隐藏窗口没有用户手势 → 全程零命中。这里模拟：静音后逐个 video 调 play()，
+  // 并点击常见播放按钮（前几轮），每 2s 一轮直到窗口关闭。
+  try {
+    let nudges = 0;
+    const PLAY_BTN_SEL = '.vjs-big-play-button,[class*="play-btn"],[class*="playbtn"],[class*="playBtn"],[class*="play-icon"],[id*="playbtn"],.player-play,.xgplayer-play';
+    const nudge = () => {
+      try {
+        for (const v of document.querySelectorAll('video')) {
+          try { v.muted = true; if (v.paused) v.play().catch(() => {}); } catch (e) {}
+        }
+        if (nudges < 3) {
+          for (const b of document.querySelectorAll(PLAY_BTN_SEL)) {
+            try { b.click(); } catch (e) {}
+          }
+        }
+      } catch (e) {}
+      nudges++;
+    };
+    nudge();
+    setInterval(nudge, 2000);
+  } catch (e) {}
+  // 已有的 video/source/iframe
   try {
     for (const n of document.querySelectorAll('video,source')) report(n.src || n.getAttribute('data-src'));
+    for (const f of document.querySelectorAll('iframe')) digIframe(f.getAttribute('src'));
   } catch (e) {}
 })();
 "#;
@@ -172,6 +262,8 @@ var __sniffBase='__BASE__';
 struct SniffHit {
     url: String,
     page: String,
+    /// 内容判定协议提示（如响应体为 m3u8 但 URL 无扩展名时 = Some("hls")）。
+    proto: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -223,14 +315,14 @@ struct AppState {
     _relay: Mutex<Option<RelayHandle>>,
 }
 
-fn push_hit(hits: &Mutex<Vec<SniffHit>>, url: String, page: String) {
+fn push_hit(hits: &Mutex<Vec<SniffHit>>, url: String, page: String, proto: Option<String>) {
     if url.is_empty() {
         return;
     }
     let mut g = hits.lock().unwrap();
     if !g.iter().any(|h| h.url == url) {
         println!("[sniff] 命中: {url}");
-        g.push(SniffHit { url, page });
+        g.push(SniffHit { url, page, proto });
     }
 }
 
@@ -246,7 +338,8 @@ async fn do_sniff(app: &AppHandle, url: &str) -> Result<SniffResponse, String> {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(ev.payload()) {
             let u = v.get("url").and_then(|x| x.as_str()).unwrap_or("");
             let p = v.get("page").and_then(|x| x.as_str()).unwrap_or("");
-            push_hit(&hits_l, u.to_string(), p.to_string());
+            let proto = v.get("proto").and_then(|x| x.as_str()).map(str::to_string);
+            push_hit(&hits_l, u.to_string(), p.to_string(), proto);
         }
     });
 
@@ -270,6 +363,10 @@ async fn do_sniff(app: &AppHandle, url: &str) -> Result<SniffResponse, String> {
         )
         .title("sniff")
         .visible(false)
+        // 部分站点（1905 等）按 UA 判定「浏览器不支持」而拒绝初始化播放器，
+        // 统一伪装成桌面 Chrome（与 extract/relay 的 DEFAULT_UA 一致，
+        // 也保证 UA 绑定的签名 URL 全链路一致）
+        .user_agent(get_video::DEFAULT_UA)
         .initialization_script(SNIFF_JS)
         .build();
         let _ = tx.send(r);
@@ -315,6 +412,25 @@ async fn do_sniff(app: &AppHandle, url: &str) -> Result<SniffResponse, String> {
         }
     }
 
+    // 收集页态诊断（关窗前）：标题/video/iframe 数 + 最近的媒体类资源名，
+    // 经 beacon /diag 打到 stdout，便于排查「零命中」站点（西瓜/1905 这类）。
+    {
+        let app4 = app.clone();
+        let win2 = win.clone();
+        let _ = app4.run_on_main_thread(move || {
+            let _ = win2.eval(
+                r#"try{
+var rs=performance.getEntriesByType('resource').map(e=>e.name);
+var media=rs.filter(u=>/\.(m3u8|mp4|mpd|ts|m4s|flv)(\?|#|$)/i.test(u)).slice(-10);
+var msg=JSON.stringify({t:document.title,v:document.querySelectorAll('video').length,f:document.querySelectorAll('iframe').length,r:rs.length,m:media,url:location.href,txt:(document.body?document.body.innerText.slice(0,200):'')});
+new Image().src='http://127.0.0.1:8377/diag?msg='+encodeURIComponent(msg);
+}catch(e){}"#,
+            );
+        });
+        // 等 beacon 送达
+        tokio::time::sleep(Duration::from_millis(600)).await;
+    }
+
     // 关闭隐藏窗口、注销监听
     let app3 = app.clone();
     let _ = app.run_on_main_thread(move || {
@@ -330,7 +446,11 @@ async fn do_sniff(app: &AppHandle, url: &str) -> Result<SniffResponse, String> {
     let fallback_page_origin = origin_of(url);
     let mut results = Vec::new();
     for (i, hit) in found.iter().enumerate() {
-        let protocol = Protocol::from_url(&hit.url);
+        // 协议：URL 扩展名优先；内容判定提示（响应体为 m3u8）兜底
+        let protocol = match Protocol::from_url(&hit.url) {
+            Protocol::Other if hit.proto.as_deref() == Some("hls") => Protocol::Hls,
+            p => p,
+        };
         let cand = Candidate::single(hit.url.clone(), protocol, guess_quality(&hit.url));
         let mut headers = HashMap::new();
         let hit_page_origin = origin_of(&hit.page);
@@ -777,7 +897,8 @@ async fn start_beacon_server(state: Arc<AppState>) {
                         if let Ok(v) = serde_json::from_str::<serde_json::Value>(data) {
                             let u = v.get("url").and_then(|x| x.as_str()).unwrap_or("");
                             let p = v.get("page").and_then(|x| x.as_str()).unwrap_or("");
-                            push_hit(&st.hits, u.to_string(), p.to_string());
+                            let proto = v.get("proto").and_then(|x| x.as_str()).map(str::to_string);
+                            push_hit(&st.hits, u.to_string(), p.to_string(), proto);
                         }
                     }
                     // 1x1 gif
@@ -789,6 +910,16 @@ async fn start_beacon_server(state: Arc<AppState>) {
                     ];
                     ([(axum::http::header::CONTENT_TYPE, "image/gif")], gif).into_response()
                 }
+            }),
+        )
+        // 页态诊断：嗅探结束时回传标题/video 数/媒体资源清单（排查零命中站点）
+        .route(
+            "/diag",
+            get(move |Query(q): Query<HashMap<String, String>>| async move {
+                if let Some(msg) = q.get("msg") {
+                    println!("[diag] {msg}");
+                }
+                axum::http::StatusCode::NO_CONTENT
             }),
         )
         // 解码探针回传：probeplayer 页抽帧统计（f=mean,std;mean,std）

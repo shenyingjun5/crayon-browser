@@ -509,11 +509,19 @@ async fn inspect_hls(
     info.container = hls_container(&media_text).map(str::to_string);
     let need_segment = info.video.is_none() && info.audio.is_none();
     if need_segment {
-        let seg_line = media_text
-            .lines()
-            .map(str::trim)
-            .find(|l| !l.is_empty() && !l.starts_with('#'))?;
-        let seg_url = crate::extract::resolve_url(&media_url, seg_line)?;
+        // fMP4：moov（含 stsd）在 EXT-X-MAP 的 init 段里，媒体分片（m4s）没有，
+        // 优先解析 init 段；没有 EXT-X-MAP 才回退抓首个媒体分片（TS 走 PMT）
+        let init_url =
+            ext_x_map_uri(&media_text).and_then(|u| crate::extract::resolve_url(&media_url, &u));
+        let seg_url = match init_url {
+            Some(u) => Some(u),
+            None => media_text
+                .lines()
+                .map(str::trim)
+                .find(|l| !l.is_empty() && !l.starts_with('#'))
+                .and_then(|l| crate::extract::resolve_url(&media_url, l)),
+        };
+        let seg_url = seg_url?;
         let buf = fetch_prefix(client, &seg_url, headers, 256 * 1024).await?;
         let seg_info = match segment_container(&buf) {
             Some("TS") => ts_codecs(&buf),
@@ -523,8 +531,10 @@ async fn inspect_hls(
         if seg_info.video.is_some() || seg_info.audio.is_some() {
             info.video = seg_info.video;
             info.audio = seg_info.audio;
-            if let Some(c) = seg_info.container {
-                info.container = Some(c);
+            // 容器以分片魔数为准（HLS 的 MP4 一律是 fMP4；init 段的
+            // mp4_codecs 会报 MP4，这里纠正回 fMP4）
+            if let Some(c) = segment_container(&buf) {
+                info.container = Some(c.to_string());
             }
         }
     }
@@ -540,6 +550,21 @@ fn first_media_line(text: &str, base: &str) -> Option<String> {
             return crate::extract::resolve_url(base, l);
         }
         want_next = l.starts_with("#EXT-X-STREAM-INF");
+    }
+    None
+}
+
+/// 媒体播放列表 EXT-X-MAP 的 URI（fMP4 init 段地址）。
+fn ext_x_map_uri(text: &str) -> Option<String> {
+    for line in text.lines() {
+        let l = line.trim();
+        if let Some(rest) = l.strip_prefix("#EXT-X-MAP:") {
+            if let Some(idx) = rest.find("URI=\"") {
+                let after = &rest[idx + 5..];
+                let end = after.find('"').unwrap_or(after.len());
+                return Some(after[..end].to_string());
+            }
+        }
     }
     None
 }
@@ -760,5 +785,12 @@ mod tests {
             first_media_line(text, "http://a.com/live/master.m3u8").as_deref(),
             Some("http://a.com/live/sub/v1.m3u8")
         );
+    }
+
+    #[test]
+    fn ext_x_map_uri_parse() {
+        let text = "#EXTM3U\n#EXT-X-MAP:URI=\"init.mp4?sign=abc\",BYTERANGE=\"720@0\"\n#EXTINF:5,\ns1.m4s\n";
+        assert_eq!(ext_x_map_uri(text).as_deref(), Some("init.mp4?sign=abc"));
+        assert_eq!(ext_x_map_uri("#EXTM3U\n#EXTINF:5,\ns1.ts\n"), None);
     }
 }
