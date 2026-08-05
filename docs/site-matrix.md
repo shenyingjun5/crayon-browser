@@ -63,3 +63,11 @@
 - sniff 对腾讯（部分）、爱奇艺、优酷、1905 有效；西瓜受字节 jsvmp 反爬拦截为已知限制。
 - 非央视命中流实测结论：「解析到地址」≠「可播」，且受限原因各异——腾讯是 HEVC 编码兼容性（流干净、投屏可播）、爱奇艺是分片签名鉴权（405 D2102，真受限）、优酷 MP4 直链完全可播、1905 是 AV1 编码（投屏需注意接收端 AV1 支持）。
 - 受限判定三层机制（HLS 活性 / DRM 结构 / 解码探针）已全量生效：2026-08-04 起解码探针扩展到**所有**可播候选（不再限央视家族），爱奇艺分片 405 这类「清单能拉、分片鉴权」会在结果页直接标「流地址失效或加载失败」并禁点；HEVC/AV1/VP9 等 webview 解不了编码的候选自动跳过探针，避免「没画面 ≠ 流坏」误判（腾讯、1905 实测保持可播）。
+
+### 7sefun（苹果CMS 聚合站）——嗅探全框架注入 + 广告误杀修复（2026-08-05）
+- 链路：页面内嵌 `player_aaaa`（encrypt:2，base64+urldecode 双重解码）→ 二级线路页 `lmm85.com`（Cloudflare 拦截直连）→ 实际走第三方播放器 iframe `dp.no3acg.com/player/ec.php`（"超级播放器"，ArtPlayer 内核），正片地址 AES-128-CBC 加密在 ConFig.url（key 派生自 uid，iv 硬编码）。
+- 零命中根因有两个，均已修复：
+  1. 嗅探脚本此前只注主框架（`.initialization_script`），iframe 内播放器完全没 hook → 改用 `.initialization_script_for_all_frames`，iframe 内经 `postMessage` 向顶层框架代报命中（Tauri IPC 只注主框架、http beacon 在 https 页是混合内容，iframe 内均不可靠）。
+  2. 广告 URL 过滤误杀正片：正片托管在快手 CDN `v1.adkwai.com`（338MB / 25 分钟 / H.264，`adVideoLp` 只是桶名），被广告域名正则误判丢弃。修复：URL 层只拦确定无疑的广告网络平台（doubleclick 等），广告判定改为看 DOM 上下文——广告容器（`.action-ad`/`#wyn`/`.pause-ad` 等）内的 video 才是贴片广告，上报跳过、nudge 快进；主播放器视频一律按正片处理。
+- 实测：嗅探命中 1 条 MP4 正片（H.264，无 DRM，有 relay），Kazumi 对该站同样靠 webview 嗅探（规则 `useWebview:true`，无特殊提取逻辑）。
+- 经验：「广告域名 ≠ 广告内容」，聚合站常把正片上传到有广告联盟 CDN 蹭免费存储/带宽，广告识别必须以播放器 DOM 结构为准。

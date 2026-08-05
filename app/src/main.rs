@@ -26,6 +26,8 @@ use tauri::{AppHandle, Emitter, Listener, Manager, WebviewUrl, WebviewWindowBuil
 
 /// 嗅探收集窗口：最长 12s；首个命中后再等 3s 收尾。
 const SNIFF_MAX_WAIT: Duration = Duration::from_secs(12);
+/// 零命中宽限上限：播放器 iframe 加载慢的站点多等一轮。
+const SNIFF_MAX_WAIT_EXTENDED: Duration = Duration::from_secs(25);
 const SNIFF_TAIL: Duration = Duration::from_secs(3);
 
 /// 注入目标页的嗅探脚本（document start 执行）。
@@ -34,6 +36,16 @@ const SNIFF_JS: &str = r#"
   if (window.__getVideoSniff) return;
   window.__getVideoSniff = true;
   const RE = /\.(m3u8|mp4|mpd)(\?|#|$)/i;
+  // 广告过滤分两层，不能用 URL 模式误杀正片（7sefun 实测：正片就托管在
+  // 快手 CDN v1.adkwai.com，adVideoLp 路径只是桶名，338MB/25分钟是正剧）：
+  // 1) URL 层只拦确定无疑的广告网络平台（doubleclick 等），这类绝不做正片 CDN；
+  // 2) 元素层看 DOM 上下文——位于广告容器内的 video 才是广告（前置贴片、暂停广告），
+  //    上报时跳过、nudge 时快进，主播放器里的视频一律当正片。
+  const AD_RE = /(doubleclick\.net|googlesyndication\.com|googleadservices\.com|adservice\.google\.)/i;
+  const AD_BOX_SEL = '.action-ad,#wyn,.pause-ad,[class*="action-ad"],[class*="video-ad"],[class*="ad-video"]';
+  function inAdBox(el) {
+    try { return !!(el && el.closest && el.closest(AD_BOX_SEL)); } catch (e) { return false; }
+  }
   const seen = new Set();
   function abs(u) {
     try { return new URL(u, location.href).href; } catch (e) { return null; }
@@ -47,9 +59,18 @@ const SNIFF_JS: &str = r#"
       if (!force && !RE.test(u)) return;
       // DASH/HLS 的 init 段（_init.mp4）不是独立可播流，过滤（1905 实测）
       if (/_init\.mp4(\?|#|$)/i.test(u)) return;
+      // 广告网络平台 URL：过滤且不计入 seen
+      if (AD_RE.test(u)) return;
       seen.add(u);
       const proto = force ? 'hls' : undefined;
       const payload = JSON.stringify({ url: u, page: location.href, proto });
+      // 通道 0：iframe 内 → postMessage 给顶层框架转发（Tauri IPC 只注主框架，
+      // beacon 走 http 在 https 页里是混合内容可能被拦，iframe 内两条都靠不住）
+      try {
+        if (window !== window.top) {
+          window.top.postMessage({ __gvSniff: { url: u, page: location.href, proto } }, '*');
+        }
+      } catch (e) {}
       // 通道 1：Tauri IPC event
       try {
         if (window.__TAURI__ && window.__TAURI__.event) {
@@ -60,6 +81,17 @@ const SNIFF_JS: &str = r#"
       try { new Image().src = 'http://127.0.0.1:8377/sniff?data=' + encodeURIComponent(payload); } catch (e) {}
     } catch (e) {}
   }
+  // 顶层框架：接收 iframe postMessage 上来的命中并代为上报
+  try {
+    if (window === window.top) {
+      window.addEventListener('message', (ev) => {
+        try {
+          const d = ev.data && ev.data.__gvSniff;
+          if (d && d.url) report(d.url, d.proto === 'hls');
+        } catch (e) {}
+      });
+    }
+  } catch (e) {}
   // 响应体以 #EXTM3U 开头 → 按内容判定为 HLS（kazumi 思路：hook fetch/XHR 看响应体，
   // 抓不走 video 标签、URL 无 .m3u8 扩展名的清单接口）。只读首块即断流，避免大文件。
   function checkM3u8Body(u, getReader) {
@@ -149,10 +181,15 @@ const SNIFF_JS: &str = r#"
   try {
     const scanEl = (el) => {
       if (!el || !el.getAttribute) return;
-      for (const a of ['src', 'data-src']) { const v = el.getAttribute(a); if (v) report(v); }
+      // 广告容器内的元素（前置贴片等）上报跳过——只拦元素上下文，不按 URL 猜
+      const skipAd = (el.tagName === 'VIDEO' || el.tagName === 'SOURCE') && inAdBox(el);
+      if (!skipAd && el.tagName !== 'IFRAME') {
+        for (const a of ['src', 'data-src']) { const v = el.getAttribute(a); if (v) report(v); }
+      }
       if (el.tagName === 'IFRAME') digIframe(el.getAttribute('src'));
       if (el.querySelectorAll) {
         for (const n of el.querySelectorAll('video,source')) {
+          if (inAdBox(n)) continue;
           for (const a of ['src', 'data-src']) { const v = n.getAttribute(a); if (v) report(v); }
         }
         for (const f of el.querySelectorAll('iframe')) digIframe(f.getAttribute('src'));
@@ -233,13 +270,24 @@ var __sniffBase='__BASE__';
   // 并点击常见播放按钮（前几轮），每 2s 一轮直到窗口关闭。
   try {
     let nudges = 0;
-    const PLAY_BTN_SEL = '.vjs-big-play-button,[class*="play-btn"],[class*="playbtn"],[class*="playBtn"],[class*="play-icon"],[id*="playbtn"],.player-play,.xgplayer-play';
+    const PLAY_BTN_SEL = '.vjs-big-play-button,[class*="play-btn"],[class*="playbtn"],[class*="playBtn"],[class*="play-icon"],[id*="playbtn"],.player-play,.xgplayer-play,.ad-off,[class*="ad-off"],[class*="adskip"],[class*="ad-skip"],[class*="skip-ad"],[class*="skipAd"]';
     const nudge = () => {
       try {
         for (const v of document.querySelectorAll('video')) {
-          try { v.muted = true; if (v.paused) v.play().catch(() => {}); } catch (e) {}
+          try {
+            v.muted = true;
+            if (v.paused) v.play().catch(() => {});
+            // 广告容器内的贴片快进到尾：触发 ended 让播放器接着加载正片，
+            // 否则只能干等广告播完（15-30s）。主播放器的视频绝不快进——
+            // 7sefun 实测正片托管在广告 CDN 域名上，按 URL 判断必误杀
+            if (inAdBox(v) && v.duration && v.currentTime < v.duration - 1) {
+              v.currentTime = v.duration - 0.5;
+            }
+          } catch (e) {}
         }
-        if (nudges < 3) {
+        // 前 8 轮点击播放/跳过广告按钮（第三方播放器 iframe 加载晚，
+        // 跳过按钮要等倒计时结束才出现，多覆盖几轮）
+        if (nudges < 8) {
           for (const b of document.querySelectorAll(PLAY_BTN_SEL)) {
             try { b.click(); } catch (e) {}
           }
@@ -252,7 +300,10 @@ var __sniffBase='__BASE__';
   } catch (e) {}
   // 已有的 video/source/iframe
   try {
-    for (const n of document.querySelectorAll('video,source')) report(n.src || n.getAttribute('data-src'));
+    for (const n of document.querySelectorAll('video,source')) {
+      if (inAdBox(n)) continue;
+      report(n.src || n.getAttribute('data-src'));
+    }
     for (const f of document.querySelectorAll('iframe')) digIframe(f.getAttribute('src'));
   } catch (e) {}
 })();
@@ -367,7 +418,9 @@ async fn do_sniff(app: &AppHandle, url: &str) -> Result<SniffResponse, String> {
         // 统一伪装成桌面 Chrome（与 extract/relay 的 DEFAULT_UA 一致，
         // 也保证 UA 绑定的签名 URL 全链路一致）
         .user_agent(get_video::DEFAULT_UA)
-        .initialization_script(SNIFF_JS)
+        // 注入所有框架：苹果CMS 类站点把播放器放在 iframe（甚至多级 iframe
+        // 跳转线路站），只注主框架会漏掉 iframe 内的拉流请求（7sefun 实测）
+        .initialization_script_for_all_frames(SNIFF_JS)
         .build();
         let _ = tx.send(r);
     })
@@ -378,9 +431,12 @@ async fn do_sniff(app: &AppHandle, url: &str) -> Result<SniffResponse, String> {
         .map_err(|e| format!("创建嗅探窗口失败: {e}"))?;
     println!("[sniff] 隐藏窗口已创建: {label} -> {url}");
 
-    // 收集：最长 12s；首个命中后再等 3s
+    // 收集：基础 12s；首个命中后再等 3s 收尾。
+    // 12s 仍零命中时宽限到 25s——第三方播放器 iframe 加载慢（7sefun 实测
+    // ~13s 才注入播放器框架，且前置广告已过滤不占命中），快速命中的站点不受影响。
     let start = Instant::now();
     let mut first_hit_at: Option<Instant> = None;
+    let mut extended = false;
     loop {
         tokio::time::sleep(Duration::from_millis(200)).await;
         // 合并 beacon 通道（state.hits）到 hits_arc
@@ -407,8 +463,18 @@ async fn do_sniff(app: &AppHandle, url: &str) -> Result<SniffResponse, String> {
                 }
             }
         }
-        if start.elapsed() >= SNIFF_MAX_WAIT {
-            break;
+        let limit = if extended {
+            SNIFF_MAX_WAIT_EXTENDED
+        } else {
+            SNIFF_MAX_WAIT
+        };
+        if start.elapsed() >= limit {
+            if !extended && first_hit_at.is_none() {
+                extended = true;
+                println!("[sniff] 12s 零命中，宽限等待至 25s");
+            } else {
+                break;
+            }
         }
     }
 
@@ -422,7 +488,7 @@ async fn do_sniff(app: &AppHandle, url: &str) -> Result<SniffResponse, String> {
                 r#"try{
 var rs=performance.getEntriesByType('resource').map(e=>e.name);
 var media=rs.filter(u=>/\.(m3u8|mp4|mpd|ts|m4s|flv)(\?|#|$)/i.test(u)).slice(-10);
-var msg=JSON.stringify({t:document.title,v:document.querySelectorAll('video').length,f:document.querySelectorAll('iframe').length,r:rs.length,m:media,url:location.href,txt:(document.body?document.body.innerText.slice(0,200):'')});
+var msg=JSON.stringify({t:document.title,v:document.querySelectorAll('video').length,f:document.querySelectorAll('iframe').length,fs:Array.from(document.querySelectorAll('iframe')).map(x=>x.src).slice(0,5),r:rs.length,m:media,all:rs.slice(-30),url:location.href,txt:(document.body?document.body.innerText.slice(0,150):'')});
 new Image().src='http://127.0.0.1:8377/diag?msg='+encodeURIComponent(msg);
 }catch(e){}"#,
             );
