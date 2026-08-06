@@ -71,3 +71,40 @@
   2. 广告 URL 过滤误杀正片：正片托管在快手 CDN `v1.adkwai.com`（338MB / 25 分钟 / H.264，`adVideoLp` 只是桶名），被广告域名正则误判丢弃。修复：URL 层只拦确定无疑的广告网络平台（doubleclick 等），广告判定改为看 DOM 上下文——广告容器（`.action-ad`/`#wyn`/`.pause-ad` 等）内的 video 才是贴片广告，上报跳过、nudge 快进；主播放器视频一律按正片处理。
 - 实测：嗅探命中 1 条 MP4 正片（H.264，无 DRM，有 relay），Kazumi 对该站同样靠 webview 嗅探（规则 `useWebview:true`，无特殊提取逻辑）。
 - 经验：「广告域名 ≠ 广告内容」，聚合站常把正片上传到有广告联盟 CDN 蹭免费存储/带宽，广告识别必须以播放器 DOM 结构为准。
+
+## 2026-08-05 全量回归矩阵
+
+测试方法同前：每站先 extract-cli 后 sniff-cli，每次运行前 `pkill` 清理实例。本轮新增两个站点：dmbus.cc（kazumi 插件 DM84）、enlienli.link（kazumi 插件 enlie）。
+
+| 站点 | 测试 URL | extract | sniff | 命中数 | 协议/编码 | 受限状态 | 对比基线 |
+|---|---|---|---|---|---|---|---|
+| CCTV 纪录片 | tv.cctv.com/2026/07/30/VIDEVUdpLU5FN93bTJDFAfwM260730.shtml | ✅ 命中 | 未跑 | 1 | HLS · H.264+AAC TS（newcntv.qcloudcdn.com，maxbr=2048，有 relay） | 无 | ✅ 一致（可播） |
+| CCTV 4K 专区 | tv.cctv.com/2021/10/13/VIDES6NcqGm4f9w8THBA8t2j211013.shtml | ✅ 命中 | 未跑 | 1 | HLS（hls.cntv.lxdns.com，无 relay） | 受限：分片列表 HTTP 404，流地址已失效 | ✅ 一致（受限-流失效） |
+| 央视频直播 | yangshipin.cn/tv/home | 未跑（基线为空） | ✅ 命中 | 1 | HLS 直播 · H.264+AAC TS（hlslive-tx-cdn.ysp.cctv.cn，647p） | 受限：WASM 私有加扰，实测解码画面异常，无法播放 | ✅ 一致（受限，禁点判定未变） |
+| B 站番剧 | bilibili.com/bangumi/play/ep733316 | ✅ 命中 | 未跑 | ≥2 | DASH · HEVC+AAC fMP4（480p，relay dashmpd）+ MP4 360p 兜底 | 无 DRM | ✅ 一致（extract 命中 DASH） |
+| 腾讯视频 | v.qq.com/x/cover/mzc002008d6c6rb.html | 0（static 空） | ✅ 命中 | 1 | HLS · HEVC+AAC TS（ltscsy.qq.com，有 relay） | 未标受限 | ✅ 一致（HEVC-in-TS：webview 只出声，投屏 VLC/电视可播） |
+| 爱奇艺 | iqiyi.com/v_1p1l5bfawk4.html（无忧渡） | 0 | ✅ 命中（3 次跑中 2 次 12s 超时零命中，1 次命中） | 3 | 1 HLS（meta-cdn.video.iqiyi.com，qd_vip=0）+ 2 MP4（hscdnct.inter.71edge.com） | 全部标「流地址失效或加载失败，无法播放」 | ✅ 一致（受限-分片签名鉴权）；注意 sniff 有超时抖动，12s 窗口对该站偏紧 |
+| 优酷 | v.youku.com/video?s=5913404537c7432f88dd（遇见你真好） | 0 | ✅ 命中 | 3 | HLS ×3 · H.264+AAC TS（valipl.cp31.ott.cibntv.net，均有 relay） | 无 | ✅ 基本一致（可播；本片源给的是 3 条 HLS 而非基线那片源的 2 MP4 + 1 HLS，构成随片源变化） |
+| 1905 电影网 | 1905.com/vod/play/1013593.shtml（我的教师生涯） | 0 | ✅ 命中 | 1 | HLS-fMP4 · AV1+AAC（fmp4hd.vodfile.m1905.com，有 relay） | 无 | ✅ 一致（可播，投屏需接收端支持 AV1） |
+| 7sefun | 7sefun.top/vodplay/36099-1-1.html（仙逆） | 0 | ✅ 命中 | 1 | MP4 · H.264（v1.adkwai.com 快手 CDN，有 relay） | 无 DRM | ✅ 一致（与 08-05 修复后基线完全相同） |
+| dmbus.cc（新站） | dmbus.cc/p/4183-1-1.html（斗罗大陆2：绝世唐门 第1集） | 0 | ✅ 命中 | 1 | MP4 · H.264+AAC（ltshwy.gtimg.com 腾讯 CDN，有 relay） | 无 DRM | 新站首测 ✅ 可播 |
+| enlienli.link（新站） | enlienli.link（首页） | 无法测试 | 0 | 0 | — | 站点不可达 | ⚠️ 站点疑似关停，见下文诊断 |
+
+回归结论：9 个基线站点全部符合预期，无回归。
+
+### dmbus.cc（动漫巴士，kazumi DM84）——新站首测通过
+
+- 链路结构：苹果CMS（mydiy 模板），播放页 URL 模式 `/p/{id}-1-1.html`（搜索页 `/s----------.html?wd=`）。播放页本身无 video 元素，内嵌第三方解析播放器 iframe `hhjx.hhplayer.com/?url=<hex 加密串>`，由它解出正片并起播——正片托管在腾讯 CDN `ltshwy.gtimg.com`（f10217 MP4，H.264+AAC，无 DRM）。全框架注入 + iframe 命中代报机制直接生效，无需新改代码。
+- 命中情况：extract 0（预期）；sniff 命中 1 条 MP4 正片，带 relay，可播。
+- 网络注意：该站 Cloudflare 层面对 curl/直连/FetchURL 全部返回 522（`berajahbareng.eu.org | 522`），走本机 HTTP 代理也一样；但 WKWebView 嗅探窗口能正常打开页面（系统代理由 TUN 透明接管）。即**只有通过本工具的 webview 链路能访问该站**，命令行抓取诊断会误导为「站死了」，实际站点活着。kazumi 插件（DM84）`useWebview:true`，同为 webview 方案。
+- 备用域名 dm84.tv / dm84.vip 均 301 回 dmbus.cc，同一站点。
+
+### enlienli.link（嗯哩嗯哩，kazumi enlie）——站点当前不可达，无法测试
+
+- 诊断过程：
+  - curl 直连：DNS 被 Clash fake-ip 接管（198.18.0.230），TLS 握手即被 RST（`SSL_ERROR_SYSCALL`）。
+  - curl 走本机 HTTP 代理（127.0.0.1:7890）：CONNECT 隧道建立后 TLS 同样被 RST。
+  - 工具 webview sniff：页面完全未加载（连 `[diag]` 页态都未产生），12s 超时零命中。
+  - Kimi 服务端 fetch：network error，同样不可达。
+  - 备用/镜像域名 enlienli.com（多个第三方网址页标注的「最新地址」）及 enlienli.tv/.cc/.top/.me 猜测镜像：全部连接失败。
+- 结论：与 dmbus.cc 的 522 不同（那种是 CF→源站故障但边缘可达、webview 能开），enlienli 是 TCP/TLS 层全路径重置，且多个独立网络路径表现一致——**站点当前疑似整体关停或域名废弃**，非本工具问题。kazumi 插件配置（baseURL `https://enlienli.link/`、搜索 `/vod/search.html?wd=`）已记录，待站点恢复或找到新域名后可直接复测：URL 模式按苹果CMS 推断应为 `/vod/play/id/{id}/sid/1/nid/1.html` 或 `/vodplay/{id}-1-1.html`。
