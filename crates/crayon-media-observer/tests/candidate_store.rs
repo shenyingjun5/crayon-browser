@@ -136,7 +136,9 @@ fn store_capacity_is_bounded() {
         "https://cdn.example.com/overflow.mp4",
         ObservationSource::NetworkRequest,
     ));
-    assert_eq!(overflow, None, "满载必须拒绝而非无界增长");
+    // MED-04 起满载语义为有界驱逐（先过期、后最旧），容量永不超过上限；
+    // 驱逐细节见 candidate_lifecycle 测试。
+    assert!(overflow.is_some(), "满载驱逐最旧候选后接收新候选");
     assert_eq!(store.len(), MAX_CANDIDATES);
 
     // evidence 同样有界

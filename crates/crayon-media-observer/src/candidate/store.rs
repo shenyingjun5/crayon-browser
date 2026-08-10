@@ -43,9 +43,11 @@ pub struct CandidateEntry {
     url: String,
     /// `scheme://host[:port]` only — safe for logs.
     redacted_origin: String,
-    tab_id: TabId,
-    navigation: NavigationId,
+    pub(crate) tab_id: TabId,
+    pub(crate) navigation: NavigationId,
     evidence: Vec<Evidence>,
+    /// Latest evidence timestamp (logical ms) — TTL/eviction reference.
+    pub(crate) last_observed_ms: u64,
 }
 
 impl CandidateEntry {
@@ -81,6 +83,12 @@ impl CandidateEntry {
     pub fn evidence(&self) -> &[Evidence] {
         &self.evidence
     }
+
+    /// Latest evidence timestamp (logical ms).
+    #[must_use]
+    pub const fn last_observed_ms(&self) -> u64 {
+        self.last_observed_ms
+    }
 }
 
 impl Debug for CandidateEntry {
@@ -102,11 +110,25 @@ pub struct RedactedCandidate {
     pub origin: String,
 }
 
+/// Per-tab lifecycle state tracked by the store (MED-04).
+#[derive(Clone)]
+pub(crate) struct TabState {
+    pub(crate) tab_id: TabId,
+    pub(crate) current_navigation: NavigationId,
+    /// Set by `on_tab_close`: late events at or below this navigation are
+    /// tombstoned; a newer navigation re-opens the tab.
+    pub(crate) closed_at_navigation: Option<NavigationId>,
+}
+
+/// Maximum tracked tabs (bounded collection rule).
+pub const MAX_TABS: usize = 64;
+
 /// In-memory candidate store with URL-normalized merging.
 #[derive(Default)]
 pub struct CandidateStore {
-    entries: Vec<CandidateEntry>,
-    next_id: u64,
+    pub(crate) entries: Vec<CandidateEntry>,
+    pub(crate) next_id: u64,
+    pub(crate) tabs: Vec<TabState>,
 }
 
 /// URL normalization for merging: scheme/host case and default ports are
@@ -144,10 +166,16 @@ impl CandidateStore {
     /// tab+navigation merges into the existing candidate and records the
     /// evidence (PL-001); otherwise a new candidate is created.
     ///
-    /// Returns `None` when the store is full (bounded capacity rule) or the
-    /// URL cannot form a merge key.
+    /// Returns `None` when the observation is stale (older navigation),
+    /// tombstoned (closed tab), the tab table is full, or the URL cannot
+    /// form a merge key. When the store is full, expired candidates are
+    /// evicted first, then the stalest one (MED-04); `None` means eviction
+    /// could not free space.
     pub fn ingest(&mut self, observation: &SourceObservation) -> Option<CandidateId> {
         let key = merge_key(observation.url())?;
+        if !self.admit(observation) {
+            return None;
+        }
         if let Some(entry) = self.entries.iter_mut().find(|e| {
             e.tab_id == *observation.tab_id()
                 && e.navigation == observation.navigation()
@@ -166,10 +194,14 @@ impl CandidateStore {
             {
                 entry.evidence.push(evidence);
             }
+            entry.last_observed_ms = entry.last_observed_ms.max(observation.observed_at_ms());
             return Some(entry.id);
         }
         if self.entries.len() >= MAX_CANDIDATES {
-            return None;
+            self.evict_for_space(observation.observed_at_ms());
+            if self.entries.len() >= MAX_CANDIDATES {
+                return None;
+            }
         }
         let id = CandidateId(self.next_id);
         self.next_id += 1;
@@ -184,8 +216,58 @@ impl CandidateStore {
                 frame: observation.frame(),
                 observed_at_ms: observation.observed_at_ms(),
             }],
+            last_observed_ms: observation.observed_at_ms(),
         });
         Some(id)
+    }
+
+    /// Admission control (BR-007/BR-013): rejects observations from a stale
+    /// navigation or a closed tab; registers new tabs within `MAX_TABS`.
+    fn admit(&mut self, observation: &SourceObservation) -> bool {
+        if let Some(tab) = self
+            .tabs
+            .iter_mut()
+            .find(|t| t.tab_id == *observation.tab_id())
+        {
+            if let Some(closed) = tab.closed_at_navigation {
+                if observation.navigation() <= closed {
+                    return false; // tombstoned: late event for a closed tab
+                }
+                tab.closed_at_navigation = None; // re-opened with newer navigation
+            }
+            if observation.navigation() < tab.current_navigation {
+                return false; // stale: frame/worker report from an old navigation
+            }
+            tab.current_navigation = observation.navigation();
+            return true;
+        }
+        if self.tabs.len() >= MAX_TABS {
+            return false;
+        }
+        self.tabs.push(TabState {
+            tab_id: observation.tab_id().clone(),
+            current_navigation: observation.navigation(),
+            closed_at_navigation: None,
+        });
+        true
+    }
+
+    /// Frees one slot when full: expired candidates (default TTL) first,
+    /// then the stalest by `last_observed_ms`.
+    pub(crate) fn evict_for_space(&mut self, now_ms: u64) {
+        let ttl = super::lifecycle::LifecyclePolicy::DEFAULT.ttl_ms();
+        self.entries
+            .retain(|e| now_ms <= e.last_observed_ms.saturating_add(ttl));
+        if self.entries.len() >= MAX_CANDIDATES {
+            if let Some((index, _)) = self
+                .entries
+                .iter()
+                .enumerate()
+                .min_by_key(|(_, e)| e.last_observed_ms)
+            {
+                self.entries.remove(index);
+            }
+        }
     }
 
     #[must_use]
