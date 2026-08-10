@@ -338,6 +338,7 @@ dependencies = [
  "axum",
  "crayon-domain",
  "crayon-ipc-schema",
+ "crayon-media-probe",
  "getrandom 0.2.17",
  "reqwest",
  "serde",
