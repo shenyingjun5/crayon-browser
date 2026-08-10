@@ -1,0 +1,64 @@
+//! Platform-independent domain foundations shared by Crayon product crates.
+
+use std::error::Error;
+use std::fmt::{Display, Formatter};
+
+/// Explicit product execution boundary.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProductMode {
+    /// Shipping product mode. Legacy extraction and relay surfaces are forbidden.
+    Formal,
+    /// Migration-only mode used by the explicitly labelled legacy application.
+    LegacyDevelopment,
+}
+
+impl ProductMode {
+    /// Reports whether this mode may enter a legacy migration adapter.
+    #[must_use]
+    pub const fn permits_legacy_adapter(self) -> bool {
+        matches!(self, Self::LegacyDevelopment)
+    }
+}
+
+/// Validated identity used when composing the product runtime.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ProductIdentity {
+    name: &'static str,
+    mode: ProductMode,
+}
+
+impl ProductIdentity {
+    /// Creates an identity. Whitespace-only names are rejected at the boundary.
+    pub fn new(name: &'static str, mode: ProductMode) -> Result<Self, ProductIdentityError> {
+        if name.trim().is_empty() {
+            return Err(ProductIdentityError::EmptyName);
+        }
+        Ok(Self { name, mode })
+    }
+
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        self.name
+    }
+
+    #[must_use]
+    pub const fn mode(self) -> ProductMode {
+        self.mode
+    }
+}
+
+/// Product identity validation failure.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProductIdentityError {
+    EmptyName,
+}
+
+impl Display for ProductIdentityError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::EmptyName => formatter.write_str("product name must not be empty"),
+        }
+    }
+}
+
+impl Error for ProductIdentityError {}

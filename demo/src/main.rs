@@ -1,4 +1,4 @@
-//! get-video L2 webview 嗅探 demo（Tauri 2）。
+//! `legacy-dev` L2 webview 嗅探 demo（Tauri 2），不是正式产品构建目标。
 //!
 //! 架构：主窗口 UI（输入网址/展示结果/播放） + 隐藏 WebviewWindow（加载目标页、
 //! 注入嗅探 JS） + get-video relay（127.0.0.1:8321，播放地址中转）。

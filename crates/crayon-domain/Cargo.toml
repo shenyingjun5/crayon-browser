@@ -1,0 +1,10 @@
+[package]
+name = "crayon-domain"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Platform-independent product identity and domain foundations"
+publish = false
+
+[lints]
+workspace = true

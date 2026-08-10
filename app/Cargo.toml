@@ -2,13 +2,14 @@
 name = "get-video-app"
 version = "0.1.0"
 edition = "2021"
-description = "get-video 正式 Tauri 壳：L1/L3 提取 + L2 webview 嗅探 + 本地 relay"
+description = "Legacy-dev Tauri migration shell; not a formal product target"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-get-video = { path = ".." }
+crayon-legacy-adapter = { path = "../crates/crayon-legacy-adapter" }
+get-video = { path = "..", default-features = false, features = ["legacy-dev"] }
 tauri = { version = "2.11.5", features = [] }
 axum = "0.8"
 serde = { version = "1", features = ["derive"] }

@@ -1,13 +1,38 @@
-//! get-video：视频地址解析 + 本地 relay 流服务模块。
+//! Crayon formal core and explicitly feature-gated legacy modules.
 //!
-//! - `extract`：L1 静态解析 / L3 站点规则包（L2 webview 嗅探待 Tauri 壳内实现）；
-//! - `relay`：axum 本地代理服务（m3u8 重写、Range 透传、防盗链伪造、SSRF 防护）；
-//! - `drm`：DRM 特征检测（只检测标记，不解密）。
+//! The default `formal-product` build exposes no legacy extraction, relay,
+//! sniffing, or CLI surface. Existing modules compile only with the mutually
+//! exclusive `legacy-dev` feature until their safe capabilities are migrated.
 
+#[cfg(all(feature = "formal-product", feature = "legacy-dev"))]
+compile_error!("formal-product and legacy-dev are mutually exclusive build modes");
+
+/// Stable formal runtime assembly API.
+pub use crayon_app_runtime as app_runtime;
+/// Pure, fail-closed cast planning gates.
+pub use crayon_cast_policy as cast_policy;
+/// Platform-independent product types.
+pub use crayon_domain as domain;
+/// Versioned browser/core transport types.
+pub use crayon_ipc_schema as ipc_schema;
+/// Browser observation facts without browser-engine types.
+pub use crayon_media_observer as media_observer;
+/// Platform-neutral media format and protection probes.
+pub use crayon_media_probe as media_probe;
+
+pub use crayon_app_runtime::RuntimeDescriptor;
+pub use crayon_domain::{ProductIdentity, ProductIdentityError, ProductMode};
+pub use crayon_ipc_schema::{Handshake, SchemaVersion};
+
+#[cfg(feature = "legacy-dev")]
 pub mod codec;
+#[cfg(feature = "legacy-dev")]
 pub mod drm;
+#[cfg(feature = "legacy-dev")]
 pub mod extract;
+#[cfg(feature = "legacy-dev")]
 pub mod probe;
+#[cfg(feature = "legacy-dev")]
 pub mod relay;
 
 /// 默认桌面浏览器 UA。
@@ -44,14 +69,5 @@ pub fn encode_url_component(s: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn encode_component() {
-        assert_eq!(
-            encode_url_component("https://a.com/x y.m3u8?token=a&b=1"),
-            "https%3A%2F%2Fa.com%2Fx%20y.m3u8%3Ftoken%3Da%26b%3D1"
-        );
-    }
-}
+#[path = "lib_tests.rs"]
+mod tests;

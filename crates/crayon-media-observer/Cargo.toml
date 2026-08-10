@@ -1,0 +1,10 @@
+[package]
+name = "crayon-media-observer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Platform-neutral media observation facts and trust provenance"
+publish = false
+
+[lints]
+workspace = true

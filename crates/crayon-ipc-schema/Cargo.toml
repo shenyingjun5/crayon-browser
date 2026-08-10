@@ -1,0 +1,13 @@
+[package]
+name = "crayon-ipc-schema"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Version negotiation primitives for Crayon browser/core IPC"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+crayon-domain = { path = "../crayon-domain" }

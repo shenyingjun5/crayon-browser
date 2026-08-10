@@ -1,4 +1,4 @@
-//! get-video 命令行入口：启动本地 relay 服务。
+//! `legacy-dev` only CLI entry point for the historical relay service.
 
 use clap::Parser;
 use get_video::relay::{self, RelayConfig};

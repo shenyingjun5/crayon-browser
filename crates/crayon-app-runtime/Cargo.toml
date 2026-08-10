@@ -1,0 +1,14 @@
+[package]
+name = "crayon-app-runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Platform-neutral Crayon product runtime composition"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+crayon-domain = { path = "../crayon-domain" }
+crayon-ipc-schema = { path = "../crayon-ipc-schema" }

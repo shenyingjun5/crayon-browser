@@ -1,0 +1,13 @@
+[package]
+name = "crayon-legacy-adapter"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Explicit migration boundary for the legacy Crayon development application"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+crayon-domain = { path = "../crayon-domain" }

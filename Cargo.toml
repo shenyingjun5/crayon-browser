@@ -1,11 +1,53 @@
 [package]
 name = "get-video"
-version = "0.1.0"
-edition = "2021"
-description = "视频地址解析 + 本地 relay 流服务模块"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Crayon formal core with an explicitly gated legacy extraction/relay mode"
+publish = false
+
+[features]
+default = ["formal-product"]
+formal-product = []
+legacy-dev = []
 
 [workspace]
-members = ["demo", "app"]
+resolver = "2"
+members = [
+    "crates/crayon-app-runtime",
+    "crates/crayon-domain",
+    "crates/crayon-ipc-schema",
+    "crates/crayon-legacy-adapter",
+    "crates/crayon-media-probe",
+    "crates/crayon-media-observer",
+    "crates/crayon-cast-policy",
+    "tools/repo-guard",
+]
+exclude = ["app", "demo"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"
+
+[profile.dev]
+debug = 1
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+strip = "symbols"
+
+[lints]
+workspace = true
 
 [lib]
 name = "get_video"
@@ -14,8 +56,29 @@ path = "src/lib.rs"
 [[bin]]
 name = "get-video"
 path = "src/main.rs"
+required-features = ["legacy-dev"]
+
+[[test]]
+name = "legacy_contract"
+path = "tests/architecture/legacy_contract.rs"
+
+[[test]]
+name = "fixtures"
+path = "tests/fixtures.rs"
+required-features = ["legacy-dev"]
+
+[[test]]
+name = "online"
+path = "tests/online.rs"
+required-features = ["legacy-dev"]
 
 [dependencies]
+crayon-app-runtime = { path = "crates/crayon-app-runtime" }
+crayon-cast-policy = { path = "crates/crayon-cast-policy" }
+crayon-domain = { path = "crates/crayon-domain" }
+crayon-ipc-schema = { path = "crates/crayon-ipc-schema" }
+crayon-media-observer = { path = "crates/crayon-media-observer" }
+crayon-media-probe = { path = "crates/crayon-media-probe" }
 axum = "0.8"
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", default-features = false, features = [

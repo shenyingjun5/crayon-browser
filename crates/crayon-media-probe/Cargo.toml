@@ -1,0 +1,10 @@
+[package]
+name = "crayon-media-probe"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Bounded, platform-neutral media format and protection probes"
+publish = false
+
+[lints]
+workspace = true

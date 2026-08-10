@@ -1,0 +1,13 @@
+[package]
+name = "crayon-cast-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Pure fail-closed gates for entering Crayon cast planning"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+crayon-media-observer = { path = "../crayon-media-observer" }

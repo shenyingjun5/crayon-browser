@@ -1,4 +1,4 @@
-//! relay 服务生命周期与路由（docs/design.md §5）。
+//! `legacy-dev` only relay lifecycle and general-purpose routes.
 
 pub mod proxy;
 
