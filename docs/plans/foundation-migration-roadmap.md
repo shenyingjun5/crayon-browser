@@ -1,6 +1,6 @@
 # FND：基础工程与 Legacy 迁移 Roadmap
 
-状态：`FND-01/02/03/04/05/06/07A DONE`，`FND-07B IN_PROGRESS`。
+状态：`FND-01/02/03/04/05/06/07A/07B DONE`，`FND-07C IN_PROGRESS`。
 
 ## 目标
 
@@ -142,12 +142,13 @@
 
 #### FND-07B：拆分共享模型与状态所有权
 
-- 状态：`IN_PROGRESS`；依赖：FND-07A。
+- 状态：`DONE`；依赖：FND-07A。
 - 修改：`app/src/runtime.rs`、`app/src/models.rs`、`app/src/main.rs`。
 - 工作：纯移动 `Sniff*`、`Probe*`、`AppState` 和去重写入；明确锁所有权，不改字段、日志和同步语义。
 - 验证：模型序列化 golden、去重测试、legacy 回归、字段集合机器比对。
 - 验收：状态只有 runtime owner；生产测试物理隔离；无公共 API 扩张。
 - 证据：S2。
+- 完成证据（2026-08-10）：`SniffHit`/`SniffResultItem`/`SniffResponse`/`ProbeReport`/`ProbeTarget` 逐字迁至 `app/src/models.rs`，`AppState` 与去重写入 `push_hit` 逐字迁至 `app/src/runtime.rs`（锁所有权在模块 doc 明确：beacon 服务写入、sniff/probe 读取、`_relay` 装配后只读持有）；字段、日志文案与同步语义不变，字段集合迁移前后机器比对一致；`main.rs` 从 952 行降至 881 行。新增 `app/src/models_tests.rs`（序列化 golden 2 条：全字段字节锁定 + 可选字段省略）与 `app/src/runtime_tests.rs`（去重 2 条：空 URL 忽略、同 URL 保留首次），4 条全部实际运行通过。`cargo test -p get-video --no-default-features --features legacy-dev --lib` 58/58；`cargo test --test legacy_contract` 6/6；`scripts/check.sh all` 通过（guard/format/formal-workspace/legacy-package）；`git diff --check` 通过。本机 WebKitGTK 2.38 < 2.40，app crate 整体编译被环境阻断（属 FND-07E 既定范围），新测试经 `#[path]` 原样挂载的独立 harness 运行；app 级 Clippy 同一原因未运行，已按“未运行”记录。任务级 Code Review P0/P1/P2/P3 均为 0。`app/Cargo.lock` 为 app 被排除出根 workspace 后的独立构建产物，是否纳入版本控制留给 FND-07E 构建资源收口时决定，本任务未提交它。
 
 #### FND-07C：拆分 legacy Beacon 与网络地址
 

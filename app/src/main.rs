@@ -16,8 +16,7 @@
 use get_video::extract::{
     guess_quality, origin_of, Candidate, Extractor, Protocol, RulePack, VideoInfo,
 };
-use get_video::relay::{self, RelayConfig, RelayHandle};
-use serde::Serialize;
+use get_video::relay::{self, RelayConfig};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -31,76 +30,12 @@ const SNIFF_MAX_WAIT_EXTENDED: Duration = Duration::from_secs(25);
 const SNIFF_TAIL: Duration = Duration::from_secs(3);
 
 mod legacy_sniffer;
+mod models;
+mod runtime;
 
 use legacy_sniffer::SNIFF_JS;
-
-#[derive(Debug, Clone)]
-struct SniffHit {
-    url: String,
-    page: String,
-    /// 内容判定协议提示（如响应体为 m3u8 但 URL 无扩展名时 = Some("hls")）。
-    proto: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-struct SniffResultItem {
-    index: usize,
-    url: String,
-    protocol: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    quality: Option<String>,
-    drm: bool,
-    /// 受限原因（WASM 私有加扰 / 全站 DRM）：命中即不可播。
-    #[serde(skip_serializing_if = "Option::is_none")]
-    restriction: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    relay_url: Option<String>,
-    /// 编码/封装标签（如 `H.264+AAC · TS`），供投屏接收端判断兼容性。
-    #[serde(skip_serializing_if = "Option::is_none")]
-    codec: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-struct SniffResponse {
-    page: String,
-    count: usize,
-    results: Vec<SniffResultItem>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    note: Option<String>,
-}
-
-/// 探针回传：抽帧统计（mean/std 序列）+ 播放进度 + 可选错误。
-#[derive(Debug, Clone, Default)]
-struct ProbeReport {
-    /// (mean, std) 采样序列。
-    frames: Vec<(f64, f64)>,
-    err: Option<String>,
-}
-
-/// 共享状态：嗅探命中收集 + relay 基地址 + 防重入锁。
-struct AppState {
-    hits: Mutex<Vec<SniffHit>>,
-    relay_base: String,
-    /// 局域网可访问的 relay 基地址（投屏给手机/电视用），如 `http://192.168.1.8:8321`。
-    lan_base: String,
-    /// 与 relay 共享的 DASH MPD 仓库（提取器写入，/dashmpd/{id} 读出）。
-    dash_store: get_video::relay::DashStore,
-    /// 解码探针回传（probeplayer 页 → /probe-report beacon）。
-    probe_reports: Mutex<HashMap<String, ProbeReport>>,
-    busy: AtomicBool,
-    _relay: Mutex<Option<RelayHandle>>,
-}
-
-fn push_hit(hits: &Mutex<Vec<SniffHit>>, url: String, page: String, proto: Option<String>) {
-    if url.is_empty() {
-        return;
-    }
-    let mut g = hits.lock().unwrap();
-    if !g.iter().any(|h| h.url == url) {
-        println!("[sniff] 命中: {url}");
-        g.push(SniffHit { url, page, proto });
-    }
-}
+use models::{ProbeReport, ProbeTarget, SniffHit, SniffResponse, SniffResultItem};
+use runtime::{push_hit, AppState};
 
 /// 核心嗅探流程：创建隐藏 webview 加载目标页，收集命中，关闭窗口，归一化结果。
 async fn do_sniff(app: &AppHandle, url: &str) -> Result<SniffResponse, String> {
@@ -305,12 +240,6 @@ new Image().src='http://127.0.0.1:8377/diag?msg='+encodeURIComponent(msg);
         results,
         note,
     })
-}
-
-/// 解码探针目标：候选流地址 + 它的 relay 地址。
-struct ProbeTarget {
-    url: String,
-    relay_url: String,
 }
 
 /// 单流解码探针：隐藏 webview 加载 relay 的 /probeplayer 页（与 /proxy 同源，

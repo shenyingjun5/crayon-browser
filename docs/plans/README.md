@@ -32,9 +32,10 @@
 5. `FND-05` Rust workspace 与领域空壳：当前 `DONE`。
 6. `FND-06A`～`FND-06D` 纯媒体能力迁移：当前 `DONE`。
 7. `FND-07A` 嗅探脚本资源迁移：当前 `DONE`。
-8. `FND-07B` 共享模型与状态所有权拆分：当前 `IN_PROGRESS`。
+8. `FND-07B` 共享模型与状态所有权拆分：当前 `DONE`。
+9. `FND-07C` 拆分 legacy Beacon 与网络地址：当前 `IN_PROGRESS`。
 
-`FND-07` 是迁移 Epic，实际按 `FND-07A`～`FND-07E` 顺序执行；当前只移动共享模型、状态和去重写入，不得混入 Beacon、command、Relay 或 CLI。
+`FND-07` 是迁移 Epic，实际按 `FND-07A`～`FND-07E` 顺序执行；当前只移动 Beacon、probe 回传和 LAN 地址选择，不得混入 command、Relay 或 CLI。
 
 ## 状态更新规则
 

@@ -100,6 +100,12 @@ git diff --check                   # FND-01 交付前检查
 - `app/src/main.rs` 从 1178 行降至 952 行；正式 workspace 66 条与 legacy 93 条离线回归通过，13 条公网测试仍显式 ignored；严格 Clippy、repo guard、format 和 diff 检查通过。
 - Tauri app 缺失的可复现构建资源仍由 FND-07E 负责，本任务没有修改端口、路由、状态、命令、Relay 或 CLI 行为。
 
+## FND-07B Legacy 共享模型与状态所有权（2026-08-10）
+
+- `Sniff*`/`Probe*` 数据模型逐字迁至 `app/src/models.rs`，`AppState` 与去重写入 `push_hit` 逐字迁至 `app/src/runtime.rs`；锁所有权在模块 doc 显式（beacon 写入、sniff/probe 读取、`_relay` 装配后只读），字段、日志与同步语义不变（字段集合机器比对一致）。
+- 新增 `models_tests.rs`（序列化 golden 2 条）与 `runtime_tests.rs`（去重 2 条）；`app/src/main.rs` 从 952 行降至 881 行。
+- legacy 回归 58 条、legacy_contract 6 条、`scripts/check.sh all` 通过；app 整体编译与 Clippy 受本机 WebKitGTK 2.38 < 2.40 阻断（FND-07E 既定范围），新测试经 `#[path]` 原样挂载的独立 harness 运行通过。
+
 ## 事实更新规则
 
 - 完成模块 Roadmap 后，把稳定结论收敛到本目录，再归档实施过程。
