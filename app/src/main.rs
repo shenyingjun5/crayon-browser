@@ -32,7 +32,8 @@ mod login;
 mod models;
 mod runtime;
 
-use commands::{close_login, extract, lan_addr, open_login, report_log, sniff};
+use commands::{extract, lan_addr, report_log, sniff};
+use login::{close_login, open_login};
 
 fn main() {
     tauri::Builder::default()

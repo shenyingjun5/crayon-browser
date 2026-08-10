@@ -2,7 +2,7 @@
 
 > 版本：v0.3
 > 日期：2026-08-10
-> 状态：执行中；`FND-01~06/07A~07E/08/09/10/11` 已交付（07E 待达标环境编译验证、FND-12 待 07E 解锁），`MED-01~17 DONE`，`MED-18` 收口进行中
+> 状态：执行中；`FND-01~12`（含 `07A~07E`）与 `MED-01~18` 已 DONE，下一阶段等待核实 CEF-01/SDK-01 外部前置
 > 目标：任何新 Agent 读取 `AGENTS.md`、current 契约和所属模块 Roadmap 后，可以领取一个原子任务并独立实现、测试、Review 和更新状态。
 
 ## 1. 使用方式
@@ -66,7 +66,7 @@ flowchart LR
 | HM | 14 | ArkWeb/Native 技术预览、真机结论 | S4 |
 | QAR | 16 | E2E、压力、许可、安装更新、发布门禁 | S5 |
 
-合计 121 个唯一原子任务。验收目录当前定义 93 个唯一测试用例；任务和用例 ID 已完成唯一性、缺失引用和依赖格式检查。
+合计 128 个唯一原子任务。验收目录当前定义 93 个唯一测试用例；任务和用例 ID 已完成唯一性、缺失引用和依赖格式检查。
 
 模块任务详见 [`docs/plans/README.md`](plans/README.md)。
 
@@ -125,28 +125,28 @@ flowchart LR
 
 | 模块 | READY | TODO | IN_PROGRESS | DONE | 当前阻塞 |
 |---|---:|---:|---:|---:|---|
-| FND | 0 | 0 | 1 | 17 | FND-07E 待 WebKitGTK ≥ 2.40 环境编译验证；FND-12 待 07E |
-| CEF | 0 | 15 | 0 | 0 | CEF 二进制分发不可达（本机），需工具链环境 |
-| MED | 0 | 0 | 1 | 17 | MED-18 待 30 分钟 harness 完成 |
-| SDK | 0 | 14 | 0 | 0 | 需 Cast-SDK 仓库位置与接入授权（SDK-01） |
-| PLT | 0 | 18 | 0 | 0 | 等 CEF-07、SDK-05 |
+| FND | 0 | 0 | 0 | 19 | 无；FND V0 已收口 |
+| CEF | 0 | 15 | 0 | 0 | 待核实固定 revision、可用二进制与三平台工具链 |
+| MED | 0 | 0 | 0 | 18 | 无 |
+| SDK | 0 | 14 | 0 | 0 | 需固定 Cast-SDK revision 与正式接入授权（SDK-01） |
+| PLT | 0 | 19 | 0 | 0 | 等 CEF-07、SDK-05 |
 | PRV | 0 | 13 | 0 | 0 | 等 FND-08（已达）、CEF-05 |
 | HM | 0 | 14 | 0 | 0 | 等 SDK-05 与真机 |
 | QAR | 0 | 16 | 0 | 0 | 等目标切片实现 |
 
-任务状态发生变化时同步更新模块 Roadmap；本表只在模块汇总状态变化时更新。（2026-08-10 更新：FND 17 项 DONE 含 FND-01~06、07A~07E、08~11，其中 07E 为 IMPLEMENTED 待验证；MED-01~17 DONE。）
+任务状态发生变化时同步更新模块 Roadmap；本表只在模块汇总状态变化时更新。（2026-08-10 更新：FND 19 项、MED 18 项全部 DONE；总计 37/128。）
 
 ## 6. 现状到目标的迁移映射
 
 | 当前路径 | 现状 | 目标 | 迁移任务 |
 |---|---|---|---|
-| `src/lib.rs` | 根 crate + DEFAULT_UA + 内联测试 | 兼容 re-export，最终由 workspace crate 取代 | FND-02/05/12 |
+| `src/lib.rs` | 正式 Core 兼容 re-export；legacy UA/helper 仅在 `legacy-dev` | 最终由稳定 workspace crate 取代 | FND-02/05/12 |
 | `src/codec.rs` | codec/probe + 224 行内联测试 | `crayon-media-probe` + 独立测试 | FND-02/06 |
 | `src/drm.rs` | DRM 识别 + 内联测试 | `crayon-media-probe::protection` | FND-02/06 |
 | `src/extract/*` | 静态/站点提取和重复决策 | observer/candidate/adapter registry | FND-06、MED-01～04 |
 | `src/probe.rs` | 画面统计 + 内联测试 | probe verdict；浏览器捕获适配另置 | FND-02/06 |
 | `src/relay/*` | 任意 URL proxy/API/player | session relay；legacy router 隔离 | FND-01/04、MED-09～18 |
-| `app/src/main.rs` | 1231 行混合职责、自动广告操作 | CEF/Runtime/observer 独立模块；Tauri legacy | FND-01/04/07、CEF/MED |
+| `app/src/main.rs` | 51 行 Tauri legacy 装配入口；自动广告操作已移除 | CEF/Runtime/observer 独立模块；Tauri 仅回归 | FND-01/04/07/12、CEF/MED |
 | `app/ui` | 解析型单页 UI | `browser/shared-ui` 产品 UI | FND-07、CEF-08/13 |
 | `tests/fixtures.rs` | 1124 行混合 fixture/测试 | `tests/fixtures` + test-support | FND-02/03 |
 | `tests/online.rs` | 公共网络测试 | 本地确定性集成；公网标记 manual | FND-03/10 |
@@ -202,4 +202,4 @@ flowchart LR
 
 ## 12. 当前执行指令
 
-当前执行 `MED-18` 收口：安全评审文档与 fuzz 语料已落地，等待 30 分钟长稳 harness（RL-013）完成后收口提交。后续任务解锁条件：FND-07E/FND-12 需 WebKitGTK ≥ 2.40 或 macOS/Windows 环境做 app 编译验证；CEF-01 需可下载 CEF 二进制的工具链环境；SDK-01 需 Cast-SDK 仓库位置与接入授权；PRV/PLT/HM/QAR 级联依赖上述解锁。
+`FND-12` 已完成：三项 finding 全部关闭，fast/core/security、Workspace/App 严格 Clippy、Debug/Release build、8 个正式产物 RG-006 和独立 Review 均通过，FND V0 收口。下一步先核实 `CEF-01` 的固定 revision/二进制/三平台工具链，或取得 `SDK-01` 的固定 Cast-SDK revision 与正式接入授权；外部前置未核实前不得把任务伪标为 READY/IN_PROGRESS。

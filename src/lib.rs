@@ -36,9 +36,11 @@ pub mod probe;
 pub mod relay;
 
 /// 默认桌面浏览器 UA。
+#[cfg(feature = "legacy-dev")]
 pub const DEFAULT_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
 /// 等价于 JS 的 encodeURIComponent：除 `A-Za-z0-9-_.!~*'()` 外全部编码。
+#[cfg(feature = "legacy-dev")]
 pub fn encode_url_component(s: &str) -> String {
     const SET: &percent_encoding::AsciiSet = &percent_encoding::CONTROLS
         .add(b' ')

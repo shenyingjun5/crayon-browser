@@ -1,6 +1,7 @@
 use super::*;
 
 #[test]
+#[cfg(feature = "legacy-dev")]
 fn encode_component() {
     assert_eq!(
         encode_url_component("https://a.com/x y.m3u8?token=a&b=1"),

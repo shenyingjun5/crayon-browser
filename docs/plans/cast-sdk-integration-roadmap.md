@@ -1,6 +1,6 @@
 # SDK：Cast-SDK 集成 Roadmap
 
-状态：等待 `FND-08`。本机 Cast-SDK 工作树只用于审阅，正式集成不得依赖任何开发者本机绝对路径。
+状态：`FND-08 DONE`；`SDK-01 TODO`，领取前需确认固定 Cast-SDK revision 与正式接入授权。本机 Cast-SDK 工作树只用于审阅，正式集成不得依赖任何开发者本机绝对路径。
 
 ## 边界
 

@@ -1,6 +1,6 @@
 # CEF：Desktop 浏览器壳 Roadmap
 
-状态：等待 `FND-08`。目标平台 Windows、macOS、Linux；每项以目标路径、测试 ID 和证据作为验收，不以单平台截图替代。
+状态：`FND-08 DONE`；`CEF-01 TODO`，领取前需核实固定 CEF revision、可用二进制与三平台 configure 工具链。目标平台 Windows、macOS、Linux；每项以目标路径、测试 ID 和证据作为验收，不以单平台截图替代。
 
 ## 原子任务
 

@@ -1,6 +1,6 @@
 # PRV：隐私与产品安全 Roadmap
 
-状态：等待 `FND-08`、`CEF-05`。Relay 网络安全实现归 MED，本 Roadmap 负责 Profile、追踪防护、安全存储、隐私数据流和系统级安全门禁。
+状态：`FND-08 DONE`，等待 `CEF-05`。Relay 网络安全实现归 MED，本 Roadmap 负责 Profile、追踪防护、安全存储、隐私数据流和系统级安全门禁。
 
 ## 原子任务
 

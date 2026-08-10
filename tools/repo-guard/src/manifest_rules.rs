@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 struct Manifest {
     path: PathBuf,
     package: Option<String>,
+    features: BTreeMap<String, BTreeSet<String>>,
     dependencies: Vec<Dependency>,
 }
 
@@ -18,6 +19,22 @@ struct Dependency {
     production: bool,
     line: usize,
 }
+
+const LEGACY_ROOT_DEPENDENCIES: &[&str] = &[
+    "axum",
+    "base64",
+    "clap",
+    "futures-util",
+    "percent-encoding",
+    "regex",
+    "reqwest",
+    "serde",
+    "serde_json",
+    "tokio",
+    "tracing",
+    "tracing-subscriber",
+    "url",
+];
 
 pub fn inspect(root: &Path, files: &[PathBuf]) -> Vec<CheckResult> {
     let manifests: Vec<Manifest> = files
@@ -35,6 +52,7 @@ fn parse_manifest(root: &Path, path: &Path) -> Result<Manifest, std::io::Error> 
     let text = fs::read_to_string(root.join(path))?;
     let mut section = String::new();
     let mut package = None;
+    let mut features = BTreeMap::new();
     let mut dependencies = Vec::new();
     let lines: Vec<&str> = text.lines().collect();
     let mut index = 0;
@@ -52,6 +70,26 @@ fn parse_manifest(root: &Path, path: &Path) -> Result<Manifest, std::io::Error> 
         let key = key.trim().trim_matches('\"').to_owned();
         if section == "[package]" && key == "name" {
             package = Some(value.trim().trim_matches('\"').to_owned());
+        }
+        if section == "[features]" {
+            let mut feature_value = value.trim().to_owned();
+            let mut bracket_depth = delimiter_depth(&feature_value, '[', ']');
+            while bracket_depth > 0 && index + 1 < lines.len() {
+                index += 1;
+                let continuation = lines[index].trim();
+                feature_value.push(' ');
+                feature_value.push_str(continuation);
+                bracket_depth += delimiter_depth(continuation, '[', ']');
+            }
+            let members = feature_value
+                .trim_start_matches('[')
+                .trim_end_matches(']')
+                .split(',')
+                .map(|member| member.trim().trim_matches('\"'))
+                .filter(|member| !member.is_empty())
+                .map(str::to_owned)
+                .collect();
+            features.insert(key.clone(), members);
         }
         if section.contains("dependencies") {
             let dependency_line = index + 1;
@@ -76,6 +114,7 @@ fn parse_manifest(root: &Path, path: &Path) -> Result<Manifest, std::io::Error> 
     Ok(Manifest {
         path: path.to_path_buf(),
         package,
+        features,
         dependencies,
     })
 }
@@ -176,7 +215,7 @@ fn dependency_architecture(manifests: &[Manifest]) -> (CheckResult, CheckResult)
 
     let architecture = CheckResult::applicable(
         "RG-005",
-        "workspace dependency graph is acyclic and Cast-SDK is adapter-only",
+        "workspace graph and formal/adapter dependency boundaries are enforced",
         architecture_findings,
     );
     let cast_pin = if cast_count == 0 {
@@ -208,6 +247,7 @@ fn enforce_product_boundaries(
     let domain_forbidden_tokens = [
         "ark", "axum", "cast", "cef", "hyper", "reqwest", "tauri", "tokio", "tower", "windows",
     ];
+    enforce_formal_root_boundary(manifest, &package, dependency, findings);
 
     if package == "crayon-domain"
         && domain_forbidden_tokens
@@ -251,6 +291,48 @@ fn enforce_product_boundaries(
                     .to_owned(),
         });
     }
+}
+
+fn enforce_formal_root_boundary(
+    manifest: &Manifest,
+    package: &str,
+    dependency: &Dependency,
+    findings: &mut Vec<Finding>,
+) {
+    let dependency_name = dependency.name.to_ascii_lowercase();
+    if package != "get-video" || !LEGACY_ROOT_DEPENDENCIES.contains(&dependency_name.as_str()) {
+        return;
+    }
+
+    let normalized_value = dependency
+        .value
+        .chars()
+        .filter(|character| !character.is_ascii_whitespace())
+        .collect::<String>()
+        .to_ascii_lowercase();
+    let feature_member = format!("dep:{dependency_name}");
+    let enabled_by_legacy = manifest
+        .features
+        .get("legacy-dev")
+        .is_some_and(|members| members.contains(&feature_member));
+    let enabled_by_other_feature = manifest
+        .features
+        .iter()
+        .any(|(feature, members)| feature != "legacy-dev" && members.contains(&feature_member));
+    if normalized_value.contains("optional=true") && enabled_by_legacy && !enabled_by_other_feature
+    {
+        return;
+    }
+
+    findings.push(Finding {
+        severity: Severity::Error,
+        path: display_path(&manifest.path),
+        line: Some(dependency.line),
+        message: format!(
+            "formal root legacy dependency `{}` must be optional and enabled exclusively by legacy-dev",
+            dependency.name
+        ),
+    });
 }
 
 fn find_cycle(graph: &BTreeMap<String, Vec<String>>) -> Option<Vec<String>> {

@@ -180,6 +180,20 @@ fn fnd_07d_command_surface_and_module_wiring_unchanged() {
             "mod login;",
         ],
     );
+    // 命令必须从实际所有者模块导入；仅锁 handler 名称不足以证明 app 可编译。
+    assert_markers_present(
+        LEGACY_APP_MAIN,
+        "FND-07D command owner wiring",
+        &[
+            "use commands::{extract, lan_addr, report_log, sniff};",
+            "use login::{close_login, open_login};",
+        ],
+    );
+    assert_forbidden_markers_absent(
+        LEGACY_APP_MAIN,
+        "FND-07D stale command owner wiring",
+        &["use commands::{close_login"],
+    );
     // 登录窗口行为标记：复用同一窗口、可见、标题不变。
     assert_markers_present(
         LEGACY_LOGIN,
@@ -253,11 +267,34 @@ fn fnd_07e_assembly_entry_and_cli_markers() {
 }
 
 #[test]
+fn fnd_12_legacy_sniff_rejects_invalid_url_without_panicking() {
+    assert_markers_present(
+        LEGACY_SNIFF,
+        "FND-12-R2 typed sniff URL validation",
+        &[
+            "fn parse_sniff_url",
+            "let external_url = parse_sniff_url(url)?;",
+        ],
+    );
+    assert_forbidden_markers_absent(
+        LEGACY_SNIFF,
+        "FND-12-R2 panic-free sniff URL validation",
+        &["url_owned.parse().unwrap()"],
+    );
+}
+
+#[test]
 fn rl_001_formal_build_excludes_general_purpose_lan_router() {
     assert_markers_present(
         ROOT_CARGO,
         "RL-001 feature boundary",
-        &["default = [\"formal-product\"]", "legacy-dev = []"],
+        &[
+            "default = [\"formal-product\"]",
+            "legacy-dev = [",
+            "\"dep:axum\"",
+            "\"dep:reqwest\"",
+            "\"dep:tokio\"",
+        ],
     );
     assert_markers_present(
         ROOT_LIB,

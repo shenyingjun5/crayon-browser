@@ -11,20 +11,20 @@
 | [`testing-standard.md`](testing-standard.md) | 测试层级、fixture、平台矩阵和证据要求 |
 | [`test-cases.md`](test-cases.md) | 可执行测试用例目录 |
 | [`code-review-standard.md`](code-review-standard.md) | Code Review 维度、等级和合并条件 |
+| [`fnd-migration-review.md`](fnd-migration-review.md) | FND-12 基础迁移收口：依赖/红线/规模审计与验证证据（2026-08-10） |
 | [`med-security-review.md`](med-security-review.md) | MED 模块安全评审：威胁模型对照、RL 全集覆盖、性能/泄漏报告（2026-08-10） |
 | [`../crayon-private-cast-browser-technical-design.md`](../crayon-private-cast-browser-technical-design.md) | 完整技术背景与协议设计 |
 | [`../plans/README.md`](../plans/README.md) | 活跃 Roadmap 和下一批可领取任务 |
 
-## 当前基线（2026-08-09）
+## 当前基线（2026-08-10）
 
-- 根 crate：`get-video 0.1.0`，Rust 2021；正式 workspace 另含 domain、ipc、runtime、media-probe、media-observer、cast-policy、legacy-adapter 和 repo-guard；Tauri `app/demo` 被显式排除并独立保留。
-- 当前 UI：Tauri 2，属于迁移源，不是目标 CEF 架构。
-- `app/src/main.rs` 为 1231 行，混合窗口、注入脚本、候选、relay、诊断和 CLI，必须按基础迁移 Roadmap 拆分。
-- 9 个生产文件的内联测试已迁入同目录 `*_tests.rs`；生产文件只保留条件测试模块声明。
-- 当前 relay 暴露任意 URL `/proxy`、`/api/extract`、测试页面，并可监听 `0.0.0.0`；正式产品必须替换为 session/resource 路由。
-- 正式注入观察器不再包含自动播放、广告识别/跳过或 seek；旧通用 relay 只存在于显式 `legacy-dev` 编译路径。
-- `cargo test --workspace`：65 passed；`legacy-dev` 包为 92 passed、13 ignored；最近一次 `scripts/check.ps1 all` 为 49.9 秒。
-- PRD、技术方案和 Roadmap 当前均为新增文档，开发前仍需检查真实 Git 状态。
+- `FND-01..12` 与 `MED-01..18` 已全部 DONE：Core API v1、配置/本地化、确定性 test-support、媒体观察/预检/策略、授权 Relay 和 delivery 编排已落地。
+- 默认 `formal-product` 根包只直接依赖 6 个正式 Core crate；legacy 网络/CLI/解析依赖为 optional 且只能由 `legacy-dev` 显式启用，RG-005 持续门禁。
+- 当前可运行 UI 仍是被 workspace 排除的 Tauri 2 迁移源，不是目标 CEF 产品；其 `app/src/main.rs` 已降至 51 行装配代码，Windows App 12 项单测、严格 Clippy 和 CLI smoke 通过。
+- 正式 Relay 只提供高熵 session/resource 路由；任意 URL `/proxy`、`/api/extract` 和测试页面只存在于 legacy feature，正式 Release 产物扫描不含这些 surface。
+- 正式媒体观察器没有自动播放、广告识别/跳过或 seek；Browser process 可信输入与真实播放推进仍是投屏许可前置。
+- `scripts/check.ps1 fast/core/security`、Workspace Debug/Release 构建和 8 个正式 Release `.rlib` 的 RG-006 扫描通过；完整证据见 FND/MED 收口 Review。
+- CEF 壳、Cast-SDK 固定 revision、桌面平台采集、隐私 Profile、HarmonyOS 和发布链路尚未实现，不得把基础层完成表述为产品完成。
 
 ## FND-01 遗留契约基线（2026-08-09）
 
@@ -121,9 +121,10 @@ git diff --check                   # FND-01 交付前检查
 
 ## FND-07E 启动、Relay 与 CLI 装配收口（2026-08-10）
 
-- relay 启动迁至 `app/src/legacy_relay.rs`，CLI/UI-test 编排迁至 `app/src/cli.rs`，setup 装配迁至 `app/src/app.rs`；`app/src/main.rs` 降至 61 行，只含命令注册与装配入口。端口、route、线程、CLI marker 契约锁定不变（函数集合机器比对无丢失）。
-- 补齐 `app/icons/icon.ico` 与 `demo/icons/icon.ico`（由 64x64 `icon.png` 确定性生成），解除 FND-04 记录的 Windows 构建阻断；提交 `app/Cargo.lock` 保证 app 独立构建可复现。
-- legacy_contract 8 条、legacy 回归 58 条、`scripts/check.sh all`/`security` 通过；`cargo check --manifest-path app/Cargo.toml` 在本机被系统 WebKitGTK 2.38.2 < 2.40 阻断（openEuler 24.03，未绕过版本检查），需在达标环境补跑后 FND-07E 转 VERIFIED。
+- relay 启动迁至 `app/src/legacy_relay.rs`，CLI/UI-test 编排迁至 `app/src/cli.rs`，setup 装配迁至 `app/src/app.rs`；`app/src/main.rs` 为 51 行，只含命令注册与装配入口。端口、route、线程、CLI marker 契约锁定不变。
+- Windows 验证修复了登录命令仍从 `commands` 导入的 stale owner 接线；架构契约同时锁定 handler 顺序与实际模块 owner。独立 `app/Cargo.lock` 已补齐当前 policy/probe/relay 路径依赖。
+- Windows `cargo check --manifest-path app/Cargo.toml --locked --offline`、app 10 项真实单测、app 全目标严格 Clippy、合法 loopback sniff 与 extract 错误路径两条 CLI marker smoke 均通过；`scripts/check.ps1 all`/`security`、legacy_contract 8 条和 legacy 58 条回归通过。FND-07E 与 FND-07 Epic 已 DONE。
+- `--sniff-cli` 非法相对 URL panic、MED-18 security corpus 恒真断言和 formal 根包 legacy 依赖泄漏已由 FND-12 修复并加入回归门禁。
 
 ## FND-08 Core API v1 与 capability schema（2026-08-10）
 
@@ -158,6 +159,13 @@ git diff --check                   # FND-01 交付前检查
 
 - `MED-01..MED-18` 全部 DONE：observer（SourceObservation 校验/candidate 归并排序/生命周期）、media-probe（有界 HTTP/HLS·DASH·MP4 预检/保护证据保守合并）、cast-policy（唯一 Mirror/Direct/Relay/Reject 决策）、crayon-relay（CSPRNG session/vault/双面路由/network_guard/MP4 与 HLS 流式/runtime 收口）、app-runtime delivery 编排（单次降级无循环）。
 - 安全评审见 [`med-security-review.md`](med-security-review.md)：RL-001..015 全覆盖、30 分钟长稳 harness（6.9GB 流量 RSS 平台期）、首字节附加延迟 p50 ≈722µs、Release 产物 RG-006 全过。
+
+## FND-12 基础迁移收口（2026-08-10）
+
+- FND V0 全量 Review 已完成，三项 finding 全部关闭：有效化 HLS security corpus 断言、消除非法 sniff URL panic、把根包 legacy 运行时依赖收紧为 `legacy-dev` 专属 optional feature。
+- RG-005 现在同时验证 optional 属性、`legacy-dev` 显式启用以及其他 feature 不得泄漏；默认根包直接依赖图只剩 6 个正式 Core crate。
+- Windows App 12/12、Workspace/App 严格 Clippy、fast/core/security、Debug/Release build、8 个正式 Release 产物扫描和真实非法 URL CLI smoke 全部通过。
+- 独立审查与未覆盖项见 [`fnd-migration-review.md`](fnd-migration-review.md)；结论只覆盖基础迁移层，下一阶段仍需 CEF/Cast-SDK/平台与真机证据。
 
 ## 事实更新规则
 

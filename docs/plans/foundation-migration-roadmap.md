@@ -1,6 +1,6 @@
 # FND：基础工程与 Legacy 迁移 Roadmap
 
-状态：`FND-01/02/03/04/05/06/07A/07B/07C/07D/08/09/10/11 DONE`，`FND-07E IMPLEMENTED`（app 整体编译验证待 WebKitGTK ≥ 2.40 环境），`FND-12 IN_PROGRESS`。
+状态：`FND-01/02/03/04/05/06/07A/07B/07C/07D/07E/08/09/10/11/12 DONE`；FND V0 已收口。
 
 ## 目标
 
@@ -126,9 +126,10 @@
 ### FND-07：拆分 Tauri 迁移源
 
 - 类型：迁移 Epic；完成条件为 `FND-07A`～`FND-07E` 全部 `DONE`。
-- 状态：`IN_PROGRESS`
+- 状态：`DONE`
 - 依赖：FND-04、FND-05。
 - 不做：修改嗅探算法、端口/路由、CLI 输出、登录持久化、正式产品功能或修复 legacy 行为。
+- 完成证据（2026-08-10）：`FND-07A`～`FND-07E` 全部 DONE；legacy Tauri 迁移源完成职责拆分，`main.rs` 仅 51 行装配代码；Windows `--locked --offline` build、真实 app 测试、CLI smoke、all/security 与任务级 Review 均通过。正式 CEF E2E 完成前继续保留该 legacy 回归入口。
 
 #### FND-07A：迁移嗅探脚本资源
 
@@ -172,14 +173,14 @@
 
 #### FND-07E：收口启动、Relay 与 CLI 装配
 
-- 状态：`IMPLEMENTED`；依赖：FND-07D。
+- 状态：`DONE`；依赖：FND-07D。
 - 修改：`app/src/legacy_relay.rs`、`app/src/cli.rs`、`app/src/app.rs`、`app/src/main.rs`、缺失的构建资源。
 - 工作：移动 legacy relay 启动和 CLI/UI-test 编排；`main.rs` 只调用装配入口；补齐可复现的 Tauri build 前置资源。
 - 验证：`cargo check --manifest-path app/Cargo.toml`、CLI/UI smoke contract、all/security、文件规模。
 - 验收：`main.rs <300`；每个生产文件单一职责；app 可编译；端口、route、线程、CLI marker 与迁移前一致。
 - 证据：S2。
 - 完成证据（2026-08-10）：relay 启动逐字迁至 `app/src/legacy_relay.rs`（`LegacyRelay` 显式携带 handle/base/lan_base/dash_store）；CLI/UI-test/probe-eval 编排逐字迁至 `app/src/cli.rs`（`parse_cli_modes`/`run_cli_modes`）；setup 装配逐字迁至 `app/src/app.rs`；`main.rs` 242→61 行，只含命令注册与装配入口。函数集合机器比对：无丢失，仅新增 4 个装配函数（`setup`/`start_legacy_relay`/`parse_cli_modes`/`run_cli_modes`）。补齐 Windows 构建资源 `app/icons/icon.ico` 与 `demo/icons/icon.ico`（由既有 64x64 `icon.png` 确定性生成的 PNG-in-ICO，解除 FND-04 记录的 Windows 构建阻断）；提交 `app/Cargo.lock` 保证 app 独立构建可复现。legacy_contract 新增 FND-07E 装配契约（main.rs <300 行、CLI marker 逐字锁定、模块接线），RG-004 relay 基线改锁 `legacy_relay.rs`。验证：`cargo test --test legacy_contract` 8/8；legacy lib 58/58；app 侧 13 条测试经 `#[path]` harness 通过；`scripts/check.sh all` 与 `security` 通过；`cargo fmt --all -- --check`、`git diff --check` 通过。`cargo check --manifest-path app/Cargo.toml`：**未通过（环境阻断）**——openEuler 24.03 系统 webkit2gtk-4.1 为 2.38.2，wry 要求 >= 2.40（错误：`Package dependency requirement 'webkit2gtk-4.1 >= 2.40' could not be satisfied`）；按 README 既定口径不绕过系统库版本检查。端口、route、线程、CLI marker 与迁移前一致（契约锁定）。任务级 Code Review P0/P1/P2/P3 均为 0。
-- 转 VERIFIED/DONE 条件：在 WebKitGTK ≥ 2.40 的 Linux 或 macOS/Windows 机器上 `cargo check --manifest-path app/Cargo.toml` 通过并补跑 CLI smoke（`--sniff-cli`/`--extract-cli` marker 输出）。
+- Windows 完成证据（2026-08-10）：先以新增 command-owner 契约稳定复现 `main.rs` 从错误模块导入 `open_login`/`close_login`，再改为由 `login` owner 导入；Rust 2024 compatibility 级联错误随根因关闭。`app/Cargo.lock` 补齐 MED 后新增的 policy/probe/relay 路径依赖；`cargo check --manifest-path app/Cargo.toml --locked --offline` PASS，证明独立 app 依赖解析可复现。`cargo test --manifest-path app/Cargo.toml --locked --offline -j 1` 10/10；app 全目标严格 Clippy PASS；合法 loopback fixture 的 `--sniff-cli` 以 0 退出并输出 `SNIFF_RESULT_JSON`，`--extract-cli not-a-url` 以 0 退出并输出 `EXTRACT_RESULT_JSON`，均不访问公网。`scripts/check.ps1 all`（113.8s）与 `security`（8.6s）、legacy_contract 8/8、legacy lib 58/58、legacy fixture 29/29、本地 integration 8/8、format、repo guard 和 `git diff --check` 全部 PASS。任务级 Review P0/P1/P2/P3=0；Rust 1.96 全 workspace Clippy 的既有 MED-18 测试失败和非法 sniff CLI URL 的既有 panic 已登记为 FND-12-R1/R2，不由本任务夹带修复。
 
 ### FND-08：冻结 Core API v1 与 capability schema
 
@@ -231,13 +232,18 @@
 
 ### FND-12：基础迁移收口 Review
 
-- 状态：`TODO`
+- 状态：`DONE`
 - 依赖：FND-04、FND-05、FND-06、FND-07、FND-08、FND-09、FND-10、FND-11。
 - 修改：Roadmap/current 文档；仅修 Review finding。
 - 工作：全量架构/安全/测试 Review；核对依赖图、文件规模、legacy 正式隔离、Core API 和测试入口。
 - 验证：fast/core/security、workspace build、Release artifact scan、`git diff --check`。
 - 验收：无 P0/P1；P2 有任务；V0 完成；CEF/MED/SDK 前置可解锁。
 - 证据：S2。
+- Review finding（全部关闭）：
+  - `FND-12-R1`——Rust 1.96 严格 workspace Clippy 发现 security corpus 恒真断言；已改为成功结果线性有界、失败只接受 `HlsError::NotHls`，目标测试与全 workspace `-D warnings` 通过。
+  - `FND-12-R2`——legacy `--sniff-cli not-a-url` 的 URL `unwrap` panic；已在主线程 dispatch 前返回结构化错误，新增独立单测/架构契约，真实 CLI exit 0、无 panic/端口残留。
+  - `FND-12-R3`——默认 formal 根包无条件携带 legacy 依赖；13 个 legacy 依赖已改为 optional 且只能由 `legacy-dev` 显式启用，RG-005 覆盖非 optional、正确接线和其他 feature 泄漏三类用例，默认直接依赖图只剩 6 个正式 Core crate。
+- 完成证据（2026-08-10）：独立 Review 见 `docs/current/fnd-migration-review.md`，P0/P1/P2/P3=0。`cargo clippy --workspace --all-targets -- -D warnings` 与 app 全目标严格 Clippy PASS；app `--locked --offline` check PASS、12/12 单测；legacy_contract 9/9；`scripts/check.ps1 fast/core/security` 全部 PASS；`cargo build --workspace` 和 `cargo build --workspace --release` PASS；默认正式依赖闭包 8 个 Release `.rlib` 的 RG-006 全部 PASS；非法 sniff URL 真实 CLI smoke 输出结构化 marker 且无残留监听；format、repo guard、`git diff --check` PASS。规模强提醒仅命中两个 feature-gated legacy 函数，保持整体的理由已写入 Review；CEF、Cast-SDK、平台/真机/发布证据明确不在 FND 范围。FND V0 完成，下一阶段按 CEF/SDK 前置继续。
 
 ## 提交顺序
 

@@ -18,8 +18,13 @@ const SNIFF_MAX_WAIT: Duration = Duration::from_secs(12);
 const SNIFF_MAX_WAIT_EXTENDED: Duration = Duration::from_secs(25);
 const SNIFF_TAIL: Duration = Duration::from_secs(3);
 
+fn parse_sniff_url(url: &str) -> Result<tauri::Url, String> {
+    url.parse().map_err(|error| format!("URL 无效: {error}"))
+}
+
 /// 核心嗅探流程：创建隐藏 webview 加载目标页，收集命中，关闭窗口，归一化结果。
 pub(crate) async fn do_sniff(app: &AppHandle, url: &str) -> Result<SniffResponse, String> {
+    let external_url = parse_sniff_url(url)?;
     let state = app.state::<Arc<AppState>>();
     let relay_base = state.relay_base.clone();
     let hits_arc: Arc<Mutex<Vec<SniffHit>>> = Arc::new(Mutex::new(Vec::new()));
@@ -44,14 +49,13 @@ pub(crate) async fn do_sniff(app: &AppHandle, url: &str) -> Result<SniffResponse
     // 创建隐藏 webview（GTK 要求主线程，走 run_on_main_thread）
     let label = format!("sniff-{}", std::process::id());
     let app2 = app.clone();
-    let url_owned = url.to_string();
     let label2 = label.clone();
     let (tx, rx) = tokio::sync::oneshot::channel();
     app.run_on_main_thread(move || {
         let r = WebviewWindowBuilder::new(
             &app2,
             &label2,
-            WebviewUrl::External(url_owned.parse().unwrap()),
+            WebviewUrl::External(external_url),
         )
         .title("sniff")
         .visible(false)
@@ -222,3 +226,7 @@ new Image().src='http://127.0.0.1:8377/diag?msg='+encodeURIComponent(msg);
         note,
     })
 }
+
+#[cfg(test)]
+#[path = "legacy_sniff_tests.rs"]
+mod tests;

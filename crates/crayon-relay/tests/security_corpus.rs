@@ -31,7 +31,20 @@ fn malformed_playlists_never_panic() {
             let out = rewrite(&parsed, "https://cdn.example.com/x.m3u8", 0, |_url| {
                 Ok("/s/t/r/r1/a".to_string())
             });
-            assert!(out.is_ok() || matches!(out, Err(_)), "corpus {i}");
+            match out {
+                Ok(rewritten) => assert!(
+                    rewritten.len()
+                        <= body
+                            .len()
+                            .saturating_add(parsed.line_count().saturating_mul(64)),
+                    "corpus {i} rewrite output must remain linearly bounded"
+                ),
+                Err(error) => assert_eq!(
+                    error,
+                    HlsError::NotHls,
+                    "corpus {i} may only reject an invalid URI"
+                ),
+            }
         }
     }
     // 加密拒绝稳定

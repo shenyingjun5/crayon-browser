@@ -178,6 +178,33 @@ fn legacy_adapter_is_available_only_to_the_explicit_legacy_app() {
 }
 
 #[test]
+fn formal_root_requires_legacy_runtime_dependencies_to_be_optional() {
+    let rejected = TestRepo::new("formal-root-legacy-runtime");
+    rejected.write(
+        "Cargo.toml",
+        "[package]\nname = \"get-video\"\nversion = \"0.1.0\"\n[dependencies]\nreqwest = \"0.12\"\n",
+    );
+    rejected.write("src/lib.rs", "pub fn value() {}\n");
+    assert_eq!(status(&rejected, "RG-005"), CheckStatus::Failed);
+
+    let accepted = TestRepo::new("formal-root-optional-runtime");
+    accepted.write(
+        "Cargo.toml",
+        "[package]\nname = \"get-video\"\nversion = \"0.1.0\"\n[features]\nlegacy-dev = [\"dep:reqwest\"]\n[dependencies]\nreqwest = { version = \"0.12\", optional = true }\n",
+    );
+    accepted.write("src/lib.rs", "pub fn value() {}\n");
+    assert_eq!(status(&accepted, "RG-005"), CheckStatus::Passed);
+
+    let leaked = TestRepo::new("formal-root-feature-leak");
+    leaked.write(
+        "Cargo.toml",
+        "[package]\nname = \"get-video\"\nversion = \"0.1.0\"\n[features]\nformal-product = [\"dep:reqwest\"]\nlegacy-dev = [\"dep:reqwest\"]\n[dependencies]\nreqwest = { version = \"0.12\", optional = true }\n",
+    );
+    leaked.write("src/lib.rs", "pub fn value() {}\n");
+    assert_eq!(status(&leaked, "RG-005"), CheckStatus::Failed);
+}
+
+#[test]
 fn release_fixture_asset_fails_rg_006() {
     let repo = TestRepo::new("release-asset");
     repo.write("Cargo.toml", &basic_manifest("release-asset"));

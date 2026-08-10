@@ -597,26 +597,39 @@ dependencies = [
 name = "crayon-app-runtime"
 version = "0.1.0"
 dependencies = [
+ "crayon-cast-policy",
  "crayon-domain",
  "crayon-ipc-schema",
+ "crayon-media-observer",
+ "crayon-media-probe",
+ "crayon-relay",
+ "url",
 ]
 
 [[package]]
 name = "crayon-cast-policy"
 version = "0.1.0"
 dependencies = [
+ "crayon-domain",
+ "crayon-ipc-schema",
  "crayon-media-observer",
+ "crayon-media-probe",
 ]
 
 [[package]]
 name = "crayon-domain"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "toml 0.8.2",
+]
 
 [[package]]
 name = "crayon-ipc-schema"
 version = "0.1.0"
 dependencies = [
  "crayon-domain",
+ "serde",
 ]
 
 [[package]]
@@ -629,10 +642,38 @@ dependencies = [
 [[package]]
 name = "crayon-media-observer"
 version = "0.1.0"
+dependencies = [
+ "crayon-domain",
+ "url",
+]
 
 [[package]]
 name = "crayon-media-probe"
 version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "reqwest 0.12.28",
+ "tokio",
+ "url",
+]
+
+[[package]]
+name = "crayon-relay"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "crayon-domain",
+ "crayon-ipc-schema",
+ "crayon-media-probe",
+ "futures-util",
+ "getrandom 0.2.17",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tokio",
+ "url",
+ "zeroize",
+]
 
 [[package]]
 name = "crc32fast"

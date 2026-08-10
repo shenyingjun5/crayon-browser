@@ -35,12 +35,12 @@
 8. `FND-07B` 共享模型与状态所有权拆分：当前 `DONE`。
 9. `FND-07C` 拆分 legacy Beacon 与网络地址：当前 `DONE`。
 10. `FND-07D` 拆分 legacy 命令与探测编排：当前 `DONE`。
-11. `FND-07E` 收口启动、Relay 与 CLI 装配：当前 `IMPLEMENTED`（代码完成；`cargo check --manifest-path app/Cargo.toml` 被本机 WebKitGTK 2.38.2 < 2.40 阻断，需在达标环境补跑后转 VERIFIED）。
+11. `FND-07E` 收口启动、Relay 与 CLI 装配：当前 `DONE`（Windows app 可复现构建、真实 app 测试、严格 Clippy 与两条 CLI smoke 已通过）。
 12. `FND-08` 冻结 Core API v1 与 capability schema：当前 `DONE`。
 13. `FND-09` 建立确定性 test-support：当前 `DONE`。
 14. `FND-10` 把公网测试降级为手工兼容测试：当前 `DONE`。
 15. `FND-11` 建立配置加载与本地化资源：当前 `DONE`。
-16. `FND-12` 基础迁移收口 Review：当前 `BLOCKED`（依赖 FND-07 Epic 全 DONE；FND-07E 待 WebKitGTK ≥ 2.40 环境编译验证）。
+16. `FND-12` 基础迁移收口 Review：当前 `DONE`（三项 finding 全部关闭，依赖/红线/规模/测试/Release 产物 Review 完成）。
 17. `MED-01` SourceObservation 校验与 navigation 约束：当前 `DONE`。
 18. `MED-02` candidate 归一化与证据合并：当前 `DONE`。
 19. `MED-03` candidate 置信排序：当前 `DONE`。
@@ -60,9 +60,9 @@
 33. `MED-17` app-runtime delivery 编排（Planner→direct/relay/mirror）：当前 `DONE`。
 34. `MED-18` 安全 Review 与收口（threat model/fuzz/30 分钟 harness）：当前 `DONE`。
 
-`MED` 模块 18 个原子任务全部 DONE（2026-08-10）。后续可领任务均需外部条件：FND-07E/FND-12 需 WebKitGTK ≥ 2.40 或 macOS/Windows 环境；CEF-01 需 CEF 二进制可下载的工具链环境；SDK-01 需 Cast-SDK 仓库位置与接入授权；PRV/PLT/HM/QAR 级联依赖上述解锁。
+`FND` 模块 19 个唯一原子任务与 `MED` 模块 18 个原子任务全部 DONE（2026-08-10），FND V0 已收口。下一候选为 `CEF-01`（需固定 CEF revision、可用二进制和三平台 configure 证据）或 `SDK-01`（需固定 Cast-SDK revision 与正式接入授权）；领取前先把对应外部前置核实为可用，PRV/PLT/HM/QAR 再按依赖级联解锁。
 
-`FND-07` 是迁移 Epic，实际按 `FND-07A`～`FND-07E` 顺序执行；`FND-07E` 代码已收口，仅剩达标环境下的编译/CLI smoke 验证。MED 按自身依赖推进（MED-01 依赖 FND-06/FND-08，均 DONE）。
+`FND-07` 已按 `FND-07A`～`FND-07E` 顺序完成；FND-12 又关闭了 security corpus 恒真断言、非法 sniff URL panic 与 formal 根包 legacy 依赖泄漏。稳定结论和未覆盖项见 `docs/current/fnd-migration-review.md`。
 
 ## 状态更新规则
 
