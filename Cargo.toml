@@ -23,6 +23,7 @@ members = [
     "crates/crayon-cast-policy",
     "tools/repo-guard",
     "test-support",
+    "crates/crayon-relay",
 ]
 exclude = ["app", "demo"]
 

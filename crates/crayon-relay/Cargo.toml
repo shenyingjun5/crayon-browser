@@ -1,0 +1,15 @@
+[package]
+name = "crayon-relay"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Session-scoped media relay: opaque tokens, TTL, receiver binding, revocation"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+crayon-domain = { path = "../crayon-domain" }
+crayon-ipc-schema = { path = "../crayon-ipc-schema" }
+getrandom = "0.2"

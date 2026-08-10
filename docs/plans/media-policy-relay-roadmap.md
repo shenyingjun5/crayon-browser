@@ -1,6 +1,6 @@
 # MED：媒体观察、策略与 Session Relay Roadmap
 
-状态：`MED-01/02/03/04/05/06/07/08 DONE`，`MED-09 IN_PROGRESS`。本模块不做设备协议、浏览器对象和平台采集。
+状态：`MED-01/02/03/04/05/06/07/08/09 DONE`，`MED-10 IN_PROGRESS`。本模块不做设备协议、浏览器对象和平台采集。
 
 ## 原子任务
 
@@ -18,6 +18,7 @@
 - **MED-06（2026-08-10，commit 见 git log）**：`crayon-media-probe` 新增 `hls`（播放列表检查解析：variant 的 bandwidth/resolution/codecs/URI、EXT-X-MEDIA rendition、EXT-X-KEY/SESSION-KEY 加密事实、EXT-X-MAP、ENDLIST；相对 URI 转绝对；行数上限 10k）与 `inspect`（`MediaInspector` 编排：content-type/`#EXTM3U` 内容嗅探选路，HEAD 405 回退有界 Range，PL-003；MP4 ftyp 主品牌识别只读首 4KB；DASH ContentProtection/Representation 计数；不识别 → `Unknown` 而非报错）。硬性规则实测：不下载主体（Range 录制断言）、不请求 key（key 路由 hit_count=0 断言，PL-005）、DRM 事实只作数据上报不产出直投资产（PL-006）。验证：`cargo test -p crayon-media-probe` 42/42（inspect 新增 6 条：PL-003/004/005/006、直播列表+内容嗅探、未知内容）；严格 Clippy、`check.sh all`、`git diff --check` 通过。Code Review P0/P1/P2/P3 均为 0。
 - **MED-07（2026-08-10，commit 见 git log）**：`crayon-media-probe::assess` 新增 `assess_protection`——证据合并（预检结论、EME `encrypted` 信号、blob/MediaStream 来源、codec 证据），保守优先级 `DrmProtected > NoDirectUrl > KeyRequired > Unknown > Clear`：EME 信号升级表面干净的 URL（BR-011）；blob/MediaStream 不伪造直投 URL（BR-012）；AES-128/SAMPLE-AES/SESSION-KEY 一律 `KeyRequired`（当前合规姿态拒绝直投，区别于 legacy 的 AES-128 可播）；预检不确定 → `Unknown` 不静默放行；codec 证据透传、未得出保持 None 不猜测。验证：media-probe 49/49（assess 新增 7 条：clean/KeyRequired/DrmProtected/EME 升级/blob/Unknown 保守/codec 透传）；严格 Clippy、`check.sh all`、`git diff --check` 通过。Code Review P0/P1/P2/P3 均为 0。
 - **MED-08（2026-08-10，commit 见 git log）**：`crayon-cast-policy::decide` 落地唯一决策函数（设计 §9.2 顺序）：播放门禁 fail-closed（PL-010，页面自报/无激活/未推进均以稳定 CoreError 拒绝）→ DRM 全局拒绝 → KeyRequired/NoDirectUrl/Unknown 只允许 Mirror 兜底 → credential-bound 不出浏览器（PL-008）→ 接收端协议/编码不兼容降级或稳定拒绝（PL-007）→ 广告连续性未知且从头播放选 Mirror（PL-009）→ 其余按 headers_class 分 Direct（无特殊头）/Relay（Referer/UA 由 session relay 代持）。Mirror 需 tab_video 能力，缺 system_audio 时带 `Degradation::NoSystemAudio` 显式降级原因（PL-011）；无采集能力则 `capabilities_unavailable` 稳定拒绝。`CastPolicyDecision` 新增 `Relay` 变体（v1 窗口内向后兼容：previous 向量仍全部可解析，RG-007 通过）并补 golden 向量。跨平台 golden（PL-013）：桌面 CEF 与 ArkWeb 受限能力下安全结论一致、仅可用模式不同。cast-policy 新增对 domain/ipc-schema/media-probe 的依赖（DTO 消费，无网络/平台）。验证：cast-policy 13/13（decide 9 条：PL-007~PL-011、PL-013、happy path、门禁矩阵）、ipc-schema 7/7（含 relay 向量）；严格 Clippy、`check.sh all`、`git diff --check` 通过。Code Review P0/P1/P2/P3 均为 0。
+- **MED-09（2026-08-10，commit 见 git log）**：新建 `crayon-relay` crate（workspace 成员）。`session` 模块：`SessionToken` 128-bit CSPRNG（getrandom），hex 为路由段、Debug 脱敏、常数时间比较、不含上游 URL（RL-002）；`SessionRegistry`——创建（receiver 绑定 + 可选首请求 IP + 固定 upstream allow-set + TTL 默认 2h + generation）、`authorize` 先于任何 upstream 访问（未知 token 401 类/IP 不匹配 403 类/过期/未注册资源，RL-003）、`stop` 立即失效且幂等（RL-004）、`revoke` 五触发器（Navigation/ProfileDestroyed/AppExit 全量，RouteLost/DeviceReplaced 按设备，RL-005）、TTL expire 清退、容量 32 session/128 resource 有界。时间全部调用方供给（逻辑毫秒）。secret 随记录 Drop 零化（复用 ipc-schema SessionSecret）。验证：`cargo test -p crayon-relay` 7/7（RL-002 熵与形状、RL-003 授权矩阵、allow-set 固定、RL-004、RL-005 触发器全集、TTL 边界、容量）；严格 Clippy、`check.sh all`、`git diff --check` 通过。Code Review P0/P1/P2/P3 均为 0。
 | MED-02 | MED-01 | `candidate/store` | candidate 归一化、证据合并、完整 URL 内存保存、脱敏 ID | PL-001、PL-002；query 不丢；无 secret serde | S1 DONE（2026-08-10） |
 | MED-03 | MED-02 | `candidate/ranking` | 当前播放、可见性、输入时间、来源置信排序 | BR-006；稳定排序/相同时间/音频 | S1 DONE（2026-08-10） |
 | MED-04 | MED-02 | `candidate/lifecycle` | navigation/TTL/cancel/generation 失效与有界容量 | BR-007、BR-013、PL-012；满载 eviction | S1 DONE（2026-08-10） |
@@ -25,7 +26,7 @@
 | MED-06 | MED-05 | `probe/mp4_hls_dash` | MP4/HLS/DASH AST/容器/代表资产预检 | PL-003..PL-006；不下载主体、不请求 key | S2 DONE（2026-08-10） |
 | MED-07 | MED-06 | `probe/protection_codec` | DRM/EME/加密/codec 证据合并，保守错误语义 | PL-005、PL-006、BR-011、BR-012 | S1 DONE（2026-08-10） |
 | MED-08 | MED-03,MED-04,MED-07 | `crayon-cast-policy` | 唯一 `Mirror/Direct/Relay/Reject` 纯函数和 stable reasons | PL-007..PL-014；跨平台 golden 完全一致 | S2 DONE（2026-08-10） |
-| MED-09 | FND-08,FND-09 | `crayon-relay/session` | session/resource/receiver/route/TTL 模型、CSPRNG ID、ManualClock | RL-002..RL-005；Drop/stop 幂等 | S1 |
+| MED-09 | FND-08,FND-09 | `crayon-relay/session` | session/resource/receiver/route/TTL 模型、CSPRNG ID、ManualClock | RL-002..RL-005；Drop/stop 幂等 | S1 DONE（2026-08-10） |
 | MED-10 | MED-09 | `relay/vault` | 不可序列化 secret recipe、origin/path/header scope、零化/撤销 | RL-004、RL-005、RL-014、RL-015；无 clone/debug 泄漏 | S1 |
 | MED-11 | MED-09 | `relay/router` | loopback control + LAN media router，仅 opaque route | RL-001、RL-003、RL-008；正式路由快照 | S2 |
 | MED-12 | MED-10,MED-11 | `relay/network_guard` | IP 分类、全 DNS 校验、固定地址、逐跳 redirect/scope | RL-006、RL-007、RL-015；SSRF/rebinding matrix | S2 |
