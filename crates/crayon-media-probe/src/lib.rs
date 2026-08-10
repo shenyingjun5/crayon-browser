@@ -1,11 +1,14 @@
 //! Bounded, platform-neutral media inspection primitives.
 
+mod assess;
 mod codec;
 mod frame;
 mod hls;
 pub mod http;
-mod inspect;
+pub mod inspect;
 mod protection;
+
+pub use assess::{assess_protection, Protection, ProtectionAssessment, ProtectionEvidence};
 
 pub use codec::{
     codec_name, codecs_from_m3u8, hls_container, mp4_codecs, segment_container, ts_codecs,
