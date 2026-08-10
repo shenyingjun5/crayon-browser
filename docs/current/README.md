@@ -112,6 +112,12 @@ git diff --check                   # FND-01 交付前检查
 - 新增 beacon route 契约/query 边界测试 3 条与 LAN helper 不变量测试 2 条（dev-only `tower` 依赖，不进入生产构建图）；`app/src/main.rs` 从 881 行降至 757 行。
 - RG-004 契约改锁 `legacy_beacon.rs` 固定端口基线；legacy 回归 58 条、legacy_contract 6 条、`scripts/check.sh all` 通过；app 整体编译/Clippy 受本机 WebKitGTK 2.38 阻断，新测试经 `#[path]` harness 运行。
 
+## FND-07D Legacy 命令与探测编排拆分（2026-08-10）
+
+- Tauri commands 与提取编排迁至 `app/src/commands.rs`，嗅探编排迁至 `legacy_sniff.rs`，解码探针迁至 `legacy_probe.rs`，登录窗口/Cookie 读取迁至 `login.rs`；探针候选筛选为纯函数，入 `models.rs`。handler 名称、注册顺序与序列化输出不变（函数集合机器比对一致）。
+- `app/src/main.rs` 从 757 行降至 242 行，只含装配入口；legacy_contract 新增命令面/模块接线/登录窗口契约，BR-009/BR-010 红线扫描覆盖全部 app 模块。
+- app 侧 13 条测试经 `#[path]` harness 通过；legacy 回归 58 条、legacy_contract 7 条、`scripts/check.sh all` 通过；app 整体编译/Clippy 仍受 WebKitGTK 2.38 阻断（FND-07E 收口）。
+
 ## 事实更新规则
 
 - 完成模块 Roadmap 后，把稳定结论收敛到本目录，再归档实施过程。

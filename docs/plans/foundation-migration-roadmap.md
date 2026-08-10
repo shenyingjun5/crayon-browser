@@ -1,6 +1,6 @@
 # FND：基础工程与 Legacy 迁移 Roadmap
 
-状态：`FND-01/02/03/04/05/06/07A/07B/07C DONE`，`FND-07D IN_PROGRESS`。
+状态：`FND-01/02/03/04/05/06/07A/07B/07C/07D DONE`，`FND-07E IN_PROGRESS`。
 
 ## 目标
 
@@ -162,12 +162,13 @@
 
 #### FND-07D：拆分 legacy 命令与探测编排
 
-- 状态：`TODO`；依赖：FND-07C。
+- 状态：`DONE`；依赖：FND-07C。
 - 修改：`app/src/commands.rs`、`app/src/legacy_sniff.rs`、`app/src/legacy_probe.rs`、`app/src/login.rs`。
 - 工作：纯移动 Tauri commands、隐藏窗口嗅探、解码探针、提取和登录窗口；handler 名称与序列化输出不变。
 - 验证：command surface contract、候选筛选测试、登录窗口 build、legacy CLI 回归。
 - 验收：每模块单一变化原因；无自动播放/点击/seek；Cookie 不进入日志或 formal crate。
 - 证据：S2。
+- 完成证据（2026-08-10）：Tauri commands（`sniff`/`extract`/`report_log`/`lan_addr`）与 L1/L3 提取编排（`do_extract`/`load_rule_pack`）逐字迁至 `app/src/commands.rs`；隐藏窗口嗅探（`do_sniff` + SNIFF 超时常量）逐字迁至 `app/src/legacy_sniff.rs`；解码探针（`probe_one`/`probe_scrambled`）逐字迁至 `app/src/legacy_probe.rs`；登录窗口与站点 Cookie 读取（`open_login`/`close_login`/`site_cookie_header`）逐字迁至 `app/src/login.rs`；探针候选筛选（`sniff_probe_targets`/`extract_probe_targets`）为纯函数，移入 `ProbeTarget` 所在的 `app/src/models.rs` 以保持 Tauri-free 可测试。handler 名称、注册顺序、序列化输出、日志与同步语义不变；`main.rs` 757→242 行。函数集合机器比对迁移前后一致（仅新增测试函数）。legacy_contract 新增 FND-07D 命令面/模块接线/登录窗口标记契约，BR-009/BR-010 红线扫描扩展到全部新模块。新增候选筛选测试 2 条（restriction/DRM/非原生协议/HEVC/无 relay 均排除，url 与 relay_url 原样保留）。验证：app 侧 13 条测试经 `#[path]` harness 全部实际运行通过；legacy lib 58/58；legacy_contract 7/7；`scripts/check.sh all` 通过（guard/format/formal-workspace/legacy-package）；`cargo fmt --all -- --check`、`git diff --check` 通过。app 整体编译/Clippy 与登录窗口真机 build 受本机 WebKitGTK 2.38 < 2.40 阻断（FND-07E 既定范围），按“未运行”记录。任务级 Code Review P0/P1/P2/P3 均为 0。
 
 #### FND-07E：收口启动、Relay 与 CLI 装配
 

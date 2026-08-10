@@ -21,6 +21,17 @@ const LEGACY_BEACON: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/app/src/legacy_beacon.rs"
 ));
+const LEGACY_COMMANDS: &str =
+    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/app/src/commands.rs"));
+const LEGACY_SNIFF: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/app/src/legacy_sniff.rs"
+));
+const LEGACY_PROBE: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/app/src/legacy_probe.rs"
+));
+const LEGACY_LOGIN: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/app/src/login.rs"));
 const ROOT_CARGO: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml"));
 const ROOT_LIB: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lib.rs"));
 const APP_CARGO: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/app/Cargo.toml"));
@@ -58,7 +69,13 @@ fn fnd_07a_sniffer_script_is_external_and_integrity_locked() {
     assert_markers_present(
         LEGACY_APP_MAIN,
         "FND-07A resource loading",
-        &["mod legacy_sniffer;", "use legacy_sniffer::SNIFF_JS;"],
+        &["mod legacy_sniffer;", "mod legacy_sniff;"],
+    );
+    // FND-07D 起注入脚本由 legacy_sniff 编排引用。
+    assert_markers_present(
+        LEGACY_SNIFF,
+        "FND-07A resource usage",
+        &["use crate::legacy_sniffer::SNIFF_JS;"],
     );
     assert_markers_present(
         LEGACY_SNIFFER_LOADER,
@@ -82,7 +99,14 @@ fn fnd_07a_sniffer_script_is_external_and_integrity_locked() {
 
 #[test]
 fn br_009_formal_observer_does_not_filter_or_identify_ads() {
-    for source in [LEGACY_APP_MAIN, LEGACY_SNIFFER_JS] {
+    for source in [
+        LEGACY_APP_MAIN,
+        LEGACY_SNIFFER_JS,
+        LEGACY_COMMANDS,
+        LEGACY_SNIFF,
+        LEGACY_PROBE,
+        LEGACY_LOGIN,
+    ] {
         assert_forbidden_markers_absent(
             source,
             "BR-009",
@@ -100,7 +124,14 @@ fn br_009_formal_observer_does_not_filter_or_identify_ads() {
 
 #[test]
 fn br_010_formal_observer_does_not_play_click_or_seek() {
-    for source in [LEGACY_APP_MAIN, LEGACY_SNIFFER_JS] {
+    for source in [
+        LEGACY_APP_MAIN,
+        LEGACY_SNIFFER_JS,
+        LEGACY_COMMANDS,
+        LEGACY_SNIFF,
+        LEGACY_PROBE,
+        LEGACY_LOGIN,
+    ] {
         assert_forbidden_markers_absent(
             source,
             "BR-010",
@@ -114,6 +145,45 @@ fn br_010_formal_observer_does_not_play_click_or_seek() {
             ],
         );
     }
+}
+
+#[test]
+fn fnd_07d_command_surface_and_module_wiring_unchanged() {
+    // 命令面契约：六个 handler 名称与注册顺序不变（前端 invoke 依赖）。
+    assert_markers_present(
+        LEGACY_APP_MAIN,
+        "FND-07D command surface",
+        &[
+            "tauri::generate_handler![",
+            "sniff,",
+            "extract,",
+            "report_log,",
+            "open_login,",
+            "close_login,",
+            "lan_addr",
+        ],
+    );
+    // 模块接线：编排代码只存在于 FND-07D 指定模块。
+    assert_markers_present(
+        LEGACY_APP_MAIN,
+        "FND-07D module wiring",
+        &[
+            "mod commands;",
+            "mod legacy_probe;",
+            "mod legacy_sniff;",
+            "mod login;",
+        ],
+    );
+    // 登录窗口行为标记：复用同一窗口、可见、标题不变。
+    assert_markers_present(
+        LEGACY_LOGIN,
+        "FND-07D login window build",
+        &[
+            "get_webview_window(\"login\")",
+            ".visible(true)",
+            "站点登录（登录完成后直接关闭本窗口）",
+        ],
+    );
 }
 
 #[test]

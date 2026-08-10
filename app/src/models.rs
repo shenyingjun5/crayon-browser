@@ -54,6 +54,45 @@ pub(crate) struct ProbeTarget {
     pub(crate) relay_url: String,
 }
 
+/// 嗅探结果中需要跑解码探针的候选（未受限、非 DRM、原生可播协议，
+/// 且编码是 webview 能解码的——HEVC/AV1 等跳过，避免「没画面 ≠ 流坏」误判）。
+pub(crate) fn sniff_probe_targets(resp: &SniffResponse) -> Vec<ProbeTarget> {
+    resp.results
+        .iter()
+        .filter(|r| {
+            r.restriction.is_none()
+                && !r.drm
+                && (r.protocol == "hls" || r.protocol == "mp4")
+                && get_video::probe::webview_can_judge(r.codec.as_deref())
+        })
+        .filter_map(|r| {
+            r.relay_url.clone().map(|relay_url| ProbeTarget {
+                url: r.url.clone(),
+                relay_url,
+            })
+        })
+        .collect()
+}
+
+/// 提取结果中需要跑解码探针的候选（同嗅探链路的筛选口径）。
+pub(crate) fn extract_probe_targets(info: &get_video::extract::VideoInfo) -> Vec<ProbeTarget> {
+    info.formats
+        .iter()
+        .filter(|f| {
+            f.restriction.is_none()
+                && !f.drm
+                && (f.protocol == "hls" || f.protocol == "mp4")
+                && get_video::probe::webview_can_judge(f.codec.as_deref())
+        })
+        .filter_map(|f| {
+            f.relay_url.clone().map(|relay_url| ProbeTarget {
+                url: f.url.clone(),
+                relay_url,
+            })
+        })
+        .collect()
+}
+
 #[cfg(test)]
 #[path = "models_tests.rs"]
 mod tests;

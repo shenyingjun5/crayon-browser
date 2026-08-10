@@ -34,9 +34,10 @@
 7. `FND-07A` 嗅探脚本资源迁移：当前 `DONE`。
 8. `FND-07B` 共享模型与状态所有权拆分：当前 `DONE`。
 9. `FND-07C` 拆分 legacy Beacon 与网络地址：当前 `DONE`。
-10. `FND-07D` 拆分 legacy 命令与探测编排：当前 `IN_PROGRESS`。
+10. `FND-07D` 拆分 legacy 命令与探测编排：当前 `DONE`。
+11. `FND-07E` 收口启动、Relay 与 CLI 装配：当前 `IN_PROGRESS`。
 
-`FND-07` 是迁移 Epic，实际按 `FND-07A`～`FND-07E` 顺序执行；当前只移动 Tauri commands、隐藏窗口嗅探、解码探针、提取和登录窗口，不得混入 Relay 或 CLI 装配。
+`FND-07` 是迁移 Epic，实际按 `FND-07A`～`FND-07E` 顺序执行；当前只移动 legacy relay 启动、CLI/UI-test 编排与装配收口，并补齐可复现的 Tauri build 前置资源。
 
 ## 状态更新规则
 
