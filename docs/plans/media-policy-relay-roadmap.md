@@ -1,12 +1,16 @@
 # MED：媒体观察、策略与 Session Relay Roadmap
 
-状态：等待 `FND-06`。本模块不做设备协议、浏览器对象和平台采集。
+状态：`MED-01 DONE`，`MED-02 IN_PROGRESS`。本模块不做设备协议、浏览器对象和平台采集。
 
 ## 原子任务
 
 | ID | 依赖 | 目标路径 | 实现输出 | 测试/验收 | 证据 |
 |---|---|---|---|---|---|
-| MED-01 | FND-06,FND-08 | `crayon-media-observer/observation` | `SourceObservation` 校验、大小/来源/navigation 约束 | BR-007、BR-008；非法 URL/长度/时间 | S1 |
+| MED-01 | FND-06,FND-08 | `crayon-media-observer/observation` | `SourceObservation` 校验、大小/来源/navigation 约束 | BR-007、BR-008；非法 URL/长度/时间 | S1 DONE（2026-08-10） |
+
+## 完成证据
+
+- **MED-01（2026-08-10，commit 见 git log）**：`crayon-media-observer::observation` 新增 `SourceObservation`——构造即校验（空/超长 >2048/非 http(s) URL 拒绝，含 2048 边界用例），携带 tab/navigation/frame/source/双 URL/逻辑时间戳；`NavigationId` 绑定 + `is_current` 支撑导航后旧 frame/worker 迟到上报丢弃（BR-007）；iframe/Worker/MSE 来源事实保留（BR-008）；类型无正文/表单/Cookie 字段（Debug 扫描断言）。observer crate 按架构表新增对 `crayon-domain` 的依赖（仅用 `TabId`）。验证：`cargo test -p crayon-media-observer` 6/6（新增 4 条：事实完整、非法 URL/长度/边界、BR-007、BR-008）；全 workspace 严格 Clippy、`scripts/check.sh all`、`git diff --check` 通过。Code Review P0/P1/P2/P3 均为 0。
 | MED-02 | MED-01 | `candidate/store` | candidate 归一化、证据合并、完整 URL 内存保存、脱敏 ID | PL-001、PL-002；query 不丢；无 secret serde | S1 |
 | MED-03 | MED-02 | `candidate/ranking` | 当前播放、可见性、输入时间、来源置信排序 | BR-006；稳定排序/相同时间/音频 | S1 |
 | MED-04 | MED-02 | `candidate/lifecycle` | navigation/TTL/cancel/generation 失效与有界容量 | BR-007、BR-013、PL-012；满载 eviction | S1 |

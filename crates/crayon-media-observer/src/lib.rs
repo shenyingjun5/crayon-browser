@@ -1,5 +1,11 @@
 //! Platform-neutral facts emitted by browser media observation.
 
+mod observation;
+
+pub use observation::{
+    FrameContext, NavigationId, ObservationError, ObservationSource, SourceObservation,
+};
+
 /// Provenance of a playback observation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ObservationOrigin {

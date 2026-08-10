@@ -40,9 +40,11 @@
 13. `FND-09` 建立确定性 test-support：当前 `DONE`。
 14. `FND-10` 把公网测试降级为手工兼容测试：当前 `DONE`。
 15. `FND-11` 建立配置加载与本地化资源：当前 `DONE`。
-16. `FND-12` 基础迁移收口 Review：当前 `IN_PROGRESS`。
+16. `FND-12` 基础迁移收口 Review：当前 `BLOCKED`（依赖 FND-07 Epic 全 DONE；FND-07E 待 WebKitGTK ≥ 2.40 环境编译验证）。
+17. `MED-01` SourceObservation 校验与 navigation 约束：当前 `DONE`。
+18. `MED-02` candidate 归一化与证据合并：当前 `IN_PROGRESS`。
 
-`FND-07` 是迁移 Epic，实际按 `FND-07A`～`FND-07E` 顺序执行；`FND-07E` 代码已收口，仅剩达标环境下的编译/CLI smoke 验证。
+`FND-07` 是迁移 Epic，实际按 `FND-07A`～`FND-07E` 顺序执行；`FND-07E` 代码已收口，仅剩达标环境下的编译/CLI smoke 验证。MED 按自身依赖推进（MED-01 依赖 FND-06/FND-08，均 DONE）。
 
 ## 状态更新规则
 

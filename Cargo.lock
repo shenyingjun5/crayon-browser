@@ -311,6 +311,9 @@ dependencies = [
 [[package]]
 name = "crayon-media-observer"
 version = "0.1.0"
+dependencies = [
+ "crayon-domain",
+]
 
 [[package]]
 name = "crayon-media-probe"

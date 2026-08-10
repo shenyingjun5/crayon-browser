@@ -148,6 +148,11 @@ git diff --check                   # FND-01 交付前检查
 - `browser/shared-ui/locales/` 建立 zh-CN/en-US 双语文案资源（16 键）；`config_locales` 契约测试保证 key parity 与零 secret。
 - 验证：config 10 条 + locale 2 条测试、全 workspace 严格 Clippy、`check.sh all` 通过。
 
+## MED-01 SourceObservation 校验（2026-08-10）
+
+- `crayon-media-observer::observation`：`SourceObservation` 构造即校验（空/超长/非 http(s) 拒绝），携带 tab/navigation/frame/source/双 URL/逻辑时间戳；`is_current` 支撑导航后迟到事件丢弃（BR-007）；iframe/Worker/MSE 来源事实保留（BR-008）。
+- observer 新增对 `crayon-domain` 的依赖（架构表允许）；6 条测试、严格 Clippy、`check.sh all` 通过。
+
 ## 事实更新规则
 
 - 完成模块 Roadmap 后，把稳定结论收敛到本目录，再归档实施过程。
