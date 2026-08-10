@@ -270,10 +270,17 @@ dependencies = [
 name = "crayon-app-runtime"
 version = "0.1.0"
 dependencies = [
+ "crayon-cast-policy",
  "crayon-domain",
  "crayon-ipc-schema",
+ "crayon-media-observer",
+ "crayon-media-probe",
+ "crayon-relay",
+ "reqwest",
  "serde_json",
  "test-support",
+ "tokio",
+ "url",
 ]
 
 [[package]]

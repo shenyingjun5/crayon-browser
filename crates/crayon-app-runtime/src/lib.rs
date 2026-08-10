@@ -1,5 +1,7 @@
 //! Platform-neutral product runtime composition.
 
+pub mod delivery;
+
 use crayon_domain::{ProductIdentity, ProductIdentityError, ProductMode};
 use crayon_ipc_schema::Handshake;
 
