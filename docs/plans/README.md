@@ -43,7 +43,8 @@
 16. `FND-12` 基础迁移收口 Review：当前 `BLOCKED`（依赖 FND-07 Epic 全 DONE；FND-07E 待 WebKitGTK ≥ 2.40 环境编译验证）。
 17. `MED-01` SourceObservation 校验与 navigation 约束：当前 `DONE`。
 18. `MED-02` candidate 归一化与证据合并：当前 `DONE`。
-19. `MED-03` candidate 置信排序：当前 `IN_PROGRESS`。
+19. `MED-03` candidate 置信排序：当前 `DONE`。
+20. `MED-04` candidate 生命周期（navigation/TTL/失效与有界容量）：当前 `IN_PROGRESS`。
 
 `FND-07` 是迁移 Epic，实际按 `FND-07A`～`FND-07E` 顺序执行；`FND-07E` 代码已收口，仅剩达标环境下的编译/CLI smoke 验证。MED 按自身依赖推进（MED-01 依赖 FND-06/FND-08，均 DONE）。
 
