@@ -1,79 +1,59 @@
-# 活跃 Roadmap
+# 活跃 Roadmap 索引
 
-本目录只保存当前可执行的模块 Roadmap。Agent 从首批执行队列或任务表中领取一个状态为 `READY` 的任务；完成模块后把稳定结论收敛到 `docs/current/`，实施文档移入 `docs/archive/`。
+本目录只保存当前可执行的模块 Roadmap。领取任务前必须先读仓库根 `AGENTS.md`、`docs/current/README.md`、总 Roadmap 和所属模块 Roadmap。一次只领取一个满足依赖的原子任务。
 
-当前目录共定义 164 个唯一原子任务；`docs/current/test-cases.md` 共定义 122 个唯一测试用例。
+## 1. 当前产品范围
 
-## 总入口
+- Windows/macOS CEF 浏览器与局域网 Direct/Relay 投屏优先。
+- 无视频推送路由时只交接给独立蜡笔投屏客户端；浏览器不做 WebRTC、采集或编码。
+- 浏览器和投屏主链路完成后再做当前网页的确定性 Markdown 提取。
+- HarmonyOS 只规划鸿蒙电脑 PC 形态技术预览。
+- Linux、AI/模型、Agent、CLI、MCP 没有当前活跃 Roadmap。
 
-- [`../crayon-private-cast-browser-roadmap.md`](../crayon-private-cast-browser-roadmap.md)：总依赖、交付波次、任务状态和 Agent 领取顺序。
+## 2. 权威入口
 
-## 模块 Roadmap
+- [总 Roadmap](../crayon-private-cast-browser-roadmap.md)：阶段、依赖、总数与当前领取顺序。
+- [当前契约索引](../current/README.md)：PRD、架构、测试和 Code Review 契约。
 
-| 代码 | Roadmap | 当前目标 | 前置 |
+## 3. 模块索引
+
+| 模块 | Roadmap | 当前目标 | 关键起点 |
 |---|---|---|---|
-| FND | [`foundation-migration-roadmap.md`](foundation-migration-roadmap.md) | 冻结 legacy 红线、重组 workspace、建立门禁与可迁移 Core | 无 |
-| CEF | [`desktop-cef-browser-roadmap.md`](desktop-cef-browser-roadmap.md) | Win/macOS/Linux CEF 壳、共享 UI、媒体观察与 IPC | FND-08 |
-| MED | [`media-policy-relay-roadmap.md`](media-policy-relay-roadmap.md) | 候选、预检、纯策略和 session relay | FND-06 |
-| SDK | [`cast-sdk-integration-roadmap.md`](cast-sdk-integration-roadmap.md) | 固定 Cast-SDK source revision，接通发现、投屏码、能力、播控与会话 | FND-08 |
-| PLT | [`desktop-platform-adapters-roadmap.md`](desktop-platform-adapters-roadmap.md) | Windows/macOS/Linux 采集、音频、编码、存储、网络、更新 | CEF-07、SDK-05 |
-| PRV | [`privacy-security-roadmap.md`](privacy-security-roadmap.md) | Profile、防追踪、安全存储、威胁模型与隐私验证 | FND-08、CEF-05 |
-| CNT | [`content-intelligence-roadmap.md`](content-intelligence-roadmap.md) | 页面快照、Markdown、阅读卡片、模型与资料包 | CEF 页面/IPC、PRV 数据分级/安全存储 |
-| AGT | [`agent-access-roadmap.md`](agent-access-roadmap.md) | tool registry、capability、CLI/MCP 与确认审计 | CNT、CEF、SDK app-runtime、PRV 威胁模型 |
-| HM | [`harmony-browser-roadmap.md`](harmony-browser-roadmap.md) | ArkUI/ArkWeb + Native Core 技术预览与 Go/No-Go | FND-08、MED-08、SDK-05 |
-| QAR | [`quality-release-roadmap.md`](quality-release-roadmap.md) | 跨平台 E2E、稳定性、许可、签名、更新和 GA | 各目标平台功能任务 |
+| FND | [foundation-migration-roadmap.md](foundation-migration-roadmap.md) | Workspace、契约、质量入口与仓库基线 | 19 个原子任务 `DONE` |
+| MED | [media-policy-relay-roadmap.md](media-policy-relay-roadmap.md) | 媒体观察、策略、LAN Relay、外部客户端交接迁移 | `MED-19 READY` |
+| CEF | [desktop-cef-browser-roadmap.md](desktop-cef-browser-roadmap.md) | Windows/macOS CEF 壳、共享 UI、媒体观察和 IPC | `CEF-01B READY` |
+| SDK | [cast-sdk-integration-roadmap.md](cast-sdk-integration-roadmap.md) | 固定源码 Cast-SDK facade、发现、连接和控制 | `SDK-03 READY` |
+| PLT | [desktop-platform-adapters-roadmap.md](desktop-platform-adapters-roadmap.md) | Windows/macOS 存储、网络、生命周期、更新和客户端交接 | `PLT-01` |
+| PRV | [privacy-security-roadmap.md](privacy-security-roadmap.md) | Profile、隐私、安全、日志和删除语义 | `PRV-01` |
+| CNT | [content-intelligence-roadmap.md](content-intelligence-roadmap.md) | 当前页确定性提取与 Markdown 预览/导出 | `CNT-01`，等待主链路 |
+| HM | [harmony-browser-roadmap.md](harmony-browser-roadmap.md) | 鸿蒙电脑 PC 形态 ArkUI/ArkWeb 技术预览 | `HM-01`，后续启动 |
+| QAR | [quality-release-roadmap.md](quality-release-roadmap.md) | Windows/macOS 构建、真实设备、性能、长稳和发布门禁 | `QAR-01` |
 
-## 首批执行队列
+当前共 128 个活跃任务，95 个当前测试用例。历史归档、已删除范围和未来设想不计入活跃总数。
 
-按依赖顺序执行，不应并行修改同一文件：
+## 4. 当前领取队列
 
-1. `FND-01` 基线与红线特征测试：当前 `DONE`。
-2. `FND-02` 测试/生产物理隔离：当前 `DONE`。
-3. `FND-03` repo guard 和分层检查入口：当前 `DONE`。
-4. `FND-04` Legacy 合规/安全红线隔离：当前 `DONE`。
-5. `FND-05` Rust workspace 与领域空壳：当前 `DONE`。
-6. `FND-06A`～`FND-06D` 纯媒体能力迁移：当前 `DONE`。
-7. `FND-07A` 嗅探脚本资源迁移：当前 `DONE`。
-8. `FND-07B` 共享模型与状态所有权拆分：当前 `DONE`。
-9. `FND-07C` 拆分 legacy Beacon 与网络地址：当前 `DONE`。
-10. `FND-07D` 拆分 legacy 命令与探测编排：当前 `DONE`。
-11. `FND-07E` 收口启动、Relay 与 CLI 装配：当前 `DONE`（Windows app 可复现构建、真实 app 测试、严格 Clippy 与两条 CLI smoke 已通过）。
-12. `FND-08` 冻结 Core API v1 与 capability schema：当前 `DONE`。
-13. `FND-09` 建立确定性 test-support：当前 `DONE`。
-14. `FND-10` 把公网测试降级为手工兼容测试：当前 `DONE`。
-15. `FND-11` 建立配置加载与本地化资源：当前 `DONE`。
-16. `FND-12` 基础迁移收口 Review：当前 `DONE`（三项 finding 全部关闭，依赖/红线/规模/测试/Release 产物 Review 完成）。
-17. `MED-01` SourceObservation 校验与 navigation 约束：当前 `DONE`。
-18. `MED-02` candidate 归一化与证据合并：当前 `DONE`。
-19. `MED-03` candidate 置信排序：当前 `DONE`。
-20. `MED-04` candidate 生命周期（navigation/TTL/失效与有界容量）：当前 `DONE`。
-21. `MED-05` probe 有界 HTTP client：当前 `DONE`。
-22. `MED-06` probe MP4/HLS/DASH 预检：当前 `DONE`。
-23. `MED-07` probe 保护/编码证据合并（保守错误语义）：当前 `DONE`。
-24. `MED-08` cast-policy 唯一决策函数：当前 `DONE`。
-25. `MED-09` relay session 模型（CSPRNG ID/TTL/ManualClock）：当前 `DONE`。
-26. `MED-10` relay vault（不可序列化 secret recipe/零化/撤销）：当前 `DONE`。
-27. `MED-11` relay router（loopback 控制面 + LAN 媒体面）：当前 `DONE`。
-28. `MED-12` relay network_guard（IP 分类/DNS/逐跳 redirect）：当前 `DONE`。
-29. `MED-13` relay MP4 GET/HEAD/Range 流式：当前 `DONE`。
-30. `MED-14` relay HLS AST parser（opaque 资源表）：当前 `DONE`。
-31. `MED-15` relay HLS 流式（TS/fMP4/live TTL/有界缓存）：当前 `DONE`。
-32. `MED-16` relay runtime（route 绑定/并发/超时/stop 收口）：当前 `DONE`。
-33. `MED-17` app-runtime delivery 编排（Planner→direct/relay/mirror）：当前 `DONE`。
-34. `MED-18` 安全 Review 与收口（threat model/fuzz/30 分钟 harness）：当前 `DONE`。
-35. `CEF-01A` 固定 CEF Standard revision、四平台 hash、许可和缓存/离线根契约：当前 `DONE`。
-36. `CEF-01B` 冻结不含 CEF 类型/产品策略的 C++17 `BrowserEngineAdapter` 最小接口：当前 `READY`，因用户切换到 SDK 源码接入而暂停领取，尚无生产代码。
-37. `SDK-01` 固定 Cast-SDK source revision：当前 `DONE`；submodule、source lock、checkout HEAD 和 repo guard 边界已验证。
-38. `SDK-02` 从固定源码接入 `cast-sender-service`：当前 `READY`；只允许 `crayon-cast-adapter` 建立实际依赖。
+| 顺序 | 任务 | 状态 | 说明 |
+|---:|---|---|---|
+| 1 | `MED-19` | READY | 将既有 `Mirror`/WebRTC schema 与 runtime 语义迁移为 `ExternalClientHandoff`；不得顺带实现平台 UI |
+| 2 | `CEF-01B` | READY | Windows CEF toolchain/bootstrap；不得扩张旧 Mirror 语义 |
+| 3 | `SDK-02` | DONE | 固定版本 Cast-SDK facade 依赖接入完成；未实现 WebRTC 或外部客户端协议 |
+| 4 | `SDK-03` | READY | 产品侧 `CastFacade` trait、强类型 DTO/error 契约；不暴露 SDK 内部类型 |
+| 5 | 后续任务 | TODO | 严格按模块依赖和总阶段领取 |
 
-`FND` 模块 19 个唯一原子任务与 `MED` 模块 18 个原子任务全部 DONE（2026-08-10），FND V0 已收口。CEF bootstrap 已拆为 `CEF-01A`～`CEF-01E`，`CEF-01A DONE`、`CEF-01B READY`；`SDK-01 DONE`，Cast-SDK 已固定为 `44c3a99871aa1e68cbda71eacefbb41d23a747a8` 源码 revision。下一项 `SDK-02 READY`，才建立 `cast-sender-service` 实际依赖。
+`CNT-01` 即使接口设计已明确，也必须等 `CEF-15`、`SDK-14`、`MED-19`、`PRV-08` 完成后才能进入 `READY`。
 
-新定位新增 `CNT-01..16` 与 `AGT-01..16`，当前全部 `TODO`。它们不改变 SDK 接入顺序：`CNT` 等 CEF 页面/IPC 和 PRV 数据分级后先做确定性内容 Alpha，真实模型等 secure store/发送预览；`AGT` 等正常内容与投屏用例、独立威胁模型后再做默认关闭的 Developer Preview。
+## 5. 当前代码事实
 
-`FND-07` 已按 `FND-07A`～`FND-07E` 顺序完成；FND-12 又关闭了 security corpus 恒真断言、非法 sniff URL panic 与 formal 根包 legacy 依赖泄漏。稳定结论和未覆盖项见 `docs/current/fnd-migration-review.md`。
+- Foundation 19 个原子任务、`MED-01..18`、`CEF-01A`、`SDK-01`、`SDK-02` 已完成，共 40 项。
+- Cast-SDK 固定源码 revision 为 `44c3a99871aa1e68cbda71eacefbb41d23a747a8`，由 `third_party/cast-sdk` gitlink 与 `config/cast-sdk-source.toml` 约束；后续以 `SDK-01` 最终 Review 记录为准。
+- 当前代码仍含历史 `CastPolicyDecision::Mirror` / `DeliveryPlan::Mirror`，这是 `MED-19` 的待迁移输入，不应被新代码继续引用。
+- Roadmap 表示目标和完成证据，不等于所有目标都已由代码实现；领取前必须读取真实代码、测试和 Git 状态。
 
-## 状态更新规则
+## 6. 状态与完成规则
 
-- 任务表只记录可复核事实；每次状态变化附 commit（如有）、命令、结果和未覆盖项。
-- 新 Roadmap 必须先加入本索引并说明与现有模块的依赖和不重叠边界。
-- 不允许新建同义 Roadmap；目标扩大时更新现有文档或明确建立新的稳定领域。
+- 状态仅使用 `TODO`、`READY`、`IN_PROGRESS`、`BLOCKED`、`IMPLEMENTED`、`VERIFIED`、`DONE`。
+- `IMPLEMENTED` 不等于完成；必须记录实际 Format、Lint、Unit、Integration、Build 与适用 Harness 结果。
+- 平台/设备任务没有真实平台或指定 Harness 证据时不得标 `DONE`。
+- 每个原子任务完成后按 `docs/current/code-review-standard.md` 独立 Review；P0/P1 未关闭不得合并。
+- 外部发布、推送、Tag、部署、凭证使用和 Cast-SDK 外部仓库修改仍需明确授权。

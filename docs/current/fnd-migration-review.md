@@ -62,6 +62,6 @@
 
 ## 未覆盖与剩余风险
 
-- macOS/Linux 未复跑 legacy Tauri app；该 app 不发布，Windows 已完成补充构建与 CLI 证据。正式三平台证据由 CEF/PLT/QAR Roadmap 提供。
-- CEF 二进制、sandbox、三平台壳、Cast-SDK 接入、真接收端和平台采集均未进入 FND 范围，不能由本 Review 推断完成；Cast-SDK 固定 revision 的源码引入由 SDK-01 单独执行。
+- macOS/Linux 未复跑 legacy Tauri app；该 app 不发布，Windows 已完成补充构建与 CLI 证据。2026-08-11 之后正式产品只要求 Windows/macOS 证据，Linux 不在当前范围。
+- CEF 二进制、sandbox、Windows/macOS 壳、Cast-SDK 接入和真接收端均未进入 FND 范围，不能由本 Review 推断完成；Cast-SDK 固定 revision 的源码引入由 SDK-01 单独执行。浏览器采集/编码/WebRTC 已移出当前产品范围。
 - Windows legacy CLI 退出时 Chromium 报 `Failed to unregister class Chrome_WidgetWin_0 (1412)`，进程仍以 0 退出且端口已释放；正式 CEF 生命周期测试必须重新覆盖，不能沿用该结果。

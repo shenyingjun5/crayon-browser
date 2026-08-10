@@ -1,6 +1,6 @@
 # SDK：Cast-SDK 集成 Roadmap
 
-状态：`FND-08 DONE`；`SDK-01 DONE`；`SDK-02 READY`。源码固定为 Cast-SDK `44c3a99871aa1e68cbda71eacefbb41d23a747a8`，通过 `third_party/cast-sdk` submodule 接入；不得依赖开发者本机源码路径。
+状态：`FND-08 DONE`；`SDK-01 DONE`；`SDK-02 DONE`；`SDK-03 READY`。源码固定为 Cast-SDK `44c3a99871aa1e68cbda71eacefbb41d23a747a8`，通过 `third_party/cast-sdk` submodule 接入；不得依赖开发者本机源码路径。
 
 ## 边界
 
@@ -10,6 +10,8 @@
 
 - 当前阶段不等待 NuGet、SwiftPM 或 OHPM 包，统一从固定 Cast-SDK source revision 构建。
 - 本 Roadmap 不处理 Linux；Linux 不作为 SDK-01～SDK-14 的前置、验收或发布阻塞项。
+- Cast-SDK 适配只服务同一局域网内的 Direct/Relay、设备发现、投屏码、连接和控制，不承载 WebRTC、浏览器采集或编码。
+- 无 Direct/Relay 路由时由产品层执行外部客户端交接；这不是 Cast-SDK session，也不得构造 receiver descriptor。
 - Windows、macOS 后续只从 `cast-sender-service::SenderCommandService` 公开 facade 接入；HarmonyOS 从同一 revision 构建 ArkTS/native bridge。
 - 浏览器不增加设备身份认证、密钥交换、临时授权或 SDK 使用许可代码；自动发现、投屏码、连接和控制完全沿用 Cast-SDK 现有行为。
 
@@ -25,10 +27,10 @@
 | SDK-06 | SDK-05 | `cast-adapter/discovery` | start/stop/refresh/list 快照和增量事件 | CS-001、CS-002；多网卡、同名、过期、重复 | S2 |
 | SDK-07 | SDK-05,SDK-06 | `cast-adapter/connection` | connect/disconnect/resolve by cast code 状态映射，不增加身份认证或授权协议 | CS-003；成功/错误/取消/route lost | S2 |
 | SDK-08 | SDK-05 | `cast-adapter/capability` | receiver assessment -> `ReceiverCapabilities`，TTL/generation | CS-004；未知/变化/旧缓存；policy golden | S2 |
-| SDK-09 | SDK-05,SDK-08,MED-08 | `cast-adapter/delivery` | Direct/HLS/relay URL 只经 facade 投送；Mirror descriptor 协议确认 | CS-005；无 SOAP/URL 拼接；unsupported 明确 | S2 |
+| SDK-09 | SDK-05,SDK-08,MED-19 | `cast-adapter/delivery` | Direct/HLS/Relay URL 只经 facade 投送；外部客户端交接不进入 SDK | CS-005；无 SOAP/URL/WebRTC descriptor 拼接；unsupported 明确 | S2 |
 | SDK-10 | SDK-09 | `cast-adapter/control` | handle-bound play/pause/seek/volume/stop | CS-006；非法值、重复、旧 handle、超时 | S2 |
 | SDK-11 | SDK-09,SDK-10 | `cast-adapter/session` | listener、自然结束、receiver stop、route lost、替换 | CS-007；旧事件不能停止新会话 | S2 |
-| SDK-12 | SDK-07,SDK-08,SDK-10,SDK-11 | `crayon-app-runtime/cast_usecase` | UI/runtime 状态与 SDK 事件编排，撤销 relay/mirror | Fake E2E V2；每个终态资源清理 | S2 |
+| SDK-12 | SDK-07,SDK-08,SDK-10,SDK-11,MED-19 | `crayon-app-runtime/cast_usecase` | UI/runtime 与 SDK 事件编排；撤销 Direct/Relay；外部交接不创建 SDK session | Fake E2E V2；每个终态资源清理；PL-015 | S2 |
 | SDK-13 | SDK-12 | 真接收端 Harness | 自动发现、投屏码、能力、投送、控制、终态 | CS-010、E2E-001、E2E-002；记录接收端版本/网络 | S4 |
 | SDK-14 | SDK-02,SDK-12,SDK-13 | Review/升级说明 | API contract、source revision、错误映射、并发生命周期 Review | 全 CS；无 P0/P1；锁定 SDK gitlink/revision | S4 |
 
@@ -39,6 +41,13 @@
 - 验证：`git submodule update --init --recursive --checkout` PASS；`git submodule status --recursive` 显示 Cast-SDK `44c3a99871aa1e68cbda71eacefbb41d23a747a8`、SignalLake-SDK `c9b87b20cba93dcec5b71df8779ce2dee32291b5`；`cargo test -p repo-guard` 22/22 PASS；`cargo run -p repo-guard -- scan --root .` PASS 且 RG-008 passed；`scripts/check.ps1 fast` PASS；`git diff --check` PASS。
 - Code Review：按 current 标准检查需求边界、源码锁、路径穿越、submodule 生命周期、测试隔离和后续依赖方向，P0/P1/P2/P3 = 0。
 - 未覆盖：本任务没有建立 `crayon-cast-adapter`、没有编译 SDK facade、没有执行平台/真机测试；这些分别由 SDK-02 及后续任务完成。
+
+## SDK-02 完成记录（2026-08-11）
+
+- 改动：新建 `crates/crayon-cast-adapter`（workspace member，doc-only lib + 链接冒烟测试），仅以 path 依赖锁定 submodule 内的 `cast-sender-service` 与 `cast-sender-core`；根 `Cargo.toml` 将 `third_party/cast-sdk` 加入 workspace `exclude`（cargo 会把 workspace 目录内的 path 依赖自动视为成员，并用本仓库根错误解析 SDK 的 workspace 继承；exclude 保持独立源码边界）。产品侧 `CastFacade` 由 SDK-03 定义；本任务不含 WebRTC、外部客户端协议或平台接线。
+- 验证：`cargo check -p crayon-cast-adapter` PASS；`cargo test -p crayon-cast-adapter` 2/2 PASS（facade 构造无 discovery/端口/网络副作用，类型独立可构造）；`cargo tree -p crayon-cast-adapter` 基线：11 个 SDK crate + `serde/serde_json/socket2/getrandom/windows-sys` 传递闭包，无 tauri/automation/webview/CDP 命中，无重复版本；debug rlib 基线 `cast-sender-service` 12.8 MB、SDK 合计约 25 MB、adapter 3.6 KB；`cargo run -p repo-guard -- scan --root .` RG-005/RG-008 passed；`cargo clippy --workspace --all-targets -- -D warnings` PASS；`scripts/check.sh fast` PASS；`scripts/check.sh security` PASS；`cargo test --workspace` 63 suites / 231 passed PASS。
+- Code Review：按 current 标准审查需求边界、依赖方向（仅 adapter 依赖 SDK，由 RG-005/RG-008 机器强制）、测试隔离（不触网、不起服务）与构造/Drop 生命周期（`SenderCommandService::new` 纯分配，`http_server=None`、discovery 未启动），P0/P1 = 0；P2 一项：Cast-SDK 仓库根 LICENSE 为 GPL-3.0 而 workspace 元数据声明 UNLICENSED，分发前需上游澄清（跟踪：SDK-14、QAR-09）。
+- 未覆盖：SDK 平台 image/live/document-render crate 未编译（不在 service 依赖图）；macOS 构建未验证（无 runner）；真机/平台证据由 SDK-13 负责。
 
 ## SDK 缺口处理
 

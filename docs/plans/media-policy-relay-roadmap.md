@@ -1,6 +1,8 @@
 # MED：媒体观察、策略与 Session Relay Roadmap
 
-状态：`MED-01..MED-18 DONE`（模块收口）。本模块不做设备协议、浏览器对象和平台采集。
+状态：`MED-01..MED-18 DONE`；`MED-19 READY`。本模块不做设备协议、浏览器对象和平台采集。
+
+> 产品契约更新（2026-08-11）：下方 `MED-08`、`MED-17` 与既有完成证据记录的是历史 v1 `Mirror`/WebRTC 语义，不再代表当前目标。不得改写这些完成证据；`MED-19` 以兼容迁移方式将公共语义收口为外部蜡笔投屏客户端交接。
 
 ## 原子任务
 
@@ -45,6 +47,17 @@
 | MED-16 | MED-13,MED-15 | `relay/runtime` | route 绑定、并发/timeout/stop/navigation/profile/app-exit 收口 | RL-004、RL-005、RL-012、RL-013 | S2 DONE（2026-08-10） |
 | MED-17 | MED-08,MED-16 | `crayon-app-runtime/delivery` | Planner -> direct/relay/mirror 编排；普通失败不提权；单次降级 | PL-014、E2E-002、E2E-004 fake；无循环 fallback | S2 DONE（2026-08-10） |
 | MED-18 | MED-04,MED-08,MED-17 | 安全 Review/文档 | threat model、fuzz corpus、性能与泄漏报告；修 P0/P1 | security check；RL 全集；30 分钟 harness | S3 DONE（2026-08-10） |
+| MED-19 | MED-18,FND-08 | `crayon-ipc-schema`,`crayon-cast-policy`,`crayon-app-runtime` | 将 `Mirror`/WebRTC 决策与计划迁移为 `ExternalClientHandoff`；保留兼容读取窗口，禁止创建采集、编码、WebRTC、receiver 或 Relay 会话 | PL-007..PL-009、PL-011、PL-015、E2E-001、E2E-004；current/previous golden | S2 READY |
+
+## MED-19 当前任务
+
+- 输入：历史 `CastPolicyDecision::Mirror`、`DeliveryPlan::Mirror`、能力字段和当前/previous schema golden。
+- 输出：明确的外部客户端交接 DTO、稳定 reason、用户确认要求和旧 schema 兼容迁移。
+- 正常路径：Direct/Relay 不可用时只返回交接建议；浏览器 UI 经用户确认后调用平台下载/启动接口。
+- 错误/边界：取消、未安装、下载失败、启动失败、重复调用、导航/标签关闭和旧结果到达均不得创建或污染投屏会话。
+- 资源释放：交接不持有媒体 URL、Relay token、receiver session、采集器、编码器或 WebRTC transport。
+- 明确不做：实现独立投屏客户端、屏幕/标签页/系统音频采集、编码、WebRTC sender，或修改 Cast-SDK 协议栈。
+- 允许修改路径仅限任务表所列 crate、对应独立测试、schema golden 和当前契约文档；不得顺带改平台 UI。
 
 ## 关键不变量
 
@@ -52,6 +65,7 @@
 - `MediaCandidate.original_url` 和 recipe 只在可信内存；DTO/日志只含 opaque ID 和 redacted origin。
 - Relay 不是下载器、通用代理或云代理；媒体体不落盘。
 - 当前策略对需要密钥或加密 HLS 保守拒绝；变更需独立合规 Roadmap。
+- 当前决策集合为 `Direct/Relay/ExternalClientHandoff/Reject`。外部交接不是浏览器投屏模式，不建立 WebRTC、采集、编码、receiver 或 Relay 会话，也不能显示“投屏已开始”。
 
 ## 提交策略
 

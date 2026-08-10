@@ -1,204 +1,198 @@
-# 蜡笔 AI 投屏浏览器当前目标架构
+# 蜡笔 AI Agent 投屏浏览器当前架构
+
+- 版本：v0.6
+- 日期：2026-08-11
+- 状态：当前权威架构契约
 
 ## 1. 架构结论
 
-产品以共享 UI、浏览器引擎适配和应用编排为入口，下设三个互相隔离的领域：媒体/投屏、网页内容/模型、Agent 安全访问；Cast-SDK facade 与平台能力适配仍是唯一外部设备/系统边界。桌面端共享 CEF，HarmonyOS 使用 ArkWeb；设备协议和播控复用 Cast-SDK，不在本仓库重复实现。
+产品由四个互相隔离、通过 app-runtime 编排的领域组成：浏览器、媒体/投屏、内容数据面、Agent 安全访问。第二阶段模型能力建立在内容数据面之上，但不能参与权限或安全决策。
 
 ```mermaid
 flowchart TB
-    UI["shared-ui：浏览、内容、AI 与投屏交互"] --> ENGINE["browser-engine-api"]
-    ENGINE --> CEF["cef-shell：Win/macOS/Linux"]
-    ENGINE --> ARK["harmony-shell：ArkWeb"]
-    UI --> APP["app-runtime：状态机与用例编排"]
-    CEF --> APP
-    ARK --> APP
-    APP --> MEDIA["crayon-media：观察、候选、策略、relay"]
-    CEF --> SNAP["content-gateway：有界语义快照"]
-    ARK --> SNAP
-    SNAP --> CONTENT["crayon-content：提取、Markdown、卡片"]
-    APP --> CONTENT
-    CONTENT --> MODEL["model-adapter：用户确认后的 provider"]
-    AGENT["CLI/MCP：loopback、默认关闭"] --> GATE["agent-gateway：registry、grant、receipt"]
-    GATE --> APP
-    APP --> CAST["crayon-cast-adapter"]
-    CAST --> SDK["Cast-SDK 固定源码 / 公开 facade"]
-    APP --> PLATFORM["platform-api"]
-    PLATFORM --> WIN["platform/windows"]
-    PLATFORM --> MAC["platform/macos"]
-    PLATFORM --> LNX["platform/linux"]
-    PLATFORM --> HM["platform/harmony"]
-    MEDIA --> RECEIVER["蜡笔接收端媒体地址/WebRTC"]
-    SDK --> RECEIVER
+  USER["用户 UI"] --> APP["app-runtime / product state"]
+  CLI["CLI"] --> IPC["local IPC adapter"]
+  MCP["MCP client"] --> MCPAD["loopback MCP adapter"]
+  IPC --> CAAP["CAAP protocol + tool registry"]
+  MCPAD --> CAAP
+  CAAP --> GUARD["task / capability / confirmation / receipt"]
+  GUARD --> APP
+
+  APP --> ENGINE["browser-engine-api"]
+  ENGINE --> CEF["CEF · Windows/macOS"]
+  ENGINE --> ARK["ArkWeb · HarmonyOS 电脑"]
+  ENGINE --> SNAP["trusted page data plane"]
+  SNAP --> MD["deterministic Markdown"]
+  MD -. Phase 2 .-> MODEL["model adapter"]
+
+  APP --> MEDIA["media policy / LAN Relay"]
+  APP --> CAST["Cast-SDK facade"]
+  CAST --> RX["LAN receiver"]
+  MEDIA --> RX
+  APP --> PLATFORM["secure store / lifecycle / update / client handoff"]
 ```
 
-## 2. 目标仓库目录
+## 2. 依赖方向
 
-```text
-get-video/
-├── AGENTS.md
-├── Cargo.toml                         # Rust workspace；不放产品依赖细节
-├── cmake/                             # CEF/C++ 共用构建 helper
-├── config/
-│   ├── product-defaults.toml          # 非秘密产品默认值
-│   ├── feature-schema.json            # capability/feature schema
-│   └── policy-schema.json             # 策略签名数据 schema
-├── browser/
-│   ├── shared-ui/                     # TypeScript UI、状态机视图、本地化资源
-│   ├── engine-api/                    # C++ BrowserEngineAdapter 稳定接口
-│   ├── cef-shell/                     # Desktop CEF browser/render process
-│   │   ├── include/
-│   │   ├── src/browser/
-│   │   ├── src/renderer/
-│   │   ├── src/content/                # 语义快照采集与 Browser 校验；不含模型实现
-│   │   ├── src/ipc/
-│   │   └── tests/
-│   └── harmony-shell/                 # ArkUI/ArkWeb；Harmony Roadmap 启动后创建
-├── crates/
-│   ├── crayon-domain/                 # 共享 ID、错误、能力、状态，不依赖平台/网络
-│   ├── crayon-media-observer/         # SourceObservation、候选关联
-│   ├── crayon-cast-policy/            # 唯一 Mirror/Direct/Reject 决策器
-│   ├── crayon-media-probe/             # MP4/HLS/DASH/DRM/codec 有界预检
-│   ├── crayon-relay/                   # session relay、HLS/DASH、SSRF
-│   ├── crayon-content/                 # 确定性提取、Markdown、结构化数据、阅读卡片
-│   ├── crayon-agent-gateway/           # tool registry、grant、任务代际、receipt
-│   ├── crayon-profile/                 # Profile 生命周期与清理编排
-│   ├── crayon-cast-adapter/            # Cast-SDK facade 的唯一产品适配层
-│   ├── crayon-app-runtime/             # 产品用例、状态机、Core API
-│   ├── crayon-ipc-schema/              # 版本化 Browser/Core schema
-│   └── crayon-legacy-adapter/           # 迁移期兼容；完成后删除
-├── platform/
-│   ├── api/                            # capture/codec/store/network/lifecycle/update 接口
-│   ├── windows/
-│   ├── macos/
-│   ├── linux/
-│   └── harmony/
-├── third_party/
-│   └── cast-sdk/                       # 固定 source revision 的独立 submodule 边界
-├── integrations/
-│   └── ai-providers/                   # 经批准的模型 adapter；凭证来自 secure store
-├── apps/
-│   ├── desktop/                        # CEF 正式装配根；含默认关闭的 agent CLI/MCP
-│   ├── harmony/                        # Harmony 正式装配根
-│   └── legacy-tauri/                   # 当前 app 迁入；仅回归/迁移，不发布
-├── test-support/                       # 仅测试依赖：clock、mock upstream、fake receiver
-├── tests/
-│   ├── contracts/                      # IPC、策略、Cast-SDK facade golden tests
-│   ├── integration/                    # 本地 upstream/relay/receiver/Fake model
-│   ├── e2e/                            # 浏览器到接收端闭环
-│   ├── fixtures/                       # 许可清晰、无秘密的媒体/manifest
-│   └── security/                       # SSRF、token、重放、泄漏
-├── tools/
-│   ├── repo-guard/                     # 模块、文件、硬编码、测试隔离门禁
-│   └── receiver-simulator/
-├── scripts/                            # 跨平台入口脚本；核心逻辑放 tools
-└── docs/
-    ├── current/
-    ├── plans/
-    └── archive/
+固定方向：`UI/CLI/MCP adapter -> CAAP/应用编排 -> 领域接口 -> Core/Cast-SDK facade -> 平台 adapter`。
+
+- CLI/MCP 不能直接调用 CEF、ArkWeb、Cast-SDK、Relay、平台 API 或数据库。
+- MCP 是 CAAP adapter，不单独实现工具、权限、确认或状态机。
+- CEF/ArkWeb 类型不进入 CAAP schema、领域 Core 或 tool registry。
+- 模型 adapter 只消费用户确认过的内容 DTO，不能回调 capability guard 扩权。
+- 状态唯一所有，callback/timer/worker 不越权修改 owner 集合。
+
+## 3. 主要模块
+
+| 模块 | 所有权 | 不拥有 |
+|---|---|---|
+| `crayon-domain` / `crayon-ipc-schema` | 稳定 ID、DTO、错误、CAAP schema 与兼容窗口 | 引擎/平台对象、secret 正文 |
+| `crayon-browser-gateway` | 可信输入、tab/navigation/generation 和 Browser-side 验证 | Agent grant、模型策略 |
+| `crayon-page-data` | 结构化语义快照、分页/增量、provenance 和资源上限 | UI 操作授权、原始 CDP 输出 |
+| `crayon-content-*` | 主内容、Markdown、导出与第二阶段模型输入 DTO | provider 密钥、Agent 权限 |
+| `crayon-agent-gateway` | CAAP session、tool registry、task、grant、confirmation、receipt | CEF/SDK/Relay/平台直接调用 |
+| `crayon-app-runtime` | 正常浏览、页面操作、内容和投屏用例 | transport 与平台实现 |
+| `crayon-media-*` / `crayon-relay` | 媒体事实、策略和 LAN Relay | 设备协议、通用代理 |
+| `crayon-cast-adapter` | Cast-SDK facade、handle 与事件映射 | 页面、Agent transport、WebRTC |
+| `crayon-platform-api` | 存储、网络、生命周期、更新、外部客户端交接、本机 IPC | Agent 工具语义、采集/编码 |
+| `crayon-model-adapter`（第二阶段） | provider 契约、发送/流式/取消/错误 | capability、DRM、页面操作 |
+
+## 4. CAAP 自有协议
+
+### 4.1 逻辑协议
+
+`CAAP v1` 是 transport-independent 的本机 Agent 协议，必须定义：
+
+- `Hello/Welcome`：协议版本、产品版本、feature/capability、最大消息与兼容窗口。
+- `ClientSession`：短期 secret、Profile scope、client identity、到期和撤销。
+- `TargetRef`：opaque `profile_id/tab_id/navigation_id/generation`，不包含对象指针。
+- `ToolDescriptor`：tool ID/version、risk、输入/输出 schema、是否确认、资源预算。
+- `Invoke/Chunk/Complete/Error`：流式结果、sequence、deadline、cancel token 和稳定错误。
+- `Grant/Confirmation`：scope、目标、关键参数摘要、到期、一次性 nonce。
+- `IdempotencyKey`：重复请求不产生重复副作用。
+- `ActionReceipt`：脱敏结果、目标类别、时间、状态和 TTL。
+
+schema 使用 current/previous golden，拒绝未知高风险字段。逻辑协议不绑定 JSON、Protobuf 或 CBOR；wire 编码由任务基准和可审查性决策，但 CLI/MCP 看到的行为必须一致。
+
+### 4.2 Transport
+
+- CLI：Windows named pipe、macOS Unix domain socket；仅当前用户可访问。
+- MCP：只绑定 loopback，默认关闭，使用短期高熵 session secret；映射 MCP initialize/list/call/cancel 到 CAAP。
+- HarmonyOS 电脑：本机 IPC 方案在 `HM` Roadmap 评估，但逻辑协议和工具不分叉。
+- 不提供 LAN/WAN Agent 监听，不通过网页端口复用 Agent 控制面。
+
+### 4.3 工具风险
+
+- R0/R1 可按任务或 App 会话授予。
+- R2/R3 每次显示目标和关键参数，目标变化或确认超时后重确认。
+- R4 只接受 Browser 签发的可见 `SemanticNodeHandle`，handle 绑定 origin/tab/navigation/generation/节点语义和短 TTL。
+- Cookie、Authorization、密码/支付、文件上传、隐藏/跨源元素、任意 JS/CDP、任意文件/网络永久不可表达。
+
+## 5. 高性能页面数据面
+
+### 5.1 数据路径
+
+```mermaid
+flowchart LR
+  DOM["Renderer DOM / accessibility facts"] --> COLLECT["bounded collector"]
+  COLLECT --> VERIFY["Browser gateway verification"]
+  VERIFY --> CACHE["generation-scoped snapshot cache"]
+  CACHE --> STRUCT["structured page chunks"]
+  CACHE --> MARKDOWN["deterministic Markdown"]
+  STRUCT --> TOOL["CAAP R1 tools"]
+  MARKDOWN --> TOOL
 ```
 
-目录按迁移 Roadmap 分阶段创建，禁止一次性创建空目录或占位模块。根 `src/`、`app/`、`demo/` 在兼容迁移完成前保留；正式 CEF 闭环和回归门禁完成后才移动到 `apps/legacy-tauri/` 或删除。
+- Renderer 只发送受限事实；Browser process 确认 frame、origin、navigation 和 generation。
+- 快照缓存按 Profile/tab/navigation 所有，导航、标签关闭、撤销、Profile 销毁立即失效。
+- 首次快照可分块；重复读取优先复用已验证结构或返回版本化增量。
+- 对标题、可见文本、链接/表格/代码和交互元素建立字段级索引，避免每个工具重复遍历整树。
+- 大结果有 chunk、游标、最大节点/字节/深度和 deadline；消费者背压不能阻塞 Renderer/UI。
+- page data 带 provenance 与 untrusted 标记；页面指令永远不是系统/授权指令。
 
-## 3. 模块职责
+### 5.2 性能原则
 
-| 模块 | 唯一职责 | 可以依赖 | 禁止承担 |
-|---|---|---|---|
-| `crayon-domain` | 强类型 ID、错误、能力和状态 | serde 等基础库 | 网络、平台、UI、Cast-SDK |
-| `media-observer` | 可信输入关联、Observation -> Candidate | domain | 投屏方式决策、设备控制 |
-| `cast-policy` | Mirror/Direct/Reject 纯决策 | domain、probe DTO | 网络请求、平台 API、UI |
-| `media-probe` | 有界格式/DRM/可访问性证据 | domain、HTTP adapter | 用户体验和设备控制 |
-| `relay` | 授权 session、资源注册、媒体流 | domain、probe | 任意 URL API、设备发现 |
-| `content` | `PageSnapshot` -> 正文/Markdown/结构化数据/阅读卡片的确定性转换 | domain | CEF/ArkWeb、文件选择、模型网络、Agent 权限 |
-| `model-adapter` | 用户确认后把最小内容请求映射到批准 provider | content DTO、secure-store 接口 | 浏览器 DOM、Profile 路径、投屏/安全决策 |
-| `agent-gateway` | 工具 registry、capability grant、确认、任务代际、receipt | domain、app-runtime 用例接口 | 直接调用 CEF/Cast-SDK/relay/平台 API、任意脚本 |
-| `profile` | 无痕/常用空间生命周期与清理结果 | domain、平台接口 | CEF/ArkWeb 具体对象 |
-| `cast-adapter` | 浏览器语义到 Cast-SDK facade 映射 | domain、Cast-SDK 公开 facade | SOAP/DLNA 协议副本、网页逻辑 |
-| `app-runtime` | 用例编排和唯一产品状态机 | 上述领域接口 | CEF/OS 具体调用、协议实现 |
-| `ipc-schema` | 版本、消息和兼容协商 | domain | 业务实现 |
-| `platform/*` | 权限、采集、编码、安全存储、更新 | platform-api | 产品策略和站点规则 |
+- 常规读页不走 screenshot/OCR，不把完整 DOM/HTML反复序列化为 JSON。
+- 快照构建不在 UI 线程执行不可控工作；支持取消与 generation 失效。
+- 同一导航的多个 Agent 工具共享一次采集/清洗结果。
+- 热路径不做高频日志、同步文件 IO、无界字符串复制或锁内 IPC。
+- benchmark 至少覆盖小页、100KB 长文、复杂表格、无限列表截断和高频增量变化。
 
-## 4. Cast-SDK 集成边界
+## 6. Agent task 生命周期
 
-固定使用 Cast-SDK 已公开的稳定 facade：
-
-- 发现：`start_discovery`、`stop_discovery`、`refresh_discovery`、`list_devices`。
-- 连接：`connect_device`、`disconnect_device`、`resolve_device_by_cast_code`。
-- 能力：`list_devices_with_capabilities`、`assess_cast`、receiver app capability。
-- URL 投送：通过公开 URL/HLS facade 或经 SDK 批准的统一 remote media API。
-- 控制：session handle 绑定的 play/pause/seek/volume/stop。
-- 会话监督：监听 current session、route lost、receiver stop/end 和 stale generation。
-
-浏览器拥有：
-
-- CEF/ArkWeb 页面、Cookie、Profile、用户输入和媒体观察。
-- `SourceObservation`、`MediaCandidate`、广告连续性/DRM 策略。
-- 网页授权 relay 的 secret vault 和生命周期。
-- 标签页采集与 WebRTC 镜像。
-
-网页内容/Agent 边界：
-
-- Renderer 只产生有界 `PageSnapshot` 线索；Browser process 校验顶层标签、Profile、origin、navigation/generation、字段和大小。
-- `crayon-content` 不知道 Cookie、Authorization、CEF、ArkWeb、Cast-SDK 或 provider secret；模型是可选消费者，不是正文或安全规则所有者。
-- `agent-gateway` 只能调用 `app-runtime` 已存在的产品用例。CLI/MCP 不得直接创建第二套导航、投屏、relay 或 Profile 生命周期。
-- 页面文本、无障碍树、模型输出和外部 client 输入都标记为不可信，不能生成 capability grant 或取消用户确认。
-- MCP transport 默认关闭、只绑定 loopback、使用短期高熵 secret；loopback、allow-list 和 redaction 只是组合门禁的一部分，不单独构成安全边界。
-
-源码基线：
-
-| 项 | 固定值 |
-|---|---|
-| Repository | `https://github.com/shenyingjun5/Cast-SDK.git` |
-| Revision | `44c3a99871aa1e68cbda71eacefbb41d23a747a8` |
-| Submodule | `third_party/cast-sdk` |
-| Machine-readable lock | `config/cast-sdk-source.toml` |
-
-- Windows、macOS 桌面端由 `crayon-cast-adapter` 直接编译并调用 `cast-sender-service::SenderCommandService`。
-- HarmonyOS 从同一 submodule revision 构建 `sender/harmonyos/sdk-arkts` 和 `native-bridge`，通过 ArkTS `CastSenderClient` 映射同一产品 facade。
-- 本轮不处理 Linux 发送端 SDK；Linux 不进入 SDK-01～SDK-14 的依赖或完成门禁。
-
-集成规则：
-
-- `.gitmodules`、gitlink 和 `config/cast-sdk-source.toml` 必须指向同一远端和精确 commit；禁止 branch、tag 漂移或开发者本机绝对路径。
-- submodule 作为独立源码边界，不参与本仓库生产源码、文件规模和依赖扫描；真正依赖只允许从 `crayon-cast-adapter` 建立。
-- SDK 升级使用独立原子任务完成 gitlink、source lock、API diff、contract test、构建和回滚记录。
-- UI、CEF、ArkWeb 和 media 模块不得直接依赖 Cast-SDK。
-- SDK 缺少能力时返回稳定 unsupported 或建立 Cast-SDK Roadmap；不得在浏览器仓库拼协议补洞。
-
-## 5. 核心状态机
-
-```text
-Idle
- -> Browsing
- -> PlaybackEligible
- -> SelectingReceiver
- -> Planning
- -> StartingMirror | StartingDirect
- -> Casting
- -> Stopping
- -> Browsing
-
-任意活动态 -> Failed -> Browsing/Idle
-导航、标签关闭、route lost、receiver stop、Profile 销毁 -> Stopping
+```mermaid
+stateDiagram-v2
+  [*] --> Connected
+  Connected --> AwaitingGrant: invoke
+  AwaitingGrant --> Running: granted / confirmation valid
+  AwaitingGrant --> Finished: denied / expired
+  Running --> Streaming: chunks
+  Streaming --> Finished: complete
+  Running --> Cancelling: cancel / navigation / revoke / exit
+  Streaming --> Cancelling: cancel / navigation / revoke / exit
+  Cancelling --> Finished: resources released
 ```
 
-状态写入只由 `crayon-app-runtime` 完成。CEF/ArkWeb、relay、Cast-SDK 和平台 adapter 只能产生带 session/generation 的事实事件；旧 generation 事件必须丢弃。
+- 每个 task 绑定 client/session/Profile/target/generation/tool/version/grant。
+- 取消、deadline、导航、标签关闭、Profile 切换、App 退出和 transport 断开都能收敛。
+- 旧结果只允许丢弃，不能补偿性执行新的副作用。
+- 队列、并发、chunk、receipt 和任务表有界，满载 fail closed。
 
-内容任务由 `crayon-content` use-case owner 管理 `Idle -> Snapshotting -> Extracting -> Previewing -> OptionalModel -> Completed/Cancelled/Failed`，但不得直接改变 Cast 状态。Agent 任务由 `crayon-agent-gateway` 管理 `Requested -> AwaitingGrant -> Running -> Completed/Cancelled/Failed`；它只能通过 `app-runtime` 事件请求状态迁移。导航、Profile 销毁、grant 撤销和 App 退出会同时使相关旧 generation 失效。
+## 7. 正常用例边界
 
-## 6. 配置和能力
+Agent 工具调用 app-runtime 的正常用例：
 
-- `ProductConfig`：端口范围、超时、容量、更新渠道等非秘密默认值，可由签名配置覆盖。
-- `PlatformCapabilities`：browser engine、tab video/audio、hardware codec、secure store、local discovery、protected surface。
-- `ReceiverCapabilities`：只来自 Cast-SDK，不由 UI 或站点规则猜测。
-- `CastPolicyInput`：用户播放证明、候选证据、平台能力、接收端能力、广告连续性和播放门禁状态。
-- `ContentCapabilities`：semantic snapshot、local export、secure model store、reader card 与 receiver document capability；未知能力显式降级。
-- `AgentCapabilityGrant`：Profile/tab/tool/risk/target/generation/expiry 的强类型授权，默认不可持久化。
-- 秘密、Cookie 和 Authorization 不进入上述可序列化诊断模型。
+- `browser.read_targets/read_page/read_markdown`
+- `browser.navigate/tab_open/tab_switch/tab_close/back/refresh/scroll`
+- `browser.semantic_action`
+- `cast.read_devices/read_session/start/control/stop`
 
-## 7. 迁移不变量
+这些用例同样被产品 UI 使用。Agent gateway 不能创建“更强”的隐藏版本，也不能绕过用户播放、DRM、广告、Relay、下载、权限和外部协议门禁。
 
-1. 先用特征测试记录现状，再做纯移动，再做行为修复；三者不混在同一提交。
-2. 当前 53 项 core 测试不得减少；迁移内联测试只能改变位置，不能删断言。
-3. 正式 App 不得依赖 legacy 任意 URL proxy、隐藏 WebView 自动交互和 beacon 端口。
-4. 任何时刻至少保留一条可运行的端到端开发链路；正式 CEF 达到门禁前不删除 Tauri 迁移源。
-5. 公共错误、协议和状态变更必须版本化并有前后兼容测试。
+## 8. 投屏与外部客户端
+
+- 当前投屏决策是 `Direct/Relay/ExternalClientHandoff/Reject`。
+- Direct/Relay 只在 LAN，由 Cast-SDK facade 投送与控制。
+- `ExternalClientHandoff` 需要用户确认，不创建 Cast-SDK、Relay 或 WebRTC session。
+- R3 Agent 投屏工具需要独立确认，并沿用相同 policy；Agent 无权调用独立客户端的采集/镜像控制面。
+- 历史 `Mirror/tab_video/system_audio` 字段由 `MED-19` 兼容迁移，不能成为 Agent capability。
+
+## 9. 第二阶段模型能力
+
+- model adapter 位于内容 DTO 之后，默认没有 provider。
+- 文档总结消费清洗后的 snapshot/Markdown 子集。
+- 视频总结首期只消费合法可得且用户可见的字幕/转录或用户提供文本，不下载媒体或绕过 DRM。
+- 模型请求使用独立发送确认，不复用 Agent R1 grant；payload 与预览逐字段一致。
+- 输出绑定 snapshot/hash/provenance，标识 AI 生成；超时/取消/失败不影响本地 Markdown。
+- 模型输出保持 untrusted，不能生成 grant、工具确认或新的 CAAP 调用。
+
+## 10. 安全威胁
+
+- 间接提示注入：页面/模型/工具结果不得改变 capability 或串联第二工具。
+- confused deputy：R1 grant 不能复用为 R2～R4；一个 target 不能替换为另一个。
+- 本机恶意 client：当前用户 ACL、短期 secret、版本握手、限流、重放防护和单客户端策略。
+- TOCTOU：确认摘要绑定 target/generation/handle/参数 hash，变化即过期。
+- 跨 Profile：ID、缓存、grant、receipt 和 transport session 全部隔离。
+- 数据泄漏：不返回 Cookie、Authorization、完整敏感 query、浏览历史、密码/支付/隐藏表单值。
+- Release surface：扫描 remote bind、原始 CDP/WebDriver、任意 JS、文件上传、通用文件/网络工具和 debug control。
+
+## 11. 平台与范围
+
+- Windows/macOS CEF 是当前桌面范围。
+- HarmonyOS 只按鸿蒙电脑 PC 形态技术预览。
+- Linux 不提供当前 adapter。
+- 浏览器不实现 WebRTC、屏幕/标签页/系统音频采集或编码。
+
+## 12. 生命周期释放顺序
+
+1. 停止接收新 CAAP/MCP/CLI 请求，撤销 session/grant。
+2. 取消 Agent、page snapshot、Markdown和第二阶段模型任务。
+3. 停止 Cast-SDK session/listener。
+4. 撤销 Relay token/recipe/cache。
+5. 销毁 tab/profile/engine。
+6. 清理无痕数据并报告失败。
+7. 停止 transport、receipt/诊断 consumer 和平台对象。
+
+## 13. 架构变更门禁
+
+下列变化先修订独立 Roadmap：CAAP v2/远程 transport、新工具风险级别、放宽永久禁止能力、模型/provider/密钥、新平台、浏览器 WebRTC/采集/编码、Cast-SDK 公共 API 或新设备协议。

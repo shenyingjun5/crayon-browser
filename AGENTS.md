@@ -1,16 +1,18 @@
 <!-- rulepack-simple type=development -->
 
-# 蜡笔 AI 投屏浏览器 Agent 规则
+# 蜡笔 AI Agent 投屏浏览器 Agent 规则
 
 本文件是仓库级常驻规则。任何 Agent 在修改代码、测试、构建、依赖或 Roadmap 前必须完整读取本文件；更深目录存在 `AGENTS.md` 时，仅补充该目录的专有规则，不得放松本文件约束。
 
 ## 1. 项目定位
 
-- 产品：跨平台“蜡笔 AI 投屏浏览器 / AI Cast Browser”，品类定位是以浏览器为载体的“网页理解 + 安全投屏”工作台。Windows、macOS、Linux 使用 CEF；HarmonyOS 使用 ArkUI/ArkWeb。
-- 核心体验：当前页可确定性整理为 Markdown/阅读卡片，并在用户确认后调用模型；用户主动播放后可选择接收端，使用标签页投屏或通过安全门禁的高清直投。
-- 共享能力：内容快照/Markdown、媒体候选、策略、relay、隐私契约、Agent capability、协议适配和 UI 状态机。
+- 产品：面向 AI Agent 定制的“蜡笔 AI Agent 投屏浏览器”。当前桌面范围为 Windows、macOS CEF；HarmonyOS 面向鸿蒙电脑 PC 形态，使用 ArkUI/ArkWeb；Linux 暂不进入当前产品和开发范围。
+- 核心定位：除用户直接浏览与局域网投屏外，浏览器必须通过自有版本化 Agent 协议为 CLI/MCP 提供高性能页面读取和经用户授权的受控操作；MCP 是协议 adapter，不是第二套业务实现。
+- 交付顺序：先完成浏览器基础功能与局域网投屏闭环；随后完成确定性页面快照/Markdown和 Agent 协议、CLI/MCP 只读能力；再开放经用户确认的网页操作；依赖模型的视频/文档总结等内建 AI 能力放在第二阶段。
+- 投屏边界：浏览器只支持局域网内的 Direct/Relay 媒体投送，不实现 WebRTC、标签页采集、系统音频采集、编码或镜像传输。没有可投视频时只引导下载/打开独立的蜡笔投屏客户端。
+- 共享能力：媒体候选、策略、relay、隐私契约、确定性页面快照/Markdown、Agent tool registry/capability/receipt、自有协议适配和 UI 状态机。
 - Cast-SDK 边界：设备发现、投屏码、设备连接、能力评估、DLNA/CastExtension、播放控制和会话监督复用 Cast-SDK；浏览器项目不得复制协议栈。
-- 非目标：视频下载、内容聚合、站点级批量抓取、广告跳过、DRM 绕过、批量账号、代理池、反检测指纹、云端媒体代理和无人值守通用浏览器自动化。
+- 非目标：Linux 当前适配、浏览器内建 WebRTC 镜像、视频下载、内容聚合、站点级批量抓取、广告跳过、DRM 绕过、批量账号、代理池、反检测指纹和云端媒体代理。第一阶段不接真实模型 provider，但 Agent 协议、CLI/MCP 和授权控制面属于核心范围。
 
 ## 2. 事实来源与阅读顺序
 
@@ -56,14 +58,16 @@
 ## 4. 架构与模块化规则
 
 - 依赖方向固定为：产品 UI/应用编排 -> 领域接口 -> 共享 Core/Cast-SDK facade -> 平台适配；禁止反向依赖。
-- CEF、ArkWeb、Windows/macOS/Linux/HarmonyOS 系统 API 只能出现在对应 adapter/shell 模块。
-- 共享策略不得出现散落的 `if windows/macos/linux` 或设备型号判断；使用 `PlatformCapabilities`/receiver capability。
+- CEF、ArkWeb、Windows/macOS/HarmonyOS 系统 API 只能出现在对应 adapter/shell 模块。
+- 共享策略不得出现散落的 `if windows/macos/harmony` 或设备型号判断；使用 `PlatformCapabilities`/receiver capability。
 - Cast-SDK 通过固定 git revision 的源码 submodule 和 `crayon-cast-adapter` 接入；只有 adapter 可以依赖 SDK 公开 facade。App 不得拼 SOAP、DLNA metadata、CastExtension 或接收端控制 URL。
 - 浏览器业务不得进入 Cast-SDK；若发现 SDK 公共能力缺口，在 Cast-SDK 建独立 Roadmap/API 变更，浏览器侧不得复制临时协议实现。
 - `lib.rs`、`main.rs` 只负责装配、re-export 和生命周期入口，不放大段业务实现、注入脚本或测试正文。
 - 禁止创建无边界的 `utils.rs`、`common.rs`、`manager.rs`、`misc.rs`；共享代码必须属于稳定领域概念。
 - 状态必须有唯一所有者。一个模块不得直接修改另一个模块的内部集合、锁或缓存。
 - 辅助日志、诊断、遥测不得参与主业务正确性；生产者非阻塞，队列/缓存/重试必须有界。
+- Agent 访问必须统一经过版本化 tool registry、capability guard 和 app-runtime 正常用例；CLI/MCP 不得直接调用 CEF、ArkWeb、CDP、Cast-SDK、Relay 或平台 API。
+- 自有 Agent 协议的逻辑 schema 与 transport 分离；CLI 使用本机 IPC，MCP 只做 loopback adapter，两者共享握手、工具、错误、取消、幂等、generation 与审计语义。
 
 ## 5. 硬编码与配置
 
@@ -104,9 +108,10 @@
 - 禁止自动点击播放、广告或跳过按钮，禁止修改广告 `currentTime`、速率、可见性，禁止按广告域名过滤媒体候选。
 - DRM/EME/私有加扰只允许识别和拒绝直投；不得提取 key/license、注入 CDM 绕过或规避 protected surface。
 - Cookie、Authorization 和浏览历史不得进入接收端命令、媒体 URL、云端、日志或持久化诊断。
-- 页面正文、DOM、无障碍树和模型输出都不可信；不得据此授予 Agent capability、跳过确认、读取秘密或改变 DRM/广告/网络安全结论。
-- 模型调用前必须展示 provider 与实际发送字段；默认不上传正文，不发送隐藏 DOM、密码/表单值、跨源 iframe 正文或其他标签内容。
-- CLI/MCP 默认关闭且只允许 loopback + 短期 secret；不得暴露 Cookie/Authorization、任意 JavaScript、原始 CDP/WebDriver、远程监听、文件上传或通用文件/网络访问。
+- 页面正文、DOM 和无障碍树都不可信；不得据此改变 DRM、广告、投屏授权或网络安全结论。
+- 第一阶段 Release 不得包含真实模型 provider 或 API Key。Agent/CLI/MCP 按独立 Roadmap启用，但不得暴露原始 CDP/WebDriver、任意 JavaScript、Cookie/Authorization、密码/支付、文件上传、任意文件系统、远程监听或通用网络代理能力。
+- 页面正文、无障碍树、模型输出和 MCP/CLI 输入都不可信，不能生成或扩大 grant、改变目标、跳过确认或触发额外工具；写操作必须使用 Browser 签发的短期语义 handle 并受 tab/navigation/generation 约束。
+- 浏览器不得包含 WebRTC sender、标签页/窗口采集、系统音频采集或硬件编码投屏实现。镜像入口只允许调用受控的外部客户端 handoff；安装/打开必须由用户明确确认。
 - LAN 不得暴露通用 `/api/extract`、任意 URL proxy 或无鉴权控制接口。媒体路由必须是高熵 session/resource ID，并绑定设备、route、TTL 和上游 allow-set。
 - 所有 URL、重定向、DNS、文件路径、消息长度和数量需要边界验证；必须覆盖 SSRF、DNS rebinding、开放代理、重放和路径穿越。
 - P0 设备发现、投屏码、连接和控制均使用 Cast-SDK 现有局域网能力；产品云端不承载媒体或设备控制。
@@ -117,7 +122,7 @@
 - 不在持锁期间执行网络/文件 IO、外部回调、IPC、等待、线程 join 或不可控平台调用；不在锁内 `await`。
 - 多锁必须记录全局锁序；检查 stop/release 与 callback/timer/worker 的反向调用和旧会话污染。
 - 队列、缓存、连接、并发请求、重试和日志均必须有界，定义满载行为和 dropped 计数。
-- 采集、逐帧、逐分片、socket 和渲染热路径禁止默认高频日志、字符串格式化、JSON、同步 IO 和不必要复制。
+- 逐分片、socket、渲染和 Agent 页面快照/增量热路径禁止默认高频日志、重复整树序列化、字符串格式化、同步 IO 和不必要复制；协议必须支持分页/流式、取消、deadline 和背压。
 - start/stop、导航、设备切换、网络切换、休眠唤醒和 App 退出必须幂等并逆序释放资源。
 
 ## 10. 开发验证

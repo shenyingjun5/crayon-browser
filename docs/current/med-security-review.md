@@ -1,5 +1,7 @@
 # MED 模块安全评审（MED-18，2026-08-10）
 
+> 2026-08-11 产品契约更新：本文记录 `MED-01..18` 基于历史 v1 `Mirror` 语义完成时的安全证据，不能作为继续实现浏览器 WebRTC、采集或编码的依据。`MED-19` 将公共决策与 delivery 迁移为 `Direct/Relay/ExternalClientHandoff/Reject`；迁移后的外部交接不创建 receiver、Relay 或 WebRTC 会话。
+
 范围：`crayon-media-observer`、`crayon-media-probe`、`crayon-cast-policy`、`crayon-relay`、`crayon-app-runtime/delivery`（MED-01..MED-17 全部提交）。评审顺序按 `code-review-standard.md`：需求/边界 → 正确性 → 架构/API → 并发/生命周期 → 安全/隐私 → 性能 → 测试 → 可维护性。
 
 ## 1. 威胁模型对照（技术方案 §14 → 实现 → 测试）
@@ -51,7 +53,7 @@
 
 - P0：无。P1：无。P2：无。
 - P3（不阻塞，已记录）：
-  1. DASH relay serving 不在 v1（Relay+DASH 结构化降 Mirror，MED-17 已记录）；后续 DASH 任务需先建 schema 任务。
+  1. DASH relay serving 不在 v1（历史实现曾结构化降 Mirror，MED-17 已记录）；`MED-19` 后应改为外部客户端交接或稳定拒绝。后续 DASH 任务需先建 schema 任务。
   2. `GuardedFetch` 每跳新建 reqwest Client（连接不复用），对分片级流量有轻微开销；如性能门禁需要，后续任务引入 pinned-client 缓存。
   3. `is_well_formed_range` 在 mp4 模块私有，安全语料以行为级覆盖；如需更强保证可在 MED 后续任务抽公共 parser。
 

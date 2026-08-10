@@ -1,6 +1,6 @@
 # CEF：Desktop 浏览器壳 Roadmap
 
-状态：`CEF-01A DONE`，`CEF-01B READY`；用户切换到 SDK 源码接入后本任务退回待领取，尚未创建 `browser/engine-api` 生产代码。目标平台 Windows、macOS、Linux；每项以目标路径、测试 ID 和证据作为验收，不以单平台截图替代。
+状态：`CEF-01A DONE`，`CEF-01B READY`；用户切换到 SDK 源码接入后本任务退回待领取，尚未创建 `browser/engine-api` 生产代码。当前目标平台为 Windows、macOS；Linux 不在当前范围。每项以目标路径、测试 ID 和证据作为验收，不以单平台截图替代。
 
 ## 原子任务
 
@@ -10,8 +10,8 @@
 | CEF-01B | READY | CEF-01A | `browser/engine-api` | 不含 CEF 类型和产品策略的 C++17 `BrowserEngineAdapter` 最小接口、独立 Fake 与 compile contract | 接口 contract；Fake 生命周期/错误/重复释放；Harmony 可实现性说明 | S1 |
 | CEF-01C | TODO | CEF-01B | 根 `CMakeLists.txt`、`CMakePresets.json`、`cmake/cef` | 共享 CMake/preset、离线 CEF root 接入和最小 test target | preset/schema、无网络 configure、错误 root、RG-005 | S1 |
 | CEF-01D | TODO | CEF-01C | `browser/cef-shell` Windows 构建文件、验证记录 | Windows x64 CEF 最小壳 configure/build 与 Debug/Release 资源装配证据 | VS2022 configure/build；启动前依赖 smoke；包不入 Git | S2 |
-| CEF-01E | TODO | CEF-01D | macOS/Linux 构建文件、CI/验证记录 | macOS x64/arm64、Linux x64 configure/build 门禁并收口 bootstrap Review | 三目标 CI/configure/build；P0/P1=0；未实机项显式记录 | S2 |
-| CEF-02 | TODO | CEF-01E | `browser/cef-shell/src/process` | Browser/render/GPU 子进程入口与 sandbox 开关；正式构建强制 sandbox | 三平台启动/退出；sandbox smoke；无业务代码在 main | S3 |
+| CEF-01E | TODO | CEF-01D | macOS 构建文件、CI/验证记录 | macOS x64/arm64 configure/build 门禁并收口 bootstrap Review | 两个 macOS 架构 CI/configure/build；P0/P1=0；未实机项显式记录 | S2 |
+| CEF-02 | TODO | CEF-01E | `browser/cef-shell/src/process` | Browser/render/GPU 子进程入口与 sandbox 开关；正式构建强制 sandbox | Windows/macOS 启动/退出；sandbox smoke；无业务代码在 main | S3 |
 | CEF-03 | TODO | CEF-02 | `src/browser/window` | 单窗口/标签生命周期、导航、前后退、刷新、停止、缩放 | BR-001、重复关闭、崩溃恢复；资源无泄漏 | S3 |
 | CEF-04 | TODO | CEF-03 | `src/browser/context` | 临时/持久 `CefRequestContext` factory，Profile ID 不用名称作路径 | BR-002、PV-001、PV-004 基础；context 隔离 | S3 |
 | CEF-05 | TODO | CEF-04 | `src/browser/permission` | 摄像头/麦克风/通知/定位/剪贴板/下载按站点控制 | allow/deny/remember/session tests；默认最小权限 | S3 |
@@ -22,9 +22,9 @@
 | CEF-10 | TODO | CEF-09 | `src/browser/input_proof` | Browser process 可信输入、前台标签和播放推进交叉校验 | BR-003、BR-004、BR-005、BR-007；页面伪造全部失败 | S2 |
 | CEF-11 | TODO | CEF-09 | `src/browser/network_observer` | ResourceRequest/response observation，仅允许字段并有大小/速率上限 | BR-008、BR-011、BR-012；敏感 header/正文不进入 DTO | S2 |
 | CEF-12 | TODO | CEF-10,CEF-11 | `src/browser/observation_gateway` | DOM/network observation 合并并发送 Core，generation fencing | PL-001、PL-002；导航迟到事件；背压/dropped | S2 |
-| CEF-13 | TODO | CEF-08,CEF-12 | `shared-ui/features/cast` | `Idle/Browsing/Eligible/Selecting/Planning/Casting` 视图绑定 | 状态 UI contract；未播放禁用；错误不假成功 | S3 |
-| CEF-14 | TODO | CEF-05,CEF-07,CEF-12,CEF-13 | `tests/e2e/desktop/browser` | 三平台本地 fixture E2E harness、截图/日志脱敏产物 | BR-001..BR-014 适用项；无公网 | S3 |
-| CEF-15 | TODO | CEF-14 | 文档/Review | 三平台 CEF 壳总 Review、性能/包体/启动基线，修 P0/P1 | desktop build + E2E + repo guard；V1 CEF 部分完成 | S3 |
+| CEF-13 | TODO | CEF-08,CEF-12,MED-19 | `shared-ui/features/cast` | `Idle/Browsing/Eligible/Selecting/Planning/Casting` 与 `ExternalClientHandoff` 视图绑定 | 状态 UI contract；未播放禁用；交接需确认；错误不假成功 | S3 |
+| CEF-14 | TODO | CEF-05,CEF-07,CEF-12,CEF-13 | `tests/e2e/desktop/browser` | Windows/macOS 本地 fixture E2E harness、截图/日志脱敏产物 | BR-001..BR-014 适用项；无公网 | S3 |
+| CEF-15 | TODO | CEF-14 | 文档/Review | Windows/macOS CEF 壳总 Review、性能/包体/启动基线，修 P0/P1 | desktop build + E2E + repo guard；V1 CEF 部分完成 | S3 |
 
 ## CEF bootstrap 原子范围
 
@@ -34,9 +34,9 @@
 - 输入：CEF 官方 Automated Builds 的 stable revision、四个平台 Standard archive SHA-1、CEF/Chromium 再分发许可要求；Windows VS2022/CMake/Ninja 可用性。
 - 输出与允许修改：`cmake/cef/` 下的唯一版本/平台 manifest 与下载校验模块、`tests/contracts/` 下的确定性契约测试、`.gitignore` 的 CEF 缓存条目，以及 `docs/current/`/本 Roadmap 的第三方依赖事实。
 - 禁止修改：`browser/engine-api`、CEF shell、产品 UI、媒体策略、Cast-SDK；不得提交 archive/解压目录，不得启用专有 codec/CDM，不得把网络下载作为自动化测试成功条件。
-- 验收：版本和 distribution type 唯一；Windows x64、macOS x64/arm64、Linux x64 均有固定 hash；未知平台、缺失/错误离线根、hash 不匹配明确失败；缓存路径可覆盖且不污染源码；重复下载幂等；许可证义务可追踪。
+- 历史验收：版本和 distribution type 唯一；Windows x64、macOS x64/arm64、Linux x64 均有固定 hash；未知平台、缺失/错误离线根、hash 不匹配明确失败；缓存路径可覆盖且不污染源码；重复下载幂等；许可证义务可追踪。Linux hash 仅作为 `CEF-01A` 已完成证据保留，不构成当前支持承诺。
 - 测试：先运行缺失实现的失败 contract，再运行 `cmake -P tests/contracts/cef_distribution_contract.cmake`；以显式 download target 实际下载 Windows x64 Standard archive 并校验；运行 `scripts/check.ps1 fast` 和 `scripts/check.ps1 security`。
-- 完成证据：实际命令、archive 名称/大小/hash、未覆盖平台、独立 Code Review 记录；只完成 Windows 下载不把三平台 bootstrap 标为完成。
+- 完成证据：实际命令、archive 名称/大小/hash、未覆盖平台、独立 Code Review 记录。该证据属于 `CEF-01A` 历史基线，后续只推进 Windows/macOS。
 
 完成记录（2026-08-10）：
 
@@ -45,7 +45,7 @@
 - 结构/许可：真实 archive 含 `LICENSE.txt`、`include/cef_version.h`、`cmake/cef_variables.cmake`、`libcef_dll/CMakeLists.txt`；版本宏精确匹配固定 revision；archive 被 `.gitignore` 命中，未进入工作树。
 - 验证：CEF contract、`scripts/check.ps1 fast`、`scripts/check.ps1 security`、`git diff --check` 全部通过。
 - Code Review：需求/边界、正确性、架构、安全、并发/生命周期、测试和维护性逐项审查；发现并关闭 1 个 P1（离线根未校验 revision），最终 P0/P1/P2/P3 均为 0。
-- 未覆盖：macOS x64/arm64、Linux x64 只锁定官方 hash，尚未实际下载/configure；由 CEF-01E 完成。CEF archive 未解压，产品构建图由 01C、Windows 壳由 01D 负责。
+- 未覆盖：macOS x64/arm64 只锁定官方 hash，尚未实际下载/configure；由 CEF-01E 完成。Linux x64 不再进入当前任务。CEF archive 未解压，产品构建图由 01C、Windows 壳由 01D 负责。
 
 ### CEF-01B 跨引擎接口冻结（待领取）
 
@@ -63,8 +63,8 @@
 ### CEF-01C～CEF-01E 边界
 
 - `CEF-01C` 只建立共享构建图；输入为 01A/01B，输出限 CMake/preset/test target，不实现平台进程或产品行为。
-- `CEF-01D` 只负责 Windows x64 bootstrap；不改公共接口，不用单平台结果代替 macOS/Linux。
-- `CEF-01E` 只补齐 macOS x64/arm64、Linux x64 门禁并 Review；没有对应 runner 时必须保留为 `BLOCKED/VERIFIED`，不得伪造 S2 证据。
+- `CEF-01D` 只负责 Windows x64 bootstrap；不改公共接口，不用单平台结果代替 macOS。
+- `CEF-01E` 只补齐 macOS x64/arm64 门禁并 Review；没有对应 runner 时必须保留为 `BLOCKED/VERIFIED`，不得伪造 S2 证据。
 
 ## 接口冻结
 
@@ -74,4 +74,4 @@
 
 - C++ format/static analysis、目标 test target、目标平台 build。
 - 变更 renderer/browser IPC 时执行畸形消息、大小上限、旧 navigation 和 secret 泄漏测试。
-- 三平台实现允许分任务完成，但共同接口变更由一个 owner 先合并，平台 Agent 不各自改 schema。
+- Windows/macOS 实现允许分任务完成，但共同接口变更由一个 owner 先合并，平台实现不得各自修改 schema。
