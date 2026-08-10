@@ -5,3 +5,4 @@
 //! stay in Core memory and are revoked with the session.
 
 pub mod session;
+pub mod vault;

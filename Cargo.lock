@@ -338,6 +338,9 @@ dependencies = [
  "crayon-domain",
  "crayon-ipc-schema",
  "getrandom 0.2.17",
+ "test-support",
+ "url",
+ "zeroize",
 ]
 
 [[package]]
