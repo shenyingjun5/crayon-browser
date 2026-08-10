@@ -1,0 +1,18 @@
+{
+  "app.title": "蜡笔隐私投屏浏览器",
+  "nav.back": "后退",
+  "nav.forward": "前进",
+  "nav.reload": "刷新",
+  "nav.stop": "停止",
+  "address.placeholder": "输入网址",
+  "cast.select_receiver": "选择接收端",
+  "cast.mode.mirror": "标签页投屏",
+  "cast.mode.direct": "高清直投",
+  "cast.stop": "停止投屏",
+  "cast.rejected": "当前内容不能投屏",
+  "privacy.incognito": "无痕窗口",
+  "privacy.cleanup_failed": "无痕数据清理失败",
+  "login.open": "登录站点",
+  "error.network": "网络错误",
+  "update.available": "发现新版本"
+}

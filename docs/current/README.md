@@ -142,6 +142,12 @@ git diff --check                   # FND-01 交付前检查
 - `tests/online.rs` 13 条公网用例需 `GET_VIDEO_ONLINE=1` + `--ignored` 双重显式启用，缺一即跳过不算失败；输出不再含 URL/账号；testing-standard.md 增列手工兼容层规则。
 - `MockUpstream` 新增 `RangeAware` 脚本（206/Content-Range）；legacy-dev 全 target 严格 Clippy、`check.sh all` 通过。
 
+## FND-11 配置加载与本地化资源（2026-08-10）
+
+- `crayon-domain::config`：`ProductConfig` 严格 TOML 加载（未知字段/缺段/越界/版本不符均以稳定 `ConfigError` 阻止启动；secret 字样键在读取值前拒绝）；`config/product-defaults.toml` 集中端口范围、超时、容量、更新渠道、日志策略（URL 脱敏默认开）。
+- `browser/shared-ui/locales/` 建立 zh-CN/en-US 双语文案资源（16 键）；`config_locales` 契约测试保证 key parity 与零 secret。
+- 验证：config 10 条 + locale 2 条测试、全 workspace 严格 Clippy、`check.sh all` 通过。
+
 ## 事实更新规则
 
 - 完成模块 Roadmap 后，把稳定结论收敛到本目录，再归档实施过程。

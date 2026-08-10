@@ -1,6 +1,6 @@
 # FND：基础工程与 Legacy 迁移 Roadmap
 
-状态：`FND-01/02/03/04/05/06/07A/07B/07C/07D/08/09/10 DONE`，`FND-07E IMPLEMENTED`（app 整体编译验证待 WebKitGTK ≥ 2.40 环境），`FND-11 IN_PROGRESS`。
+状态：`FND-01/02/03/04/05/06/07A/07B/07C/07D/08/09/10/11 DONE`，`FND-07E IMPLEMENTED`（app 整体编译验证待 WebKitGTK ≥ 2.40 环境），`FND-12 IN_PROGRESS`。
 
 ## 目标
 
@@ -219,7 +219,7 @@
 
 ### FND-11：建立配置加载与本地化资源
 
-- 状态：`TODO`
+- 状态：`DONE`
 - 依赖：FND-08。
 - 创建：`config/product-defaults.toml`、`browser/shared-ui/locales/zh-CN.json`、`en-US.json`、domain config types。
 - 工作：集中端口范围、超时、容量、更新渠道、日志策略；用户文案迁资源；配置校验失败阻止启动并返回稳定错误。
@@ -227,6 +227,7 @@
 - 验证：config unit、locale key parity、secret scan。
 - 验收：业务源码不含用户文案和可变 magic value；配置不允许 secrets。
 - 证据：S2。
+- 完成证据（2026-08-10）：`crayon-domain::config` 新增 `ProductConfig`（network 端口范围 / timeouts / capacity / update 渠道 / logging 策略），TOML 严格加载：未知字段、缺段、越界（端口反转/重叠、超时 0 或超上限、容量 0 或超上限、`schema_version != 1`）均以稳定 `ConfigError` code 阻止启动；secret 字样键（password/secret/token/cookie/authorization/api_key/private_key）在读取值之前即被拒绝（`config_secret_not_allowed`）。新增 `config/product-defaults.toml`（relay 20000-29999、control 30000-30999、session TTL 7200s 上限 24h、容量上限、stable 渠道、info 级别 + URL 脱敏默认开）与 `browser/shared-ui/locales/zh-CN.json`/`en-US.json`（16 个浏览器 chrome 文案键）。新增依赖 `toml 0.8`（MIT/Apache、serde 生态基础库、纯 Rust 跨平台）仅入 `crayon-domain`。验证：`cargo test -p crayon-domain --test v1_config` 10/10；`crayon-app-runtime --test config_locales` 2/2（zh/en key parity + 非空值 + 全部 config/locale 资源 LeakScanner secret scan）；全 workspace 严格 Clippy（`-D warnings`）、`scripts/check.sh all`、`cargo fmt --all -- --check`、`git diff --check` 通过；repo-guard 对新资源零 finding。用户文案迁移说明：formal 代码本无 UI 文案（legacy 文案随 `legacy-dev` 隔离，最终删除），locales 建立 shared-ui 既定资源位。任务级 Code Review P0/P1/P2/P3 均为 0。
 
 ### FND-12：基础迁移收口 Review
 

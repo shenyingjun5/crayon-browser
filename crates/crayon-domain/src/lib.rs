@@ -1,12 +1,17 @@
 //! Platform-independent domain foundations shared by Crayon product crates.
 
 mod capabilities;
+mod config;
 mod error;
 mod ids;
 
 pub use capabilities::{
     BrowserEngineKind, LocalDiscoveryKind, PlatformCapabilities, ProtectedSurfaceKind,
     ReceiverCapabilities, SecureStoreKind,
+};
+pub use config::{
+    CapacityConfig, ConfigError, LogLevel, LoggingConfig, NetworkConfig, ProductConfig,
+    TimeoutConfig, UpdateChannel, UpdateSection, CONFIG_SCHEMA_VERSION,
 };
 pub use error::CoreError;
 pub use ids::{DeviceId, IdError, ResourceId, SessionGeneration, SessionId, TabId};

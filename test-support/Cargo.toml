@@ -12,7 +12,7 @@ workspace = true
 [dependencies]
 crayon-domain = { path = "../crates/crayon-domain" }
 crayon-ipc-schema = { path = "../crates/crayon-ipc-schema" }
-tokio = { version = "1", features = ["net", "rt", "sync"] }
+tokio = { version = "1", features = ["net", "rt", "sync", "io-util"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }

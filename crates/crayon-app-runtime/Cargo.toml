@@ -12,3 +12,7 @@ workspace = true
 [dependencies]
 crayon-domain = { path = "../crayon-domain" }
 crayon-ipc-schema = { path = "../crayon-ipc-schema" }
+
+[dev-dependencies]
+serde_json = "1"
+test-support = { path = "../../test-support" }
