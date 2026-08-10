@@ -10,4 +10,10 @@ publish = false
 workspace = true
 
 [dependencies]
+crayon-domain = { path = "../crayon-domain" }
+crayon-ipc-schema = { path = "../crayon-ipc-schema" }
 crayon-media-observer = { path = "../crayon-media-observer" }
+crayon-media-probe = { path = "../crayon-media-probe" }
+
+[dev-dependencies]
+test-support = { path = "../../test-support" }

@@ -1,5 +1,9 @@
 //! Pure fail-closed gates for entering cast planning.
 
+mod decide;
+
+pub use decide::{decide, Degradation, PolicyContext, PolicyOutcome};
+
 use crayon_media_observer::{
     ObservationOrigin, PlaybackObservation, PlaybackProgress, UserActivation,
 };

@@ -280,7 +280,11 @@ dependencies = [
 name = "crayon-cast-policy"
 version = "0.1.0"
 dependencies = [
+ "crayon-domain",
+ "crayon-ipc-schema",
  "crayon-media-observer",
+ "crayon-media-probe",
+ "test-support",
 ]
 
 [[package]]

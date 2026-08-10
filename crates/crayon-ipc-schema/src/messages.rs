@@ -277,8 +277,11 @@ impl CastPolicyInput {
 pub enum CastPolicyDecision {
     /// Tab capture + WebRTC mirroring.
     Mirror,
-    /// Receiver pulls the stream directly through the session relay.
+    /// Receiver pulls the original stream URL directly (no special headers).
     Direct,
+    /// Receiver pulls through the session relay, which holds the required
+    /// Referer/UA upstream headers (headers never reach the receiver).
+    Relay,
     Reject {
         reason: CoreError,
     },

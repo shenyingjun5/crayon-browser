@@ -51,6 +51,10 @@ const CASES: &[VectorCase] = &[
         "cast_policy_decision_reject.json",
         roundtrip::<CastPolicyDecision>,
     ),
+    (
+        "cast_policy_decision_relay.json",
+        roundtrip::<CastPolicyDecision>,
+    ),
     ("session_grant.json", roundtrip::<SessionGrant>),
     ("core_error.json", roundtrip::<CoreError>),
 ];
