@@ -60,9 +60,9 @@
 33. `MED-17` app-runtime delivery 编排（Planner→direct/relay/mirror）：当前 `DONE`。
 34. `MED-18` 安全 Review 与收口（threat model/fuzz/30 分钟 harness）：当前 `DONE`。
 35. `CEF-01A` 固定 CEF Standard revision、四平台 hash、许可和缓存/离线根契约：当前 `DONE`。
-36. `CEF-01B` 冻结不含 CEF 类型/产品策略的 `BrowserEngineAdapter` 最小接口：当前 `READY`。
+36. `CEF-01B` 冻结不含 CEF 类型/产品策略的 C++17 `BrowserEngineAdapter` 最小接口：当前 `IN_PROGRESS`；范围限 `browser/engine-api` 的公共契约、独立 Fake/测试和模块级 CMake。
 
-`FND` 模块 19 个唯一原子任务与 `MED` 模块 18 个原子任务全部 DONE（2026-08-10），FND V0 已收口。CEF bootstrap 已拆为 `CEF-01A`～`CEF-01E`，`CEF-01A DONE` 并解锁 `CEF-01B READY`；`SDK-01` 仍需固定 Cast-SDK revision 与正式接入授权，PRV/PLT/HM/QAR 再按依赖级联解锁。
+`FND` 模块 19 个唯一原子任务与 `MED` 模块 18 个原子任务全部 DONE（2026-08-10），FND V0 已收口。CEF bootstrap 已拆为 `CEF-01A`～`CEF-01E`，`CEF-01A DONE`，当前领取 `CEF-01B IN_PROGRESS`；`SDK-01` 仍需固定 Cast-SDK revision 与正式接入授权，PRV/PLT/HM/QAR 再按依赖级联解锁。
 
 `FND-07` 已按 `FND-07A`～`FND-07E` 顺序完成；FND-12 又关闭了 security corpus 恒真断言、非法 sniff URL panic 与 formal 根包 legacy 依赖泄漏。稳定结论和未覆盖项见 `docs/current/fnd-migration-review.md`。
 

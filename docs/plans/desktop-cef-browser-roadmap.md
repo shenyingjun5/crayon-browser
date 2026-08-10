@@ -1,13 +1,13 @@
 # CEF：Desktop 浏览器壳 Roadmap
 
-状态：`CEF-01A DONE`，`CEF-01B READY`；CEF 官方稳定版、四平台发行包校验值、许可证和本地缓存/离线根契约已固定。目标平台 Windows、macOS、Linux；每项以目标路径、测试 ID 和证据作为验收，不以单平台截图替代。
+状态：`CEF-01A DONE`，`CEF-01B IN_PROGRESS`；当前只冻结不依赖 CEF/ArkWeb 的 C++17 `BrowserEngineAdapter` 契约和独立 Fake/compile contract。目标平台 Windows、macOS、Linux；每项以目标路径、测试 ID 和证据作为验收，不以单平台截图替代。
 
 ## 原子任务
 
 | ID | 状态 | 依赖 | 目标路径 | 实现输出 | 测试/验收 | 证据 |
 |---|---|---|---|---|---|---|
 | CEF-01A | DONE | FND-08 | `cmake/cef`、`tests/contracts`、第三方文档 | 固定 CEF Standard revision、四平台官方 hash、许可和本地缓存/离线根契约 | 确定性 contract test；错误平台/缺失根/错误版本/校验失败；Windows 包实下载校验 | S1 |
-| CEF-01B | READY | CEF-01A | `browser/engine-api` | 不含 CEF 类型和产品策略的 `BrowserEngineAdapter` 最小接口、Fake 与 compile-only contract | 接口 contract；Fake 生命周期/错误/重复释放；Harmony 可实现性说明 | S1 |
+| CEF-01B | IN_PROGRESS | CEF-01A | `browser/engine-api` | 不含 CEF 类型和产品策略的 C++17 `BrowserEngineAdapter` 最小接口、独立 Fake 与 compile contract | 接口 contract；Fake 生命周期/错误/重复释放；Harmony 可实现性说明 | S1 |
 | CEF-01C | TODO | CEF-01B | 根 `CMakeLists.txt`、`CMakePresets.json`、`cmake/cef` | 共享 CMake/preset、离线 CEF root 接入和最小 test target | preset/schema、无网络 configure、错误 root、RG-005 | S1 |
 | CEF-01D | TODO | CEF-01C | `browser/cef-shell` Windows 构建文件、验证记录 | Windows x64 CEF 最小壳 configure/build 与 Debug/Release 资源装配证据 | VS2022 configure/build；启动前依赖 smoke；包不入 Git | S2 |
 | CEF-01E | TODO | CEF-01D | macOS/Linux 构建文件、CI/验证记录 | macOS x64/arm64、Linux x64 configure/build 门禁并收口 bootstrap Review | 三目标 CI/configure/build；P0/P1=0；未实机项显式记录 | S2 |
@@ -47,9 +47,21 @@
 - Code Review：需求/边界、正确性、架构、安全、并发/生命周期、测试和维护性逐项审查；发现并关闭 1 个 P1（离线根未校验 revision），最终 P0/P1/P2/P3 均为 0。
 - 未覆盖：macOS x64/arm64、Linux x64 只锁定官方 hash，尚未实际下载/configure；由 CEF-01E 完成。CEF archive 未解压，产品构建图由 01C、Windows 壳由 01D 负责。
 
-### CEF-01B～CEF-01E 边界
+### CEF-01B 跨引擎接口冻结（当前任务）
 
-- `CEF-01B` 只冻结引擎抽象；输入为 01A 契约，输出限 `browser/engine-api` 与独立测试，不接 CEF、不建窗口。
+- 状态：`IN_PROGRESS`；依赖 `CEF-01A DONE`。
+- 单一目标：冻结桌面 native 编排可消费、CEF 后端可实现且能映射到 ArkWeb 的最小 C++17 浏览器引擎契约；本任务不创建可运行浏览器。
+- 输入：`docs/current/architecture.md` 的依赖方向与状态所有权、FND-08 的强类型 ID/Core 错误语义、BR-001/BR-013 与 PV-001/PV-004 的后续调用需求，以及 CEF/ArkWeb 均可表达的导航、标签、Profile、权限、可信输入事实和 observation 订阅能力。
+- 输出与允许修改：`browser/engine-api/include/crayon/browser_engine/` 的纯抽象接口/强类型值对象，`browser/engine-api/README.md` 的线程、所有权、错误和 Harmony 语义映射，`browser/engine-api/tests/` 的独立 Fake/contract，以及仅供该模块独立编译测试的 `browser/engine-api/CMakeLists.txt`。
+- 禁止修改：根 `CMakeLists.txt`/preset、`browser/cef-shell`、`browser/harmony-shell`、Rust Core/schema、产品 UI、Profile 实现、媒体策略、Cast-SDK 与平台 adapter；生产 include/source 不得包含 Fake、Mock、CEF、ArkWeb、OS header 或站点规则。
+- 接口边界：命令只表示已接收或稳定拒绝，异步结果只经有所有权说明的 event sink 交付；类型覆盖 adapter 生命周期、标签/导航、Profile 上下文、权限决定、可信输入事实和 observation 订阅。不得携带 Cookie、Authorization、响应正文、接收端命令、投屏模式决策或 CEF handle。
+- 错误与生命周期：无效/空 ID、非法 URL/zoom/权限值 fail closed；重复 close/destroy/unsubscribe 幂等且结果稳定；subscription/adapter 释放后不得回调；接口本身不启动线程、计时器、IO 或等待，因此取消/超时由后续具体 operation owner 定义，不能在本任务伪造异步成功。
+- 验收：所有 public header 可独立包含；Fake 完整实现每个纯虚方法；contract 覆盖正常命令、无效输入、重复调用、事件顺序、unsubscribe 后无回调和 adapter 销毁；扫描证明 public/production 文件不含 CEF/ArkWeb/OS/Cast/relay/测试类型；Harmony 说明逐项给出 ArkWeb 可实现、需 native bridge 或后续 capability 降级，不把桌面结果冒充 Harmony 真机证据。
+- 测试命令：先以缺少 public header 的 compile contract 记录失败；再运行 `cmake -S browser/engine-api -B .cache/build/engine-api -G Ninja -DCRAYON_ENGINE_API_BUILD_TESTS=ON`、`cmake --build .cache/build/engine-api`、`ctest --test-dir .cache/build/engine-api --output-on-failure`、`scripts/check.ps1 fast`、`scripts/check.ps1 security` 和 `git diff --check`。
+- 完成证据：编译器/CMake/Ninja 版本、测试数量与结果、public include 扫描、Code Review 结论和未覆盖项；只有实现、测试、Review 均完成后才转 `DONE` 并解锁 `CEF-01C`。
+
+### CEF-01C～CEF-01E 边界
+
 - `CEF-01C` 只建立共享构建图；输入为 01A/01B，输出限 CMake/preset/test target，不实现平台进程或产品行为。
 - `CEF-01D` 只负责 Windows x64 bootstrap；不改公共接口，不用单平台结果代替 macOS/Linux。
 - `CEF-01E` 只补齐 macOS x64/arm64、Linux x64 门禁并 Review；没有对应 runner 时必须保留为 `BLOCKED/VERIFIED`，不得伪造 S2 证据。

@@ -2,7 +2,7 @@
 
 > 版本：v0.3
 > 日期：2026-08-10
-> 状态：执行中；`FND-01~12`（含 `07A~07E`）、`MED-01~18` 与 `CEF-01A` 已 DONE，`CEF-01B READY`
+> 状态：执行中；`FND-01~12`（含 `07A~07E`）、`MED-01~18` 与 `CEF-01A` 已 DONE，`CEF-01B IN_PROGRESS`
 > 目标：任何新 Agent 读取 `AGENTS.md`、current 契约和所属模块 Roadmap 后，可以领取一个原子任务并独立实现、测试、Review 和更新状态。
 
 ## 1. 使用方式
@@ -126,7 +126,7 @@ flowchart LR
 | 模块 | READY | TODO | IN_PROGRESS | DONE | 当前阻塞 |
 |---|---:|---:|---:|---:|---|
 | FND | 0 | 0 | 0 | 19 | 无；FND V0 已收口 |
-| CEF | 1 | 17 | 0 | 1 | CEF-01B 已解锁；macOS/Linux runner 留待 01E |
+| CEF | 0 | 17 | 1 | 1 | CEF-01B 正在冻结跨引擎接口；macOS/Linux runner 留待 01E |
 | MED | 0 | 0 | 0 | 18 | 无 |
 | SDK | 0 | 14 | 0 | 0 | 需固定 Cast-SDK revision 与正式接入授权（SDK-01） |
 | PLT | 0 | 19 | 0 | 0 | 等 CEF-07、SDK-05 |
@@ -202,4 +202,4 @@ flowchart LR
 
 ## 12. 当前执行指令
 
-`CEF-01A` 已完成：固定 CEF Standard revision、四平台校验值、许可证和缓存/离线根契约，Windows x64 archive 已实际下载并校验且不入 Git。下一原子任务为 `CEF-01B READY`，只冻结跨引擎接口；CMake 产品构建图和平台 shell 分别由 `CEF-01C`～`CEF-01E` 完成。`SDK-01` 仍需固定 Cast-SDK revision 与正式接入授权。
+`CEF-01A` 已完成：固定 CEF Standard revision、四平台校验值、许可证和缓存/离线根契约，Windows x64 archive 已实际下载并校验且不入 Git。`CEF-01B IN_PROGRESS`，范围只包含 C++17 跨引擎接口、独立 Fake/contract 与 Harmony 语义映射；根 CMake、CEF/ArkWeb 后端和平台 shell 不得偷跑，分别由 `CEF-01C`～`CEF-01E` 及 HM Roadmap 完成。`SDK-01` 仍需固定 Cast-SDK revision 与正式接入授权。
