@@ -10,11 +10,17 @@ publish = false
 workspace = true
 
 [dependencies]
+axum = "0.8"
 crayon-domain = { path = "../crayon-domain" }
 crayon-ipc-schema = { path = "../crayon-ipc-schema" }
 getrandom = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt", "net", "sync"] }
 url = "2"
 zeroize = "1"
 
 [dev-dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 test-support = { path = "../../test-support" }
+tokio = { version = "1", features = ["full"] }

@@ -4,5 +4,6 @@
 //! session/resource routes; upstream URLs, Referer/UA recipes and secrets
 //! stay in Core memory and are revoked with the session.
 
+pub mod router;
 pub mod session;
 pub mod vault;
