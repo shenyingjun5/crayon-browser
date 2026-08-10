@@ -124,6 +124,13 @@ git diff --check                   # FND-01 交付前检查
 - 补齐 `app/icons/icon.ico` 与 `demo/icons/icon.ico`（由 64x64 `icon.png` 确定性生成），解除 FND-04 记录的 Windows 构建阻断；提交 `app/Cargo.lock` 保证 app 独立构建可复现。
 - legacy_contract 8 条、legacy 回归 58 条、`scripts/check.sh all`/`security` 通过；`cargo check --manifest-path app/Cargo.toml` 在本机被系统 WebKitGTK 2.38.2 < 2.40 阻断（openEuler 24.03，未绕过版本检查），需在达标环境补跑后 FND-07E 转 VERIFIED。
 
+## FND-08 Core API v1 与 capability schema（2026-08-10）
+
+- `crayon-domain`：强类型 ID（TabId/SessionId/DeviceId/ResourceId，边界校验）、`SessionGeneration`（溢出不回绕）、`CoreError` 14 个稳定错误码（golden 锁定）、`PlatformCapabilities`/`ReceiverCapabilities`（`deny_unknown_fields`）。
+- `crayon-ipc-schema`：v1 消息全集（SourceObservation/MediaCandidate/CastPolicyInput/Decision 等），`SessionSecret` 不可序列化且 Debug 脱敏；`SchemaVersion`/`Handshake` 可序列化、零版本拒绝。`AdContinuity` 无 `skippable`/`ad_free` 变体（广告红线写入 schema）。
+- `schemas/current` 与 `schemas/previous` 各 10 个 golden 向量；v1 窗口策略：previous 镜像 current 直到 v2；RG-007 转为 passed。`config/feature-schema.json` 冻结能力/特性 v1 JSON Schema。
+- 验证：domain+ipc-schema 16 条契约测试、全 workspace 严格 Clippy、`scripts/check.sh all` 通过；PL-013 完整决策矩阵随 MED 落地。
+
 ## 事实更新规则
 
 - 完成模块 Roadmap 后，把稳定结论收敛到本目录，再归档实施过程。

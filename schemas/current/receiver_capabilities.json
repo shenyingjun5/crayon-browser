@@ -1,0 +1,9 @@
+{
+  "mp4": true,
+  "hls": true,
+  "dash": true,
+  "h264": true,
+  "hevc": false,
+  "av1": false,
+  "max_height": 2160
+}

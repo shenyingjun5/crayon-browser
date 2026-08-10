@@ -284,12 +284,18 @@ dependencies = [
 [[package]]
 name = "crayon-domain"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "crayon-ipc-schema"
 version = "0.1.0"
 dependencies = [
  "crayon-domain",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

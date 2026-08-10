@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://crayon.dev/schemas/feature-schema.json",
+  "title": "Crayon product capability/feature schema v1",
+  "description": "Startup capability declaration and non-secret product feature flags. Secrets, cookies and page URLs are forbidden anywhere in this document.",
+  "type": "object",
+  "required": ["schema_version", "platform_capabilities", "features"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Non-zero IPC schema version; current window supports v1."
+    },
+    "platform_capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "browser_engine",
+        "tab_video",
+        "system_audio",
+        "hardware_h264",
+        "local_discovery",
+        "secure_store",
+        "protected_surface"
+      ],
+      "properties": {
+        "browser_engine": { "type": "string", "enum": ["cef", "arkweb"] },
+        "tab_video": { "type": "boolean" },
+        "system_audio": { "type": "boolean" },
+        "hardware_h264": { "type": "boolean" },
+        "local_discovery": { "type": "string", "enum": ["mdns+udp", "unavailable"] },
+        "secure_store": { "type": "string", "enum": ["os_native", "unavailable"] },
+        "protected_surface": { "type": "string", "enum": ["blocked", "capturable"] }
+      }
+    },
+    "features": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "strict_anti_fingerprinting": {
+          "type": "boolean",
+          "default": false,
+          "description": "Strict mode is never the P0 default (design 7.2)."
+        },
+        "anonymous_telemetry": {
+          "type": "boolean",
+          "default": false,
+          "description": "Telemetry is opt-in only and defaults off (design 15)."
+        }
+      }
+    }
+  }
+}

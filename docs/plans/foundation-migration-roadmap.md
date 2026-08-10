@@ -1,6 +1,6 @@
 # FND：基础工程与 Legacy 迁移 Roadmap
 
-状态：`FND-01/02/03/04/05/06/07A/07B/07C/07D DONE`，`FND-07E IMPLEMENTED`（app 整体编译验证待 WebKitGTK ≥ 2.40 环境）。
+状态：`FND-01/02/03/04/05/06/07A/07B/07C/07D/08 DONE`，`FND-07E IMPLEMENTED`（app 整体编译验证待 WebKitGTK ≥ 2.40 环境），`FND-09 IN_PROGRESS`。
 
 ## 目标
 
@@ -183,7 +183,7 @@
 
 ### FND-08：冻结 Core API v1 与 capability schema
 
-- 状态：`TODO`
+- 状态：`DONE`
 - 依赖：FND-05、FND-06。
 - 修改：`crayon-domain`、`crayon-ipc-schema/schema/`、`config/feature-schema.json`、contract tests。
 - 工作：定义强类型 ID、稳定错误、`PlatformCapabilities`、`ReceiverCapabilities`、`SourceObservation`、`MediaCandidate`、`CastPolicyInput/Decision` 和 session generation；明确 secret 不可序列化字段。
@@ -191,6 +191,7 @@
 - 验证：schema golden、serde roundtrip、unknown field/version tests、secret field deny tests。
 - 验收：v1 当前/前一版本策略写入契约；不含 UI 文案、OS 类型和 Cast-SDK 内部类型。
 - 证据：S2。
+- 完成证据（2026-08-10）：`crayon-domain` 新增强类型 ID（`TabId`/`SessionId`/`DeviceId`/`ResourceId`，非空/长度/字符集校验，wire 为字符串）、`SessionGeneration`（单调代际，溢出返回 `None` 不回绕）、`CoreError`（14 个稳定错误码，CS-008 golden 锁定全集合，未知码拒绝）、`PlatformCapabilities`/`ReceiverCapabilities`（设计 §4.1/§9.1 字段，`deny_unknown_fields`）；`ProductMode` 获得稳定 wire 名（`formal`/`legacy_development`）。`crayon-ipc-schema` 新增 v1 消息（`PageContext`/`PlaybackState`/`SourceObservation`/`MediaCandidate`/`CastPolicyInput`/`CastPolicyDecision`，全部 `deny_unknown_fields`；`AdContinuity` 无 `skippable`/`ad_free` 变体）、`SessionSecret`（无 Serialize/Deserialize、Debug 脱敏、Drop 清零）与 `SessionGrant`（只携带 id+generation）；`SchemaVersion`/`Handshake` 可序列化且 `schema_version=0` 拒绝。`schemas/current` 与 `schemas/previous` 各 10 个 golden 向量；v1 兼容窗口策略写入契约：v1 为首个版本，previous 镜像 current，直到 v2 冻结（RG-007 由 not_applicable 转为 passed）。`config/feature-schema.json` 定义能力/特性 v1 JSON Schema（密钥/Cookie/页面 URL 禁止入内）。验证：`cargo test -p crayon-domain -p crayon-ipc-schema` 16/16（golden 语义级 roundtrip、previous 窗口兼容、未知字段/零版本拒绝、secret deny、PL-013 schema 级能力无关性）；全 workspace 严格 Clippy（`-D warnings`）通过；`scripts/check.sh all` 通过；`cargo fmt --all -- --check`、`git diff --check` 通过。PL-013 的完整决策矩阵随 MED 策略引擎落地，本任务覆盖 schema 级不变量（测试注释已标明）。任务级 Code Review P0/P1/P2/P3 均为 0；`CastPolicyDecision` 内部 tag 枚举的 unit variant 不拒绝未知键为 serde 既定限制（出方向消息，测试注释已记录）。
 
 ### FND-09：建立确定性 test-support
 

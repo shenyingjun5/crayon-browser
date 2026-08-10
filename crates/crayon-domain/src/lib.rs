@@ -1,10 +1,23 @@
 //! Platform-independent domain foundations shared by Crayon product crates.
 
+mod capabilities;
+mod error;
+mod ids;
+
+pub use capabilities::{
+    BrowserEngineKind, LocalDiscoveryKind, PlatformCapabilities, ProtectedSurfaceKind,
+    ReceiverCapabilities, SecureStoreKind,
+};
+pub use error::CoreError;
+pub use ids::{DeviceId, IdError, ResourceId, SessionGeneration, SessionId, TabId};
+
+use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
 /// Explicit product execution boundary.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ProductMode {
     /// Shipping product mode. Legacy extraction and relay surfaces are forbidden.
     Formal,

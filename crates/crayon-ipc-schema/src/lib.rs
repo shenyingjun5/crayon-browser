@@ -1,9 +1,21 @@
-//! Version negotiation primitives for browser/core communication.
+//! Version negotiation primitives and frozen v1 wire messages for
+//! browser/core communication.
+
+mod messages;
+mod secret;
+
+pub use messages::{
+    AdContinuity, AudioCodecKind, CastPolicyDecision, CastPolicyInput, HeadersClass,
+    MediaCandidate, PageContext, PlaybackState, ProtocolKind, SourceObservation, VideoCodecKind,
+};
+pub use secret::{SessionGrant, SessionSecret};
 
 use crayon_domain::ProductMode;
+use serde::{de::Error as _, Deserialize, Deserializer, Serialize, Serializer};
 use std::num::NonZeroU16;
 
-/// Non-zero IPC schema version.
+/// Non-zero IPC schema version. Wire form is the plain `u16`; zero is
+/// rejected at deserialization.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct SchemaVersion(NonZeroU16);
 
@@ -27,8 +39,24 @@ impl SchemaVersion {
     }
 }
 
+impl Serialize for SchemaVersion {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_u16(self.get())
+    }
+}
+
+impl<'de> Deserialize<'de> for SchemaVersion {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let raw = u16::deserialize(deserializer)?;
+        NonZeroU16::new(raw)
+            .map(Self)
+            .ok_or_else(|| D::Error::custom("schema_version must be non-zero"))
+    }
+}
+
 /// Minimal startup negotiation data shared by browser and core.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Handshake {
     schema_version: SchemaVersion,
     product_mode: ProductMode,

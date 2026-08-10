@@ -1,0 +1,9 @@
+{
+  "browser_engine": "cef",
+  "tab_video": true,
+  "system_audio": true,
+  "hardware_h264": true,
+  "local_discovery": "mdns+udp",
+  "secure_store": "os_native",
+  "protected_surface": "blocked"
+}
