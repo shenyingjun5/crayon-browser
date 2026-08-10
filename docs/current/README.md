@@ -11,6 +11,7 @@
 | [`testing-standard.md`](testing-standard.md) | 测试层级、fixture、平台矩阵和证据要求 |
 | [`test-cases.md`](test-cases.md) | 可执行测试用例目录 |
 | [`code-review-standard.md`](code-review-standard.md) | Code Review 维度、等级和合并条件 |
+| [`med-security-review.md`](med-security-review.md) | MED 模块安全评审：威胁模型对照、RL 全集覆盖、性能/泄漏报告（2026-08-10） |
 | [`../crayon-private-cast-browser-technical-design.md`](../crayon-private-cast-browser-technical-design.md) | 完整技术背景与协议设计 |
 | [`../plans/README.md`](../plans/README.md) | 活跃 Roadmap 和下一批可领取任务 |
 
@@ -152,6 +153,11 @@ git diff --check                   # FND-01 交付前检查
 
 - `crayon-media-observer::observation`：`SourceObservation` 构造即校验（空/超长/非 http(s) 拒绝），携带 tab/navigation/frame/source/双 URL/逻辑时间戳；`is_current` 支撑导航后迟到事件丢弃（BR-007）；iframe/Worker/MSE 来源事实保留（BR-008）。
 - observer 新增对 `crayon-domain` 的依赖（架构表允许）；6 条测试、严格 Clippy、`check.sh all` 通过。
+
+## MED 模块收口（2026-08-10）
+
+- `MED-01..MED-18` 全部 DONE：observer（SourceObservation 校验/candidate 归并排序/生命周期）、media-probe（有界 HTTP/HLS·DASH·MP4 预检/保护证据保守合并）、cast-policy（唯一 Mirror/Direct/Relay/Reject 决策）、crayon-relay（CSPRNG session/vault/双面路由/network_guard/MP4 与 HLS 流式/runtime 收口）、app-runtime delivery 编排（单次降级无循环）。
+- 安全评审见 [`med-security-review.md`](med-security-review.md)：RL-001..015 全覆盖、30 分钟长稳 harness（6.9GB 流量 RSS 平台期）、首字节附加延迟 p50 ≈722µs、Release 产物 RG-006 全过。
 
 ## 事实更新规则
 

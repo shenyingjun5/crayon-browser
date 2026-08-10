@@ -1,8 +1,8 @@
 # 蜡笔隐私投屏浏览器可执行开发 Roadmap
 
 > 版本：v0.3
-> 日期：2026-08-09
-> 状态：执行中；`FND-01/02/03/04/05/06/07A DONE`，`FND-07B IN_PROGRESS`
+> 日期：2026-08-10
+> 状态：执行中；`FND-01~06/07A~07E/08/09/10/11` 已交付（07E 待达标环境编译验证、FND-12 待 07E 解锁），`MED-01~17 DONE`，`MED-18` 收口进行中
 > 目标：任何新 Agent 读取 `AGENTS.md`、current 契约和所属模块 Roadmap 后，可以领取一个原子任务并独立实现、测试、Review 和更新状态。
 
 ## 1. 使用方式
@@ -125,16 +125,16 @@ flowchart LR
 
 | 模块 | READY | TODO | IN_PROGRESS | DONE | 当前阻塞 |
 |---|---:|---:|---:|---:|---|
-| FND | 0 | 8 | 1 | 10 | 无 |
-| CEF | 0 | 15 | 0 | 0 | 等 FND-08 |
-| MED | 0 | 18 | 0 | 0 | 等 FND-06 |
-| SDK | 0 | 14 | 0 | 0 | 等 FND-08 与 Cast-SDK pin 决策 |
+| FND | 0 | 0 | 1 | 17 | FND-07E 待 WebKitGTK ≥ 2.40 环境编译验证；FND-12 待 07E |
+| CEF | 0 | 15 | 0 | 0 | CEF 二进制分发不可达（本机），需工具链环境 |
+| MED | 0 | 0 | 1 | 17 | MED-18 待 30 分钟 harness 完成 |
+| SDK | 0 | 14 | 0 | 0 | 需 Cast-SDK 仓库位置与接入授权（SDK-01） |
 | PLT | 0 | 18 | 0 | 0 | 等 CEF-07、SDK-05 |
-| PRV | 0 | 13 | 0 | 0 | 等 FND-08、CEF-05 |
-| HM | 0 | 14 | 0 | 0 | 等共享 API/策略/SDK adapter |
+| PRV | 0 | 13 | 0 | 0 | 等 FND-08（已达）、CEF-05 |
+| HM | 0 | 14 | 0 | 0 | 等 SDK-05 与真机 |
 | QAR | 0 | 16 | 0 | 0 | 等目标切片实现 |
 
-任务状态发生变化时同步更新模块 Roadmap；本表只在模块汇总状态变化时更新。
+任务状态发生变化时同步更新模块 Roadmap；本表只在模块汇总状态变化时更新。（2026-08-10 更新：FND 17 项 DONE 含 FND-01~06、07A~07E、08~11，其中 07E 为 IMPLEMENTED 待验证；MED-01~17 DONE。）
 
 ## 6. 现状到目标的迁移映射
 
@@ -202,4 +202,4 @@ flowchart LR
 
 ## 12. 当前执行指令
 
-当前执行 `FND-07B`：只移动 legacy 共享模型、状态所有权和去重写入并建立序列化/字段契约；不得同时移动 Beacon、commands、Relay 或 CLI。
+当前执行 `MED-18` 收口：安全评审文档与 fuzz 语料已落地，等待 30 分钟长稳 harness（RL-013）完成后收口提交。后续任务解锁条件：FND-07E/FND-12 需 WebKitGTK ≥ 2.40 或 macOS/Windows 环境做 app 编译验证；CEF-01 需可下载 CEF 二进制的工具链环境；SDK-01 需 Cast-SDK 仓库位置与接入授权；PRV/PLT/HM/QAR 级联依赖上述解锁。

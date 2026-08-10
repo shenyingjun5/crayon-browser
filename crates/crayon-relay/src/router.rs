@@ -8,11 +8,12 @@
 //! - media plane (LAN): `GET /s/{token}/master.m3u8`,
 //!   `GET /s/{token}/manifest.mpd`, `GET /s/{token}/r/{resource_id}/{name}`.
 //!
-//! There is no `/api/extract`, no arbitrary-URL `/proxy`, no player/probe
-//! page (RL-001). Authorization always runs before any upstream access
-//! (RL-003); malformed tokens/ids, path traversal, wrong methods and
-//! oversized input are rejected bounded (RL-008). Media bytes flow through
-//! the pluggable `ResourceFetcher` (MP4/HLS streaming lands in MED-13/15).
+//! There are no legacy extraction/proxy/player routes at all (RL-001) —
+//! only the opaque session/resource surface below. Authorization always runs
+//! before any upstream access (RL-003); malformed tokens/ids, path
+//! traversal, wrong methods and oversized input are rejected bounded
+//! (RL-008). Media bytes flow through the pluggable `ResourceFetcher`
+//! (MP4/HLS streaming lands in MED-13/15).
 
 use crate::session::{SessionAuthError, SessionRegistry};
 use crate::vault::RecipeVault;
