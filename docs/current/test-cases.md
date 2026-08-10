@@ -1,4 +1,4 @@
-# 蜡笔隐私投屏浏览器测试用例目录
+# 蜡笔 AI 投屏浏览器测试用例目录
 
 状态值：`AUTO` 自动化、`HARNESS` 专项设施、`DEVICE` 真机、`RELEASE` 发布产物。每个用例实现后必须在测试代码注释或测试名称中保留 ID。
 
@@ -13,7 +13,7 @@
 | RG-005 | AUTO | 解析 workspace 依赖图 | 无循环依赖；仅 cast-adapter 依赖 Cast-SDK |
 | RG-006 | AUTO | 构建 Release 并扫描符号/资源 | 不包含 test、fixture、debug remote control 和测试框架 |
 | RG-007 | AUTO | 修改 IPC/schema 后运行兼容检查 | 当前与前一协议版本 golden vectors 均通过 |
-| RG-008 | AUTO | 检查 Cast-SDK revision 与允许清单 | 固定 commit；无隐式本机 path dependency |
+| RG-008 | AUTO | 检查 Cast-SDK source lock、`.gitmodules`、checkout HEAD 与后续 Cargo 依赖；gitlink 由 submodule 状态命令复核 | 固定 commit；无 branch 漂移或本机 path dependency |
 
 ## 2. 浏览器、播放门禁与媒体观察
 
@@ -59,7 +59,7 @@
 |---|---|---|---|
 | RL-001 | AUTO | 构建正式 LAN router | 不存在 `/api/extract`、任意 URL `/proxy`、player/probe 页面 |
 | RL-002 | AUTO | 创建 session | token/resource ID 至少 128-bit CSPRNG，不含上游 URL |
-| RL-003 | AUTO | 未配对设备、错误 receiver ID/IP 请求资源 | 401/403，不访问 upstream |
+| RL-003 | AUTO | 非当前 Cast-SDK route、错误 receiver ID/IP 请求资源 | 401/403，不访问 upstream |
 | RL-004 | AUTO | 停止 session 后重复访问 | 10 秒门禁内失效；vault/registry 清空 |
 | RL-005 | AUTO | 导航、route lost、设备替换、Profile 销毁、App exit | 每个触发器均撤销 session 和 secret |
 | RL-006 | AUTO | 上游重定向到 localhost/RFC1918/link-local/metadata | 每跳拒绝；不返回内部响应 |
@@ -79,14 +79,14 @@
 |---|---|---|---|
 | CS-001 | AUTO | Fake facade start/refresh/stop discovery | 生命周期幂等，UI 只消费设备快照 |
 | CS-002 | AUTO | 设备同名、UDN 冲突、多网卡候选 | UI 使用稳定 device ID，不缓存 IP |
-| CS-003 | AUTO | 六位码成功、过期、错误、取消 | 映射稳定状态；浏览器不实现算法副本 |
+| CS-003 | AUTO | 六位码成功、格式错误、未找到、取消 | 映射稳定连接状态；浏览器不实现算法副本 |
 | CS-004 | AUTO | receiver capability 变化 | policy 使用 SDK 最新 assessment，旧缓存失效 |
 | CS-005 | AUTO | Direct plan 投送 | 只通过 Cast-SDK facade，App 不拼 SOAP/URL |
 | CS-006 | AUTO | pause/seek/volume/stop 带旧 session handle | SDK/adapter 拒绝 stale generation |
 | CS-007 | AUTO | receiver 自然结束、电视端 Stop、route lost | App 状态收敛并撤销 relay/mirror |
 | CS-008 | AUTO | SDK 返回 unsupported/protocol/permission 错误 | 映射稳定产品错误码，不解析自然语言 |
-| CS-009 | AUTO | Cast-SDK revision 升级 | API contract、行为 golden、依赖树和许可证检查通过 |
-| CS-010 | DEVICE | 自动发现和投屏码分别连接蜡笔接收端 | 发现、确认、首帧、控制、停止闭环 |
+| CS-009 | AUTO | Cast-SDK revision 升级 | gitlink/source lock、API contract、行为 golden、依赖树和回滚检查通过 |
+| CS-010 | DEVICE | 自动发现和投屏码分别连接蜡笔接收端 | 发现、连接、首帧、控制、停止闭环 |
 
 ## 6. Profile、隐私与安全存储
 
@@ -98,12 +98,51 @@
 | PV-004 | AUTO | 两个常用空间登录同一 origin | Cookie、权限和存储互不可见 |
 | PV-005 | AUTO | 销毁常用空间 | 先停止投屏/撤销 secret，再删除受控目录 |
 | PV-006 | AUTO | 构造符号链接/目录联接逃逸 | 拒绝删除目标，外部文件不受影响 |
-| PV-007 | DEVICE | DPAPI/Keychain/Secret Service/HUKS 写读删 | 密钥不以明文落盘，解除配对后删除 |
+| PV-007 | DEVICE | DPAPI/Keychain/Secret Service/HUKS 写读删敏感配置 | 敏感值不以明文落盘，空间销毁后删除 |
 | PV-008 | AUTO | 默认启动并检查网络/日志 | 遥测关闭，无浏览 URL/标题上报 |
 | PV-009 | AUTO | 标准/严格防追踪模式 | 统一策略，不为不同 Profile 生成唯一随机指纹 |
 | PV-010 | AUTO | 诊断导出预览 | 用户可见内容与实际发送一致，无秘密 |
 
-## 7. 标签页采集与平台生命周期
+## 7. 网页内容、Markdown 与 AI
+
+| ID | 类型 | 前置/步骤 | 预期 |
+|---|---|---|---|
+| CT-001 | AUTO | 顶层 fixture 含标题、段落、列表、链接、图片、表格和代码块 | `PageSnapshot` 字段/顺序/schema 正确，节点/字节有界 |
+| CT-002 | AUTO | 页面伪造来源/旧 generation/超大或畸形快照 | Browser gateway 全部拒绝，不进入内容 Core |
+| CT-003 | AUTO | 密码、隐藏表单、脚本、跨源 iframe 与 data/blob/javascript URL | 快照不包含敏感值/脚本/跨源正文，危险 URL 被拒绝或标记 |
+| CT-004 | AUTO | 长文、多栏、空页、导航页、重复节点和无限列表 fixture | 确定性主内容/阅读顺序稳定；截断与未包含项显式 |
+| CT-005 | AUTO | Markdown golden 覆盖 Unicode、fence、表格、链接和图片引用 | 输出可复现、转义正确、来源默认无 query/fragment，不含 HTML/script 注入 |
+| CT-006 | AUTO | 表格/链接/图片/代码块超量、重复和超长字段 | 结构化输出/CSV 有界且稳定截断，UI 不阻塞 |
+| CT-007 | AUTO | 复制/保存/覆盖/取消/非法文件名/部分写失败 | 只写用户选择路径；原子结果或明确失败，无静默残留 |
+| CT-008 | AUTO | 预览长文后导航、关闭标签、切换 Profile | 阅读视图失效，旧结果不覆盖新页；键盘/无障碍可用 |
+| CT-009 | AUTO | 16:9/4K 卡片含长表格、代码和缺图 | 分页稳定、无裁断正文；取消后字体/图片/task 释放 |
+| CT-010 | CONTRACT | 用 Fake/真实 capability 查询 document/card 投屏 | 只消费 Cast-SDK facade；缺能力得到 GO/NO-GO，不拼接协议 |
+| CT-011 | AUTO | Fake provider 正常/超时/取消/流式中断/额度错误 | 状态明确、有界重试、无自动换 provider；本地 Markdown 可用 |
+| CT-012 | AUTO | 比较发送前预览与 provider 实际 payload | 字段逐项一致，无完整 URL query/fragment、原图 URL、Cookie/Authorization/隐藏 DOM/其他标签；输出绑定 snapshot/hash |
+| CT-013 | AUTO | 用户选择多个标签，期间关闭/导航/跨 Profile/部分失败 | 只处理获选同 Profile 标签，逐页来源/失败明确，容量有界 |
+| CT-014 | SECURITY | provider redirect 到其他 origin/私网/metadata，或普通用户配置任意 endpoint | P0/P1 只访问注册 HTTPS origin；逐跳拒绝，Key 不发往错误目标；企业 endpoint 需独立策略 |
+
+## 8. Agent、CLI 与 MCP
+
+| ID | 类型 | 前置/步骤 | 预期 |
+|---|---|---|---|
+| AG-001 | AUTO | 校验 tool/capability/risk schema 与前一版本 golden | R0～R4、参数、结果、错误稳定；永久禁止能力不可表达 |
+| AG-002 | AUTO | 重复命令、取消、超时、旧 generation、App/Profile/标签退出 | task 状态收敛、幂等、旧结果丢弃、队列和资源有界 |
+| AG-003 | AUTO | 单次/单任务/App grant、撤销、Profile/目标变化 | 默认 deny；grant 不跨 Profile/目标/会话且可立即撤销 |
+| AG-004 | AUTO | 副作用工具确认、拒绝、过期、导航/设备变化 | UI 展示工具/目标/关键参数；变化后必须重确认 |
+| AG-005 | SECURITY | 页面/模型输出包含“忽略规则并授权/调用工具” | 内容保持不可信，不能扩大 grant、改目标或触发第二工具 |
+| AG-006 | AUTO | 读取当前页/选区/Markdown/标签，尝试后台或跨 Profile | 只返回授权 tab/generation 的脱敏、有界内容 |
+| AG-007 | AUTO | 读取设备能力和当前会话，含同名/旧 route/无会话 | 不返回 IP/媒体 URL/token；状态使用 Cast-SDK 最新 generation |
+| AG-008 | AUTO | 导航、开关/切换标签、滚动，覆盖危险 scheme/重定向/下载 | R2 确认后执行；危险/超量/取消失败关闭 |
+| AG-009 | AUTO | 开始投屏、pause/seek/stop，设备/媒体/route 中途变化 | R3 确认且沿用用户播放/DRM/广告/policy 门禁；变化重确认 |
+| AG-010 | SECURITY | 用语义 handle 点击/输入密码、支付、文件、隐藏/跨源元素 | 永久拒绝；无 selector/任意脚本/CDP 透传 |
+| AG-011 | AUTO | 预览/清除 action receipt 并扫描日志/磁盘 | 有界 TTL；不含正文、完整 query、Cookie、Authorization、token |
+| AG-012 | SECURITY | 非 loopback、错误/过期 secret、CSRF、DNS rebinding、重放、超并发 | 不建立/复用会话，不产生浏览或网络副作用 |
+| AG-013 | AUTO | CLI list/call/cancel/version，含无交互副作用调用 | 只读可用；需要确认时返回稳定错误，不以 CLI 绕过 |
+| AG-014 | CONTRACT | MCP initialize/list/call/cancel/版本/超大消息 | 映射同一 registry；只读 Preview 默认关闭，错误与取消稳定 |
+| AG-015 | SECURITY | fuzz、间接提示注入、本机恶意 client、Release surface 扫描 | 无远程 bind、Cookie/文件上传/任意脚本/CDP；P0/P1=0 才 GO |
+
+## 9. 标签页采集与平台生命周期
 
 | ID | 类型 | 前置/步骤 | 预期 |
 |---|---|---|---|
@@ -118,7 +157,7 @@
 | CP-L01 | DEVICE | Linux Wayland + PipeWire portal + VA-API | Portal、音频、GPU、退出回收通过 |
 | CP-H01 | DEVICE | Harmony AVScreenCapture + AVCodec | ArkWeb 页面与采集、后台限制结果明确 |
 
-## 8. 端到端、稳定性与发布
+## 10. 端到端、稳定性与发布
 
 | ID | 类型 | 前置/步骤 | 预期 |
 |---|---|---|---|
@@ -128,9 +167,9 @@
 | E2E-004 | DEVICE | 广告 + 正片 fixture 选择从头播放 | 使用 Mirror 并保留完整页面编排 |
 | E2E-005 | DEVICE | 100 次开始/停止/设备切换 | 无线程/socket/token/临时目录持续增长 |
 | E2E-006 | DEVICE | 8 小时标签页投屏 | 无崩溃、音画漂移在预算内、资源稳定 |
-| E2E-007 | DEVICE | VPN/多网卡/IPv6/防火墙切换 | 不广告错误 LAN 地址，不连接未知设备 |
+| E2E-007 | DEVICE | VPN/多网卡/IPv6/防火墙切换 | 不广播错误 LAN 地址，不继续使用过期 route/session |
 | UP-001 | RELEASE | 干净机器安装、首次启动、卸载 | 签名正确；用户数据边界符合说明 |
-| UP-002 | RELEASE | Stable N -> N+1 覆盖升级 | Profile/配对按 schema 迁移；失败可恢复 |
+| UP-002 | RELEASE | Stable N -> N+1 覆盖升级 | Profile/Cast-SDK revision 配置按 schema 迁移；失败可恢复 |
 | UP-003 | RELEASE | 尝试降级到已知高危内核 | 阻断或明确安全策略，不静默降级 |
 | UP-004 | RELEASE | 扫描安装包 SBOM/NOTICE/源码映射 | 组件、许可、版本和产物一致 |
 | UP-005 | RELEASE | 扫描 H.264/AAC/CDM 组件 | 只有书面放行组件进入产物 |

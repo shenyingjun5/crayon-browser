@@ -14,7 +14,7 @@
 | QAR-06 | QAR-02,QAR-03 | `tests/stress` | 1000 session、100 切换、断网/休眠/设备重启 | E2E-005、E2E-007；资源回落 | S4 |
 | QAR-07 | QAR-06 | 长稳报告 | 30 分钟 relay、8 小时 Mirror、8 小时浏览/Profile | RL-013、E2E-006；无趋势泄漏 | S4 |
 | QAR-08 | PRV-13,MED-18,SDK-14 | 独立安全 Review/渗透 | 浏览器/IPC/LAN/Profile/update 攻击面报告 | P0/P1 关闭；P2 有任务 | S4 |
-| QAR-09 | FND-08 | `docs/current/component-licensing.md` | 从候选技术栈开始维护 H.264/AAC/HEVC/AV1/Widevine/CDM/CEF/Cast-SDK 许可与地区/渠道结论；依赖冻结后复审 | 未放行组件不进入正式依赖/产物 | S0+legal |
+| QAR-09 | FND-08 | `docs/current/component-licensing.md` | 从候选技术栈开始维护 H.264/AAC/HEVC/AV1/Widevine/CDM/CEF 的许可与地区/渠道结论；Cast-SDK 作为自有组件只记录 source revision、制品和源码对应关系 | 未放行外部组件不进入正式依赖/产物；自有 SDK revision 可追溯 | S0+legal |
 | QAR-10 | QAR-09 | SBOM/NOTICE 流水线 | 每平台 SBOM、NOTICE、source mapping、签名 hash | UP-004、UP-005；依赖与产物一致 | S5 |
 | QAR-11 | QAR-01 | Windows packaging | EXE/MSIX、签名、安装/卸载/升级/回滚 | UP-001..UP-003；干净 Win10/11 | S5 |
 | QAR-12 | QAR-01 | macOS packaging | app/DMG/PKG、签名、公证、权限说明、更新 | UP-001..UP-003；AS/Intel | S5 |
@@ -27,7 +27,7 @@
 
 - 任意自动广告操作、DRM 绕过、通用 LAN proxy 或 secret 泄漏。
 - 未关闭 P0/P1、未完成目标平台 S4/S5 证据。
-- CEF/Cast-SDK/codec/CDM 许可、签名或源码对应关系不清。
+- CEF/codec/CDM 许可或签名不清，或者 Cast-SDK gitlink/revision 与源码对应关系不可追溯。
 - 无痕清理失败被静默、Release 包含 debug/test 入口。
 - 不能独立升级某平台的浏览器安全内核。
 

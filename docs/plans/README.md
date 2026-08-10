@@ -2,7 +2,7 @@
 
 本目录只保存当前可执行的模块 Roadmap。Agent 从首批执行队列或任务表中领取一个状态为 `READY` 的任务；完成模块后把稳定结论收敛到 `docs/current/`，实施文档移入 `docs/archive/`。
 
-当前目录共定义 132 个唯一原子任务；`docs/current/test-cases.md` 共定义 93 个唯一测试用例。
+当前目录共定义 164 个唯一原子任务；`docs/current/test-cases.md` 共定义 122 个唯一测试用例。
 
 ## 总入口
 
@@ -15,9 +15,11 @@
 | FND | [`foundation-migration-roadmap.md`](foundation-migration-roadmap.md) | 冻结 legacy 红线、重组 workspace、建立门禁与可迁移 Core | 无 |
 | CEF | [`desktop-cef-browser-roadmap.md`](desktop-cef-browser-roadmap.md) | Win/macOS/Linux CEF 壳、共享 UI、媒体观察与 IPC | FND-08 |
 | MED | [`media-policy-relay-roadmap.md`](media-policy-relay-roadmap.md) | 候选、预检、纯策略和 session relay | FND-06 |
-| SDK | [`cast-sdk-integration-roadmap.md`](cast-sdk-integration-roadmap.md) | 固定 Cast-SDK revision，接通发现、投屏码、能力、播控与会话 | FND-08 |
+| SDK | [`cast-sdk-integration-roadmap.md`](cast-sdk-integration-roadmap.md) | 固定 Cast-SDK source revision，接通发现、投屏码、能力、播控与会话 | FND-08 |
 | PLT | [`desktop-platform-adapters-roadmap.md`](desktop-platform-adapters-roadmap.md) | Windows/macOS/Linux 采集、音频、编码、存储、网络、更新 | CEF-07、SDK-05 |
 | PRV | [`privacy-security-roadmap.md`](privacy-security-roadmap.md) | Profile、防追踪、安全存储、威胁模型与隐私验证 | FND-08、CEF-05 |
+| CNT | [`content-intelligence-roadmap.md`](content-intelligence-roadmap.md) | 页面快照、Markdown、阅读卡片、模型与资料包 | CEF 页面/IPC、PRV 数据分级/安全存储 |
+| AGT | [`agent-access-roadmap.md`](agent-access-roadmap.md) | tool registry、capability、CLI/MCP 与确认审计 | CNT、CEF、SDK app-runtime、PRV 威胁模型 |
 | HM | [`harmony-browser-roadmap.md`](harmony-browser-roadmap.md) | ArkUI/ArkWeb + Native Core 技术预览与 Go/No-Go | FND-08、MED-08、SDK-05 |
 | QAR | [`quality-release-roadmap.md`](quality-release-roadmap.md) | 跨平台 E2E、稳定性、许可、签名、更新和 GA | 各目标平台功能任务 |
 
@@ -60,9 +62,13 @@
 33. `MED-17` app-runtime delivery 编排（Planner→direct/relay/mirror）：当前 `DONE`。
 34. `MED-18` 安全 Review 与收口（threat model/fuzz/30 分钟 harness）：当前 `DONE`。
 35. `CEF-01A` 固定 CEF Standard revision、四平台 hash、许可和缓存/离线根契约：当前 `DONE`。
-36. `CEF-01B` 冻结不含 CEF 类型/产品策略的 C++17 `BrowserEngineAdapter` 最小接口：当前 `IN_PROGRESS`；范围限 `browser/engine-api` 的公共契约、独立 Fake/测试和模块级 CMake。
+36. `CEF-01B` 冻结不含 CEF 类型/产品策略的 C++17 `BrowserEngineAdapter` 最小接口：当前 `READY`，因用户切换到 SDK 源码接入而暂停领取，尚无生产代码。
+37. `SDK-01` 固定 Cast-SDK source revision：当前 `DONE`；submodule、source lock、checkout HEAD 和 repo guard 边界已验证。
+38. `SDK-02` 从固定源码接入 `cast-sender-service`：当前 `READY`；只允许 `crayon-cast-adapter` 建立实际依赖。
 
-`FND` 模块 19 个唯一原子任务与 `MED` 模块 18 个原子任务全部 DONE（2026-08-10），FND V0 已收口。CEF bootstrap 已拆为 `CEF-01A`～`CEF-01E`，`CEF-01A DONE`，当前领取 `CEF-01B IN_PROGRESS`；`SDK-01` 仍需固定 Cast-SDK revision 与正式接入授权，PRV/PLT/HM/QAR 再按依赖级联解锁。
+`FND` 模块 19 个唯一原子任务与 `MED` 模块 18 个原子任务全部 DONE（2026-08-10），FND V0 已收口。CEF bootstrap 已拆为 `CEF-01A`～`CEF-01E`，`CEF-01A DONE`、`CEF-01B READY`；`SDK-01 DONE`，Cast-SDK 已固定为 `44c3a99871aa1e68cbda71eacefbb41d23a747a8` 源码 revision。下一项 `SDK-02 READY`，才建立 `cast-sender-service` 实际依赖。
+
+新定位新增 `CNT-01..16` 与 `AGT-01..16`，当前全部 `TODO`。它们不改变 SDK 接入顺序：`CNT` 等 CEF 页面/IPC 和 PRV 数据分级后先做确定性内容 Alpha，真实模型等 secure store/发送预览；`AGT` 等正常内容与投屏用例、独立威胁模型后再做默认关闭的 Developer Preview。
 
 `FND-07` 已按 `FND-07A`～`FND-07E` 顺序完成；FND-12 又关闭了 security corpus 恒真断言、非法 sniff URL panic 与 formal 根包 legacy 依赖泄漏。稳定结论和未覆盖项见 `docs/current/fnd-migration-review.md`。
 

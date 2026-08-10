@@ -24,7 +24,7 @@
 
 - 默认 `get-video` 正常依赖只剩 `crayon-app-runtime`、`crayon-cast-policy`、`crayon-domain`、`crayon-ipc-schema`、`crayon-media-observer` 和 `crayon-media-probe`；`axum/reqwest/tokio/clap/...` 只在 `legacy-dev` 图中出现。
 - `crayon-domain` 无网络/平台依赖；`crayon-app-runtime` 无 CEF/Tauri/OS 具体依赖；正式生产边不引用 `test-support`。
-- `crayon-legacy-adapter` 只供被 workspace 排除且明确标记的 `get-video-app` 使用；Cast-SDK 尚未接入，RG-008 因此仍为 not applicable，不能写成已通过集成。
+- `crayon-legacy-adapter` 只供被 workspace 排除且明确标记的 `get-video-app` 使用；FND 收口时 Cast-SDK 尚未接入、RG-008 为 not applicable。后续 SDK-01 已固定源码 revision 并使 RG-008 通过，但 facade 实际接线仍属于 SDK-02 以后，不能写成投屏集成已完成。
 - Core API v1、current/previous schema 窗口和配置 schema 保持冻结；本次没有改变公共 wire schema、状态机或持久化格式。
 
 ### 浏览器、广告、DRM、Relay 与秘密
@@ -63,5 +63,5 @@
 ## 未覆盖与剩余风险
 
 - macOS/Linux 未复跑 legacy Tauri app；该 app 不发布，Windows 已完成补充构建与 CLI 证据。正式三平台证据由 CEF/PLT/QAR Roadmap 提供。
-- CEF 二进制、sandbox、三平台壳、Cast-SDK revision、真接收端和平台采集均未进入 FND 范围，不能由本 Review 推断完成。
+- CEF 二进制、sandbox、三平台壳、Cast-SDK 接入、真接收端和平台采集均未进入 FND 范围，不能由本 Review 推断完成；Cast-SDK 固定 revision 的源码引入由 SDK-01 单独执行。
 - Windows legacy CLI 退出时 Chromium 报 `Failed to unregister class Chrome_WidgetWin_0 (1412)`，进程仍以 0 退出且端口已释放；正式 CEF 生命周期测试必须重新覆盖，不能沿用该结果。

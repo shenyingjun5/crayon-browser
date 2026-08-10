@@ -1,13 +1,15 @@
-# 蜡笔隐私投屏浏览器技术方案
+# 蜡笔 AI 投屏浏览器技术方案
 
-> 版本：v0.2
-> 日期：2026-08-09
+> 版本：v0.4
+> 日期：2026-08-10
 > 状态：架构评审稿
 > 关联文档：`docs/crayon-private-cast-browser-prd.md`
 
+> 本文保留浏览器、媒体、投屏与平台技术背景；网页内容/模型与 Agent 的当前权威边界分别以 `docs/current/architecture.md`、`docs/plans/content-intelligence-roadmap.md` 和 `docs/plans/agent-access-roadmap.md` 为准。
+
 ## 1. 技术目标
 
-以“共享产品核心 + 浏览器引擎适配器 + 平台能力适配器”构建跨平台产品。Windows、macOS、Linux 桌面端统一采用 Chromium Embedded Framework（CEF）；HarmonyOS 不承诺移植 CEF，而采用 ArkUI/ArkWeb 后端接入同一产品协议。复用现有 Rust `get-video` 的提取、媒体检查、DRM、编码探测和 relay 能力；增加标签页投屏、自有设备发现、配对和播放控制；建立可验证的无痕会话与防追踪能力。
+以“共享产品核心 + 浏览器引擎适配器 + 平台能力适配器”构建跨平台 AI 投屏工作台。Windows、macOS、Linux 桌面端统一采用 Chromium Embedded Framework（CEF）；HarmonyOS 不承诺移植 CEF，而采用 ArkUI/ArkWeb 后端接入同一产品契约。复用现有 Rust `get-video` 的媒体检查、DRM、编码探测和 relay 能力；从固定 Cast-SDK source revision 复用设备发现、投屏码连接、播放控制和会话监督；新增独立的确定性页面内容 Core 与受控 Agent gateway；建立可验证的无痕会话、防追踪、模型数据预览和 capability 授权能力。
 
 核心约束：
 
@@ -18,6 +20,7 @@
 - 不修改或绕过 DRM、广告编排和站点授权控制。
 - 产品策略、投屏协议、隐私语义和错误码跨平台一致。
 - 平台差异必须封装在适配层并通过能力协商显式降级，不允许散落在业务逻辑中。
+- 页面快照与模型输出都不可信；模型不参与安全/权限/DRM/广告判断，CLI/MCP 不暴露原始调试协议或任意脚本。
 
 ## 2. 技术选型结论
 
@@ -44,10 +47,10 @@ HarmonyOS 采用 ArkUI/ArkWeb：
 共享部分：
 
 - `CastPolicyEngine`、媒体候选 schema、DRM/广告连续性规则。
-- relay、配对、控制协议、设备能力协商和版本兼容规则。
+- relay、Cast-SDK facade、设备能力协商和版本兼容规则。
 - 隐私数据分类、生命周期、日志脱敏、错误码和遥测 schema。
 - 本地 HTML/CSS/TypeScript 浏览器 UI、设计系统和交互状态机，平台控件仅承接系统窗口与权限入口。
-- 契约测试、协议测试向量和接收端模拟器。
+- Cast-SDK facade 契约测试、媒体协议测试向量和接收端模拟器。
 
 平台部分：
 
@@ -63,9 +66,8 @@ HarmonyOS 采用 ArkUI/ArkWeb：
 
 - `crayon-browser`：C++/CEF，负责窗口、标签页、Profile、网络观察、页面注入和本地浏览器 UI。
 - `crayon-core`：Rust，复用当前 crate，负责媒体归一化、检查、策略、relay、Profile 编排和产品状态机。
-- `crayon-cast-adapter`：Rust，作为浏览器产品接入 Cast-SDK `SenderCommandService` 的唯一边界，复用设备发现、投屏码、能力评估、DLNA/CastExtension、播放控制和会话监督。
+- `crayon-cast-adapter`：统一产品 facade 与 DTO；Windows/macOS 直接包装源码中的 `SenderCommandService`，HarmonyOS 从同一 revision 构建 ArkTS/native bridge，复用设备发现、投屏码、能力评估、播放控制和会话监督。
 - `crayon-receiver`：蜡笔接收端，负责 WebRTC/标准媒体播放与状态回报。
-- `crayon-signal`：可选云端服务，仅承担短期投屏码 rendezvous 与控制信令转发。
 
 HarmonyOS 侧使用 `crayon-harmony-shell`（ArkUI/ArkWeb）和稳定的 Native 接口。若平台不适合独立 Core 进程，则以 Native library/平台服务承载相同接口；进程形态可以不同，协议语义和安全边界必须一致。
 
@@ -90,14 +92,12 @@ flowchart TB
     PLATFORM --> STORE["安全存储 / 权限 / 更新 / 电源"]
     POLICY --> RELAY["会话化媒体 relay"]
     CORE --> CAST["crayon-cast-adapter"]
-    CAST --> SDK["Cast-SDK SenderCommandService"]
+    CAST --> SDK["Cast-SDK 固定 source revision"]
     SDK --> DISC["设备发现 / 投屏码 / 能力 / 会话"]
-    SDK --> PAIR["设备连接与控制"]
-    PAIR --> RCV["蜡笔接收端"]
+    SDK --> CONN["设备连接与控制"]
+    CONN --> RCV["蜡笔接收端"]
     MIRROR --> RCV
     RELAY --> RCV
-    PAIR -. "可选六位码" .-> SIGNAL["蜡笔信令服务"]
-    SIGNAL -. "不传媒体" .-> RCV
 ```
 
 ## 4. 进程模型
@@ -109,7 +109,7 @@ flowchart TB
 | GPU/utility/network process | Chromium 内部能力 | 跟随 CEF sandbox，不放宽沙箱 |
 | Rust Core | 媒体检查、策略、relay、Profile 与产品状态 | 控制接口仅本机，LAN 仅暴露 tokenized media route |
 | Cast Adapter | 浏览器领域模型与 Cast-SDK facade 映射 | 不实现 SOAP/DLNA/CastExtension，不接收网页 secret |
-| Receiver | 播放、遥控状态、设备能力报告 | 只接受已配对发送端签名命令 |
+| Receiver | 播放、遥控状态、设备能力报告 | 按 Cast-SDK 现有协议工作 |
 
 要求：
 
@@ -195,16 +195,14 @@ flowchart TB
 
 接收端至少提供：
 
-- 设备身份密钥和可验证设备 ID。
-- `_crayoncast._tcp.local` mDNS 服务。
-- UDP discovery 响应。
-- HTTPS/WSS 控制端点。
+- Cast-SDK 现有自动发现和投屏码连接能力。
+- Cast-SDK 设备描述、能力报告和控制端点。
 - WebRTC 接收播放。
 - MP4/HLS/DASH 播放。
 - H.264/AAC 作为首版兼容目标，须通过平台能力和许可门禁；HEVC、AV1、EAC3 按设备能力与许可上报。
 - 字幕/音轨能力上报。
 - 播放状态、进度、缓冲、错误回报。
-- 六位码与本机确认 UI。
+- 六位投屏码展示 UI。
 
 ## 6. Profile 与无痕实现
 
@@ -220,7 +218,7 @@ flowchart TB
 
 - 每个空间使用独立 RequestContext 和独立数据目录。
 - 空间 ID 使用随机 UUID，不使用用户输入名称作为路径。
-- 空间元数据与配对密钥使用 Windows DPAPI、macOS Keychain、Linux Secret Service、HarmonyOS HUKS 保护。
+- 空间元数据和其他本机敏感配置使用 Windows DPAPI、macOS Keychain、Linux Secret Service、HarmonyOS HUKS 保护。
 - 禁止通过符号链接/目录联接将空间目录指向外部路径。
 - 删除空间前解析绝对路径并验证位于应用专属 profile 根目录内。
 
@@ -372,7 +370,7 @@ flowchart TB
 - 不再向 LAN 暴露 `/api/extract`、`/player`、`/probeplayer` 和任意 URL `/proxy`。
 - relay URL 从“编码上游 URL”改为不透明 session/resource ID。
 - 上游 URL、Referer 和 UA 只保存在 Rust Core 内存 session 中。
-- 会话绑定已配对设备、有效期、最大并发和允许的上游 host。
+- 会话绑定当前 Cast-SDK 连接 route、有效期、最大并发和允许的上游 host。
 
 ### 11.2 路由设计
 
@@ -392,7 +390,7 @@ flowchart TB
 
 - token 至少 128 bit 随机熵。
 - session 默认 2 小时上限，停止后立即撤销。
-- 可选绑定 receiver device ID、公钥签名和首次请求 IP。
+- 可选绑定 Cast-SDK receiver device ID、当前 route 和首次请求 IP。
 - 只允许 session 创建时解析出的上游 host 集合，禁止运行时任意跳转到私网地址。
 - 对 DNS 重绑定做解析前后地址校验。
 - 保持 SSRF 私网、loopback、link-local 和 metadata 地址阻断。
@@ -405,52 +403,49 @@ flowchart TB
 - 需要账号 Cookie 或动态 Authorization 的内容降级标签页投屏。
 - 不逆向签名、不生成平台私有鉴权参数。
 
-## 12. 设备发现、配对与控制
+## 12. Cast-SDK 源码接入、设备连接与控制
 
-本节定义产品依赖的行为契约，实现归 Cast-SDK 所有。浏览器只能通过 `crayon-cast-adapter` 调用 Cast-SDK 稳定 facade；不得在本仓库重新实现 mDNS/UDP、投屏码算法、SOAP/DLNA、CastExtension 或会话监督。SDK 能力不足时先在 Cast-SDK 建独立 Roadmap 和公共 API，再固定新 revision 接入。
+浏览器只消费 Cast-SDK 固定 revision 中的公开 facade，不重新设计设备协议、身份认证、临时授权或使用许可代码。当前阶段不等待 NuGet、SwiftPM、OHPM 或应用市场，直接从源码构建。
 
-### 12.1 自动发现
+### 12.1 Source lock
 
-mDNS 服务：
+| 项 | 值 |
+|---|---|
+| Repository | `https://github.com/shenyingjun5/Cast-SDK.git` |
+| Revision | `44c3a99871aa1e68cbda71eacefbb41d23a747a8` |
+| Submodule path | `third_party/cast-sdk` |
+| Lock manifest | `config/cast-sdk-source.toml` |
 
-- Service type：`_crayoncast._tcp.local`
-- TXT：`id`、`name`、`version`、`port`、`cap_hash`。
-- TXT 不包含用户信息、房间精确地址或长期密钥。
+- `.gitmodules` URL、superproject gitlink 和 source lock revision 必须一致。
+- `git submodule update --init --recursive` 是唯一还原入口；不得引用开发者本机 sibling 路径。
+- repo guard 跳过嵌套 git submodule 的内部源码，避免把 SDK 测试、依赖和文件规模误算为浏览器代码。
+- 本阶段不处理 Linux 发送端 SDK；Linux 不阻塞 Windows、macOS、HarmonyOS 的 SDK 接入和验收。
 
-UDP fallback：
+### 12.2 浏览器 facade
 
-- 发送带随机 nonce 的 discovery 请求。
-- 接收端签名响应，防止无状态伪造。
-- 广播频率、TTL 和包大小受限，避免成为放大器。
+`crayon-cast-adapter` 向产品暴露统一 `CastFacade`。Windows、macOS 映射到 `cast-sender-service::SenderCommandService`；HarmonyOS 从固定 submodule 构建并映射 ArkTS `CastSenderClient`。稳定语义只包括：
 
-### 12.2 配对
+- `start/stop/refresh/list discovery`
+- `resolve by cast code`、`connect`、`disconnect`
+- receiver capability 与 cast assessment
+- video/HLS/relay URL 和已确认的 mirror descriptor 投送
+- session handle 绑定的 play/pause/seek/volume/stop
+- current session、route lost、receiver stop/end 和 stale generation
 
-- 接收端首次配对显示六位码或二维码。
-- 双方使用临时 ECDH 建立会话，六位码作为短认证字符串，不直接派生长期密钥。
-- 用户在接收端确认设备名称。
-- 交换长期设备公钥并存入操作系统安全存储。
-- 后续控制命令使用设备密钥签名和单调递增 nonce 防重放。
+UI、CEF、ArkWeb、媒体观察和 relay 不得直接导入任何平台 SDK 类型。平台 callback 在 adapter 边界复制数据并转换为共享 DTO；SDK 调用不在 CEF/ArkUI 主线程或持有产品状态锁时执行。
 
-### 12.3 云端投屏码
+### 12.3 自动发现和投屏码
 
-- 接收端与 `crayon-signal` 建立出站 TLS/WebSocket。
-- 服务生成 60～120 秒有效码。
-- 浏览器提交码后只交换临时公钥、设备能力摘要和信令通道。
-- 云端不得接收媒体 URL、Cookie、Authorization、页面标题或媒体内容。
-- 建立局域网直连后终止云端会话；远程投屏不在 P0 范围。
+- 自动发现完全调用平台 SDK 的 discovery facade；浏览器只展示设备快照和增量状态。
+- 六位投屏码原样交给 SDK 的 resolve/connect API；算法、端口池、fallback 和错误判断只属于 Cast-SDK。
+- 浏览器只映射成功、未找到、格式错误、取消、断开和 route lost，不增加配对、设备身份或授权状态机。
+- P0 不接入云端 rendezvous；媒体 URL、Cookie、Authorization 和页面标题均不进入 Cast-SDK diagnostics。
 
-### 12.4 控制协议
+### 12.4 版本与升级
 
-核心消息：
-
-- `HELLO/CAPABILITIES`
-- `PLAY_MIRROR`
-- `PLAY_URL`
-- `PAUSE/RESUME/SEEK/SET_VOLUME/STOP`
-- `STATE/BUFFERING/ERROR/ENDED`
-- `PING/PONG`
-
-所有消息包含：协议版本、session ID、发送端设备 ID、递增序号、时间窗和签名。
+- 三个平台从同一 Cast-SDK commit 构建，并按相同 capability schema 对齐。
+- 升级先在独立任务中更新 gitlink 与 source lock，执行 public API diff、构建、CS contract、真接收端 Harness 和回滚演练。
+- SDK 能力缺口回到 Cast-SDK 建公共 API 任务并合入新 commit；浏览器不得复制 SOAP、DLNA metadata、CastExtension、投屏码或 receiver control URL。
 
 ## 13. 本机 IPC 与 Native ABI
 
@@ -469,11 +464,9 @@ Windows 推荐命名管道；macOS/Linux 使用 Unix domain socket；HarmonyOS �
 | 威胁 | 场景 | 缓解 |
 |---|---|---|
 | 恶意网页触发投屏 | 页面伪造 play/IPC 消息 | 可信用户输入、Browser process 二次确认、设备选择 UI |
-| LAN 开放代理 | 邻居调用通用 proxy | 移除通用 LAN API、session token、设备绑定、host allow-set |
+| LAN 开放代理 | 邻居调用通用 proxy | 移除通用 LAN API、session token、当前 route 绑定、host allow-set |
 | SSRF/DNS 重绑定 | 上游跳向路由器或云 metadata | 解析前后 IP 分类、重定向逐跳校验、私网阻断 |
 | Cookie 泄露 | URL/日志/接收端命令带 Cookie | Cookie 不出浏览器/本机 Core，结构化脱敏日志 |
-| 假接收端 | 局域网伪造设备名称 | 首次可见确认、短码、长期设备公钥 |
-| 重放控制命令 | 捕获旧 PLAY/SEEK | session nonce、序号、时间窗、签名 |
 | 页面越权调用 native | 远程页面访问 browser bridge | UI origin 隔离、最小 bridge、schema 校验 |
 | Profile 数据残留 | 无痕关闭后目录未删除 | 临时 RequestContext、退出审计、失败显式提示、启动补偿清理 |
 | 更新供应链攻击 | 恶意 CEF/规则/安装包 | 签名更新、固定依赖、SBOM、双人发布、可复现构建 |
@@ -526,7 +519,7 @@ Windows 推荐命名管道；macOS/Linux 使用 Unix domain socket；HarmonyOS �
 ### 16.4 跨平台契约测试
 
 - `CastPolicyEngine` 对固定输入在所有平台返回相同决策与错误码。
-- 配对、控制、relay、token 撤销和协议降级使用统一 golden vectors。
+- Cast-SDK facade、控制、relay、token 撤销和协议降级使用统一 golden vectors。
 - 平台能力缺失只改变可选模式，不改变用户播放门禁、DRM 和隐私结论。
 - CI 至少包含 Windows、macOS、Linux 原生 runner；HarmonyOS 使用模拟器做基础测试、真机做 ArkWeb、音频、录屏和本地网络门禁。
 - 每个平台发布前执行安装、覆盖升级、降级阻断、卸载数据边界、崩溃恢复和签名校验。
@@ -573,10 +566,7 @@ core/
   cast-adapter/              # Cast-SDK facade 的唯一产品适配层
   privacy/                   # 清理审计、脱敏日志
 third_party/
-  cast-sdk/                  # 固定 revision；设备、协议、播控与会话事实源
-receiver-protocol/
-  schema/
-  test-vectors/
+  cast-sdk/                  # 固定 revision 源码 submodule
 core-api/
   schema/                    # IPC/C ABI 版本与能力协商
   c-api/                     # 稳定 C ABI 头文件
@@ -601,7 +591,7 @@ docs/
 4. `BrowserEngineAdapter`、`PlatformAdapter`、`PlatformCapabilities` 和 Core API v1 冻结，并有跨平台契约测试。
 5. 接收端 WebRTC/MP4/HLS 基线能力确认。
 6. relay session 化安全评审，确认无通用 LAN proxy。
-7. 六位码配对的威胁建模和协议评审。
+7. Cast-SDK submodule 的干净 checkout、source lock、公开 facade 构建和 revision 回滚验证。
 8. 广告连续性状态模型经产品与法务确认。
 9. H.264/AAC、Widevine/CDM 和接收端编解码许可路线完成书面结论。
 10. CEF/ArkWeb 更新 SLA、各平台签名/公证/包管理与发布责任人确认。

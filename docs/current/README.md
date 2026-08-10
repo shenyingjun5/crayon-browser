@@ -6,8 +6,8 @@
 
 | 文档 | 作用 |
 |---|---|
-| [`../crayon-private-cast-browser-prd.md`](../crayon-private-cast-browser-prd.md) | 产品范围、用户体验、隐私和合规门禁 |
-| [`architecture.md`](architecture.md) | 目标架构、目录、依赖方向和 Cast-SDK 边界 |
+| [`../crayon-private-cast-browser-prd.md`](../crayon-private-cast-browser-prd.md) | AI 投屏工作台定位、产品范围、用户体验、隐私和合规门禁 |
+| [`architecture.md`](architecture.md) | 目标架构、目录、内容/Agent 依赖方向和 Cast-SDK 边界 |
 | [`testing-standard.md`](testing-standard.md) | 测试层级、fixture、平台矩阵和证据要求 |
 | [`test-cases.md`](test-cases.md) | 可执行测试用例目录 |
 | [`code-review-standard.md`](code-review-standard.md) | Code Review 维度、等级和合并条件 |
@@ -26,7 +26,8 @@
 - 正式媒体观察器没有自动播放、广告识别/跳过或 seek；Browser process 可信输入与真实播放推进仍是投屏许可前置。
 - `scripts/check.ps1 fast/core/security`、Workspace Debug/Release 构建和 8 个正式 Release `.rlib` 的 RG-006 扫描通过；完整证据见 FND/MED 收口 Review。
 - CEF 固定为 `150.0.10+g8042e43+chromium-150.0.7871.101` Standard；四平台官方 hash、许可和离线根契约已锁定，Windows x64 archive 已实下载校验并保持 Git ignored。
-- CEF 壳、Cast-SDK 固定 revision、桌面平台采集、隐私 Profile、HarmonyOS 和发布链路尚未实现，不得把基础层完成表述为产品完成。
+- Cast-SDK source revision 已由 SDK-01 固定并通过 RG-008；CEF 壳、Cast-SDK facade 实际接线、桌面平台采集、隐私 Profile、HarmonyOS 和发布链路尚未实现，不得把源码引入表述为投屏闭环完成。
+- 新定位已规划 `CNT-01..16`（页面快照/Markdown/阅读卡片/模型）与 `AGT-01..16`（CLI/MCP/capability）；当前均未实现。确定性内容管线等 CEF 页面/IPC 与数据分级，真实模型等 secure store/发送前预览，Agent transport 等正常用例与独立威胁模型。
 
 ## FND-01 遗留契约基线（2026-08-09）
 
@@ -67,8 +68,8 @@ git diff --check                   # FND-01 交付前检查
 
 ## FND-03 Repo Guard 与检查入口（2026-08-09）
 
-- `tools/repo-guard` 输出 schema v1 JSON，覆盖 RG-001～RG-008；错误阻断，规模和遗留可配置字面量以 warning 报告，缺少 Release 产物/schema/Cast-SDK 时显式 `not_applicable`。
-- 16 个工具测试覆盖生产测试泄漏、测试依赖、3000 行测试文件、凭证/绝对路径、依赖环、domain/runtime/legacy 边界、Cast-SDK revision、Release 文件名/字节资产、schema vector、误报和临时目录清理。
+- `tools/repo-guard` 输出 schema v1 JSON，覆盖 RG-001～RG-008；错误阻断，规模和遗留可配置字面量以 warning 报告，缺少 Release 产物/schema/Cast-SDK source lock 时显式 `not_applicable`。SDK-01 增加嵌套 git submodule 边界和 source lock/checkout HEAD 检查；本仓库存在 source lock 时，SDK-02 的实际 Cargo 依赖只能来自锁定源码路径。
+- repo guard 覆盖生产测试泄漏、测试依赖、3000 行测试文件、凭证/绝对路径、依赖环、domain/runtime/legacy 边界、Cast-SDK revision、Release 文件名/字节资产、schema vector、误报、submodule 边界和临时目录清理。
 - `scripts/check.ps1` 与 `scripts/check.sh` 提供 `fast/core/security/all`；成功或失败都输出逐步骤结构化 summary。
 - 热缓存 `fast` 实测 16.9 秒；`core`、`security`、`all` 和 Git Bash `fast` 已通过。
 

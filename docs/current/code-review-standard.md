@@ -1,4 +1,4 @@
-# 蜡笔隐私投屏浏览器 Code Review 标准
+# 蜡笔 AI 投屏浏览器 Code Review 标准
 
 ## 1. 目标
 
@@ -56,7 +56,16 @@ Review 必须确认改动满足任务和架构、不会破坏现有行为，并�
 - EME/DRM/protected surface 是否只识别和拒绝，不请求 key/license 或绕过。
 - 网页本机播放能力与投屏能力是否分开表达。
 
-### 2.8 Relay、网络与秘密
+### 2.8 页面内容、模型与 Agent
+
+- `PageSnapshot` 是否只含允许字段并绑定 Profile/tab/navigation/generation；隐藏表单、密码、跨源正文、脚本和敏感 header 是否被排除。
+- 确定性提取是否独立于模型；模型失败、取消或未授权时 Markdown 是否仍可用。
+- 发送前预览、实际 provider payload、保存策略和 secret 生命周期是否一致；模型输出是否被误用为安全/权限/DRM/广告结论。
+- 页面内容、无障碍树、模型输出和 client 输入是否始终保持不可信，能否通过间接提示注入扩大 capability 或跳过确认。
+- CLI/MCP 是否共用 tool registry/guard/app-runtime 用例；是否存在原始 CDP/WebDriver、任意脚本、remote bind、Cookie/文件/网络后门。
+- grant 是否绑定 Profile/tab/tool/risk/target/generation/expiry；副作用操作目标变化、导航、设备替换或授权撤销后是否重新确认。
+
+### 2.9 Relay、网络与秘密
 
 - LAN 是否只暴露 tokenized session/resource 路由，无任意 URL proxy/control API。
 - token 熵、receiver/route/TTL/upstream allow-set、撤销触发器是否完整。
@@ -64,21 +73,21 @@ Review 必须确认改动满足任务和架构、不会破坏现有行为，并�
 - 检查 SSRF、DNS rebinding、开放代理、路径穿越、token 猜测、重放和 DoS。
 - Cookie/Authorization/完整 URL/query/token 是否可能进入 DTO、日志、磁盘、receiver 或云端。
 
-### 2.9 Profile 与隐私
+### 2.10 Profile 与隐私
 
 - Profile/空间隔离、关闭清理、失败提示和启动补偿是否正确。
 - 路径删除是否验证根目录、类型和 symlink/junction。
 - 安全存储是否使用平台 adapter，密钥是否有删除/轮换路径。
 - 遥测是否默认关闭、字段最小、用户可预览。
 
-### 2.10 API、协议与跨平台
+### 2.11 API、协议与跨平台
 
 - 公共 API 是否最小、强类型、线程/所有权/错误语义明确。
 - IPC/C ABI/Cast-SDK 升级是否保持当前与前一版本兼容。
 - C ABI 是否使用不透明 handle、显式长度和所有权，不跨边界传容器/异常。
 - 不支持能力是否通过 capability + stable error 显式表达，不能静默成功。
 
-### 2.11 测试与交付
+### 2.12 测试与交付
 
 - 新行为和 bug 回归是否有测试；测试是否验证公共行为而非内部实现。
 - 生产/测试物理隔离，Release 不含测试资产和 debug 入口。
@@ -86,7 +95,7 @@ Review 必须确认改动满足任务和架构、不会破坏现有行为，并�
 - 测试是否避免固定 sleep、公共网络、真实账号和残留状态。
 - 文档、schema、fixture、SBOM/NOTICE 是否按影响同步。
 
-### 2.12 规模提醒
+### 2.13 规模提醒
 
 - 函数 100/200 行、生产文件 2000/3000 行、测试文件 2000/3000 行按 `AGENTS.md` 处理。
 - 规模本身不是 P0/P1；Reviewer 必须指出具体职责混合、所有权或测试风险。

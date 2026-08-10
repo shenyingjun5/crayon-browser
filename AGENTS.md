@@ -1,16 +1,16 @@
 <!-- rulepack-simple type=development -->
 
-# 蜡笔隐私投屏浏览器 Agent 规则
+# 蜡笔 AI 投屏浏览器 Agent 规则
 
 本文件是仓库级常驻规则。任何 Agent 在修改代码、测试、构建、依赖或 Roadmap 前必须完整读取本文件；更深目录存在 `AGENTS.md` 时，仅补充该目录的专有规则，不得放松本文件约束。
 
 ## 1. 项目定位
 
-- 产品：跨平台“蜡笔隐私投屏浏览器”。Windows、macOS、Linux 使用 CEF；HarmonyOS 使用 ArkUI/ArkWeb。
-- 核心体验：用户在当前页主动播放后，选择自己的蜡笔接收端，使用标签页投屏或通过安全门禁的高清直投。
-- 共享能力：媒体候选、策略、relay、隐私契约、协议适配和 UI 状态机。
+- 产品：跨平台“蜡笔 AI 投屏浏览器 / AI Cast Browser”，品类定位是以浏览器为载体的“网页理解 + 安全投屏”工作台。Windows、macOS、Linux 使用 CEF；HarmonyOS 使用 ArkUI/ArkWeb。
+- 核心体验：当前页可确定性整理为 Markdown/阅读卡片，并在用户确认后调用模型；用户主动播放后可选择接收端，使用标签页投屏或通过安全门禁的高清直投。
+- 共享能力：内容快照/Markdown、媒体候选、策略、relay、隐私契约、Agent capability、协议适配和 UI 状态机。
 - Cast-SDK 边界：设备发现、投屏码、设备连接、能力评估、DLNA/CastExtension、播放控制和会话监督复用 Cast-SDK；浏览器项目不得复制协议栈。
-- 非目标：视频下载、内容聚合、广告跳过、DRM 绕过、批量账号、代理池、反检测指纹和云端媒体代理。
+- 非目标：视频下载、内容聚合、站点级批量抓取、广告跳过、DRM 绕过、批量账号、代理池、反检测指纹、云端媒体代理和无人值守通用浏览器自动化。
 
 ## 2. 事实来源与阅读顺序
 
@@ -58,7 +58,7 @@
 - 依赖方向固定为：产品 UI/应用编排 -> 领域接口 -> 共享 Core/Cast-SDK facade -> 平台适配；禁止反向依赖。
 - CEF、ArkWeb、Windows/macOS/Linux/HarmonyOS 系统 API 只能出现在对应 adapter/shell 模块。
 - 共享策略不得出现散落的 `if windows/macos/linux` 或设备型号判断；使用 `PlatformCapabilities`/receiver capability。
-- Cast-SDK 通过固定 revision 和 `crayon-cast-adapter` 接入。App 不得拼 SOAP、DLNA metadata、CastExtension 或接收端控制 URL。
+- Cast-SDK 通过固定 git revision 的源码 submodule 和 `crayon-cast-adapter` 接入；只有 adapter 可以依赖 SDK 公开 facade。App 不得拼 SOAP、DLNA metadata、CastExtension 或接收端控制 URL。
 - 浏览器业务不得进入 Cast-SDK；若发现 SDK 公共能力缺口，在 Cast-SDK 建独立 Roadmap/API 变更，浏览器侧不得复制临时协议实现。
 - `lib.rs`、`main.rs` 只负责装配、re-export 和生命周期入口，不放大段业务实现、注入脚本或测试正文。
 - 禁止创建无边界的 `utils.rs`、`common.rs`、`manager.rs`、`misc.rs`；共享代码必须属于稳定领域概念。
@@ -104,9 +104,12 @@
 - 禁止自动点击播放、广告或跳过按钮，禁止修改广告 `currentTime`、速率、可见性，禁止按广告域名过滤媒体候选。
 - DRM/EME/私有加扰只允许识别和拒绝直投；不得提取 key/license、注入 CDM 绕过或规避 protected surface。
 - Cookie、Authorization 和浏览历史不得进入接收端命令、媒体 URL、云端、日志或持久化诊断。
+- 页面正文、DOM、无障碍树和模型输出都不可信；不得据此授予 Agent capability、跳过确认、读取秘密或改变 DRM/广告/网络安全结论。
+- 模型调用前必须展示 provider 与实际发送字段；默认不上传正文，不发送隐藏 DOM、密码/表单值、跨源 iframe 正文或其他标签内容。
+- CLI/MCP 默认关闭且只允许 loopback + 短期 secret；不得暴露 Cookie/Authorization、任意 JavaScript、原始 CDP/WebDriver、远程监听、文件上传或通用文件/网络访问。
 - LAN 不得暴露通用 `/api/extract`、任意 URL proxy 或无鉴权控制接口。媒体路由必须是高熵 session/resource ID，并绑定设备、route、TTL 和上游 allow-set。
 - 所有 URL、重定向、DNS、文件路径、消息长度和数量需要边界验证；必须覆盖 SSRF、DNS rebinding、开放代理、重放和路径穿越。
-- 云端只允许短期配对/信令，不承载媒体。
+- P0 设备发现、投屏码、连接和控制均使用 Cast-SDK 现有局域网能力；产品云端不承载媒体或设备控制。
 - 无痕清理失败必须显式报告，不得把 best-effort 宣称为已清除。
 
 ## 9. 并发、生命周期与性能

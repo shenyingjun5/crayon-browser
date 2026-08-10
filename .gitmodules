@@ -1,0 +1,3 @@
+[submodule "third_party/cast-sdk"]
+	path = third_party/cast-sdk
+	url = https://github.com/shenyingjun5/Cast-SDK.git

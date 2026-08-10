@@ -1,13 +1,13 @@
 # CEF：Desktop 浏览器壳 Roadmap
 
-状态：`CEF-01A DONE`，`CEF-01B IN_PROGRESS`；当前只冻结不依赖 CEF/ArkWeb 的 C++17 `BrowserEngineAdapter` 契约和独立 Fake/compile contract。目标平台 Windows、macOS、Linux；每项以目标路径、测试 ID 和证据作为验收，不以单平台截图替代。
+状态：`CEF-01A DONE`，`CEF-01B READY`；用户切换到 SDK 源码接入后本任务退回待领取，尚未创建 `browser/engine-api` 生产代码。目标平台 Windows、macOS、Linux；每项以目标路径、测试 ID 和证据作为验收，不以单平台截图替代。
 
 ## 原子任务
 
 | ID | 状态 | 依赖 | 目标路径 | 实现输出 | 测试/验收 | 证据 |
 |---|---|---|---|---|---|---|
 | CEF-01A | DONE | FND-08 | `cmake/cef`、`tests/contracts`、第三方文档 | 固定 CEF Standard revision、四平台官方 hash、许可和本地缓存/离线根契约 | 确定性 contract test；错误平台/缺失根/错误版本/校验失败；Windows 包实下载校验 | S1 |
-| CEF-01B | IN_PROGRESS | CEF-01A | `browser/engine-api` | 不含 CEF 类型和产品策略的 C++17 `BrowserEngineAdapter` 最小接口、独立 Fake 与 compile contract | 接口 contract；Fake 生命周期/错误/重复释放；Harmony 可实现性说明 | S1 |
+| CEF-01B | READY | CEF-01A | `browser/engine-api` | 不含 CEF 类型和产品策略的 C++17 `BrowserEngineAdapter` 最小接口、独立 Fake 与 compile contract | 接口 contract；Fake 生命周期/错误/重复释放；Harmony 可实现性说明 | S1 |
 | CEF-01C | TODO | CEF-01B | 根 `CMakeLists.txt`、`CMakePresets.json`、`cmake/cef` | 共享 CMake/preset、离线 CEF root 接入和最小 test target | preset/schema、无网络 configure、错误 root、RG-005 | S1 |
 | CEF-01D | TODO | CEF-01C | `browser/cef-shell` Windows 构建文件、验证记录 | Windows x64 CEF 最小壳 configure/build 与 Debug/Release 资源装配证据 | VS2022 configure/build；启动前依赖 smoke；包不入 Git | S2 |
 | CEF-01E | TODO | CEF-01D | macOS/Linux 构建文件、CI/验证记录 | macOS x64/arm64、Linux x64 configure/build 门禁并收口 bootstrap Review | 三目标 CI/configure/build；P0/P1=0；未实机项显式记录 | S2 |
@@ -47,9 +47,9 @@
 - Code Review：需求/边界、正确性、架构、安全、并发/生命周期、测试和维护性逐项审查；发现并关闭 1 个 P1（离线根未校验 revision），最终 P0/P1/P2/P3 均为 0。
 - 未覆盖：macOS x64/arm64、Linux x64 只锁定官方 hash，尚未实际下载/configure；由 CEF-01E 完成。CEF archive 未解压，产品构建图由 01C、Windows 壳由 01D 负责。
 
-### CEF-01B 跨引擎接口冻结（当前任务）
+### CEF-01B 跨引擎接口冻结（待领取）
 
-- 状态：`IN_PROGRESS`；依赖 `CEF-01A DONE`。
+- 状态：`READY`；依赖 `CEF-01A DONE`，尚无生产代码改动。
 - 单一目标：冻结桌面 native 编排可消费、CEF 后端可实现且能映射到 ArkWeb 的最小 C++17 浏览器引擎契约；本任务不创建可运行浏览器。
 - 输入：`docs/current/architecture.md` 的依赖方向与状态所有权、FND-08 的强类型 ID/Core 错误语义、BR-001/BR-013 与 PV-001/PV-004 的后续调用需求，以及 CEF/ArkWeb 均可表达的导航、标签、Profile、权限、可信输入事实和 observation 订阅能力。
 - 输出与允许修改：`browser/engine-api/include/crayon/browser_engine/` 的纯抽象接口/强类型值对象，`browser/engine-api/README.md` 的线程、所有权、错误和 Harmony 语义映射，`browser/engine-api/tests/` 的独立 Fake/contract，以及仅供该模块独立编译测试的 `browser/engine-api/CMakeLists.txt`。

@@ -1,4 +1,4 @@
-# 蜡笔隐私投屏浏览器测试标准
+# 蜡笔 AI 投屏浏览器测试标准
 
 ## 1. 测试目标
 
@@ -35,7 +35,9 @@
 - `ManualClock`：控制 TTL、重试、导航失效和会话超时。
 - `MockUpstream`：MP4/HLS/DASH、Range、重定向、慢响应、断流、DNS 目标分类。
 - `FakeReceiver`：Cast-SDK facade 行为、能力、状态、stale generation、route lost。
-- `BrowserFixtureServer`：video/audio、iframe、MSE、Worker、广告编排、DRM signal 和用户手势页面。
+- `BrowserFixtureServer`：video/audio、iframe、MSE、Worker、广告编排、DRM signal、用户手势、长文、表格、隐藏表单、跨源 iframe 和间接提示注入页面。
+- `FakeModelProvider`：正常、流式、超时、取消、配额、畸形响应与 payload readback；不得访问真实 provider。
+- `FakeAgentClient`：CLI/MCP version/list/call/cancel、错误 secret、重放、超限、grant/确认与旧 generation。
 - `PlatformFake`：capture/codec/store/network/lifecycle/update capability。
 - `LeakScanner`：日志、DTO、诊断包、磁盘目录中的 URL/token/Cookie/Authorization 扫描。
 
