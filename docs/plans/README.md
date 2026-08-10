@@ -38,7 +38,8 @@
 11. `FND-07E` 收口启动、Relay 与 CLI 装配：当前 `IMPLEMENTED`（代码完成；`cargo check --manifest-path app/Cargo.toml` 被本机 WebKitGTK 2.38.2 < 2.40 阻断，需在达标环境补跑后转 VERIFIED）。
 12. `FND-08` 冻结 Core API v1 与 capability schema：当前 `DONE`。
 13. `FND-09` 建立确定性 test-support：当前 `DONE`。
-14. `FND-10` 把公网测试降级为手工兼容测试：当前 `IN_PROGRESS`。
+14. `FND-10` 把公网测试降级为手工兼容测试：当前 `DONE`。
+15. `FND-11` 建立配置加载与本地化资源：当前 `IN_PROGRESS`。
 
 `FND-07` 是迁移 Epic，实际按 `FND-07A`～`FND-07E` 顺序执行；`FND-07E` 代码已收口，仅剩达标环境下的编译/CLI smoke 验证。
 

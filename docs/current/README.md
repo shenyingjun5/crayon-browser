@@ -136,6 +136,12 @@ git diff --check                   # FND-01 交付前检查
 - 新 workspace 成员 `test-support`（dev/test 专用，生产依赖图零引用）：`ManualClock`（逻辑时钟，无 sleep）、`MockUpstream`（Full/Redirect/Drip 脚本 + 请求录制）、`FakeCastFacade`（stale generation、route lost、失败注入）、`PlatformFake`/`SecureStoreFake`、`BrowserFixtureServer`（8 类测试页）、`LeakScanner`（secret/URL 泄漏扫描，目录遍历错误显式上报）。
 - 全部 loopback 随机端口、无公共网络、无真实秘密、缓冲均有界；23 条自测通过；严格 Clippy 与 `check.sh all` 通过。
 
+## FND-10 公网测试降级为手工兼容层（2026-08-10）
+
+- 新建 `tests/integration/`：R1/R2/R3/R4/R9/R11/E1/D3 的本地 fixture 版（MockUpstream loopback 随机端口），8 条全过；relay 用 `allow_private_hosts` 测试钩子仅指向本机 mock。
+- `tests/online.rs` 13 条公网用例需 `GET_VIDEO_ONLINE=1` + `--ignored` 双重显式启用，缺一即跳过不算失败；输出不再含 URL/账号；testing-standard.md 增列手工兼容层规则。
+- `MockUpstream` 新增 `RangeAware` 脚本（206/Content-Range）；legacy-dev 全 target 严格 Clippy、`check.sh all` 通过。
+
 ## 事实更新规则
 
 - 完成模块 Roadmap 后，把稳定结论收敛到本目录，再归档实施过程。

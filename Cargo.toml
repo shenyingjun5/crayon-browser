@@ -73,6 +73,11 @@ name = "online"
 path = "tests/online.rs"
 required-features = ["legacy-dev"]
 
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"
+required-features = ["legacy-dev"]
+
 [dependencies]
 crayon-app-runtime = { path = "crates/crayon-app-runtime" }
 crayon-cast-policy = { path = "crates/crayon-cast-policy" }
@@ -99,6 +104,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
+test-support = { path = "test-support" }
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", default-features = false, features = [
     "rustls-tls",

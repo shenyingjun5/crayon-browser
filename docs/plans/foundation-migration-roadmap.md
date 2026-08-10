@@ -1,6 +1,6 @@
 # FND：基础工程与 Legacy 迁移 Roadmap
 
-状态：`FND-01/02/03/04/05/06/07A/07B/07C/07D/08/09 DONE`，`FND-07E IMPLEMENTED`（app 整体编译验证待 WebKitGTK ≥ 2.40 环境），`FND-10 IN_PROGRESS`。
+状态：`FND-01/02/03/04/05/06/07A/07B/07C/07D/08/09/10 DONE`，`FND-07E IMPLEMENTED`（app 整体编译验证待 WebKitGTK ≥ 2.40 环境），`FND-11 IN_PROGRESS`。
 
 ## 目标
 
@@ -207,7 +207,7 @@
 
 ### FND-10：把公网测试降级为手工兼容测试
 
-- 状态：`TODO`
+- 状态：`DONE`
 - 依赖：FND-09。
 - 修改：`tests/online.rs`、`tests/integration/`、`docs/current/testing-standard.md`。
 - 工作：用本地 fixture 替代 CI 公网站点；保留经批准的站点 smoke 为 ignored/manual，要求显式环境变量且不输出 URL/账号。
@@ -215,6 +215,7 @@
 - 验证：断网环境 core/integration tests；manual test 默认不执行。
 - 验收：fast/core 不访问公网；manual 失败不被误报为产品单测失败。
 - 证据：S2。
+- 完成证据（2026-08-10）：新建 `tests/integration/` L3 target（`required-features = ["legacy-dev"]`），8 条本地 fixture 用例覆盖原公网用例 R1/R2/R3/R4/R9/R11/E1/D3——全部经 test-support `MockUpstream`（loopback 随机端口、脚本化响应、请求录制），relay 走 `allow_private_hosts: true` 测试钩子（仅指向本机 mock；公网 SSRF 规则仍由 fixtures/security 覆盖）。`MockUpstream` 新增 `RangeAware` 脚本（206/Content-Range/Accept-Ranges；Range 转发经请求录制断言）。`tests/online.rs` 13 条公网用例降级为手工兼容层：`GET_VIDEO_ONLINE=1` 环境变量 + `--ignored` 双重显式启用，缺一即跳过且不作为失败；panic/eprintln 输出中的 URL 与 formats dump 全部清除。testing-standard.md 增列手工兼容层规则（不输出 URL/账号、失败不误报为产品单测失败、fast/core/security/all 不访问公网）。验证：`cargo test --no-default-features --features legacy-dev --test integration` 8/8；`--test online -- --ignored` 未设环境变量时 13 条 0.01s 全部跳过（无网络访问实证）；legacy-dev 全 target 严格 Clippy（`-D warnings`）通过；`scripts/check.sh all` 通过；`cargo fmt --all -- --check`、`git diff --check` 通过。任务级 Code Review P0/P1/P2/P3 均为 0。
 
 ### FND-11：建立配置加载与本地化资源
 

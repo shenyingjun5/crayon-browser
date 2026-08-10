@@ -1,6 +1,9 @@
 //! 在线测试（docs/test-cases.md 的 [在线] 用例）：依赖公网资源，可能随时间失效。
 //!
-//! 运行方式：`cargo test --test online -- --ignored --test-threads=1`
+//! 运行方式（手工兼容测试，双重显式启用）：
+//! `GET_VIDEO_ONLINE=1 cargo test --test online -- --ignored --test-threads=1`
+//!
+//! 未设置环境变量时全部跳过且不作为产品失败；输出不得包含 URL 或账号信息。
 
 use futures_util::StreamExt;
 use get_video::extract::{Extractor, RulePack};
@@ -42,6 +45,12 @@ fn client() -> reqwest::Client {
         .unwrap()
 }
 
+/// 手工在线兼容测试门禁：必须显式设置 GET_VIDEO_ONLINE=1（且 --ignored）。
+/// 未启用时跳过，不作为产品单测失败。
+fn online_enabled() -> bool {
+    matches!(std::env::var("GET_VIDEO_ONLINE"), Ok(v) if v == "1")
+}
+
 fn proxy_url(relay_base: &str, target: &str) -> String {
     format!(
         "{}/proxy/{}",
@@ -54,6 +63,10 @@ fn proxy_url(relay_base: &str, target: &str) -> String {
 #[tokio::test]
 #[ignore]
 async fn e1_w3schools_page_mp4() {
+    if !online_enabled() {
+        eprintln!("skip: GET_VIDEO_ONLINE=1 未设置（手工兼容测试）");
+        return;
+    }
     let relay = spawn_relay().await;
     let extractor = Extractor::new(&relay.base_url(), RulePack::empty());
     let info = extractor.extract(W3S_PAGE).await.unwrap();
@@ -61,7 +74,12 @@ async fn e1_w3schools_page_mp4() {
         .formats
         .iter()
         .find(|f| f.url == W3S_MP4)
-        .unwrap_or_else(|| panic!("应提取出 {W3S_MP4}，实际: {:?}", info.formats));
+        .unwrap_or_else(|| {
+            panic!(
+                "应提取出相对地址对应的 mp4 格式（共 {} 个）",
+                info.formats.len()
+            )
+        });
     assert_eq!(f.protocol, "mp4");
     assert!(!f.drm);
     assert!(f.relay_url.is_some());
@@ -72,6 +90,10 @@ async fn e1_w3schools_page_mp4() {
 #[tokio::test]
 #[ignore]
 async fn r1_mux_master_multibitrate() {
+    if !online_enabled() {
+        eprintln!("skip: GET_VIDEO_ONLINE=1 未设置（手工兼容测试）");
+        return;
+    }
     let relay = spawn_relay().await;
     let resp = client()
         .get(proxy_url(&relay.base_url(), MUX_MASTER))
@@ -81,7 +103,10 @@ async fn r1_mux_master_multibitrate() {
     assert_eq!(resp.status(), 200);
     let body = resp.text().await.unwrap();
     let variant_count = body.matches("#EXT-X-STREAM-INF").count();
-    assert_eq!(variant_count, 5, "应保留五档码率: {body}");
+    assert_eq!(
+        variant_count, 5,
+        "应保留五档码率（实际 {variant_count} 档）"
+    );
     // 每个 STREAM-INF 的下一行都被改写为 /proxy/ 绝对地址
     let mut rewritten = 0;
     let mut lines = body.lines().map(|l| l.trim()).peekable();
@@ -109,6 +134,10 @@ async fn r1_mux_master_multibitrate() {
 #[tokio::test]
 #[ignore]
 async fn r2_apple_byterange_playlist() {
+    if !online_enabled() {
+        eprintln!("skip: GET_VIDEO_ONLINE=1 未设置（手工兼容测试）");
+        return;
+    }
     let relay = spawn_relay().await;
     let resp = client()
         .get(proxy_url(&relay.base_url(), APPLE_BYTERANGE))
@@ -121,7 +150,7 @@ async fn r2_apple_byterange_playlist() {
     // BYTERANGE 标签行不被改写
     for line in body.lines() {
         if line.starts_with("#EXT-X-BYTERANGE") {
-            assert!(!line.contains("/proxy/"), "标签行不应改写: {line}");
+            assert!(!line.contains("/proxy/"), "标签行不应改写");
         }
     }
     // 分片行被改写为代理地址（main.ts 相对路径转绝对）
@@ -132,8 +161,8 @@ async fn r2_apple_byterange_playlist() {
         .collect();
     assert!(!seg_lines.is_empty());
     for s in &seg_lines {
-        assert!(s.contains("/proxy/"), "分片行未改写: {s}");
-        assert!(s.contains("main.ts"), "分片相对路径应解析出 main.ts: {s}");
+        assert!(s.contains("/proxy/"), "分片行未改写");
+        assert!(s.contains("main.ts"), "分片相对路径应解析出 main.ts");
     }
     relay.shutdown().await;
 }
@@ -142,6 +171,10 @@ async fn r2_apple_byterange_playlist() {
 #[tokio::test]
 #[ignore]
 async fn r3_apple_master_ext_x_media() {
+    if !online_enabled() {
+        eprintln!("skip: GET_VIDEO_ONLINE=1 未设置（手工兼容测试）");
+        return;
+    }
     let relay = spawn_relay().await;
     let resp = client()
         .get(proxy_url(&relay.base_url(), APPLE_MEDIA_MASTER))
@@ -156,7 +189,7 @@ async fn r3_apple_master_ext_x_media() {
         .collect();
     assert!(!media_lines.is_empty(), "夹具应含带 URI 的 EXT-X-MEDIA");
     for l in &media_lines {
-        assert!(l.contains("/proxy/"), "EXT-X-MEDIA URI 未改写: {l}");
+        assert!(l.contains("/proxy/"), "EXT-X-MEDIA URI 未改写");
     }
     // STREAM-INF 子列表同样改写
     assert!(body.contains("/proxy/"));
@@ -167,6 +200,10 @@ async fn r3_apple_master_ext_x_media() {
 #[tokio::test]
 #[ignore]
 async fn r4_aes128_key_rewrite_not_drm() {
+    if !online_enabled() {
+        eprintln!("skip: GET_VIDEO_ONLINE=1 未设置（手工兼容测试）");
+        return;
+    }
     let relay = spawn_relay().await;
     let c = client();
     // master → 子列表
@@ -191,13 +228,10 @@ async fn r4_aes128_key_rewrite_not_drm() {
         .find(|l| l.starts_with("#EXT-X-KEY:"))
         .expect("子列表应含 EXT-X-KEY");
     assert!(key_line.contains("METHOD=AES-128"));
-    assert!(
-        key_line.contains("/proxy/"),
-        "KEY URI 应改写为代理地址: {key_line}"
-    );
+    assert!(key_line.contains("/proxy/"), "KEY URI 应改写为代理地址");
     assert!(
         key_line.contains("oceans.key"),
-        "相对 key 应解析出 oceans.key: {key_line}"
+        "相对 key 应解析出 oceans.key"
     );
     // key 经代理可拉取
     let uri_start = key_line.find("URI=\"").unwrap() + 5;
@@ -222,6 +256,10 @@ async fn r4_aes128_key_rewrite_not_drm() {
 #[tokio::test]
 #[ignore]
 async fn r9_mp4_range_passthrough() {
+    if !online_enabled() {
+        eprintln!("skip: GET_VIDEO_ONLINE=1 未设置（手工兼容测试）");
+        return;
+    }
     let relay = spawn_relay().await;
     let resp = client()
         .get(proxy_url(&relay.base_url(), W3S_MP4))
@@ -242,10 +280,13 @@ async fn r9_mp4_range_passthrough() {
 #[tokio::test]
 #[ignore]
 async fn r11_live_hls() {
+    if !online_enabled() {
+        eprintln!("skip: GET_VIDEO_ONLINE=1 未设置（手工兼容测试）");
+        return;
+    }
     let relay = spawn_relay().await;
     let c = client();
     let mut media = String::new();
-    let mut used = "";
     for candidate in [LIVE_HLS, LIVE_HLS_FALLBACK] {
         let Ok(resp) = c.get(proxy_url(&relay.base_url(), candidate)).send().await else {
             continue;
@@ -266,26 +307,21 @@ async fn r11_live_hls() {
         else {
             continue;
         };
-        assert!(sub.contains("/proxy/"), "子列表应改写: {sub}");
+        assert!(sub.contains("/proxy/"), "子列表应改写");
         let Ok(sub_resp) = c.get(&sub).send().await else {
             continue;
         };
         if sub_resp.status() != 200 {
-            eprintln!(
-                "live 源 {candidate} 子列表不可用（{}），换替补",
-                sub_resp.status()
-            );
+            eprintln!("主用例子列表不可用（{}），换替补", sub_resp.status());
             continue;
         }
         let text = sub_resp.text().await.unwrap();
         if text.starts_with("#EXTM3U") {
             media = text;
-            used = candidate;
             break;
         }
     }
     assert!(!media.is_empty(), "主用例与替补直播源均不可用");
-    eprintln!("R11 实际使用直播源: {used}");
     // 直播列表通常无 ENDLIST（不强制断言，只检查能拿到分片）
     let seg = media
         .lines()
@@ -307,6 +343,10 @@ async fn r11_live_hls() {
 #[tokio::test]
 #[ignore]
 async fn d3_dash_multi_drm() {
+    if !online_enabled() {
+        eprintln!("skip: GET_VIDEO_ONLINE=1 未设置（手工兼容测试）");
+        return;
+    }
     let text = client()
         .get(DASH_DRM)
         .send()
@@ -326,6 +366,10 @@ async fn d3_dash_multi_drm() {
 #[tokio::test]
 #[ignore]
 async fn d4_online_dash_vod_no_drm() {
+    if !online_enabled() {
+        eprintln!("skip: GET_VIDEO_ONLINE=1 未设置（手工兼容测试）");
+        return;
+    }
     let text = client()
         .get(DASH_NO_DRM)
         .send()
@@ -341,6 +385,10 @@ async fn d4_online_dash_vod_no_drm() {
 #[tokio::test]
 #[ignore]
 async fn cctv_documentary_site_extractor() {
+    if !online_enabled() {
+        eprintln!("skip: GET_VIDEO_ONLINE=1 未设置（手工兼容测试）");
+        return;
+    }
     let relay = spawn_relay().await;
     let extractor = Extractor::new(&relay.base_url(), RulePack::empty());
     let info = extractor
@@ -352,8 +400,8 @@ async fn cctv_documentary_site_extractor() {
         .formats
         .iter()
         .find(|f| f.protocol == "hls")
-        .unwrap_or_else(|| panic!("应有 hls 格式: {:?}", info.formats));
-    assert!(f.url.contains(".m3u8"), "hls 地址异常: {}", f.url);
+        .unwrap_or_else(|| panic!("应有 hls 格式（共 {} 个）", info.formats.len()));
+    assert!(f.url.contains(".m3u8"), "hls 地址异常");
     assert!(!f.drm, "公开纪录片不应标记 DRM");
     assert!(f.relay_url.is_some(), "应产出 relay 地址");
     relay.shutdown().await;
@@ -363,6 +411,10 @@ async fn cctv_documentary_site_extractor() {
 #[tokio::test]
 #[ignore]
 async fn bilibili_bangumi_site_extractor() {
+    if !online_enabled() {
+        eprintln!("skip: GET_VIDEO_ONLINE=1 未设置（手工兼容测试）");
+        return;
+    }
     let relay = spawn_relay().await;
     let extractor = Extractor::new(&relay.base_url(), RulePack::empty());
     let info = extractor
@@ -372,7 +424,12 @@ async fn bilibili_bangumi_site_extractor() {
     assert_eq!(info.source, "site-api", "应走站点解析器");
     assert!(!info.formats.is_empty(), "应有可用格式");
     let f = &info.formats[0];
-    assert_eq!(f.protocol, "mp4", "durl 整段应为 mp4: {:?}", info.formats);
+    assert_eq!(
+        f.protocol,
+        "mp4",
+        "durl 整段应为 mp4（共 {} 个格式）",
+        info.formats.len()
+    );
     assert!(!f.drm, "is_drm=false 的内容不应标记 DRM");
     assert!(f.relay_url.is_some(), "应产出 relay 地址");
     assert_eq!(
@@ -387,6 +444,10 @@ async fn bilibili_bangumi_site_extractor() {
 #[tokio::test]
 #[ignore]
 async fn bilibili_ugc_video_site_extractor() {
+    if !online_enabled() {
+        eprintln!("skip: GET_VIDEO_ONLINE=1 未设置（手工兼容测试）");
+        return;
+    }
     let relay = spawn_relay().await;
     let extractor = Extractor::new(&relay.base_url(), RulePack::empty());
     let info = extractor
@@ -396,7 +457,12 @@ async fn bilibili_ugc_video_site_extractor() {
     assert_eq!(info.source, "site-api", "应走站点解析器");
     assert!(!info.formats.is_empty(), "应有可用格式");
     let f = &info.formats[0];
-    assert_eq!(f.protocol, "mp4", "durl 整段应为 mp4: {:?}", info.formats);
+    assert_eq!(
+        f.protocol,
+        "mp4",
+        "durl 整段应为 mp4（共 {} 个格式）",
+        info.formats.len()
+    );
     assert!(!f.drm);
     assert!(f.relay_url.is_some());
     relay.shutdown().await;
@@ -406,6 +472,10 @@ async fn bilibili_ugc_video_site_extractor() {
 #[tokio::test]
 #[ignore]
 async fn bilibili_bangumi_ss_site_extractor() {
+    if !online_enabled() {
+        eprintln!("skip: GET_VIDEO_ONLINE=1 未设置（手工兼容测试）");
+        return;
+    }
     let relay = spawn_relay().await;
     let extractor = Extractor::new(&relay.base_url(), RulePack::empty());
     let info = extractor
@@ -413,10 +483,6 @@ async fn bilibili_bangumi_ss_site_extractor() {
         .await
         .unwrap();
     assert_eq!(info.source, "site-api");
-    assert!(
-        !info.formats.is_empty(),
-        "ss 页应经默认集拿到格式: {:?}",
-        info.note
-    );
+    assert!(!info.formats.is_empty(), "ss 页应经默认集拿到格式");
     relay.shutdown().await;
 }

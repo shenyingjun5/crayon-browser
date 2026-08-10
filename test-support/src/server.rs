@@ -19,6 +19,16 @@ pub(crate) struct RecordedRequest {
     pub(crate) headers: Vec<(String, String)>,
 }
 
+impl RecordedRequest {
+    /// First header value matching `name` (case-insensitive).
+    pub(crate) fn header(&self, name: &str) -> Option<&str> {
+        self.headers
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case(name))
+            .map(|(_, v)| v.as_str())
+    }
+}
+
 /// Response body delivery strategy.
 pub(crate) enum RawBody {
     /// Whole body written at once.

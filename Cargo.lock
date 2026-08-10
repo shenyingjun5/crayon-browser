@@ -447,6 +447,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "test-support",
  "tokio",
  "tracing",
  "tracing-subscriber",

@@ -16,6 +16,9 @@
 | L5 Device/Platform | `tests/e2e/device` | 真机采集、音频、权限、接收端和网络拓扑 | 按矩阵 |
 | L6 Stress/Longrun | `tests/stress` | 资源上限、切换、8h 长稳、弱网 | 夜间/发布 |
 | L7 Release | `tests/release` | 签名、公证、安装、升级、卸载、SBOM、产物隔离 | 候选版本 |
+| 手工兼容 | `tests/online.rs` | 经批准的公网站点 smoke | 手动触发 |
+
+手工兼容层规则（FND-10）：必须同时满足 `GET_VIDEO_ONLINE=1` 环境变量与 `--ignored` 才真实访问公网；任一缺失即跳过且不作为失败。输出不得包含 URL 或账号信息。该层失败记录为站点兼容性变化，不得误报为产品单测失败；`fast`/`core`/`security`/`all` 门禁不得访问公网（本地 fixture 由 `tests/integration` 覆盖）。
 
 ## 3. 测试代码边界
 

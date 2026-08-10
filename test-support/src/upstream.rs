@@ -59,6 +59,14 @@ pub enum UpstreamScript {
         chunks: Vec<Vec<u8>>,
         control: DripControl,
     },
+    /// Range-aware full body: a valid `Range: bytes=a-b` request gets 206 +
+    /// `Content-Range` + the slice (MP4 seek path); otherwise 200 full body.
+    /// Always advertises `Accept-Ranges: bytes`. Out-of-range gets 416-style
+    /// 200 full body (simplest honest fallback for a test double).
+    RangeAware {
+        content_type: Option<String>,
+        body: Vec<u8>,
+    },
 }
 
 /// Creates a drip script plus its test-side control handle.
@@ -80,6 +88,26 @@ pub fn drip(
         },
         control,
     )
+}
+
+/// Parses a single `bytes=a-b`/`bytes=a-` range against `len`, returning the
+/// inclusive (start, end) pair; unsatisfiable/malformed ranges return `None`.
+fn parse_byte_range(header: Option<&str>, len: usize) -> Option<(usize, usize)> {
+    let spec = header?.strip_prefix("bytes=")?;
+    let (start, end) = spec.split_once('-')?;
+    let start: usize = start.parse().ok()?;
+    if start >= len {
+        return None;
+    }
+    let end = if end.is_empty() {
+        len - 1
+    } else {
+        end.parse::<usize>().ok()?.min(len - 1)
+    };
+    if end < start {
+        return None;
+    }
+    Some((start, end))
 }
 
 struct State {
@@ -133,6 +161,31 @@ impl MockUpstream {
                         .collect(),
                     body: RawBody::Drip(chunks.clone(), control.gate.clone()),
                 },
+                Some(UpstreamScript::RangeAware { content_type, body }) => {
+                    let mut headers: Vec<(String, String)> = content_type
+                        .iter()
+                        .map(|ct| ("Content-Type".to_string(), ct.clone()))
+                        .collect();
+                    headers.push(("Accept-Ranges".to_string(), "bytes".to_string()));
+                    match parse_byte_range(request.header("range"), body.len()) {
+                        Some((start, end)) => {
+                            headers.push((
+                                "Content-Range".to_string(),
+                                format!("bytes {start}-{end}/{}", body.len()),
+                            ));
+                            RawResponse {
+                                status: 206,
+                                headers,
+                                body: RawBody::Full(body[start..=end].to_vec()),
+                            }
+                        }
+                        None => RawResponse {
+                            status: 200,
+                            headers,
+                            body: RawBody::Full(body.clone()),
+                        },
+                    }
+                }
                 None => RawResponse {
                     status: 404,
                     headers: Vec::new(),
