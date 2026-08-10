@@ -29,6 +29,7 @@ legacy-dev = [
 resolver = "2"
 members = [
     "crates/crayon-app-runtime",
+    "crates/crayon-cast-adapter",
     "crates/crayon-domain",
     "crates/crayon-ipc-schema",
     "crates/crayon-legacy-adapter",
@@ -39,7 +40,7 @@ members = [
     "test-support",
     "crates/crayon-relay",
 ]
-exclude = ["app", "demo"]
+exclude = ["app", "demo", "third_party/cast-sdk"]
 
 [workspace.package]
 version = "0.1.0"

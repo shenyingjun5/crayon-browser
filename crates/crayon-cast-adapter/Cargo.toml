@@ -1,0 +1,14 @@
+[package]
+name = "crayon-cast-adapter"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "The only product adapter over the pinned Cast-SDK sender facade"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+cast-sender-core = { path = "../../third_party/cast-sdk/sender/rust/crates/cast-sender-core" }
+cast-sender-service = { path = "../../third_party/cast-sdk/sender/rust/crates/cast-sender-service" }
