@@ -2,6 +2,8 @@
 
 mod observation;
 
+pub mod candidate;
+
 pub use observation::{
     FrameContext, NavigationId, ObservationError, ObservationSource, SourceObservation,
 };

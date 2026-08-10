@@ -1,6 +1,6 @@
 # MED：媒体观察、策略与 Session Relay Roadmap
 
-状态：`MED-01 DONE`，`MED-02 IN_PROGRESS`。本模块不做设备协议、浏览器对象和平台采集。
+状态：`MED-01/02 DONE`，`MED-03 IN_PROGRESS`。本模块不做设备协议、浏览器对象和平台采集。
 
 ## 原子任务
 
@@ -11,7 +11,8 @@
 ## 完成证据
 
 - **MED-01（2026-08-10，commit 见 git log）**：`crayon-media-observer::observation` 新增 `SourceObservation`——构造即校验（空/超长 >2048/非 http(s) URL 拒绝，含 2048 边界用例），携带 tab/navigation/frame/source/双 URL/逻辑时间戳；`NavigationId` 绑定 + `is_current` 支撑导航后旧 frame/worker 迟到上报丢弃（BR-007）；iframe/Worker/MSE 来源事实保留（BR-008）；类型无正文/表单/Cookie 字段（Debug 扫描断言）。observer crate 按架构表新增对 `crayon-domain` 的依赖（仅用 `TabId`）。验证：`cargo test -p crayon-media-observer` 6/6（新增 4 条：事实完整、非法 URL/长度/边界、BR-007、BR-008）；全 workspace 严格 Clippy、`scripts/check.sh all`、`git diff --check` 通过。Code Review P0/P1/P2/P3 均为 0。
-| MED-02 | MED-01 | `candidate/store` | candidate 归一化、证据合并、完整 URL 内存保存、脱敏 ID | PL-001、PL-002；query 不丢；无 secret serde | S1 |
+- **MED-02（2026-08-10，commit 见 git log）**：`crayon-media-observer::candidate::store` 新增 `CandidateStore`——同一 tab+navigation 内按归一化 URL（仅 scheme/host 大小写与默认端口归一，path/query 字节保留）合并候选并保留多源证据（PL-001：DOM/network/currentSrc 合并为一个，去重同 source+frame，evidence 上限 8）；完整签名 URL 仅存可信内存且 query 字节不丢（PL-002）；对外仅 `RedactedCandidate`（不透明 ID + `scheme://host[:port]`）；`CandidateEntry` 无 Serialize、Debug 脱敏（测试断言 query/文件名不进 Debug）；容量上限 256 满载拒绝。验证：`cargo test -p crayon-media-observer` 11/11（新增 5 条：PL-001 合并与证据、不同 URL/navigation 不合并、PL-002 query 保留与日志脱敏、归一化边界、容量有界）；全 workspace 严格 Clippy、`scripts/check.sh all`、`git diff --check` 通过。Code Review P0/P1/P2/P3 均为 0。
+| MED-02 | MED-01 | `candidate/store` | candidate 归一化、证据合并、完整 URL 内存保存、脱敏 ID | PL-001、PL-002；query 不丢；无 secret serde | S1 DONE（2026-08-10） |
 | MED-03 | MED-02 | `candidate/ranking` | 当前播放、可见性、输入时间、来源置信排序 | BR-006；稳定排序/相同时间/音频 | S1 |
 | MED-04 | MED-02 | `candidate/lifecycle` | navigation/TTL/cancel/generation 失效与有界容量 | BR-007、BR-013、PL-012；满载 eviction | S1 |
 | MED-05 | FND-06,FND-09 | `crayon-media-probe/http` | 无 secret、禁自动 redirect、有界 HEAD/Range client | PL-003、PL-014；私网/混合 DNS/超时/取消 | S2 |

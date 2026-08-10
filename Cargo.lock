@@ -313,6 +313,7 @@ name = "crayon-media-observer"
 version = "0.1.0"
 dependencies = [
  "crayon-domain",
+ "url",
 ]
 
 [[package]]

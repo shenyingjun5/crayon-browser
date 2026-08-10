@@ -11,3 +11,4 @@ workspace = true
 
 [dependencies]
 crayon-domain = { path = "../crayon-domain" }
+url = "2"
