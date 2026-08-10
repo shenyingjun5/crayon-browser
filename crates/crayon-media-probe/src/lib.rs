@@ -2,6 +2,7 @@
 
 mod codec;
 mod frame;
+pub mod http;
 mod protection;
 
 pub use codec::{
@@ -9,4 +10,5 @@ pub use codec::{
     CodecInfo,
 };
 pub use frame::{frames_degenerate, probe_verdict, FrameStat, ProbeVerdict};
+pub use http::{ProbeHttpClient, ProbeHttpConfig, ProbeHttpError, ProbeResponse};
 pub use protection::{hls_is_drm, keyformat_is_drm, mpd_is_drm};

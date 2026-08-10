@@ -45,7 +45,8 @@
 18. `MED-02` candidate 归一化与证据合并：当前 `DONE`。
 19. `MED-03` candidate 置信排序：当前 `DONE`。
 20. `MED-04` candidate 生命周期（navigation/TTL/失效与有界容量）：当前 `DONE`。
-21. `MED-05` probe 有界 HTTP client：当前 `IN_PROGRESS`。
+21. `MED-05` probe 有界 HTTP client：当前 `DONE`。
+22. `MED-06` probe MP4/HLS/DASH 预检：当前 `IN_PROGRESS`。
 
 `FND-07` 是迁移 Epic，实际按 `FND-07A`～`FND-07E` 顺序执行；`FND-07E` 代码已收口，仅剩达标环境下的编译/CLI smoke 验证。MED 按自身依赖推进（MED-01 依赖 FND-06/FND-08，均 DONE）。
 

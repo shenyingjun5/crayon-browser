@@ -319,6 +319,13 @@ dependencies = [
 [[package]]
 name = "crayon-media-probe"
 version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "reqwest",
+ "test-support",
+ "tokio",
+ "url",
+]
 
 [[package]]
 name = "crc32fast"

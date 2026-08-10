@@ -67,6 +67,9 @@ pub enum UpstreamScript {
         content_type: Option<String>,
         body: Vec<u8>,
     },
+    /// HEAD requests get 405, all other methods delegate to the wrapped
+    /// script (PL-003: servers that reject HEAD probing).
+    HeadRejected(Box<UpstreamScript>),
 }
 
 /// Creates a drip script plus its test-side control handle.
@@ -114,6 +117,73 @@ struct State {
     routes: HashMap<String, UpstreamScript>,
 }
 
+/// Renders a route script into a raw response (None → 404).
+fn render(script: Option<&UpstreamScript>, request: &RecordedRequest) -> RawResponse {
+    match script {
+        Some(UpstreamScript::Full {
+            status,
+            content_type,
+            body,
+        }) => RawResponse {
+            status: *status,
+            headers: content_type
+                .iter()
+                .map(|ct| ("Content-Type".to_string(), ct.clone()))
+                .collect(),
+            body: RawBody::Full(body.clone()),
+        },
+        Some(UpstreamScript::Redirect { location }) => RawResponse {
+            status: 302,
+            headers: vec![("Location".to_string(), location.clone())],
+            body: RawBody::Full(Vec::new()),
+        },
+        Some(UpstreamScript::Drip {
+            status,
+            content_type,
+            chunks,
+            control,
+        }) => RawResponse {
+            status: *status,
+            headers: content_type
+                .iter()
+                .map(|ct| ("Content-Type".to_string(), ct.clone()))
+                .collect(),
+            body: RawBody::Drip(chunks.clone(), control.gate.clone()),
+        },
+        Some(UpstreamScript::RangeAware { content_type, body }) => {
+            let mut headers: Vec<(String, String)> = content_type
+                .iter()
+                .map(|ct| ("Content-Type".to_string(), ct.clone()))
+                .collect();
+            headers.push(("Accept-Ranges".to_string(), "bytes".to_string()));
+            match parse_byte_range(request.header("range"), body.len()) {
+                Some((start, end)) => {
+                    headers.push((
+                        "Content-Range".to_string(),
+                        format!("bytes {start}-{end}/{}", body.len()),
+                    ));
+                    RawResponse {
+                        status: 206,
+                        headers,
+                        body: RawBody::Full(body[start..=end].to_vec()),
+                    }
+                }
+                None => RawResponse {
+                    status: 200,
+                    headers,
+                    body: RawBody::Full(body.clone()),
+                },
+            }
+        }
+        // HeadRejected 在 handler 中按方法分流，不会到达这里。
+        Some(UpstreamScript::HeadRejected(_)) | None => RawResponse {
+            status: 404,
+            headers: Vec::new(),
+            body: RawBody::Full(Vec::new()),
+        },
+    }
+}
+
 /// Scripted upstream server. Routes are exact path matches; unregistered
 /// paths return 404 (never fall through to a real network).
 pub struct MockUpstream {
@@ -130,68 +200,18 @@ impl MockUpstream {
         let handler_state = state.clone();
         let server = MiniServer::start(Arc::new(move |request: &RecordedRequest| {
             let state = handler_state.lock().unwrap();
-            match state.routes.get(&request.path) {
-                Some(UpstreamScript::Full {
-                    status,
-                    content_type,
-                    body,
-                }) => RawResponse {
-                    status: *status,
-                    headers: content_type
-                        .iter()
-                        .map(|ct| ("Content-Type".to_string(), ct.clone()))
-                        .collect(),
-                    body: RawBody::Full(body.clone()),
-                },
-                Some(UpstreamScript::Redirect { location }) => RawResponse {
-                    status: 302,
-                    headers: vec![("Location".to_string(), location.clone())],
-                    body: RawBody::Full(Vec::new()),
-                },
-                Some(UpstreamScript::Drip {
-                    status,
-                    content_type,
-                    chunks,
-                    control,
-                }) => RawResponse {
-                    status: *status,
-                    headers: content_type
-                        .iter()
-                        .map(|ct| ("Content-Type".to_string(), ct.clone()))
-                        .collect(),
-                    body: RawBody::Drip(chunks.clone(), control.gate.clone()),
-                },
-                Some(UpstreamScript::RangeAware { content_type, body }) => {
-                    let mut headers: Vec<(String, String)> = content_type
-                        .iter()
-                        .map(|ct| ("Content-Type".to_string(), ct.clone()))
-                        .collect();
-                    headers.push(("Accept-Ranges".to_string(), "bytes".to_string()));
-                    match parse_byte_range(request.header("range"), body.len()) {
-                        Some((start, end)) => {
-                            headers.push((
-                                "Content-Range".to_string(),
-                                format!("bytes {start}-{end}/{}", body.len()),
-                            ));
-                            RawResponse {
-                                status: 206,
-                                headers,
-                                body: RawBody::Full(body[start..=end].to_vec()),
-                            }
-                        }
-                        None => RawResponse {
-                            status: 200,
-                            headers,
-                            body: RawBody::Full(body.clone()),
-                        },
-                    }
+            let script = state.routes.get(&request.path);
+            if let Some(UpstreamScript::HeadRejected(inner)) = script {
+                if request.method.eq_ignore_ascii_case("HEAD") {
+                    return RawResponse {
+                        status: 405,
+                        headers: Vec::new(),
+                        body: RawBody::Full(Vec::new()),
+                    };
                 }
-                None => RawResponse {
-                    status: 404,
-                    headers: Vec::new(),
-                    body: RawBody::Full(Vec::new()),
-                },
+                return render(Some(inner.as_ref()), request);
             }
+            render(script, request)
         }))
         .await?;
         Ok(Self { server, state })
