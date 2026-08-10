@@ -119,7 +119,7 @@ fn rl_005_every_trigger_revokes_sessions() {
         RevokeReason::AppExit,
     ] {
         let (mut registry, _) = registry_with_session();
-        assert_eq!(registry.revoke(reason, None), 1, "{reason:?}");
+        assert_eq!(registry.revoke(reason, None).len(), 1, "{reason:?}");
         assert!(registry.is_empty());
     }
     // 设备级触发器只撤销绑定该设备的 session
@@ -131,7 +131,9 @@ fn rl_005_every_trigger_revokes_sessions() {
         .create_session(device("dev-02"), None, vec![], DEFAULT_SESSION_TTL_MS, 1000)
         .unwrap();
     assert_eq!(
-        registry.revoke(RevokeReason::RouteLost, Some(&device("dev-01"))),
+        registry
+            .revoke(RevokeReason::RouteLost, Some(&device("dev-01")))
+            .len(),
         1
     );
     assert_eq!(registry.len(), 1, "其他设备的 session 保留");

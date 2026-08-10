@@ -8,5 +8,6 @@ pub mod hls;
 pub mod mp4;
 pub mod network_guard;
 pub mod router;
+pub mod runtime;
 pub mod session;
 pub mod vault;

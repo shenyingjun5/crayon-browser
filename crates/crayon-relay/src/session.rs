@@ -285,8 +285,24 @@ impl SessionRegistry {
     /// Revokes sessions for a lifecycle trigger (RL-005). Navigation,
     /// profile destruction and app exit revoke everything; route lost and
     /// device replacement revoke the sessions bound to that receiver.
-    pub fn revoke(&mut self, reason: RevokeReason, receiver: Option<&DeviceId>) -> usize {
-        let before = self.sessions.len();
+    /// Returns the revoked session ids so the vault can purge their recipes.
+    pub fn revoke(&mut self, reason: RevokeReason, receiver: Option<&DeviceId>) -> Vec<SessionId> {
+        let removed: Vec<SessionId> = match reason {
+            RevokeReason::Navigation | RevokeReason::ProfileDestroyed | RevokeReason::AppExit => {
+                self.sessions.iter().map(|s| s.id.clone()).collect()
+            }
+            RevokeReason::RouteLost | RevokeReason::DeviceReplaced | RevokeReason::Stopped => {
+                match receiver {
+                    Some(device) => self
+                        .sessions
+                        .iter()
+                        .filter(|s| &s.receiver == device)
+                        .map(|s| s.id.clone())
+                        .collect(),
+                    None => Vec::new(),
+                }
+            }
+        };
         match reason {
             RevokeReason::Navigation | RevokeReason::ProfileDestroyed | RevokeReason::AppExit => {
                 self.sessions.clear()
@@ -297,7 +313,7 @@ impl SessionRegistry {
                 }
             }
         }
-        before - self.sessions.len()
+        removed
     }
 
     /// Drops expired sessions relative to `now_ms`; returns the count.
