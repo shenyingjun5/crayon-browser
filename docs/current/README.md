@@ -13,6 +13,7 @@
 | [`code-review-standard.md`](code-review-standard.md) | Code Review 维度、等级和合并条件 |
 | [`fnd-migration-review.md`](fnd-migration-review.md) | FND-12 基础迁移收口：依赖/红线/规模审计与验证证据（2026-08-10） |
 | [`med-security-review.md`](med-security-review.md) | MED 模块安全评审：威胁模型对照、RL 全集覆盖、性能/泄漏报告（2026-08-10） |
+| [`cef-distribution.md`](cef-distribution.md) | CEF 固定版本、四平台 hash、缓存/离线输入与许可门禁 |
 | [`../crayon-private-cast-browser-technical-design.md`](../crayon-private-cast-browser-technical-design.md) | 完整技术背景与协议设计 |
 | [`../plans/README.md`](../plans/README.md) | 活跃 Roadmap 和下一批可领取任务 |
 
@@ -24,6 +25,7 @@
 - 正式 Relay 只提供高熵 session/resource 路由；任意 URL `/proxy`、`/api/extract` 和测试页面只存在于 legacy feature，正式 Release 产物扫描不含这些 surface。
 - 正式媒体观察器没有自动播放、广告识别/跳过或 seek；Browser process 可信输入与真实播放推进仍是投屏许可前置。
 - `scripts/check.ps1 fast/core/security`、Workspace Debug/Release 构建和 8 个正式 Release `.rlib` 的 RG-006 扫描通过；完整证据见 FND/MED 收口 Review。
+- CEF 固定为 `150.0.10+g8042e43+chromium-150.0.7871.101` Standard；四平台官方 hash、许可和离线根契约已锁定，Windows x64 archive 已实下载校验并保持 Git ignored。
 - CEF 壳、Cast-SDK 固定 revision、桌面平台采集、隐私 Profile、HarmonyOS 和发布链路尚未实现，不得把基础层完成表述为产品完成。
 
 ## FND-01 遗留契约基线（2026-08-09）

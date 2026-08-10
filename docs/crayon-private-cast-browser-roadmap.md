@@ -2,7 +2,7 @@
 
 > 版本：v0.3
 > 日期：2026-08-10
-> 状态：执行中；`FND-01~12`（含 `07A~07E`）与 `MED-01~18` 已 DONE，下一阶段等待核实 CEF-01/SDK-01 外部前置
+> 状态：执行中；`FND-01~12`（含 `07A~07E`）、`MED-01~18` 与 `CEF-01A` 已 DONE，`CEF-01B READY`
 > 目标：任何新 Agent 读取 `AGENTS.md`、current 契约和所属模块 Roadmap 后，可以领取一个原子任务并独立实现、测试、Review 和更新状态。
 
 ## 1. 使用方式
@@ -58,7 +58,7 @@ flowchart LR
 | 模块 | 原子任务数 | 主要产物 | 最低完成证据 |
 |---|---:|---|---|
 | FND | 19 | workspace、领域 crate、legacy 隔离、repo guard、fast check | S2 |
-| CEF | 15 | 三平台 CEF 壳、共享 UI、Profile、观察、IPC | S3 |
+| CEF | 19 | 三平台 CEF 壳、共享 UI、Profile、观察、IPC | S3 |
 | MED | 18 | observation/candidate/probe/policy/session relay | S2；高风险 S3 |
 | SDK | 14 | pinned SDK、adapter、发现/码/能力/播控/监督 | S4 |
 | PLT | 19 | Win/macOS/Linux capture/codec/store/network/update | S4/平台 |
@@ -66,7 +66,7 @@ flowchart LR
 | HM | 14 | ArkWeb/Native 技术预览、真机结论 | S4 |
 | QAR | 16 | E2E、压力、许可、安装更新、发布门禁 | S5 |
 
-合计 128 个唯一原子任务。验收目录当前定义 93 个唯一测试用例；任务和用例 ID 已完成唯一性、缺失引用和依赖格式检查。
+合计 132 个唯一原子任务。验收目录当前定义 93 个唯一测试用例；任务和用例 ID 已完成唯一性、缺失引用和依赖格式检查。
 
 模块任务详见 [`docs/plans/README.md`](plans/README.md)。
 
@@ -87,7 +87,7 @@ flowchart LR
 
 ### V1：无设备的 CEF 浏览器
 
-依赖：`FND-12`、`CEF-01`～`CEF-08`、`PRV-01`～`PRV-04`。
+依赖：`FND-12`、`CEF-01A`～`CEF-01E`、`CEF-02`～`CEF-08`、`PRV-01`～`PRV-04`。
 
 交付：Windows/macOS/Linux CEF 可导航、登录、标签、用户播放门禁、媒体 observation 和临时 Profile；关闭后清理可验证。
 
@@ -126,7 +126,7 @@ flowchart LR
 | 模块 | READY | TODO | IN_PROGRESS | DONE | 当前阻塞 |
 |---|---:|---:|---:|---:|---|
 | FND | 0 | 0 | 0 | 19 | 无；FND V0 已收口 |
-| CEF | 0 | 15 | 0 | 0 | 待核实固定 revision、可用二进制与三平台工具链 |
+| CEF | 1 | 17 | 0 | 1 | CEF-01B 已解锁；macOS/Linux runner 留待 01E |
 | MED | 0 | 0 | 0 | 18 | 无 |
 | SDK | 0 | 14 | 0 | 0 | 需固定 Cast-SDK revision 与正式接入授权（SDK-01） |
 | PLT | 0 | 19 | 0 | 0 | 等 CEF-07、SDK-05 |
@@ -134,7 +134,7 @@ flowchart LR
 | HM | 0 | 14 | 0 | 0 | 等 SDK-05 与真机 |
 | QAR | 0 | 16 | 0 | 0 | 等目标切片实现 |
 
-任务状态发生变化时同步更新模块 Roadmap；本表只在模块汇总状态变化时更新。（2026-08-10 更新：FND 19 项、MED 18 项全部 DONE；总计 37/128。）
+任务状态发生变化时同步更新模块 Roadmap；本表只在模块汇总状态变化时更新。（2026-08-10 更新：FND 19 项、MED 18 项、CEF-01A DONE；总计 38/132 DONE。）
 
 ## 6. 现状到目标的迁移映射
 
@@ -202,4 +202,4 @@ flowchart LR
 
 ## 12. 当前执行指令
 
-`FND-12` 已完成：三项 finding 全部关闭，fast/core/security、Workspace/App 严格 Clippy、Debug/Release build、8 个正式产物 RG-006 和独立 Review 均通过，FND V0 收口。下一步先核实 `CEF-01` 的固定 revision/二进制/三平台工具链，或取得 `SDK-01` 的固定 Cast-SDK revision 与正式接入授权；外部前置未核实前不得把任务伪标为 READY/IN_PROGRESS。
+`CEF-01A` 已完成：固定 CEF Standard revision、四平台校验值、许可证和缓存/离线根契约，Windows x64 archive 已实际下载并校验且不入 Git。下一原子任务为 `CEF-01B READY`，只冻结跨引擎接口；CMake 产品构建图和平台 shell 分别由 `CEF-01C`～`CEF-01E` 完成。`SDK-01` 仍需固定 Cast-SDK revision 与正式接入授权。
