@@ -1,6 +1,6 @@
 # FND：基础工程与 Legacy 迁移 Roadmap
 
-状态：`FND-01/02/03/04/05/06/07A/07B/07C/07D DONE`，`FND-07E IN_PROGRESS`。
+状态：`FND-01/02/03/04/05/06/07A/07B/07C/07D DONE`，`FND-07E IMPLEMENTED`（app 整体编译验证待 WebKitGTK ≥ 2.40 环境）。
 
 ## 目标
 
@@ -172,12 +172,14 @@
 
 #### FND-07E：收口启动、Relay 与 CLI 装配
 
-- 状态：`TODO`；依赖：FND-07D。
+- 状态：`IMPLEMENTED`；依赖：FND-07D。
 - 修改：`app/src/legacy_relay.rs`、`app/src/cli.rs`、`app/src/app.rs`、`app/src/main.rs`、缺失的构建资源。
 - 工作：移动 legacy relay 启动和 CLI/UI-test 编排；`main.rs` 只调用装配入口；补齐可复现的 Tauri build 前置资源。
 - 验证：`cargo check --manifest-path app/Cargo.toml`、CLI/UI smoke contract、all/security、文件规模。
 - 验收：`main.rs <300`；每个生产文件单一职责；app 可编译；端口、route、线程、CLI marker 与迁移前一致。
 - 证据：S2。
+- 完成证据（2026-08-10）：relay 启动逐字迁至 `app/src/legacy_relay.rs`（`LegacyRelay` 显式携带 handle/base/lan_base/dash_store）；CLI/UI-test/probe-eval 编排逐字迁至 `app/src/cli.rs`（`parse_cli_modes`/`run_cli_modes`）；setup 装配逐字迁至 `app/src/app.rs`；`main.rs` 242→61 行，只含命令注册与装配入口。函数集合机器比对：无丢失，仅新增 4 个装配函数（`setup`/`start_legacy_relay`/`parse_cli_modes`/`run_cli_modes`）。补齐 Windows 构建资源 `app/icons/icon.ico` 与 `demo/icons/icon.ico`（由既有 64x64 `icon.png` 确定性生成的 PNG-in-ICO，解除 FND-04 记录的 Windows 构建阻断）；提交 `app/Cargo.lock` 保证 app 独立构建可复现。legacy_contract 新增 FND-07E 装配契约（main.rs <300 行、CLI marker 逐字锁定、模块接线），RG-004 relay 基线改锁 `legacy_relay.rs`。验证：`cargo test --test legacy_contract` 8/8；legacy lib 58/58；app 侧 13 条测试经 `#[path]` harness 通过；`scripts/check.sh all` 与 `security` 通过；`cargo fmt --all -- --check`、`git diff --check` 通过。`cargo check --manifest-path app/Cargo.toml`：**未通过（环境阻断）**——openEuler 24.03 系统 webkit2gtk-4.1 为 2.38.2，wry 要求 >= 2.40（错误：`Package dependency requirement 'webkit2gtk-4.1 >= 2.40' could not be satisfied`）；按 README 既定口径不绕过系统库版本检查。端口、route、线程、CLI marker 与迁移前一致（契约锁定）。任务级 Code Review P0/P1/P2/P3 均为 0。
+- 转 VERIFIED/DONE 条件：在 WebKitGTK ≥ 2.40 的 Linux 或 macOS/Windows 机器上 `cargo check --manifest-path app/Cargo.toml` 通过并补跑 CLI smoke（`--sniff-cli`/`--extract-cli` marker 输出）。
 
 ### FND-08：冻结 Core API v1 与 capability schema
 

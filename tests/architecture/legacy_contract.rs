@@ -32,6 +32,12 @@ const LEGACY_PROBE: &str = include_str!(concat!(
     "/app/src/legacy_probe.rs"
 ));
 const LEGACY_LOGIN: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/app/src/login.rs"));
+const LEGACY_RELAY_BOOT: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/app/src/legacy_relay.rs"
+));
+const LEGACY_CLI: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/app/src/cli.rs"));
+const LEGACY_APP_SETUP: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/app/src/app.rs"));
 const ROOT_CARGO: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml"));
 const ROOT_LIB: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lib.rs"));
 const APP_CARGO: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/app/Cargo.toml"));
@@ -192,10 +198,13 @@ fn rg_004_legacy_baseline_detects_fixed_beacon_and_lan_bind() {
     assert_markers_present(
         LEGACY_APP_MAIN,
         "RG-004 legacy beacon module wiring",
-        &[
-            "mod legacy_beacon;",
-            "use legacy_beacon::start_beacon_server;",
-        ],
+        &["mod legacy_beacon;", "mod app;"],
+    );
+    // FND-07E 起 beacon 由 app 装配启动。
+    assert_markers_present(
+        LEGACY_APP_SETUP,
+        "RG-004 legacy beacon startup wiring",
+        &["use crate::legacy_beacon::start_beacon_server;"],
     );
     assert_markers_present(
         LEGACY_BEACON,
@@ -206,9 +215,40 @@ fn rg_004_legacy_baseline_detects_fixed_beacon_and_lan_bind() {
         ],
     );
     assert_markers_present(
-        LEGACY_APP_MAIN,
+        LEGACY_RELAY_BOOT,
         "RG-004 legacy relay baseline",
         &["host: \"0.0.0.0\".into()", "port: 8321"],
+    );
+}
+
+#[test]
+fn fnd_07e_assembly_entry_and_cli_markers() {
+    // main.rs 只保留命令注册与装配入口（验收：< 300 行）。
+    let lines = LEGACY_APP_MAIN.lines().count();
+    assert!(lines < 300, "app/src/main.rs 应小于 300 行，实际 {lines}");
+    assert_markers_present(
+        LEGACY_APP_MAIN,
+        "FND-07E assembly wiring",
+        &[
+            "mod app;",
+            "mod cli;",
+            "mod legacy_relay;",
+            ".setup(app::setup)",
+            "tauri::generate_handler![",
+        ],
+    );
+    // CLI/UI smoke 契约：无头验证模式的标志与结果 marker 逐字锁定。
+    assert_markers_present(
+        LEGACY_CLI,
+        "FND-07E CLI markers",
+        &[
+            "\"--sniff-cli\"",
+            "\"--extract-cli\"",
+            "\"--ui-test\"",
+            "\"--probe-eval\"",
+            "SNIFF_RESULT_JSON: {}",
+            "EXTRACT_RESULT_JSON: {}",
+        ],
     );
 }
 

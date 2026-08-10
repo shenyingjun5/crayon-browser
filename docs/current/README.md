@@ -118,6 +118,12 @@ git diff --check                   # FND-01 交付前检查
 - `app/src/main.rs` 从 757 行降至 242 行，只含装配入口；legacy_contract 新增命令面/模块接线/登录窗口契约，BR-009/BR-010 红线扫描覆盖全部 app 模块。
 - app 侧 13 条测试经 `#[path]` harness 通过；legacy 回归 58 条、legacy_contract 7 条、`scripts/check.sh all` 通过；app 整体编译/Clippy 仍受 WebKitGTK 2.38 阻断（FND-07E 收口）。
 
+## FND-07E 启动、Relay 与 CLI 装配收口（2026-08-10）
+
+- relay 启动迁至 `app/src/legacy_relay.rs`，CLI/UI-test 编排迁至 `app/src/cli.rs`，setup 装配迁至 `app/src/app.rs`；`app/src/main.rs` 降至 61 行，只含命令注册与装配入口。端口、route、线程、CLI marker 契约锁定不变（函数集合机器比对无丢失）。
+- 补齐 `app/icons/icon.ico` 与 `demo/icons/icon.ico`（由 64x64 `icon.png` 确定性生成），解除 FND-04 记录的 Windows 构建阻断；提交 `app/Cargo.lock` 保证 app 独立构建可复现。
+- legacy_contract 8 条、legacy 回归 58 条、`scripts/check.sh all`/`security` 通过；`cargo check --manifest-path app/Cargo.toml` 在本机被系统 WebKitGTK 2.38.2 < 2.40 阻断（openEuler 24.03，未绕过版本检查），需在达标环境补跑后 FND-07E 转 VERIFIED。
+
 ## 事实更新规则
 
 - 完成模块 Roadmap 后，把稳定结论收敛到本目录，再归档实施过程。

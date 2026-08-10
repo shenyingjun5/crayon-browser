@@ -35,9 +35,10 @@
 8. `FND-07B` 共享模型与状态所有权拆分：当前 `DONE`。
 9. `FND-07C` 拆分 legacy Beacon 与网络地址：当前 `DONE`。
 10. `FND-07D` 拆分 legacy 命令与探测编排：当前 `DONE`。
-11. `FND-07E` 收口启动、Relay 与 CLI 装配：当前 `IN_PROGRESS`。
+11. `FND-07E` 收口启动、Relay 与 CLI 装配：当前 `IMPLEMENTED`（代码完成；`cargo check --manifest-path app/Cargo.toml` 被本机 WebKitGTK 2.38.2 < 2.40 阻断，需在达标环境补跑后转 VERIFIED）。
+12. `FND-08` 冻结 Core API v1 与 capability schema：当前 `IN_PROGRESS`。
 
-`FND-07` 是迁移 Epic，实际按 `FND-07A`～`FND-07E` 顺序执行；当前只移动 legacy relay 启动、CLI/UI-test 编排与装配收口，并补齐可复现的 Tauri build 前置资源。
+`FND-07` 是迁移 Epic，实际按 `FND-07A`～`FND-07E` 顺序执行；`FND-07E` 代码已收口，仅剩达标环境下的编译/CLI smoke 验证。`FND-08` 不依赖 `FND-07`，可并行领取。
 
 ## 状态更新规则
 
