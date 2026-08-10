@@ -106,6 +106,12 @@ git diff --check                   # FND-01 交付前检查
 - 新增 `models_tests.rs`（序列化 golden 2 条）与 `runtime_tests.rs`（去重 2 条）；`app/src/main.rs` 从 952 行降至 881 行。
 - legacy 回归 58 条、legacy_contract 6 条、`scripts/check.sh all` 通过；app 整体编译与 Clippy 受本机 WebKitGTK 2.38 < 2.40 阻断（FND-07E 既定范围），新测试经 `#[path]` 原样挂载的独立 harness 运行通过。
 
+## FND-07C Legacy Beacon 与网络地址拆分（2026-08-10）
+
+- loopback Beacon（`/sniff`、`/diag`、`/probe-report`）逐字迁至 `app/src/legacy_beacon.rs`，生命周期显式拆为 `beacon_router` + `start_beacon_server`；LAN 地址选择逐字迁至 `app/src/legacy_network.rs`；固定端口、route 与返回字节不变（gif 机器比对一致）。
+- 新增 beacon route 契约/query 边界测试 3 条与 LAN helper 不变量测试 2 条（dev-only `tower` 依赖，不进入生产构建图）；`app/src/main.rs` 从 881 行降至 757 行。
+- RG-004 契约改锁 `legacy_beacon.rs` 固定端口基线；legacy 回归 58 条、legacy_contract 6 条、`scripts/check.sh all` 通过；app 整体编译/Clippy 受本机 WebKitGTK 2.38 阻断，新测试经 `#[path]` harness 运行。
+
 ## 事实更新规则
 
 - 完成模块 Roadmap 后，把稳定结论收敛到本目录，再归档实施过程。

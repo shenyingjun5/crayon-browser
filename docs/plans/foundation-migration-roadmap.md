@@ -1,6 +1,6 @@
 # FND：基础工程与 Legacy 迁移 Roadmap
 
-状态：`FND-01/02/03/04/05/06/07A/07B DONE`，`FND-07C IN_PROGRESS`。
+状态：`FND-01/02/03/04/05/06/07A/07B/07C DONE`，`FND-07D IN_PROGRESS`。
 
 ## 目标
 
@@ -152,12 +152,13 @@
 
 #### FND-07C：拆分 legacy Beacon 与网络地址
 
-- 状态：`TODO`；依赖：FND-07B。
+- 状态：`DONE`；依赖：FND-07B。
 - 修改：`app/src/legacy_beacon.rs`、`app/src/legacy_network.rs`、`app/src/main.rs`。
 - 工作：纯移动 loopback Beacon、probe report 和 LAN IP 选择；不改固定端口、route 或返回字节。
 - 验证：Router route contract、query 边界、LAN helper 单测、legacy security 回归。
 - 验收：服务生命周期和状态引用显式；不得新增监听地址、route、线程或错误吞噬。
 - 证据：S2。
+- 完成证据（2026-08-10）：loopback Beacon（`/sniff`、`/diag`、`/probe-report`）逐字迁至 `app/src/legacy_beacon.rs`，生命周期显式拆为 `beacon_router`（可测试路由构造）+ `start_beacon_server`（绑定/服务）；LAN 地址选择 `lan_ip`/`lan_ip_ifaddrs` 逐字迁至 `app/src/legacy_network.rs`。固定端口 8377、route 集合、返回字节（1x1 gif 机器比对一致）与日志文案不变；未新增监听地址、route、线程或错误吞噬；`main.rs` 881→757 行。RG-004 契约改为锁定 `legacy_beacon.rs` 的固定端口基线并校验 `main.rs` 模块接线。新增 `legacy_beacon_tests.rs`（route 集合/405/404 边界、gif 字节锁定、命中去重、畸形 query 解析，3 条）与 `legacy_network_tests.rs`（私网 IPv4、非回环不变量，2 条）；仅新增 dev-dependency `tower`（MIT、tokio-rs 维护、纯 Rust，不进入生产构建图）。验证：9 条 app 侧测试经 `#[path]` harness 全部实际运行通过；`cargo test --test legacy_contract` 6/6；legacy lib 58/58；`scripts/check.sh all` 通过（guard/format/formal-workspace/legacy-package）；`cargo fmt --all -- --check`、`git diff --check` 通过。app 整体编译与 Clippy 仍受本机 WebKitGTK 2.38 < 2.40 阻断（FND-07E 既定范围），按“未运行”记录。任务级 Code Review P0/P1/P2/P3 均为 0。
 
 #### FND-07D：拆分 legacy 命令与探测编排
 

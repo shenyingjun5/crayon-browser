@@ -29,12 +29,16 @@ const SNIFF_MAX_WAIT: Duration = Duration::from_secs(12);
 const SNIFF_MAX_WAIT_EXTENDED: Duration = Duration::from_secs(25);
 const SNIFF_TAIL: Duration = Duration::from_secs(3);
 
+mod legacy_beacon;
+mod legacy_network;
 mod legacy_sniffer;
 mod models;
 mod runtime;
 
+use legacy_beacon::start_beacon_server;
+use legacy_network::lan_ip;
 use legacy_sniffer::SNIFF_JS;
-use models::{ProbeReport, ProbeTarget, SniffHit, SniffResponse, SniffResultItem};
+use models::{ProbeTarget, SniffHit, SniffResponse, SniffResultItem};
 use runtime::{push_hit, AppState};
 
 /// 核心嗅探流程：创建隐藏 webview 加载目标页，收集命中，关闭窗口，归一化结果。
@@ -370,52 +374,6 @@ fn report_log(msg: String) {
     println!("[page] {msg}");
 }
 
-/// 本机局域网 IP（投屏地址用）。
-/// UDP 路由探测（不产生实际流量）；VPN 接管默认路由时会拿到 utun 的
-/// 198.18.x.x 这类假地址，因此 Unix 上优先枚举网卡取 RFC1918 私网地址。
-fn lan_ip() -> Option<std::net::IpAddr> {
-    #[cfg(unix)]
-    if let Some(ip) = lan_ip_ifaddrs() {
-        return Some(ip);
-    }
-    let s = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
-    s.connect("8.8.8.8:80").ok()?;
-    Some(s.local_addr().ok()?.ip())
-}
-
-/// 枚举网卡，取第一个「启用、非回环、RFC1918 私网」的 IPv4（跳过 VPN 虚拟网卡）。
-#[cfg(unix)]
-fn lan_ip_ifaddrs() -> Option<std::net::IpAddr> {
-    use std::net::Ipv4Addr;
-    unsafe {
-        let mut ifaddrs: *mut libc::ifaddrs = std::ptr::null_mut();
-        if libc::getifaddrs(&mut ifaddrs) != 0 {
-            return None;
-        }
-        let mut cur = ifaddrs;
-        let mut found = None;
-        while !cur.is_null() {
-            let ifa = &*cur;
-            let flags = ifa.ifa_flags as libc::c_int;
-            let up = flags & libc::IFF_UP != 0;
-            let loopback = flags & libc::IFF_LOOPBACK != 0;
-            let is_v4 = !ifa.ifa_addr.is_null()
-                && (*ifa.ifa_addr).sa_family as libc::c_int == libc::AF_INET;
-            if up && !loopback && is_v4 {
-                let sin = &*(ifa.ifa_addr as *const libc::sockaddr_in);
-                let ip = Ipv4Addr::from(u32::from_be(sin.sin_addr.s_addr));
-                if ip.is_private() {
-                    found = Some(std::net::IpAddr::V4(ip));
-                    break;
-                }
-            }
-            cur = ifa.ifa_next;
-        }
-        libc::freeifaddrs(ifaddrs);
-        found
-    }
-}
-
 #[tauri::command]
 fn lan_addr(app: AppHandle) -> String {
     app.state::<Arc<AppState>>().lan_base.clone()
@@ -598,88 +556,6 @@ async fn close_login(app: AppHandle) -> Result<(), String> {
     })
     .map_err(|e| format!("dispatch main thread: {e}"))?;
     rx.await.map_err(|_| "main thread dropped".to_string())?
-}
-
-/// beacon 上报服务（127.0.0.1:8377）：注入脚本的兜底上报通道 + 前端验证回执。
-async fn start_beacon_server(state: Arc<AppState>) {
-    use axum::{extract::Query, response::IntoResponse, routing::get, Router};
-    let st = state.clone();
-    let st2 = state.clone();
-    let app = Router::new()
-        .route(
-            "/sniff",
-            get(move |Query(q): Query<HashMap<String, String>>| {
-                let st = st.clone();
-                async move {
-                    if let Some(data) = q.get("data") {
-                        if let Ok(v) = serde_json::from_str::<serde_json::Value>(data) {
-                            let u = v.get("url").and_then(|x| x.as_str()).unwrap_or("");
-                            let p = v.get("page").and_then(|x| x.as_str()).unwrap_or("");
-                            let proto = v.get("proto").and_then(|x| x.as_str()).map(str::to_string);
-                            push_hit(&st.hits, u.to_string(), p.to_string(), proto);
-                        }
-                    }
-                    // 1x1 gif
-                    let gif: &[u8] = &[
-                        0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00,
-                        0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0x21, 0xf9, 0x04, 0x00, 0x00,
-                        0x00, 0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00,
-                        0x00, 0x02, 0x02, 0x44, 0x01, 0x00, 0x3b,
-                    ];
-                    ([(axum::http::header::CONTENT_TYPE, "image/gif")], gif).into_response()
-                }
-            }),
-        )
-        // 页态诊断：嗅探结束时回传标题/video 数/媒体资源清单（排查零命中站点）
-        .route(
-            "/diag",
-            get(move |Query(q): Query<HashMap<String, String>>| async move {
-                if let Some(msg) = q.get("msg") {
-                    println!("[diag] {msg}");
-                }
-                axum::http::StatusCode::NO_CONTENT
-            }),
-        )
-        // 解码探针回传：probeplayer 页抽帧统计（f=mean,std;mean,std）
-        .route(
-            "/probe-report",
-            get(move |Query(q): Query<HashMap<String, String>>| {
-                let st = st2.clone();
-                async move {
-                    if let Some(id) = q.get("id") {
-                        let frames = q
-                            .get("f")
-                            .map(|f| {
-                                f.split(';')
-                                    .filter_map(|pair| {
-                                        let mut it = pair.split(',');
-                                        Some((
-                                            it.next()?.parse::<f64>().ok()?,
-                                            it.next()?.parse::<f64>().ok()?,
-                                        ))
-                                    })
-                                    .collect::<Vec<_>>()
-                            })
-                            .unwrap_or_default();
-                        let rep = ProbeReport {
-                            frames,
-                            err: q.get("err").cloned(),
-                        };
-                        println!(
-                            "[probe] 收到回传 id={id} 帧数={} err={:?}",
-                            rep.frames.len(),
-                            rep.err
-                        );
-                        st.probe_reports.lock().unwrap().insert(id.clone(), rep);
-                    }
-                    ([(axum::http::header::CONTENT_TYPE, "image/gif")], &[][..]).into_response()
-                }
-            }),
-        );
-    if let Ok(listener) = tokio::net::TcpListener::bind("127.0.0.1:8377").await {
-        println!("[beacon] 上报服务: http://127.0.0.1:8377/sniff");
-        let _ = axum::serve(listener, app).await;
-    }
 }
 
 fn main() {

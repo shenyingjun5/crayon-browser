@@ -17,6 +17,10 @@ const LEGACY_SNIFFER_JS: &str = concat!(
     "\n"
 );
 const LEGACY_RELAY: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/relay/mod.rs"));
+const LEGACY_BEACON: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/app/src/legacy_beacon.rs"
+));
 const ROOT_CARGO: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml"));
 const ROOT_LIB: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lib.rs"));
 const APP_CARGO: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/app/Cargo.toml"));
@@ -114,15 +118,27 @@ fn br_010_formal_observer_does_not_play_click_or_seek() {
 
 #[test]
 fn rg_004_legacy_baseline_detects_fixed_beacon_and_lan_bind() {
+    // FND-07C 起 beacon 服务在独立模块；固定端口/route 仍为待消除的 legacy 基线。
     assert_markers_present(
         LEGACY_APP_MAIN,
-        "RG-004 legacy baseline",
+        "RG-004 legacy beacon module wiring",
+        &[
+            "mod legacy_beacon;",
+            "use legacy_beacon::start_beacon_server;",
+        ],
+    );
+    assert_markers_present(
+        LEGACY_BEACON,
+        "RG-004 legacy beacon baseline",
         &[
             "http://127.0.0.1:8377/sniff",
             "TcpListener::bind(\"127.0.0.1:8377\")",
-            "host: \"0.0.0.0\".into()",
-            "port: 8321",
         ],
+    );
+    assert_markers_present(
+        LEGACY_APP_MAIN,
+        "RG-004 legacy relay baseline",
+        &["host: \"0.0.0.0\".into()", "port: 8321"],
     );
 }
 

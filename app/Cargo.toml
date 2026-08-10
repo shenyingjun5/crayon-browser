@@ -18,3 +18,7 @@ tokio = { version = "1", features = ["full"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+[dev-dependencies]
+# 仅测试使用：内存 Router oneshot 调用，不进入生产构建图（MIT，tokio-rs 维护）。
+tower = { version = "0.5", features = ["util"] }
