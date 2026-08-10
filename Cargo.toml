@@ -22,6 +22,7 @@ members = [
     "crates/crayon-media-observer",
     "crates/crayon-cast-policy",
     "tools/repo-guard",
+    "test-support",
 ]
 exclude = ["app", "demo"]
 

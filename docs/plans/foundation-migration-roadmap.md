@@ -1,6 +1,6 @@
 # FND：基础工程与 Legacy 迁移 Roadmap
 
-状态：`FND-01/02/03/04/05/06/07A/07B/07C/07D/08 DONE`，`FND-07E IMPLEMENTED`（app 整体编译验证待 WebKitGTK ≥ 2.40 环境），`FND-09 IN_PROGRESS`。
+状态：`FND-01/02/03/04/05/06/07A/07B/07C/07D/08/09 DONE`，`FND-07E IMPLEMENTED`（app 整体编译验证待 WebKitGTK ≥ 2.40 环境），`FND-10 IN_PROGRESS`。
 
 ## 目标
 
@@ -195,7 +195,7 @@
 
 ### FND-09：建立确定性 test-support
 
-- 状态：`TODO`
+- 状态：`DONE`
 - 依赖：FND-03、FND-08。
 - 创建：`test-support/{clock,upstream,receiver,platform,browser_fixture,leak_scanner}`。
 - 工作：实现 ManualClock、MockUpstream、FakeReceiver/FakeCastFacade、PlatformFake、fixture server、LeakScanner；只允许 dev-dependency。
@@ -203,6 +203,7 @@
 - 验证：每个 fake 自测、生产依赖图和 Release 扫描。
 - 验收：无固定长 sleep、无公共网络、无真实秘密；测试端口使用系统随机端口。
 - 证据：S2。
+- 完成证据（2026-08-10）：新建 workspace 成员 `test-support`（包名 `test-support`，RG-001 直接可判定），六个设施全部实现——`ManualClock`（逻辑时钟 + waker，64 waiter 上限，溢出报错不挂起）、`MockUpstream`（裸 TCP 迷你 HTTP 核心：Full/Redirect/Drip 脚本，Drip 经显式 `DripControl::release` 放行分片，确定性慢响应/断流；请求录制 256 条上限；未注册路径一律 404）、`FakeReceiver`/`FakeCastFacade`（发现门控、连接失败注入、stale generation 拒绝、route lost 事件、调用录制 512 上限）、`PlatformFake`（CEF/ArkWeb 能力 fixture）+ `SecureStoreFake`（写失败注入、128 条/4KB 上限）、`BrowserFixtureServer`（video/audio/iframe/MSE/Worker/广告编排/DRM signal/用户手势 8 个确定性页面 + worker.js + 假媒体路由）、`LeakScanner`（Cookie/Authorization/Bearer/Basic/query token+sign/URL userinfo/SESSDATA 规则，参数名边界防 `assigned=` 误报，allowlist 掩码，目录扫描 4MB/文件上限，walk 错误显式上报）。无固定长 sleep（waker/门控/有界 yield 自旋 + 仅负断言用有限 deadline）、无公共网络（全部 loopback 随机端口）、无真实秘密。验证：`cargo test -p test-support` 23/23；生产依赖图证据 `cargo tree -p get-video -e normal` 与 `-p crayon-app-runtime` 均 0 次引用 test-support；严格 Clippy（`-D warnings`）、`scripts/check.sh all`、`cargo fmt --all -- --check`、`git diff --check` 通过；RG-006 Release 扫描维持 not_applicable（无 --artifact-path，同既有口径）。任务级 Code Review P0/P1/P2/P3 均为 0；LeakScanner 对 `?design=` 这类参数名保守误报（安全方向，已在注释说明）；迷你 HTTP 核心为单请求/连接（测试双面既定简化）。
 
 ### FND-10：把公网测试降级为手工兼容测试
 

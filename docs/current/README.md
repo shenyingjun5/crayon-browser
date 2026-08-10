@@ -131,6 +131,11 @@ git diff --check                   # FND-01 交付前检查
 - `schemas/current` 与 `schemas/previous` 各 10 个 golden 向量；v1 窗口策略：previous 镜像 current 直到 v2；RG-007 转为 passed。`config/feature-schema.json` 冻结能力/特性 v1 JSON Schema。
 - 验证：domain+ipc-schema 16 条契约测试、全 workspace 严格 Clippy、`scripts/check.sh all` 通过；PL-013 完整决策矩阵随 MED 落地。
 
+## FND-09 确定性 test-support（2026-08-10）
+
+- 新 workspace 成员 `test-support`（dev/test 专用，生产依赖图零引用）：`ManualClock`（逻辑时钟，无 sleep）、`MockUpstream`（Full/Redirect/Drip 脚本 + 请求录制）、`FakeCastFacade`（stale generation、route lost、失败注入）、`PlatformFake`/`SecureStoreFake`、`BrowserFixtureServer`（8 类测试页）、`LeakScanner`（secret/URL 泄漏扫描，目录遍历错误显式上报）。
+- 全部 loopback 随机端口、无公共网络、无真实秘密、缓冲均有界；23 条自测通过；严格 Clippy 与 `check.sh all` 通过。
+
 ## 事实更新规则
 
 - 完成模块 Roadmap 后，把稳定结论收敛到本目录，再归档实施过程。

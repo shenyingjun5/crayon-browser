@@ -1,0 +1,18 @@
+[package]
+name = "test-support"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Deterministic test doubles (ManualClock, MockUpstream, FakeReceiver, PlatformFake, BrowserFixtureServer, LeakScanner); dev/test targets only"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+crayon-domain = { path = "../crates/crayon-domain" }
+crayon-ipc-schema = { path = "../crates/crayon-ipc-schema" }
+tokio = { version = "1", features = ["net", "rt", "sync"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
