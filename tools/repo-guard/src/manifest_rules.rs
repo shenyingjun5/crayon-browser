@@ -2,7 +2,7 @@ use crate::model::{CheckResult, Finding, Severity};
 use crate::walk::display_path;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 #[derive(Debug)]
 struct Manifest {
@@ -18,6 +18,11 @@ struct Dependency {
     value: String,
     production: bool,
     line: usize,
+}
+
+#[derive(Debug)]
+struct CastSourceLock {
+    submodule_path: String,
 }
 
 const LEGACY_ROOT_DEPENDENCIES: &[&str] = &[
@@ -44,7 +49,9 @@ pub fn inspect(root: &Path, files: &[PathBuf]) -> Vec<CheckResult> {
         .collect();
 
     let dependency_isolation = dependency_isolation(&manifests);
-    let (architecture, cast_pin) = dependency_architecture(&manifests);
+    let (cast_source, cast_source_findings) = cast_source_lock(root);
+    let (architecture, cast_pin) =
+        dependency_architecture(&manifests, cast_source.as_ref(), cast_source_findings);
     vec![dependency_isolation, architecture, cast_pin]
 }
 
@@ -155,9 +162,12 @@ fn dependency_isolation(manifests: &[Manifest]) -> CheckResult {
     )
 }
 
-fn dependency_architecture(manifests: &[Manifest]) -> (CheckResult, CheckResult) {
+fn dependency_architecture(
+    manifests: &[Manifest],
+    cast_source: Option<&CastSourceLock>,
+    mut pin_findings: Vec<Finding>,
+) -> (CheckResult, CheckResult) {
     let mut architecture_findings = Vec::new();
-    let mut pin_findings = Vec::new();
     let mut cast_count = 0;
     let package_names: BTreeSet<String> = manifests
         .iter()
@@ -176,7 +186,7 @@ fn dependency_architecture(manifests: &[Manifest]) -> (CheckResult, CheckResult)
                 edges.push(dependency.name.clone());
             }
             let dependency_name = dependency.name.to_ascii_lowercase();
-            if dependency_name.contains("cast-sdk") || dependency_name.contains("cast_sdk") {
+            if is_cast_sdk_dependency(&dependency_name) {
                 cast_count += 1;
                 if !package.to_ascii_lowercase().contains("cast-adapter") {
                     architecture_findings.push(Finding {
@@ -186,18 +196,13 @@ fn dependency_architecture(manifests: &[Manifest]) -> (CheckResult, CheckResult)
                         message: "only a cast-adapter package may depend on Cast-SDK".to_owned(),
                     });
                 }
-                let lower_value = dependency.value.to_ascii_lowercase();
-                if lower_value.contains("path")
-                    || !lower_value.contains("git")
-                    || !lower_value.contains("rev")
-                {
+                if !is_pinned_cast_dependency(dependency, cast_source) {
                     pin_findings.push(Finding {
                         severity: Severity::Error,
                         path: display_path(&manifest.path),
                         line: Some(dependency.line),
-                        message:
-                            "Cast-SDK must be a git dependency pinned with rev and without path"
-                                .to_owned(),
+                        message: "Cast-SDK dependency must use the locked submodule path; without a source lock, git dependencies require a full rev"
+                            .to_owned(),
                     });
                 }
             }
@@ -218,19 +223,237 @@ fn dependency_architecture(manifests: &[Manifest]) -> (CheckResult, CheckResult)
         "workspace graph and formal/adapter dependency boundaries are enforced",
         architecture_findings,
     );
-    let cast_pin = if cast_count == 0 {
+    let cast_pin = if cast_count == 0 && cast_source.is_none() && pin_findings.is_empty() {
         CheckResult::not_applicable(
             "RG-008",
-            "Cast-SDK is not yet present in workspace manifests",
+            "Cast-SDK source lock and dependencies are not yet present",
         )
     } else {
         CheckResult::applicable(
             "RG-008",
-            "Cast-SDK dependencies are git revisions without local path fallback",
+            "Cast-SDK source lock and adapter dependencies are pinned",
             pin_findings,
         )
     };
     (architecture, cast_pin)
+}
+
+fn is_cast_sdk_dependency(name: &str) -> bool {
+    name.contains("cast-sdk") || name.contains("cast_sdk") || name.starts_with("cast-sender-")
+}
+
+fn is_pinned_cast_dependency(
+    dependency: &Dependency,
+    cast_source: Option<&CastSourceLock>,
+) -> bool {
+    let lower_value = dependency.value.to_ascii_lowercase();
+    if let Some(source) = cast_source {
+        let normalized_path = source
+            .submodule_path
+            .replace('\\', "/")
+            .to_ascii_lowercase();
+        return lower_value.contains("path")
+            && lower_value.replace('\\', "/").contains(&normalized_path);
+    }
+    if lower_value.contains("path") || lower_value.contains("branch") || lower_value.contains("tag")
+    {
+        return false;
+    }
+    let git = dependency_inline_string(&dependency.value, "git");
+    let revision = dependency_inline_string(&dependency.value, "rev");
+    git.is_some_and(|url| url.starts_with("https://"))
+        && revision.is_some_and(|commit| is_git_commit(&commit))
+}
+
+fn dependency_inline_string(value: &str, key: &str) -> Option<String> {
+    value
+        .trim()
+        .trim_start_matches('{')
+        .trim_end_matches('}')
+        .split(',')
+        .filter_map(|field| field.split_once('='))
+        .find_map(|(candidate, value)| {
+            (candidate.trim() == key).then(|| value.trim().trim_matches('"').to_owned())
+        })
+}
+
+fn cast_source_lock(root: &Path) -> (Option<CastSourceLock>, Vec<Finding>) {
+    let lock_path = root.join("config/cast-sdk-source.toml");
+    if !lock_path.is_file() {
+        return (None, Vec::new());
+    }
+
+    let mut findings = Vec::new();
+    let text = match fs::read_to_string(&lock_path) {
+        Ok(text) => text,
+        Err(error) => {
+            findings.push(cast_source_finding(format!(
+                "cannot read source lock: {error}"
+            )));
+            return (None, findings);
+        }
+    };
+    let value = |key: &str| {
+        text.lines().find_map(|line| {
+            let (candidate, value) = line.split_once('=')?;
+            (candidate.trim() == key).then(|| value.trim().trim_matches('"').to_owned())
+        })
+    };
+    let schema_version = value("schema_version");
+    let repository = value("repository");
+    let revision = value("revision");
+    let submodule_path = value("submodule_path");
+
+    if schema_version.as_deref() != Some("1") {
+        findings.push(cast_source_finding("schema_version must be 1".to_owned()));
+    }
+    let Some(repository) = repository else {
+        findings.push(cast_source_finding("repository is required".to_owned()));
+        return (None, findings);
+    };
+    let Some(revision) = revision else {
+        findings.push(cast_source_finding("revision is required".to_owned()));
+        return (None, findings);
+    };
+    let Some(submodule_path) = submodule_path else {
+        findings.push(cast_source_finding("submodule_path is required".to_owned()));
+        return (None, findings);
+    };
+
+    if !repository.starts_with("https://") {
+        findings.push(cast_source_finding(
+            "repository must use an HTTPS remote URL".to_owned(),
+        ));
+    }
+    if !is_git_commit(&revision) {
+        findings.push(cast_source_finding(
+            "revision must be a 40-character lowercase git commit".to_owned(),
+        ));
+    }
+
+    let source_path = Path::new(&submodule_path);
+    if source_path.is_absolute()
+        || source_path.components().any(|component| {
+            matches!(
+                component,
+                Component::ParentDir | Component::RootDir | Component::Prefix(_)
+            )
+        })
+    {
+        findings.push(cast_source_finding(
+            "submodule_path must be a repository-relative path without parent traversal".to_owned(),
+        ));
+    } else {
+        let checkout = root.join(source_path);
+        if !checkout.is_dir() || !checkout.join(".git").is_file() {
+            findings.push(cast_source_finding(
+                "submodule checkout is missing or not initialized".to_owned(),
+            ));
+        } else {
+            match submodule_head(root, &checkout) {
+                Ok(head) if head != revision => findings.push(cast_source_finding(format!(
+                    "submodule HEAD {head} does not match locked revision {revision}"
+                ))),
+                Ok(_) => {}
+                Err(message) => findings.push(cast_source_finding(message)),
+            }
+        }
+    }
+
+    let gitmodules = fs::read_to_string(root.join(".gitmodules")).unwrap_or_default();
+    let expected_path = format!("path = {submodule_path}");
+    let expected_url = format!("url = {repository}");
+    if !gitmodules.lines().any(|line| line.trim() == expected_path) {
+        findings.push(cast_source_finding(
+            ".gitmodules path does not match source lock".to_owned(),
+        ));
+    }
+    if !gitmodules.lines().any(|line| line.trim() == expected_url) {
+        findings.push(cast_source_finding(
+            ".gitmodules URL does not match source lock".to_owned(),
+        ));
+    }
+
+    (Some(CastSourceLock { submodule_path }), findings)
+}
+
+fn submodule_head(root: &Path, checkout: &Path) -> Result<String, String> {
+    let marker = fs::read_to_string(checkout.join(".git"))
+        .map_err(|error| format!("cannot read submodule gitdir marker: {error}"))?;
+    let git_dir_value = marker
+        .trim()
+        .strip_prefix("gitdir:")
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "submodule .git file does not contain a gitdir".to_owned())?;
+    let git_dir_path = Path::new(git_dir_value);
+    let unresolved_git_dir = if git_dir_path.is_absolute() {
+        git_dir_path.to_path_buf()
+    } else {
+        checkout.join(git_dir_path)
+    };
+    let git_dir = fs::canonicalize(unresolved_git_dir)
+        .map_err(|error| format!("cannot resolve submodule gitdir: {error}"))?;
+    let canonical_root = fs::canonicalize(root)
+        .map_err(|error| format!("cannot resolve repository root: {error}"))?;
+    if !git_dir.starts_with(&canonical_root) {
+        return Err("submodule gitdir resolves outside the repository".to_owned());
+    }
+
+    let head = fs::read_to_string(git_dir.join("HEAD"))
+        .map_err(|error| format!("cannot read submodule HEAD: {error}"))?;
+    let head = head.trim();
+    if is_git_commit(head) {
+        return Ok(head.to_owned());
+    }
+    let reference = head
+        .strip_prefix("ref:")
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "submodule HEAD is neither a commit nor a symbolic ref".to_owned())?;
+    let reference_path = Path::new(reference);
+    if reference_path.is_absolute()
+        || reference_path.components().any(|component| {
+            matches!(
+                component,
+                Component::ParentDir | Component::RootDir | Component::Prefix(_)
+            )
+        })
+    {
+        return Err("submodule HEAD ref is not repository-relative".to_owned());
+    }
+    if let Ok(commit) = fs::read_to_string(git_dir.join(reference_path)) {
+        let commit = commit.trim();
+        if is_git_commit(commit) {
+            return Ok(commit.to_owned());
+        }
+    }
+    let packed_refs = fs::read_to_string(git_dir.join("packed-refs"))
+        .map_err(|error| format!("cannot resolve submodule HEAD ref {reference}: {error}"))?;
+    packed_refs
+        .lines()
+        .filter(|line| !line.starts_with('#') && !line.starts_with('^'))
+        .filter_map(|line| line.split_once(' '))
+        .find_map(|(commit, candidate)| {
+            (candidate == reference && is_git_commit(commit)).then(|| commit.to_owned())
+        })
+        .ok_or_else(|| format!("cannot resolve submodule HEAD ref {reference}"))
+}
+
+fn is_git_commit(value: &str) -> bool {
+    value.len() == 40
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+fn cast_source_finding(message: String) -> Finding {
+    Finding {
+        severity: Severity::Error,
+        path: "config/cast-sdk-source.toml".to_owned(),
+        line: None,
+        message,
+    }
 }
 
 fn enforce_product_boundaries(

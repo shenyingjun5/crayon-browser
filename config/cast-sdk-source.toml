@@ -1,0 +1,4 @@
+schema_version = 1
+repository = "https://github.com/shenyingjun5/Cast-SDK.git"
+revision = "44c3a99871aa1e68cbda71eacefbb41d23a747a8"
+submodule_path = "third_party/cast-sdk"

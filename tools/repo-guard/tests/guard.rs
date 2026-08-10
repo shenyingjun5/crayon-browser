@@ -135,6 +135,135 @@ fn cast_sdk_requires_adapter_and_pinned_git_revision() {
 }
 
 #[test]
+fn valid_cast_source_lock_passes_rg_008_without_adapter_dependency() {
+    let repo = TestRepo::new("cast-source-lock");
+    repo.write("Cargo.toml", &basic_manifest("browser"));
+    repo.write("src/lib.rs", "pub fn value() {}\n");
+    repo.write(
+        ".gitmodules",
+        "[submodule \"third_party/cast-sdk\"]\n\tpath = third_party/cast-sdk\n\turl = https://example.invalid/cast-sdk.git\n",
+    );
+    repo.write(
+        "config/cast-sdk-source.toml",
+        "schema_version = 1\nrepository = \"https://example.invalid/cast-sdk.git\"\nrevision = \"0123456789abcdef0123456789abcdef01234567\"\nsubmodule_path = \"third_party/cast-sdk\"\n",
+    );
+    repo.write(
+        "third_party/cast-sdk/.git",
+        "gitdir: ../../.git/modules/third_party/cast-sdk\n",
+    );
+    repo.write(
+        ".git/modules/third_party/cast-sdk/HEAD",
+        "0123456789abcdef0123456789abcdef01234567\n",
+    );
+
+    assert_eq!(status(&repo, "RG-008"), CheckStatus::Passed);
+}
+
+#[test]
+fn incomplete_cast_source_lock_fails_rg_008() {
+    let repo = TestRepo::new("invalid-cast-source-lock");
+    repo.write("Cargo.toml", &basic_manifest("browser"));
+    repo.write("src/lib.rs", "pub fn value() {}\n");
+    repo.write(
+        ".gitmodules",
+        "[submodule \"third_party/cast-sdk\"]\n\tpath = third_party/cast-sdk\n\turl = https://example.invalid/other.git\n",
+    );
+    repo.write(
+        "config/cast-sdk-source.toml",
+        "schema_version = 1\nrepository = \"https://example.invalid/cast-sdk.git\"\nsubmodule_path = \"third_party/cast-sdk\"\n",
+    );
+    repo.write(
+        "third_party/cast-sdk/.git",
+        "gitdir: ../../.git/modules/third_party/cast-sdk\n",
+    );
+    repo.write(
+        ".git/modules/third_party/cast-sdk/HEAD",
+        "0123456789abcdef0123456789abcdef01234567\n",
+    );
+
+    assert_eq!(status(&repo, "RG-008"), CheckStatus::Failed);
+}
+
+#[test]
+fn cast_source_lock_rejects_mismatched_checkout_head() {
+    let repo = TestRepo::new("cast-source-head-mismatch");
+    repo.write("Cargo.toml", &basic_manifest("browser"));
+    repo.write("src/lib.rs", "pub fn value() {}\n");
+    repo.write(
+        ".gitmodules",
+        "[submodule \"third_party/cast-sdk\"]\n\tpath = third_party/cast-sdk\n\turl = https://example.invalid/cast-sdk.git\n",
+    );
+    repo.write(
+        "config/cast-sdk-source.toml",
+        "schema_version = 1\nrepository = \"https://example.invalid/cast-sdk.git\"\nrevision = \"0123456789abcdef0123456789abcdef01234567\"\nsubmodule_path = \"third_party/cast-sdk\"\n",
+    );
+    repo.write(
+        "third_party/cast-sdk/.git",
+        "gitdir: ../../.git/modules/third_party/cast-sdk\n",
+    );
+    repo.write(
+        ".git/modules/third_party/cast-sdk/HEAD",
+        "89abcdef0123456789abcdef0123456789abcdef\n",
+    );
+
+    assert_eq!(status(&repo, "RG-008"), CheckStatus::Failed);
+}
+
+#[test]
+fn cast_adapter_accepts_dependency_below_locked_source_path() {
+    let repo = TestRepo::new("cast-source-path-dependency");
+    repo.write(
+        "Cargo.toml",
+        "[package]\nname = \"crayon-cast-adapter\"\nversion = \"0.1.0\"\n[dependencies]\ncast-sender-service = { path = \"third_party/cast-sdk/sender/rust/crates/cast-sender-service\" }\n",
+    );
+    repo.write("src/lib.rs", "pub fn value() {}\n");
+    repo.write(
+        ".gitmodules",
+        "[submodule \"third_party/cast-sdk\"]\n\tpath = third_party/cast-sdk\n\turl = https://example.invalid/cast-sdk.git\n",
+    );
+    repo.write(
+        "config/cast-sdk-source.toml",
+        "schema_version = 1\nrepository = \"https://example.invalid/cast-sdk.git\"\nrevision = \"0123456789abcdef0123456789abcdef01234567\"\nsubmodule_path = \"third_party/cast-sdk\"\n",
+    );
+    repo.write(
+        "third_party/cast-sdk/.git",
+        "gitdir: ../../.git/modules/third_party/cast-sdk\n",
+    );
+    repo.write(
+        ".git/modules/third_party/cast-sdk/HEAD",
+        "0123456789abcdef0123456789abcdef01234567\n",
+    );
+
+    let report = repo.report();
+    assert_eq!(report.check("RG-005").unwrap().status, CheckStatus::Passed);
+    assert_eq!(report.check("RG-008").unwrap().status, CheckStatus::Passed);
+}
+
+#[test]
+fn nested_git_submodule_is_not_scanned_as_product_source() {
+    let repo = TestRepo::new("git-submodule-boundary");
+    repo.write("Cargo.toml", &basic_manifest("browser"));
+    repo.write("src/lib.rs", "pub fn value() {}\n");
+    repo.write(
+        "third_party/cast-sdk/.git",
+        "gitdir: ../../../.git/modules/third_party/cast-sdk\n",
+    );
+    repo.write(
+        "third_party/cast-sdk/Cargo.toml",
+        "[package]\nname = \"foreign-cast-sdk\"\nversion = \"0.1.0\"\n[dependencies]\nmockall = \"0.13\"\n",
+    );
+    repo.write(
+        "third_party/cast-sdk/src/lib.rs",
+        "#[test]\nfn foreign_test_body() {}\n",
+    );
+
+    let report = repo.report();
+    assert!(report.passed);
+    assert_eq!(report.check("RG-001").unwrap().status, CheckStatus::Passed);
+    assert_eq!(report.check("RG-002").unwrap().status, CheckStatus::Passed);
+}
+
+#[test]
 fn domain_rejects_network_or_platform_dependencies() {
     let repo = TestRepo::new("domain-boundary");
     repo.write(
@@ -245,7 +374,7 @@ fn multiline_pinned_cast_dependency_passes_rg_008_for_adapter() {
     let repo = TestRepo::new("multiline-cast-pin");
     repo.write(
         "Cargo.toml",
-        "[package]\nname = \"crayon-cast-adapter\"\nversion = \"0.1.0\"\n[dependencies]\ncast-sdk = {\n  git = \"https://example.invalid/cast-sdk\",\n  rev = \"0123456789abcdef\"\n}\n",
+        "[package]\nname = \"crayon-cast-adapter\"\nversion = \"0.1.0\"\n[dependencies]\ncast-sdk = {\n  git = \"https://example.invalid/cast-sdk\",\n  rev = \"0123456789abcdef0123456789abcdef01234567\"\n}\n",
     );
     repo.write("src/lib.rs", "pub fn value() {}\n");
     let report = repo.report();

@@ -35,6 +35,11 @@ fn visit(root: &Path, directory: &Path, files: &mut Vec<PathBuf>) -> io::Result<
             {
                 continue;
             }
+            // Git submodules are separately versioned source inputs. Their production
+            // sources and manifests must not be treated as files owned by this repo.
+            if path.join(".git").is_file() {
+                continue;
+            }
             visit(root, &path, files)?;
         } else if file_type.is_file() {
             files.push(path.strip_prefix(root).unwrap_or(&path).to_path_buf());
