@@ -2,7 +2,9 @@
 
 mod codec;
 mod frame;
+mod hls;
 pub mod http;
+mod inspect;
 mod protection;
 
 pub use codec::{
@@ -10,5 +12,7 @@ pub use codec::{
     CodecInfo,
 };
 pub use frame::{frames_degenerate, probe_verdict, FrameStat, ProbeVerdict};
+pub use hls::{HlsEncryption, HlsPlaylist, RenditionInfo, VariantInfo};
 pub use http::{ProbeHttpClient, ProbeHttpConfig, ProbeHttpError, ProbeResponse};
+pub use inspect::{mp4_major_brand, DashInspection, Inspection, MediaInspector, Mp4Inspection};
 pub use protection::{hls_is_drm, keyformat_is_drm, mpd_is_drm};
