@@ -1,20 +1,18 @@
-//! Policy decision contract (MED-08): decision order, stable rejections and
-//! the cross-platform golden (PL-007..PL-014).
+//! Policy decision contract (MED-08, Mirror semantics migrated by MED-19):
+//! decision order, stable rejections, external-client handoff fallback and
+//! the cross-platform golden (PL-007..PL-015).
 
-use crayon_cast_policy::{decide, Degradation, PolicyContext};
-use crayon_domain::{
-    BrowserEngineKind, CoreError, LocalDiscoveryKind, PlatformCapabilities, ProtectedSurfaceKind,
-    ReceiverCapabilities, SecureStoreKind, TabId,
-};
+use crayon_cast_policy::{decide, HandoffAvailability, PolicyContext};
+use crayon_domain::{CoreError, ReceiverCapabilities, TabId};
 use crayon_ipc_schema::{
-    AdContinuity, CastPolicyDecision, CastPolicyInput, HeadersClass, MediaCandidate, PageContext,
-    PlaybackState, ProtocolKind, VideoCodecKind,
+    AdContinuity, CastPolicyDecision, CastPolicyInput, ExternalClientHandoff, HandoffConfirmation,
+    HandoffReason, HeadersClass, MediaCandidate, PageContext, PlaybackState, ProtocolKind,
+    VideoCodecKind,
 };
 use crayon_media_observer::{
     ObservationOrigin, PlaybackObservation, PlaybackProgress, UserActivation,
 };
 use crayon_media_probe::Protection;
-use test_support::platform::PlatformFake;
 
 fn full_receiver() -> ReceiverCapabilities {
     ReceiverCapabilities::new(true, true, true, true, true, true, 2160)
@@ -48,39 +46,48 @@ fn verified() -> PlaybackObservation {
     )
 }
 
-fn ctx(protection: Protection, platform: PlatformCapabilities) -> PolicyContext {
+fn ctx(protection: Protection, handoff: HandoffAvailability) -> PolicyContext {
     PolicyContext {
         observation: verified(),
         protection,
-        platform,
+        external_client_handoff: handoff,
     }
 }
 
-fn cef() -> PlatformCapabilities {
-    PlatformFake::cef_desktop()
+fn available(protection: Protection) -> PolicyContext {
+    ctx(protection, HandoffAvailability::Available)
 }
 
 fn direct_input() -> CastPolicyInput {
     input(HeadersClass::None, AdContinuity::Preserved, 120.0)
 }
 
+fn handoff(reason: HandoffReason) -> CastPolicyDecision {
+    CastPolicyDecision::ExternalClientHandoff(ExternalClientHandoff::new(reason))
+}
+
 #[test]
 fn happy_path_direct_and_relay() {
     // 无特殊请求头 → Direct
-    let outcome = decide(&direct_input(), &ctx(Protection::Clear, cef()));
-    assert_eq!(outcome.decision, CastPolicyDecision::Direct);
-    assert_eq!(outcome.degradation, None);
+    assert_eq!(
+        decide(&direct_input(), &available(Protection::Clear)),
+        CastPolicyDecision::Direct
+    );
     // 需要 Referer/UA → Relay（请求头由 session relay 代持）
-    let outcome = decide(
-        &input(HeadersClass::RefererOnly, AdContinuity::Preserved, 120.0),
-        &ctx(Protection::Clear, cef()),
+    assert_eq!(
+        decide(
+            &input(HeadersClass::RefererOnly, AdContinuity::Preserved, 120.0),
+            &available(Protection::Clear),
+        ),
+        CastPolicyDecision::Relay
     );
-    assert_eq!(outcome.decision, CastPolicyDecision::Relay);
-    let outcome = decide(
-        &input(HeadersClass::RefererAndUa, AdContinuity::Preserved, 120.0),
-        &ctx(Protection::Clear, cef()),
+    assert_eq!(
+        decide(
+            &input(HeadersClass::RefererAndUa, AdContinuity::Preserved, 120.0),
+            &available(Protection::Clear),
+        ),
+        CastPolicyDecision::Relay
     );
-    assert_eq!(outcome.decision, CastPolicyDecision::Relay);
 }
 
 #[test]
@@ -108,10 +115,10 @@ fn pl_010_gate_failure_rejects_even_when_all_else_is_fine() {
         let context = PolicyContext {
             observation: PlaybackObservation::new(origin, activation, progress),
             protection: Protection::Clear,
-            platform: cef(),
+            external_client_handoff: HandoffAvailability::Available,
         };
         assert_eq!(
-            decide(&direct_input(), &context).decision,
+            decide(&direct_input(), &context),
             CastPolicyDecision::Reject { reason: expected }
         );
     }
@@ -119,9 +126,15 @@ fn pl_010_gate_failure_rejects_even_when_all_else_is_fine() {
 
 #[test]
 fn drm_rejects_everywhere() {
-    for platform in [cef(), PlatformFake::arkweb_reduced()] {
+    for availability in [
+        HandoffAvailability::Available,
+        HandoffAvailability::Unavailable,
+    ] {
         assert_eq!(
-            decide(&direct_input(), &ctx(Protection::DrmProtected, platform)).decision,
+            decide(
+                &direct_input(),
+                &ctx(Protection::DrmProtected, availability)
+            ),
             CastPolicyDecision::Reject {
                 reason: CoreError::DrmProtected
             }
@@ -130,16 +143,15 @@ fn drm_rejects_everywhere() {
 }
 
 #[test]
-fn key_required_and_unknown_fall_back_to_mirror() {
-    for protection in [
-        Protection::KeyRequired,
-        Protection::Unknown,
-        Protection::NoDirectUrl,
+fn key_required_no_direct_url_and_unknown_fall_back_to_handoff() {
+    for (protection, reason) in [
+        (Protection::KeyRequired, HandoffReason::KeyRequired),
+        (Protection::NoDirectUrl, HandoffReason::NoDirectUrl),
+        (Protection::Unknown, HandoffReason::ProbeInconclusive),
     ] {
-        let outcome = decide(&direct_input(), &ctx(protection, cef()));
         assert_eq!(
-            outcome.decision,
-            CastPolicyDecision::Mirror,
+            decide(&direct_input(), &available(protection)),
+            handoff(reason),
             "{protection:?}"
         );
     }
@@ -147,15 +159,17 @@ fn key_required_and_unknown_fall_back_to_mirror() {
 
 #[test]
 fn pl_008_credential_bound_media_never_leaves_the_browser() {
-    let outcome = decide(
-        &input(
-            HeadersClass::CredentialBound,
-            AdContinuity::Preserved,
-            120.0,
+    assert_eq!(
+        decide(
+            &input(
+                HeadersClass::CredentialBound,
+                AdContinuity::Preserved,
+                120.0,
+            ),
+            &available(Protection::Clear),
         ),
-        &ctx(Protection::Clear, cef()),
+        handoff(HandoffReason::CredentialBound)
     );
-    assert_eq!(outcome.decision, CastPolicyDecision::Mirror);
 }
 
 #[test]
@@ -169,8 +183,8 @@ fn pl_007_receiver_incompatible_falls_back_or_stable_reject() {
         ReceiverCapabilities::new(true, false, true, true, true, true, 2160),
     );
     assert_eq!(
-        decide(&no_hls, &ctx(Protection::Clear, cef())).decision,
-        CastPolicyDecision::Mirror
+        decide(&no_hls, &available(Protection::Clear)),
+        handoff(HandoffReason::ReceiverIncompatible)
     );
     // 编码不支持
     let hevc_input = CastPolicyInput::new(
@@ -188,16 +202,15 @@ fn pl_007_receiver_incompatible_falls_back_or_stable_reject() {
         ReceiverCapabilities::new(true, true, true, true, false, false, 2160),
     );
     assert_eq!(
-        decide(&hevc_input, &ctx(Protection::Clear, cef())).decision,
-        CastPolicyDecision::Mirror
+        decide(&hevc_input, &available(Protection::Clear)),
+        handoff(HandoffReason::ReceiverIncompatible)
     );
-    // 平台也不能 mirror（无 tab 采集）→ 稳定拒绝
+    // 平台无外部交接能力 → 稳定拒绝（PL-011）
     assert_eq!(
         decide(
             &no_hls,
-            &ctx(Protection::Clear, PlatformFake::arkweb_reduced())
-        )
-        .decision,
+            &ctx(Protection::Clear, HandoffAvailability::Unavailable)
+        ),
         CastPolicyDecision::Reject {
             reason: CoreError::CapabilitiesUnavailable
         }
@@ -205,58 +218,106 @@ fn pl_007_receiver_incompatible_falls_back_or_stable_reject() {
 }
 
 #[test]
-fn pl_009_unknown_ad_continuity_from_start_mirrors() {
+fn pl_009_unknown_ad_continuity_from_start_hands_off() {
     let from_start = input(HeadersClass::None, AdContinuity::Unknown, 0.0);
     assert_eq!(
-        decide(&from_start, &ctx(Protection::Clear, cef())).decision,
-        CastPolicyDecision::Mirror
+        decide(&from_start, &available(Protection::Clear)),
+        handoff(HandoffReason::AdContinuityUnknown)
     );
     // 续播位置不受影响
     let resumed = input(HeadersClass::None, AdContinuity::Unknown, 120.0);
     assert_eq!(
-        decide(&resumed, &ctx(Protection::Clear, cef())).decision,
+        decide(&resumed, &available(Protection::Clear)),
         CastPolicyDecision::Direct
     );
     // 广告连续性已确认保留：从头也可直投
     let preserved = input(HeadersClass::None, AdContinuity::Preserved, 0.0);
     assert_eq!(
-        decide(&preserved, &ctx(Protection::Clear, cef())).decision,
+        decide(&preserved, &available(Protection::Clear)),
         CastPolicyDecision::Direct
     );
 }
 
 #[test]
-fn pl_011_missing_system_audio_degrades_with_explicit_reason() {
-    let no_audio = PlatformCapabilities::new(
-        BrowserEngineKind::Cef,
-        true,
-        false,
-        true,
-        LocalDiscoveryKind::MdnsUdp,
-        SecureStoreKind::OsNative,
-        ProtectedSurfaceKind::Blocked,
+fn pl_011_missing_handoff_capability_is_a_stable_rejection() {
+    // 任何兜底分支在无交接能力时都以 capabilities_unavailable 稳定拒绝。
+    let credential = input(
+        HeadersClass::CredentialBound,
+        AdContinuity::Preserved,
+        120.0,
     );
-    let outcome = decide(
+    assert_eq!(
+        decide(
+            &credential,
+            &ctx(Protection::Clear, HandoffAvailability::Unavailable)
+        ),
+        CastPolicyDecision::Reject {
+            reason: CoreError::CapabilitiesUnavailable
+        }
+    );
+    assert_eq!(
+        decide(
+            &direct_input(),
+            &ctx(Protection::KeyRequired, HandoffAvailability::Unavailable)
+        ),
+        CastPolicyDecision::Reject {
+            reason: CoreError::CapabilitiesUnavailable
+        }
+    );
+}
+
+#[test]
+fn pl_015_handoff_is_pure_advice_requiring_confirmation() {
+    let decision = decide(
         &input(
             HeadersClass::CredentialBound,
             AdContinuity::Preserved,
             120.0,
         ),
-        &ctx(Protection::Clear, no_audio),
+        &available(Protection::Clear),
     );
-    assert_eq!(outcome.decision, CastPolicyDecision::Mirror);
-    assert_eq!(outcome.degradation, Some(Degradation::NoSystemAudio));
+    let CastPolicyDecision::ExternalClientHandoff(advice) = decision else {
+        panic!("应为外部交接建议: {decision:?}")
+    };
+    assert_eq!(advice.confirmation(), HandoffConfirmation::Required);
+    // DTO 不持有媒体 URL、Relay token、receiver session 或传输面。
+    let wire = serde_json::to_value(advice).unwrap();
+    let mut keys: Vec<&str> = wire
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    keys.sort_unstable();
+    assert_eq!(keys, ["confirmation", "reason"]);
+    // 决策是纯函数：重复调用结果一致，不产生任何会话状态。
+    assert_eq!(
+        decide(
+            &input(
+                HeadersClass::CredentialBound,
+                AdContinuity::Preserved,
+                120.0,
+            ),
+            &available(Protection::Clear),
+        ),
+        decision
+    );
 }
 
 #[test]
-fn pl_013_safety_conclusions_are_platform_independent() {
-    // 同一输入在桌面 CEF 与 ArkWeb 受限能力下：安全/隐私结论完全一致，
-    // 只有可用模式不同。
-    let arkweb = PlatformFake::arkweb_reduced();
-    for platform in [cef(), arkweb] {
+fn pl_013_safety_conclusions_are_capability_independent() {
+    // 同一输入在交接能力有无两种声明下：安全/隐私结论完全一致，
+    // 只有兜底形态不同（建议 vs 稳定拒绝）。
+    for availability in [
+        HandoffAvailability::Available,
+        HandoffAvailability::Unavailable,
+    ] {
         // DRM 拒绝一致
         assert_eq!(
-            decide(&direct_input(), &ctx(Protection::DrmProtected, platform)).decision,
+            decide(
+                &direct_input(),
+                &ctx(Protection::DrmProtected, availability)
+            ),
             CastPolicyDecision::Reject {
                 reason: CoreError::DrmProtected
             }
@@ -269,25 +330,28 @@ fn pl_013_safety_conclusions_are_platform_independent() {
                 PlaybackProgress::NotAdvanced,
             ),
             protection: Protection::Clear,
-            platform,
+            external_client_handoff: availability,
         };
         assert!(matches!(
-            decide(&direct_input(), &context).decision,
+            decide(&direct_input(), &context),
             CastPolicyDecision::Reject { .. }
         ));
     }
-    // 模式差异：credential-bound 在桌面 Mirror，在 ArkWeb（无 tab 采集）稳定拒绝。
+    // 模式差异：credential-bound 在有交接能力时是建议，无能力时稳定拒绝。
     let credential = input(
         HeadersClass::CredentialBound,
         AdContinuity::Preserved,
         120.0,
     );
     assert_eq!(
-        decide(&credential, &ctx(Protection::Clear, cef())).decision,
-        CastPolicyDecision::Mirror
+        decide(&credential, &available(Protection::Clear)),
+        handoff(HandoffReason::CredentialBound)
     );
     assert_eq!(
-        decide(&credential, &ctx(Protection::Clear, arkweb)).decision,
+        decide(
+            &credential,
+            &ctx(Protection::Clear, HandoffAvailability::Unavailable)
+        ),
         CastPolicyDecision::Reject {
             reason: CoreError::CapabilitiesUnavailable
         }

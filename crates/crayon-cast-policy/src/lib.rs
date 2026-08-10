@@ -2,7 +2,7 @@
 
 mod decide;
 
-pub use decide::{decide, Degradation, PolicyContext, PolicyOutcome};
+pub use decide::{decide, HandoffAvailability, PolicyContext};
 
 use crayon_media_observer::{
     ObservationOrigin, PlaybackObservation, PlaybackProgress, UserActivation,

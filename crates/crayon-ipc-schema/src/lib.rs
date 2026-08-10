@@ -5,8 +5,9 @@ mod messages;
 mod secret;
 
 pub use messages::{
-    AdContinuity, AudioCodecKind, CastPolicyDecision, CastPolicyInput, HeadersClass,
-    MediaCandidate, PageContext, PlaybackState, ProtocolKind, SourceObservation, VideoCodecKind,
+    AdContinuity, AudioCodecKind, CastPolicyDecision, CastPolicyInput, ExternalClientHandoff,
+    HandoffConfirmation, HandoffReason, HeadersClass, MediaCandidate, PageContext, PlaybackState,
+    ProtocolKind, SourceObservation, VideoCodecKind,
 };
 pub use secret::{SessionGrant, SessionSecret};
 

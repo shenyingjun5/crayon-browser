@@ -155,7 +155,7 @@ Agent 工具调用 app-runtime 的正常用例：
 - Direct/Relay 只在 LAN，由 Cast-SDK facade 投送与控制。
 - `ExternalClientHandoff` 需要用户确认，不创建 Cast-SDK、Relay 或 WebRTC session。
 - R3 Agent 投屏工具需要独立确认，并沿用相同 policy；Agent 无权调用独立客户端的采集/镜像控制面。
-- 历史 `Mirror/tab_video/system_audio` 字段由 `MED-19` 兼容迁移，不能成为 Agent capability。
+- 历史 `Mirror` 决策已由 `MED-19` 迁移为 `ExternalClientHandoff`（`mirror` wire 值保留兼容读取窗口，不再发出）；`tab_video`/`system_audio` 字段不再被策略引用，不能成为 Agent capability。
 
 ## 9. 第二阶段模型能力
 

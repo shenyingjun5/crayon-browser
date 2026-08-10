@@ -6,7 +6,8 @@
 //! clean-looking URL, and an inconclusive inspection is `Unknown` — never
 //! silently `Clear`. The current compliance posture refuses direct cast/relay
 //! for anything that needs a key; this module only reports facts, the
-//! Mirror/Direct/Reject decision belongs to `crayon-cast-policy`.
+//! Direct/Relay/ExternalClientHandoff/Reject decision belongs to
+//! `crayon-cast-policy`.
 
 use crate::hls::{HlsEncryption, HlsPlaylist};
 use crate::inspect::Inspection;

@@ -21,7 +21,7 @@ pub enum ProtocolKind {
 /// Request-header requirements of the upstream media (§11.3).
 ///
 /// P0 direct cast only allows credential-free classes; media bound to
-/// Cookie/Authorization degrades to tab mirroring.
+/// Cookie/Authorization degrades to an external-client handoff suggestion.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HeadersClass {
@@ -269,19 +269,103 @@ impl CastPolicyInput {
     }
 }
 
+/// Why Direct/Relay are unavailable and an external-client handoff is
+/// suggested instead (MED-19). Stable machine-readable reason, never UI copy.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HandoffReason {
+    /// Encrypted/key-required stream: the current compliance posture keeps
+    /// the media inside the browser (PL-005).
+    KeyRequired,
+    /// blob:/MediaStream source has no castable URL (BR-012).
+    NoDirectUrl,
+    /// Probe was inconclusive: safe fallback only (PL-014).
+    ProbeInconclusive,
+    /// Media is bound to Cookie/Authorization (PL-008).
+    CredentialBound,
+    /// Receiver cannot play the candidate protocol/codec (PL-007).
+    ReceiverIncompatible,
+    /// Ad continuity unknown with from-the-start playback (PL-009).
+    AdContinuityUnknown,
+    /// Direct/Relay start failed at runtime; single-step downgrade
+    /// (design §9.2 step 7).
+    StartFailed,
+    /// DASH relay serving is out of v1 scope (documented v1 limit).
+    DashRelayUnsupported,
+    /// Legacy v1 `mirror` decision read through the compatibility window;
+    /// the old wire carried no reason. Never produced by new decisions.
+    #[default]
+    LegacyMirror,
+}
+
+/// User-confirmation requirement attached to every handoff (PL-015).
+///
+/// Single variant on purpose: a handoff suggestion can never express that
+/// confirmation is unnecessary — downloading/launching the external client
+/// always requires explicit user confirmation.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HandoffConfirmation {
+    #[default]
+    Required,
+}
+
+/// External-client handoff advice (MED-19, PL-015).
+///
+/// This is a suggestion, not a cast mode: it holds no media URL, relay
+/// token, receiver session, capturer, encoder or WebRTC transport, and the
+/// browser must never report "casting started" for it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExternalClientHandoff {
+    /// Why Direct/Relay are unavailable. The serde default exists solely for
+    /// the legacy `mirror` read window (see `HandoffReason::LegacyMirror`);
+    /// new decisions always set a concrete reason.
+    #[serde(default)]
+    reason: HandoffReason,
+    /// Always `Required`; defaults keep legacy `mirror` reads working.
+    #[serde(default)]
+    confirmation: HandoffConfirmation,
+}
+
+impl ExternalClientHandoff {
+    #[must_use]
+    pub const fn new(reason: HandoffReason) -> Self {
+        Self {
+            reason,
+            confirmation: HandoffConfirmation::Required,
+        }
+    }
+
+    #[must_use]
+    pub const fn reason(&self) -> HandoffReason {
+        self.reason
+    }
+
+    #[must_use]
+    pub const fn confirmation(&self) -> HandoffConfirmation {
+        self.confirmation
+    }
+}
+
 /// Policy-engine decision (§9.2). `Reject` always carries a stable
 /// `CoreError` code instead of a natural-language reason.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "decision", rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
 pub enum CastPolicyDecision {
-    /// Tab capture + WebRTC mirroring.
-    Mirror,
     /// Receiver pulls the original stream URL directly (no special headers).
     Direct,
     /// Receiver pulls through the session relay, which holds the required
     /// Referer/UA upstream headers (headers never reach the receiver).
     Relay,
+    /// Suggest handing off to the external Crayon cast client (MED-19).
+    /// Not a cast mode: creates no receiver handle, relay token or WebRTC
+    /// transport. The `mirror` alias is the v1 compatibility read window:
+    /// legacy `mirror` decisions still deserialize (reason `LegacyMirror`)
+    /// but are never re-emitted under the old tag.
+    #[serde(alias = "mirror")]
+    ExternalClientHandoff(ExternalClientHandoff),
     Reject {
         reason: CoreError,
     },

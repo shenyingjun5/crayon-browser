@@ -21,7 +21,7 @@
 |---|---|
 | [CEF distribution](cef-distribution.md) | CEF 固定版本、已完成 hash/缓存/许可基线；Linux hash 仅是历史 `CEF-01A` 证据，不代表当前支持 |
 | [FND migration review](fnd-migration-review.md) | Foundation 迁移和 Review 证据 |
-| [MED security review](med-security-review.md) | `MED-01..18` 历史策略/Relay 安全证据；Mirror 结论由 `MED-19` 迁移说明覆盖 |
+| [MED security review](med-security-review.md) | `MED-01..18` 历史策略/Relay 安全证据；Mirror 语义已由 `MED-19` 迁移为 `ExternalClientHandoff` |
 
 Cast-SDK source lock 的当前事实位于 `config/cast-sdk-source.toml`、`.gitmodules`、`SDK-01` Roadmap 证据和真实 gitlink；当前不存在独立的 source decision/threat-model 文档，后续任务不得引用不存在的文件作为完成证据。
 
@@ -36,10 +36,10 @@ Cast-SDK source lock 的当前事实位于 `config/cast-sdk-source.toml`、`.git
 
 ## 4. 真实现状
 
-- Foundation 19 个原子任务、`MED-01..18`、`CEF-01A`、`SDK-01`、`SDK-02` 已完成，共 40 项。
+- Foundation 19 个原子任务、`MED-01..19`、`CEF-01A`、`SDK-01`、`SDK-02` 已完成，共 41 项。
 - CEF 固定基线为 `150.0.10+g8042e43+chromium-150.0.7871.101` Standard。历史四平台 hash 已锁定，Windows x64 archive 已校验；后续产品构建只推进 Windows/macOS。
 - Cast-SDK source revision 已由 `SDK-01` 固定并通过 `RG-008`；真实 facade/平台接线和接收端闭环尚未完成。
-- 当前代码仍含历史 `Mirror`、`tab_video`、`system_audio` 等 v1 语义；`MED-19 READY` 负责迁移为 `ExternalClientHandoff`。在其完成前不得把文档目标表述成代码现状，也不得继续扩张旧字段。
+- `MED-19` 已完成：投屏决策集合为 `Direct/Relay/ExternalClientHandoff/Reject`，旧 `mirror` wire 值保留兼容读取窗口且不再发出；`tab_video`/`system_audio` 仅作为 `crayon-domain` 遗留字段存在，策略与 runtime 代码不再引用，不得继续扩张。
 - `CEF-01B READY`、`SDK-03 READY`；`CNT-01..10` 全部等待浏览器和投屏主链路门禁。
 
 ## 5. 权威与历史

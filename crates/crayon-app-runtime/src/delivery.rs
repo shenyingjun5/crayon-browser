@@ -1,18 +1,25 @@
-//! Delivery orchestration (MED-17): turns the policy decision into a
-//! concrete receiver-facing plan.
+//! Delivery orchestration (MED-17, Mirror semantics migrated by MED-19):
+//! turns the policy decision into a concrete receiver-facing plan.
 //!
 //! Rules:
 //! - ordinary planning failures reject plainly — they never upgrade
 //!   privileges and never auto-escalate into another mode (PL-014);
-//! - a runtime start failure may downgrade Direct/Relay to Mirror exactly
-//!   once and only after user confirmation (design §9.2 step 7); there is no
-//!   cyclic fallback — Mirror failure or a second failure ends the chain;
+//! - a runtime start failure may downgrade Direct/Relay to an external
+//!   client handoff suggestion exactly once (design §9.2 step 7); there is
+//!   no cyclic fallback — a handoff or rejection ends the chain;
 //! - DASH relay serving is out of v1 scope: a Relay decision for a DASH
-//!   candidate degrades structurally to Mirror (documented v1 limit).
+//!   candidate degrades structurally to a handoff suggestion (documented v1
+//!   limit);
+//! - a handoff suggestion is not a cast mode: it creates no receiver
+//!   handle, relay token, capturer, encoder or WebRTC transport and must
+//!   pass explicit user confirmation before any download/launch (PL-015).
 
-use crayon_cast_policy::{decide, PolicyContext};
-use crayon_domain::{CoreError, DeviceId, PlatformCapabilities};
-use crayon_ipc_schema::{CastPolicyDecision, CastPolicyInput, HeadersClass, ProtocolKind};
+use crayon_cast_policy::{decide, HandoffAvailability, PolicyContext};
+use crayon_domain::{CoreError, DeviceId};
+use crayon_ipc_schema::{
+    CastPolicyDecision, CastPolicyInput, ExternalClientHandoff, HandoffReason, HeadersClass,
+    ProtocolKind,
+};
 use crayon_media_observer::PlaybackObservation;
 use crayon_media_probe::Protection;
 use std::net::IpAddr;
@@ -26,7 +33,8 @@ pub struct DeliveryRequest {
     pub input: CastPolicyInput,
     pub observation: PlaybackObservation,
     pub protection: Protection,
-    pub platform: PlatformCapabilities,
+    /// Declared external-client handoff capability of the platform (PL-011).
+    pub external_client_handoff: HandoffAvailability,
     pub receiver: DeviceId,
     pub receiver_ip: Option<IpAddr>,
 }
@@ -38,8 +46,10 @@ pub enum DeliveryPlan {
     Direct { url: String },
     /// Receiver pulls through the session relay (opaque URL).
     Relay { media_url: String },
-    /// Tab capture mirroring.
-    Mirror,
+    /// External-client handoff suggestion (MED-19). Pure advice: holds no
+    /// media URL, relay token or receiver session; user confirmation is
+    /// required and it never means "casting started" (PL-015).
+    ExternalClientHandoff(ExternalClientHandoff),
     /// Stable rejection.
     Rejected(CoreError),
 }
@@ -64,20 +74,26 @@ pub fn plan_delivery(request: &DeliveryRequest, backend: &mut dyn SessionBackend
     let context = PolicyContext {
         observation: request.observation,
         protection: request.protection,
-        platform: request.platform,
+        external_client_handoff: request.external_client_handoff,
     };
-    let outcome = decide(&request.input, &context);
+    let decision = decide(&request.input, &context);
     let candidate = request.input.candidate();
-    match outcome.decision {
+    match decision {
         CastPolicyDecision::Reject { reason } => DeliveryPlan::Rejected(reason),
-        CastPolicyDecision::Mirror => DeliveryPlan::Mirror,
+        CastPolicyDecision::ExternalClientHandoff(handoff) => {
+            DeliveryPlan::ExternalClientHandoff(handoff)
+        }
         CastPolicyDecision::Direct => DeliveryPlan::Direct {
             url: candidate.url().to_string(),
         },
         CastPolicyDecision::Relay => {
-            // DASH relay 服务不在 v1：结构化降级 Mirror（非运行时失败降级）。
+            // DASH relay 服务不在 v1：结构化降级为外部交接建议（非运行时失败降级）；
+            // 平台无交接能力时按 PL-011 稳定拒绝。
             if candidate.protocol() == ProtocolKind::Dash {
-                return DeliveryPlan::Mirror;
+                return structural_handoff(
+                    HandoffReason::DashRelayUnsupported,
+                    request.external_client_handoff,
+                );
             }
             match backend.open(
                 &request.receiver,
@@ -95,6 +111,19 @@ pub fn plan_delivery(request: &DeliveryRequest, backend: &mut dyn SessionBackend
     }
 }
 
+/// Structural degrade to a handoff suggestion, or a stable capability
+/// rejection when the platform declares no handoff surface (PL-011).
+fn structural_handoff(reason: HandoffReason, availability: HandoffAvailability) -> DeliveryPlan {
+    match availability {
+        HandoffAvailability::Available => {
+            DeliveryPlan::ExternalClientHandoff(ExternalClientHandoff::new(reason))
+        }
+        HandoffAvailability::Unavailable => {
+            DeliveryPlan::Rejected(CoreError::CapabilitiesUnavailable)
+        }
+    }
+}
+
 /// Runtime start outcome reported by the playback layer.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StartOutcome {
@@ -103,18 +132,27 @@ pub enum StartOutcome {
 }
 
 /// Single-step downgrade (design §9.2 step 7): a failed Direct/Relay start
-/// may become Mirror exactly once. `already_downgraded` prevents cycles;
-/// Mirror/Rejected never downgrade further.
+/// may become an external-client handoff suggestion exactly once.
+/// `already_downgraded` prevents cycles; handoff/rejected plans never
+/// downgrade further. When the platform declares no handoff capability the
+/// chain ends without a suggestion (PL-011) — a failed start never creates
+/// or pollutes a cast session.
 #[must_use]
 pub fn downgrade_once(
     plan: &DeliveryPlan,
     start: StartOutcome,
     already_downgraded: bool,
+    handoff: HandoffAvailability,
 ) -> Option<DeliveryPlan> {
-    match (plan, start, already_downgraded) {
-        (DeliveryPlan::Direct { .. } | DeliveryPlan::Relay { .. }, StartOutcome::Failed, false) => {
-            Some(DeliveryPlan::Mirror)
-        }
+    match (plan, start, already_downgraded, handoff) {
+        (
+            DeliveryPlan::Direct { .. } | DeliveryPlan::Relay { .. },
+            StartOutcome::Failed,
+            false,
+            HandoffAvailability::Available,
+        ) => Some(DeliveryPlan::ExternalClientHandoff(
+            ExternalClientHandoff::new(HandoffReason::StartFailed),
+        )),
         _ => None,
     }
 }

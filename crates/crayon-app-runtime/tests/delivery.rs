@@ -1,14 +1,16 @@
-//! Delivery orchestration contract (MED-17): decision→plan 映射、PL-014
-//! 普通失败不提权、单次降级无循环（E2E-002/004 的 fake 变体）。
+//! Delivery orchestration contract (MED-17, Mirror semantics migrated by
+//! MED-19): decision→plan 映射、PL-014 普通失败不提权、单次降级无循环、
+//! 外部客户端交接不触碰会话后端（E2E-002/004 的 fake 变体，PL-015）。
 
 use crayon_app_runtime::delivery::{
     downgrade_once, plan_delivery, CoreSessionBackend, DeliveryPlan, DeliveryRequest,
     SessionBackend, StartOutcome,
 };
+use crayon_cast_policy::HandoffAvailability;
 use crayon_domain::{CoreError, DeviceId, ReceiverCapabilities, TabId};
 use crayon_ipc_schema::{
-    AdContinuity, CastPolicyInput, HeadersClass, MediaCandidate, PageContext, PlaybackState,
-    ProtocolKind,
+    AdContinuity, CastPolicyInput, ExternalClientHandoff, HandoffConfirmation, HandoffReason,
+    HeadersClass, MediaCandidate, PageContext, PlaybackState, ProtocolKind,
 };
 use crayon_media_observer::{
     ObservationOrigin, PlaybackObservation, PlaybackProgress, UserActivation,
@@ -17,7 +19,6 @@ use crayon_media_probe::Protection;
 use crayon_relay::runtime::{RelayRuntime, RelayRuntimeConfig};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use test_support::platform::PlatformFake;
 use test_support::upstream::{MockUpstream, UpstreamScript};
 
 fn verified() -> PlaybackObservation {
@@ -49,7 +50,7 @@ fn request(headers: HeadersClass, protocol: ProtocolKind) -> DeliveryRequest {
         ),
         observation: verified(),
         protection: Protection::Clear,
-        platform: PlatformFake::cef_desktop(),
+        external_client_handoff: HandoffAvailability::Available,
         receiver: DeviceId::new("dev-01").unwrap(),
         receiver_ip: None,
     }
@@ -141,21 +142,38 @@ fn drm_and_credential_never_reach_backend() {
         req.protection = protection;
         let plan = plan_delivery(&req, &mut backend);
         match plan {
-            DeliveryPlan::Rejected(_) | DeliveryPlan::Mirror => {}
-            other => panic!("应为 Rejected/Mirror: {other:?}"),
+            DeliveryPlan::Rejected(_) | DeliveryPlan::ExternalClientHandoff(_) => {}
+            other => panic!("应为 Rejected/ExternalClientHandoff: {other:?}"),
         }
         assert!(backend.calls.lock().unwrap().is_empty());
     }
 }
 
 #[test]
-fn dash_relay_structurally_degrades_to_mirror() {
+fn dash_relay_structurally_degrades_to_handoff_or_stable_reject() {
+    // 有交接能力：DASH relay 不在 v1，结构化降级为外部交接建议。
     let mut backend = FakeBackend::new();
     let plan = plan_delivery(
         &request(HeadersClass::RefererOnly, ProtocolKind::Dash),
         &mut backend,
     );
-    assert_eq!(plan, DeliveryPlan::Mirror, "DASH relay 不在 v1，结构化降级");
+    assert_eq!(
+        plan,
+        DeliveryPlan::ExternalClientHandoff(ExternalClientHandoff::new(
+            HandoffReason::DashRelayUnsupported
+        )),
+        "DASH relay 不在 v1，结构化降级"
+    );
+    assert!(backend.calls.lock().unwrap().is_empty());
+    // 无交接能力：稳定拒绝（PL-011），同样不触碰后端。
+    let mut backend = FakeBackend::new();
+    let mut req = request(HeadersClass::RefererOnly, ProtocolKind::Dash);
+    req.external_client_handoff = HandoffAvailability::Unavailable;
+    let plan = plan_delivery(&req, &mut backend);
+    assert_eq!(
+        plan,
+        DeliveryPlan::Rejected(CoreError::CapabilitiesUnavailable)
+    );
     assert!(backend.calls.lock().unwrap().is_empty());
 }
 
@@ -164,41 +182,76 @@ fn downgrade_is_single_step_without_cycles() {
     let direct = DeliveryPlan::Direct {
         url: "https://cdn.example.com/v.mp4".to_string(),
     };
-    // 运行中失败 → 单次降级 Mirror
+    // 运行中失败 → 单次降级为外部交接建议
     assert_eq!(
-        downgrade_once(&direct, StartOutcome::Failed, false),
-        Some(DeliveryPlan::Mirror)
+        downgrade_once(
+            &direct,
+            StartOutcome::Failed,
+            false,
+            HandoffAvailability::Available
+        ),
+        Some(DeliveryPlan::ExternalClientHandoff(
+            ExternalClientHandoff::new(HandoffReason::StartFailed)
+        ))
+    );
+    // 平台无交接能力 → 链结束，不产生建议（PL-011）
+    assert_eq!(
+        downgrade_once(
+            &direct,
+            StartOutcome::Failed,
+            false,
+            HandoffAvailability::Unavailable
+        ),
+        None
     );
     // 已降级过 → 不再降级（无循环）
-    assert_eq!(downgrade_once(&direct, StartOutcome::Failed, true), None);
-    // Mirror 失败不再降级
     assert_eq!(
-        downgrade_once(&DeliveryPlan::Mirror, StartOutcome::Failed, false),
+        downgrade_once(
+            &direct,
+            StartOutcome::Failed,
+            true,
+            HandoffAvailability::Available
+        ),
+        None
+    );
+    // 交接建议失败不再降级
+    assert_eq!(
+        downgrade_once(
+            &DeliveryPlan::ExternalClientHandoff(ExternalClientHandoff::new(
+                HandoffReason::StartFailed
+            )),
+            StartOutcome::Failed,
+            false,
+            HandoffAvailability::Available
+        ),
         None
     );
     // 成功与拒绝不产生降级
-    assert_eq!(downgrade_once(&direct, StartOutcome::Started, false), None);
+    assert_eq!(
+        downgrade_once(
+            &direct,
+            StartOutcome::Started,
+            false,
+            HandoffAvailability::Available
+        ),
+        None
+    );
     assert_eq!(
         downgrade_once(
             &DeliveryPlan::Rejected(CoreError::DrmProtected),
             StartOutcome::Failed,
-            false
+            false,
+            HandoffAvailability::Available
         ),
         None
     );
 }
 
 #[test]
-fn e2e_004_fake_ad_unknown_from_start_mirrors() {
+fn e2e_004_fake_handoff_creates_no_session_material() {
+    // 广告连续性未知 + 从头播放 → 外部客户端交接建议（PL-009/E2E-004 fake）。
     let mut backend = FakeBackend::new();
     let mut req = request(HeadersClass::None, ProtocolKind::Hls);
-    req.input = CastPolicyInput::new(
-        req.input.page().clone(),
-        PlaybackState::new(0.0, Some(3600.0), false), // 从头播放
-        req.input.candidate().clone(),
-        req.input.receiver(),
-    );
-    // 广告连续性未知 + 从头 → Mirror（保留完整页面编排）
     let candidate = MediaCandidate::new(
         "https://cdn.example.com/master.m3u8".to_string(),
         ProtocolKind::Hls,
@@ -214,7 +267,22 @@ fn e2e_004_fake_ad_unknown_from_start_mirrors() {
         candidate,
         req.input.receiver(),
     );
-    assert_eq!(plan_delivery(&req, &mut backend), DeliveryPlan::Mirror);
+    let plan = plan_delivery(&req, &mut backend);
+    let DeliveryPlan::ExternalClientHandoff(advice) = plan else {
+        panic!("应为外部交接建议: {plan:?}")
+    };
+    assert_eq!(advice.reason(), HandoffReason::AdContinuityUnknown);
+    assert_eq!(advice.confirmation(), HandoffConfirmation::Required);
+    // PL-015：交接不持有媒体 URL/Relay token/receiver session，也不创建任何
+    // 会话——后端零调用；Debug 输出不含候选 URL。
+    assert!(backend.calls.lock().unwrap().is_empty());
+    assert!(!format!("{advice:?}").contains("cdn.example.com"));
+    // 重复规划（含取消后重试、旧结果重放）是纯函数：结果一致且仍不触碰后端。
+    assert_eq!(
+        plan_delivery(&req, &mut backend),
+        DeliveryPlan::ExternalClientHandoff(advice)
+    );
+    assert!(backend.calls.lock().unwrap().is_empty());
 }
 
 #[tokio::test]

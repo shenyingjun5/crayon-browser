@@ -1,0 +1,5 @@
+{
+  "decision": "external_client_handoff",
+  "reason": "receiver_incompatible",
+  "confirmation": "required"
+}

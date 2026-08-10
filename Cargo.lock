@@ -416,7 +416,7 @@ dependencies = [
  "crayon-ipc-schema",
  "crayon-media-observer",
  "crayon-media-probe",
- "test-support",
+ "serde_json",
 ]
 
 [[package]]

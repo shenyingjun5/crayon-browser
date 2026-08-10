@@ -3,8 +3,8 @@
 
 use crayon_domain::{CoreError, PlatformCapabilities, ReceiverCapabilities};
 use crayon_ipc_schema::{
-    CastPolicyDecision, CastPolicyInput, Handshake, MediaCandidate, SchemaVersion, SessionGrant,
-    SessionSecret, SourceObservation,
+    CastPolicyDecision, CastPolicyInput, ExternalClientHandoff, HandoffConfirmation, HandoffReason,
+    Handshake, MediaCandidate, SchemaVersion, SessionGrant, SessionSecret, SourceObservation,
 };
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -55,9 +55,18 @@ const CASES: &[VectorCase] = &[
         "cast_policy_decision_relay.json",
         roundtrip::<CastPolicyDecision>,
     ),
+    (
+        "cast_policy_decision_external_client_handoff.json",
+        roundtrip::<CastPolicyDecision>,
+    ),
     ("session_grant.json", roundtrip::<SessionGrant>),
     ("core_error.json", roundtrip::<CoreError>),
 ];
+
+// 注：`cast_policy_decision_mirror.json` 同时存在于 current/previous，但不进入
+// 上面的 roundtrip 表——它是 MED-19 兼容读取窗口的 legacy 向量：仍能反序列化并
+// 迁移（见 rg_007_legacy_mirror_migrates_to_external_client_handoff），但
+// current 不再以该 wire 值发出，规范化序列化不等值，故不做 roundtrip 断言。
 
 #[test]
 fn rg_007_current_vectors_roundtrip() {
@@ -84,9 +93,84 @@ fn rg_007_previous_vectors_remain_supported() {
         );
     }
     // v1 is the initial version: previous mirrors current and every previous
-    // vector must still deserialize against the current types.
+    // vector must still deserialize against the current types. Vectors added
+    // after the previous snapshot (MED-19 handoff) exist only in current.
     for (name, case) in CASES {
-        case(&vector("previous", name));
+        let path = previous_dir.join(name);
+        if path.exists() {
+            case(&vector("previous", name));
+        }
+    }
+}
+
+/// MED-19 compatibility read window: a legacy v1 `mirror` decision still
+/// deserializes and migrates to `ExternalClientHandoff`, and the migrated
+/// value is never re-emitted under the old `mirror` tag.
+#[test]
+fn rg_007_legacy_mirror_migrates_to_external_client_handoff() {
+    let raw = vector("previous", "cast_policy_decision_mirror.json");
+    let migrated: CastPolicyDecision =
+        serde_json::from_str(&raw).expect("legacy mirror decision must deserialize");
+    assert_eq!(
+        migrated,
+        CastPolicyDecision::ExternalClientHandoff(ExternalClientHandoff::new(
+            HandoffReason::LegacyMirror
+        ))
+    );
+    let CastPolicyDecision::ExternalClientHandoff(handoff) = migrated else {
+        unreachable!("asserted above");
+    };
+    assert_eq!(
+        handoff.confirmation(),
+        HandoffConfirmation::Required,
+        "migrated handoff keeps the user-confirmation requirement"
+    );
+
+    let value = serde_json::to_value(migrated).expect("migrated decision must serialize");
+    assert_eq!(
+        value,
+        serde_json::json!({
+            "decision": "external_client_handoff",
+            "reason": "legacy_mirror",
+            "confirmation": "required"
+        }),
+        "mirror must never be re-emitted"
+    );
+}
+
+/// PL-015: the handoff DTO is pure advice — its wire form carries exactly
+/// tag/reason/confirmation and no URL, token, session or transport field.
+#[test]
+fn pl_015_handoff_wire_form_carries_no_session_material() {
+    let raw = vector(
+        "current",
+        "cast_policy_decision_external_client_handoff.json",
+    );
+    let golden: Value = serde_json::from_str(&raw).unwrap();
+    let mut keys: Vec<&str> = golden
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    keys.sort_unstable();
+    assert_eq!(keys, ["confirmation", "decision", "reason"]);
+
+    const DENIED_KEYS: &[&str] = &[
+        "url",
+        "media_url",
+        "page_url",
+        "token",
+        "session",
+        "session_id",
+        "receiver",
+        "transport",
+    ];
+    for key in keys {
+        assert!(
+            !DENIED_KEYS.contains(&key),
+            "handoff DTO must not carry `{key}`"
+        );
     }
 }
 
