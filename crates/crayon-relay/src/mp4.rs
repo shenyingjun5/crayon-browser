@@ -21,7 +21,7 @@ pub const DEFAULT_READ_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Response headers forwarded to the receiver (whitelist; everything else —
 /// `set-cookie`, CSP, etc. — is dropped).
-const FORWARDED_HEADERS: &[&str] = &[
+pub(crate) const FORWARDED_HEADERS: &[&str] = &[
     "content-type",
     "content-length",
     "content-range",
@@ -30,6 +30,19 @@ const FORWARDED_HEADERS: &[&str] = &[
     "last-modified",
     "cache-control",
 ];
+
+/// Maps whitelisted upstream response headers.
+pub(crate) fn forward_headers(response: &reqwest::Response) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for name in FORWARDED_HEADERS {
+        if let Some(value) = response.headers().get(*name) {
+            if let Ok(value) = value.to_str() {
+                out.push((name.to_string(), value.to_string()));
+            }
+        }
+    }
+    out
+}
 
 /// MP4 resource fetcher.
 pub struct Mp4Fetcher {
@@ -89,14 +102,7 @@ impl ResourceFetcher for Mp4Fetcher {
             if !(200..300).contains(&status) && status != 416 {
                 return Err(FetchError::Upstream);
             }
-            let mut out_headers = Vec::new();
-            for name in FORWARDED_HEADERS {
-                if let Some(value) = response.headers().get(*name) {
-                    if let Ok(value) = value.to_str() {
-                        out_headers.push((name.to_string(), value.to_string()));
-                    }
-                }
-            }
+            let out_headers = forward_headers(&response);
             let body = if request.method == "HEAD" {
                 Body::empty()
             } else {
@@ -128,7 +134,7 @@ fn is_well_formed_range(value: &str) -> bool {
 
 /// Wraps the upstream byte stream with a per-chunk idle timeout; a stall
 /// ends the stream with an error instead of hanging (RL-012).
-fn stream_body(response: reqwest::Response, idle: Duration) -> Body {
+pub(crate) fn stream_body(response: reqwest::Response, idle: Duration) -> Body {
     let stream = futures_util::stream::unfold(
         (response.bytes_stream(), idle, false),
         |(mut inner, idle, done)| async move {

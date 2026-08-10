@@ -55,7 +55,8 @@
 28. `MED-12` relay network_guard（IP 分类/DNS/逐跳 redirect）：当前 `DONE`。
 29. `MED-13` relay MP4 GET/HEAD/Range 流式：当前 `DONE`。
 30. `MED-14` relay HLS AST parser（opaque 资源表）：当前 `DONE`。
-31. `MED-15` relay HLS 流式（TS/fMP4/live TTL/有界缓存）：当前 `IN_PROGRESS`。
+31. `MED-15` relay HLS 流式（TS/fMP4/live TTL/有界缓存）：当前 `DONE`。
+32. `MED-16` relay runtime（route 绑定/并发/超时/stop 收口）：当前 `IN_PROGRESS`。
 
 `FND-07` 是迁移 Epic，实际按 `FND-07A`～`FND-07E` 顺序执行；`FND-07E` 代码已收口，仅剩达标环境下的编译/CLI smoke 验证。MED 按自身依赖推进（MED-01 依赖 FND-06/FND-08，均 DONE）。
 

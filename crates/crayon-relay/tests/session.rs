@@ -29,7 +29,7 @@ fn registry_with_session() -> (SessionRegistry, String) {
         )
         .unwrap();
     registry
-        .register_resource(&grant.token_hex, resource("res-01"), "cdn.example.com")
+        .register_resource(&grant.token_hex, resource("res-01"), "cdn.example.com", 0)
         .unwrap();
     (registry, grant.token_hex)
 }
@@ -83,13 +83,13 @@ fn rl_003_authorization_runs_before_upstream_access() {
 fn allow_set_is_fixed_at_creation() {
     let (mut registry, token) = registry_with_session();
     assert_eq!(
-        registry.register_resource(&token, resource("res-02"), "evil.example.org"),
+        registry.register_resource(&token, resource("res-02"), "evil.example.org", 0),
         Err(SessionAuthError::ReceiverMismatch),
         "allow-set 外的主机不得注册（运行时不可扩张）"
     );
     // 幂等重复注册
     assert!(registry
-        .register_resource(&token, resource("res-01"), "cdn.example.com")
+        .register_resource(&token, resource("res-01"), "cdn.example.com", 0)
         .is_ok());
 }
 

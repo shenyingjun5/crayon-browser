@@ -230,11 +230,27 @@ fn render(script: Option<&UpstreamScript>, request: &RecordedRequest) -> RawResp
             status,
             headers,
             body,
-        }) => RawResponse {
-            status: *status,
-            headers: headers.clone(),
-            body: RawBody::Full(body.clone()),
-        },
+        }) => {
+            // 条件请求：If-None-Match 命中 ETag → 304
+            if let Some(etag) = headers
+                .iter()
+                .find(|(k, _)| k.eq_ignore_ascii_case("etag"))
+                .map(|(_, v)| v.as_str())
+            {
+                if request.header("if-none-match") == Some(etag) {
+                    return RawResponse {
+                        status: 304,
+                        headers: vec![("ETag".to_string(), etag.to_string())],
+                        body: RawBody::Full(Vec::new()),
+                    };
+                }
+            }
+            RawResponse {
+                status: *status,
+                headers: headers.clone(),
+                body: RawBody::Full(body.clone()),
+            }
+        }
     }
 }
 

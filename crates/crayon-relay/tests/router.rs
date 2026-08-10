@@ -88,6 +88,7 @@ async fn media_harness() -> Harness {
                 &grant.token_hex,
                 ResourceId::new("res-01").unwrap(),
                 "cdn.example.com",
+                0,
             )
             .unwrap();
         grant.token_hex
@@ -286,6 +287,7 @@ async fn fetcher_absent_is_explicit_503() {
                 &grant.token_hex,
                 ResourceId::new("res-01").unwrap(),
                 "cdn.example.com",
+                0,
             )
             .unwrap();
         grant.token_hex

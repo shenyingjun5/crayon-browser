@@ -50,6 +50,7 @@ async fn harness(routes: Vec<(String, UpstreamScript)>, read_idle: Duration) -> 
                 &grant.token_hex,
                 ResourceId::new("res-01").unwrap(),
                 "127.0.0.1",
+                0,
             )
             .unwrap();
         grant.token_hex
@@ -257,7 +258,7 @@ async fn rl_012_concurrent_requests_are_not_serialized() {
     {
         let mut registry = h.core.registry.lock().unwrap();
         registry
-            .register_resource(&h.token, ResourceId::new("res-02").unwrap(), "127.0.0.1")
+            .register_resource(&h.token, ResourceId::new("res-02").unwrap(), "127.0.0.1", 0)
             .unwrap();
     }
     let session_id = {

@@ -164,7 +164,9 @@ impl NetworkGuard {
                 .fetch_hop(method.clone(), &current, &carry_headers, allow_set)
                 .await?;
             let status = response.status();
-            if !status.is_redirection() {
+            // 只跟随真正的重定向状态码（304 等 3xx 不属于跳转）。
+            let follow = matches!(status.as_u16(), 301 | 302 | 303 | 307 | 308);
+            if !follow {
                 return Ok(GuardedFetch {
                     final_url: current,
                     hops: hop,

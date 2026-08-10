@@ -49,6 +49,12 @@ pub struct FetchPlan {
     pub headers: Vec<(String, String)>,
     /// Session-fixed upstream allow-set (cloned at authorization time).
     pub allow_set: Vec<String>,
+    /// Session token hex (opaque route prefix for rewritten URIs).
+    pub token_hex: String,
+    /// Owning session id (vault writes).
+    pub session_id: crayon_domain::SessionId,
+    /// Nesting depth of this resource (master = 0).
+    pub depth: u8,
 }
 
 /// Client request facts forwarded to the fetcher.
@@ -58,6 +64,8 @@ pub struct FetchRequest {
     pub method: String,
     /// Raw `Range` header value, if present.
     pub range: Option<String>,
+    /// Raw `If-None-Match` header value, if present.
+    pub if_none_match: Option<String>,
 }
 
 /// A fetched media response: mapped status/headers plus a streaming body
@@ -240,22 +248,25 @@ async fn stop_session(
 async fn serve_master(
     state: State<Arc<RelayCore>>,
     peer: ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     path: Path<String>,
 ) -> Response {
-    serve(state, peer, path, RouteKind::MasterPlaylist).await
+    serve(state, peer, headers, path, RouteKind::MasterPlaylist).await
 }
 
 async fn serve_manifest(
     state: State<Arc<RelayCore>>,
     peer: ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     path: Path<String>,
 ) -> Response {
-    serve(state, peer, path, RouteKind::DashManifest).await
+    serve(state, peer, headers, path, RouteKind::DashManifest).await
 }
 
 async fn serve(
     State(core): State<Arc<RelayCore>>,
     peer: ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Path(token): Path<String>,
     kind: RouteKind,
 ) -> Response {
@@ -270,7 +281,14 @@ async fn serve(
     };
     let request = FetchRequest {
         method: "GET".to_string(),
-        range: None,
+        range: headers
+            .get(header::RANGE)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string),
+        if_none_match: headers
+            .get(header::IF_NONE_MATCH)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string),
     };
     serve_authorized(&core, &peer, &token, kind, resource, request).await
 }
@@ -289,6 +307,10 @@ async fn serve_resource(
         method: method.as_str().to_string(),
         range: headers
             .get(header::RANGE)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string),
+        if_none_match: headers
+            .get(header::IF_NONE_MATCH)
             .and_then(|v| v.to_str().ok())
             .map(str::to_string),
     };
@@ -333,6 +355,9 @@ async fn serve_authorized(
                     .map(|(k, v)| (k.to_string(), v.to_string()))
                     .collect(),
                 allow_set: access.upstream_allow_set.clone(),
+                token_hex: token.to_string(),
+                session_id: access.session_id.clone(),
+                depth: access.resource.depth,
             })
     };
     let Some(plan) = plan else {

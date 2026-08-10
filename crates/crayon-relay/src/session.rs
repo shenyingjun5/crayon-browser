@@ -79,6 +79,17 @@ pub struct SessionResource {
     /// Upstream host this resource resolves to (validated against the
     /// session allow-set at registration).
     pub upstream_host: String,
+    /// Nesting depth (master playlist = 0; children increment).
+    pub depth: u8,
+}
+
+/// Generates an opaque resource id (CSPRNG hex; RL-002).
+#[must_use]
+pub fn generate_resource_id() -> ResourceId {
+    let mut bytes = [0u8; 16];
+    getrandom::getrandom(&mut bytes).expect("system CSPRNG unavailable");
+    let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+    ResourceId::new(&hex).expect("hex is a valid resource id charset")
 }
 
 /// Authorization failure (RL-003): mapped to 401/403 by the router; the
@@ -212,6 +223,7 @@ impl SessionRegistry {
         token_hex: &str,
         resource_id: ResourceId,
         upstream_host: &str,
+        depth: u8,
     ) -> Result<(), SessionAuthError> {
         let session = self
             .find_mut(token_hex)
@@ -229,6 +241,7 @@ impl SessionRegistry {
         session.resources.push(SessionResource {
             id: resource_id,
             upstream_host: host,
+            depth,
         });
         Ok(())
     }
