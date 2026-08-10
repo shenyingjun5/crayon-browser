@@ -1,6 +1,6 @@
 # SDK：Cast-SDK 集成 Roadmap
 
-状态：`FND-08 DONE`；`SDK-01 DONE`；`SDK-02 DONE`；`SDK-03 READY`。源码固定为 Cast-SDK `44c3a99871aa1e68cbda71eacefbb41d23a747a8`，通过 `third_party/cast-sdk` submodule 接入；不得依赖开发者本机源码路径。
+状态：`FND-08 DONE`；`SDK-01 DONE`；`SDK-02 DONE`；`SDK-03 DONE`；`SDK-04 READY`。源码固定为 Cast-SDK `44c3a99871aa1e68cbda71eacefbb41d23a747a8`，通过 `third_party/cast-sdk` submodule 接入；不得依赖开发者本机源码路径。
 
 ## 边界
 
@@ -48,6 +48,14 @@
 - 验证：`cargo check -p crayon-cast-adapter` PASS；`cargo test -p crayon-cast-adapter` 2/2 PASS（facade 构造无 discovery/端口/网络副作用，类型独立可构造）；`cargo tree -p crayon-cast-adapter` 基线：11 个 SDK crate + `serde/serde_json/socket2/getrandom/windows-sys` 传递闭包，无 tauri/automation/webview/CDP 命中，无重复版本；debug rlib 基线 `cast-sender-service` 12.8 MB、SDK 合计约 25 MB、adapter 3.6 KB；`cargo run -p repo-guard -- scan --root .` RG-005/RG-008 passed；`cargo clippy --workspace --all-targets -- -D warnings` PASS；`scripts/check.sh fast` PASS；`scripts/check.sh security` PASS；`cargo test --workspace` 63 suites / 231 passed PASS。
 - Code Review：按 current 标准审查需求边界、依赖方向（仅 adapter 依赖 SDK，由 RG-005/RG-008 机器强制）、测试隔离（不触网、不起服务）与构造/Drop 生命周期（`SenderCommandService::new` 纯分配，`http_server=None`、discovery 未启动），P0/P1 = 0；P2 一项：Cast-SDK 仓库根 LICENSE 为 GPL-3.0 而 workspace 元数据声明 UNLICENSED，分发前需上游澄清（跟踪：SDK-14、QAR-09）。
 - 未覆盖：SDK 平台 image/live/document-render crate 未编译（不在 service 依赖图）；macOS 构建未验证（无 runner）；真机/平台证据由 SDK-13 负责。
+
+## SDK-03 完成记录（2026-08-11）
+
+- 改动：`crates/crayon-cast-adapter` 新增产品侧契约——`src/facade.rs`（`CastFacade` trait + `CastSessionListener`/`CastSessionSubscription`，对象安全、`Send + Sync`）、`src/dto.rs`（`DiscoveredDevice`、`CastCode`、`CastMediaKind`、`ReceiverAssessment`、`CastMediaRequest`/`CastMediaUrl`（不可序列化、Debug 脱敏）、`CastSessionRef`、`Volume`、`PlaybackPosition`、会话监督 DTO 与 `supersedes` fencing）、`src/error.rs`（`CastError` 13 个稳定码 + `SenderErrorKind` 镜像 + `from_sender_error`，只看 kind/稳定 code，不解析自然语言）、`src/error_tests.rs`（对真实 `CastSenderError` 的 CS-008 映射钉扎；穷尽 match 把 `SenderErrorKind` 编译钉到 SDK `ErrorKind`）、`tests/facade_contract.rs`（16 项：serde golden/roundtrip、CS-008 映射表、设备快照无网络定位键、URL Debug 脱敏、fencing 矩阵、trait 对象安全）。依赖新增 `crayon-domain`、`serde`（dev：`serde_json`）。公开签名无任何 `cast_sender_*` 类型；未接真实 `SenderCommandService`（SDK-05）、未写 Fake（SDK-04）。
+- 决策：`CastSessionRef` 与 `SessionGrant` 字段同形但语义不同（receiver 会话 fencing vs IPC/relay 授权），单列类型并注明；`PlaybackPosition` 在边界丢弃 SDK `track_uri`（即媒体 URL，RL-014）；设备 ID 约定由 SDK stable device key 派生，DTO 不含 host/IP/location/port/UDN（CS-002/AG-007）；`InvalidCastCode` 不由通用映射产生——`CastCode` 入界校验 + SDK-07 调用点把投屏码解析失败的 `InvalidInput` 语境化重映射；`Image` 类 SDK 错误映射为 `unsupported_by_receiver`（产品无图片投送）；`disconnect` 幂等且无返回；`stop` 对已终态会话幂等成功，只对旧/外来句柄报错。
+- 验证：`cargo test -p crayon-cast-adapter` 22/22 PASS（4 单测 + 16 契约 + 2 链接冒烟）；`cargo test --workspace` 64 suites 全 PASS；`cargo clippy --workspace --all-targets -- -D warnings` PASS；`cargo fmt --all -- --check` PASS；`cargo run -p repo-guard -- scan --root .` PASS（RG-003/004 仅 `app/` 既有 warning，无新增）；`bash scripts/check.sh fast` PASS；`git diff --check` PASS。映射表已逐项对照 pinned revision 源码（`DEVICE_NOT_FOUND`/`CAST_CODE_DEVICE_NOT_FOUND`→Device、`SENDER_DEVICE_ROUTE_EXPIRED`/`NETWORK_ROUTE_LOST`/`NETWORK_ROUTE_TEMPORARILY_UNAVAILABLE`→Network、`CAST_SESSION_*`→State）。
+- Code Review：按 current 标准逐维度审查（需求边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试、可维护性），P0/P1 = 0；P2 一项：pinned SDK 能力评估只有 media-type 粒度，无 codec/分辨率矩阵，`ReceiverCapabilities` 的保守合成与 TTL/generation 缓存由 SDK-08 负责（已在 `ReceiverAssessment` 文档注明，跟踪 SDK-08/SDK-14）。
+- 未覆盖：真实 service 封装与 SDK 回调线程模型（SDK-05）；发现增量事件（SDK-06）；投屏码"取消"语义——pinned SDK 的 `resolve_device_by_cast_code` 无取消 API，SDK-07 需记录缺口或映射超时；macOS 构建与真机（SDK-13）。
 
 ## SDK 缺口处理
 

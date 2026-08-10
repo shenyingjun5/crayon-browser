@@ -406,6 +406,9 @@ version = "0.1.0"
 dependencies = [
  "cast-sender-core",
  "cast-sender-service",
+ "crayon-domain",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
