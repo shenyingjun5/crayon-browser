@@ -126,6 +126,7 @@ impl std::fmt::Debug for GuardedFetch {
 }
 
 /// The relay network guard.
+#[derive(Clone)]
 pub struct NetworkGuard {
     config: NetworkGuardConfig,
 }
@@ -144,10 +145,24 @@ impl NetworkGuard {
         headers: &[(String, String)],
         allow_set: &[String],
     ) -> Result<GuardedFetch, GuardError> {
+        self.fetch_with(reqwest::Method::GET, url, headers, allow_set)
+            .await
+    }
+
+    /// Same as `fetch` with an explicit method (HEAD for existence probes).
+    pub async fn fetch_with(
+        &self,
+        method: reqwest::Method,
+        url: &str,
+        headers: &[(String, String)],
+        allow_set: &[String],
+    ) -> Result<GuardedFetch, GuardError> {
         let mut current = url.to_string();
         let mut carry_headers = headers.to_vec();
         for hop in 0..self.config.max_hops {
-            let response = self.fetch_hop(&current, &carry_headers, allow_set).await?;
+            let response = self
+                .fetch_hop(method.clone(), &current, &carry_headers, allow_set)
+                .await?;
             let status = response.status();
             if !status.is_redirection() {
                 return Ok(GuardedFetch {
@@ -179,6 +194,7 @@ impl NetworkGuard {
 
     async fn fetch_hop(
         &self,
+        method: reqwest::Method,
         url: &str,
         headers: &[(String, String)],
         allow_set: &[String],
@@ -221,7 +237,7 @@ impl NetworkGuard {
             }
         }
         let client = builder.build().map_err(|_| GuardError::Transport)?;
-        let mut request = client.get(url);
+        let mut request = client.request(method, url);
         for (name, value) in headers {
             request = request.header(name, value);
         }

@@ -4,7 +4,8 @@
 
 use crayon_domain::{DeviceId, ResourceId};
 use crayon_relay::router::{
-    control_router, media_router, FetchPlan, FetchedMedia, RelayCore, ResourceFetcher, RouteKind,
+    control_router, media_router, FetchPlan, FetchRequest, FetchedMedia, RelayCore,
+    ResourceFetcher, RouteKind,
 };
 use crayon_relay::session::DEFAULT_SESSION_TTL_MS;
 use crayon_relay::vault::UpstreamRecipe;
@@ -21,6 +22,7 @@ impl ResourceFetcher for FakeFetcher {
         &self,
         kind: RouteKind,
         plan: FetchPlan,
+        _request: FetchRequest,
     ) -> std::pin::Pin<
         Box<
             dyn std::future::Future<Output = Result<FetchedMedia, crayon_relay::router::FetchError>>
@@ -31,8 +33,8 @@ impl ResourceFetcher for FakeFetcher {
         Box::pin(async {
             Ok(FetchedMedia {
                 status: 200,
-                content_type: Some("video/mp4".to_string()),
-                body: b"media-bytes".to_vec(),
+                headers: vec![("content-type".to_string(), "video/mp4".to_string())],
+                body: axum::body::Body::from("media-bytes"),
             })
         })
     }

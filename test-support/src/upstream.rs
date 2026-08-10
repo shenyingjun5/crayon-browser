@@ -70,6 +70,12 @@ pub enum UpstreamScript {
     /// HEAD requests get 405, all other methods delegate to the wrapped
     /// script (PL-003: servers that reject HEAD probing).
     HeadRejected(Box<UpstreamScript>),
+    /// Full response with a fully custom header set (header-mapping tests).
+    Custom {
+        status: u16,
+        headers: Vec<(String, String)>,
+        body: Vec<u8>,
+    },
 }
 
 /// Creates a drip script plus its test-side control handle.
@@ -93,24 +99,52 @@ pub fn drip(
     )
 }
 
-/// Parses a single `bytes=a-b`/`bytes=a-` range against `len`, returning the
-/// inclusive (start, end) pair; unsatisfiable/malformed ranges return `None`.
-fn parse_byte_range(header: Option<&str>, len: usize) -> Option<(usize, usize)> {
-    let spec = header?.strip_prefix("bytes=")?;
-    let (start, end) = spec.split_once('-')?;
-    let start: usize = start.parse().ok()?;
+/// Range parse outcome for `bytes=a-b` / `bytes=a-` / `bytes=-n` forms.
+enum RangeParse {
+    /// Inclusive (start, end).
+    Satisfiable(usize, usize),
+    /// Well-formed but outside the body (start >= len or empty suffix).
+    Unsatisfiable,
+    /// Not a range we understand — serve the full body.
+    Malformed,
+}
+
+fn parse_byte_range(header: Option<&str>, len: usize) -> RangeParse {
+    let Some(spec) = header.and_then(|h| h.strip_prefix("bytes=")) else {
+        return RangeParse::Malformed;
+    };
+    let Some((start, end)) = spec.split_once('-') else {
+        return RangeParse::Malformed;
+    };
+    if start.is_empty() {
+        // suffix: last N bytes
+        let Ok(n) = end.parse::<usize>() else {
+            return RangeParse::Malformed;
+        };
+        if n == 0 {
+            return RangeParse::Unsatisfiable;
+        }
+        let take = n.min(len);
+        return RangeParse::Satisfiable(len - take, len - 1);
+    }
+    let Ok(start) = start.parse::<usize>() else {
+        return RangeParse::Malformed;
+    };
     if start >= len {
-        return None;
+        return RangeParse::Unsatisfiable;
     }
     let end = if end.is_empty() {
         len - 1
     } else {
-        end.parse::<usize>().ok()?.min(len - 1)
+        match end.parse::<usize>() {
+            Ok(e) => e.min(len - 1),
+            Err(_) => return RangeParse::Malformed,
+        }
     };
     if end < start {
-        return None;
+        return RangeParse::Unsatisfiable;
     }
-    Some((start, end))
+    RangeParse::Satisfiable(start, end)
 }
 
 struct State {
@@ -157,7 +191,7 @@ fn render(script: Option<&UpstreamScript>, request: &RecordedRequest) -> RawResp
                 .collect();
             headers.push(("Accept-Ranges".to_string(), "bytes".to_string()));
             match parse_byte_range(request.header("range"), body.len()) {
-                Some((start, end)) => {
+                RangeParse::Satisfiable(start, end) => {
                     headers.push((
                         "Content-Range".to_string(),
                         format!("bytes {start}-{end}/{}", body.len()),
@@ -168,7 +202,18 @@ fn render(script: Option<&UpstreamScript>, request: &RecordedRequest) -> RawResp
                         body: RawBody::Full(body[start..=end].to_vec()),
                     }
                 }
-                None => RawResponse {
+                RangeParse::Unsatisfiable => {
+                    headers.push((
+                        "Content-Range".to_string(),
+                        format!("bytes */{}", body.len()),
+                    ));
+                    RawResponse {
+                        status: 416,
+                        headers,
+                        body: RawBody::Full(Vec::new()),
+                    }
+                }
+                RangeParse::Malformed => RawResponse {
                     status: 200,
                     headers,
                     body: RawBody::Full(body.clone()),
@@ -180,6 +225,15 @@ fn render(script: Option<&UpstreamScript>, request: &RecordedRequest) -> RawResp
             status: 404,
             headers: Vec::new(),
             body: RawBody::Full(Vec::new()),
+        },
+        Some(UpstreamScript::Custom {
+            status,
+            headers,
+            body,
+        }) => RawResponse {
+            status: *status,
+            headers: headers.clone(),
+            body: RawBody::Full(body.clone()),
         },
     }
 }

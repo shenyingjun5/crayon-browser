@@ -42,19 +42,30 @@ pub enum RouteKind {
     Resource,
 }
 
-/// A fetched media response (full body; streaming arrives with MED-13/15).
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct FetchedMedia {
-    pub status: u16,
-    pub content_type: Option<String>,
-    pub body: Vec<u8>,
-}
-
 /// Trusted fetch hand-off built inside the vault lock; awaited outside it.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FetchPlan {
     pub url: String,
     pub headers: Vec<(String, String)>,
+    /// Session-fixed upstream allow-set (cloned at authorization time).
+    pub allow_set: Vec<String>,
+}
+
+/// Client request facts forwarded to the fetcher.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FetchRequest {
+    /// `GET` or `HEAD` (router only routes these).
+    pub method: String,
+    /// Raw `Range` header value, if present.
+    pub range: Option<String>,
+}
+
+/// A fetched media response: mapped status/headers plus a streaming body
+/// (backpressure flows through the body stream).
+pub struct FetchedMedia {
+    pub status: u16,
+    pub headers: Vec<(String, String)>,
+    pub body: Body,
 }
 
 /// Media fetch seam: implemented by the MP4/HLS serving tasks. Called only
@@ -64,6 +75,7 @@ pub trait ResourceFetcher: Send + Sync {
         &self,
         kind: RouteKind,
         plan: FetchPlan,
+        request: FetchRequest,
     ) -> Pin<Box<dyn Future<Output = Result<FetchedMedia, FetchError>> + Send>>;
 }
 
@@ -256,18 +268,31 @@ async fn serve(
     let Some(resource) = resource else {
         return error_response(StatusCode::BAD_REQUEST, "invalid_resource");
     };
-    serve_authorized(&core, &peer, &token, kind, resource).await
+    let request = FetchRequest {
+        method: "GET".to_string(),
+        range: None,
+    };
+    serve_authorized(&core, &peer, &token, kind, resource, request).await
 }
 
 async fn serve_resource(
     State(core): State<Arc<RelayCore>>,
     peer: ConnectInfo<SocketAddr>,
+    method: axum::http::Method,
+    headers: HeaderMap,
     Path((token, resource_id, _name)): Path<(String, String, String)>,
 ) -> Response {
     let Some(resource) = ResourceId::new(&resource_id).ok() else {
         return error_response(StatusCode::BAD_REQUEST, "invalid_resource");
     };
-    serve_authorized(&core, &peer, &token, RouteKind::Resource, resource).await
+    let request = FetchRequest {
+        method: method.as_str().to_string(),
+        range: headers
+            .get(header::RANGE)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string),
+    };
+    serve_authorized(&core, &peer, &token, RouteKind::Resource, resource, request).await
 }
 
 async fn serve_authorized(
@@ -276,6 +301,7 @@ async fn serve_authorized(
     token: &str,
     kind: RouteKind,
     resource: ResourceId,
+    request: FetchRequest,
 ) -> Response {
     // RL-003：授权先于任何 upstream 访问。
     let access = {
@@ -306,6 +332,7 @@ async fn serve_authorized(
                     .into_iter()
                     .map(|(k, v)| (k.to_string(), v.to_string()))
                     .collect(),
+                allow_set: access.upstream_allow_set.clone(),
             })
     };
     let Some(plan) = plan else {
@@ -315,16 +342,17 @@ async fn serve_authorized(
     let Some(fetcher) = &core.fetcher else {
         return error_response(StatusCode::SERVICE_UNAVAILABLE, "serving_unavailable");
     };
-    match fetcher.fetch(kind, plan).await {
+    match fetcher.fetch(kind, plan, request).await {
         Ok(media) => {
-            let mut response = Response::new(Body::from(media.body));
+            let mut response = Response::new(media.body);
             *response.status_mut() = StatusCode::from_u16(media.status).unwrap_or(StatusCode::OK);
-            if let Some(ct) = media.content_type {
-                response.headers_mut().insert(
-                    header::CONTENT_TYPE,
-                    ct.parse()
-                        .unwrap_or(header::HeaderValue::from_static("application/octet-stream")),
-                );
+            for (name, value) in media.headers {
+                if let (Ok(name), Ok(value)) = (
+                    name.parse::<header::HeaderName>(),
+                    value.parse::<header::HeaderValue>(),
+                ) {
+                    response.headers_mut().insert(name, value);
+                }
             }
             response
         }

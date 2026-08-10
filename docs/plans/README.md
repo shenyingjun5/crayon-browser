@@ -53,7 +53,8 @@
 26. `MED-10` relay vault（不可序列化 secret recipe/零化/撤销）：当前 `DONE`。
 27. `MED-11` relay router（loopback 控制面 + LAN 媒体面）：当前 `DONE`。
 28. `MED-12` relay network_guard（IP 分类/DNS/逐跳 redirect）：当前 `DONE`。
-29. `MED-13` relay MP4 GET/HEAD/Range 流式：当前 `IN_PROGRESS`。
+29. `MED-13` relay MP4 GET/HEAD/Range 流式：当前 `DONE`。
+30. `MED-14` relay HLS AST parser（opaque 资源表）：当前 `IN_PROGRESS`。
 
 `FND-07` 是迁移 Epic，实际按 `FND-07A`～`FND-07E` 顺序执行；`FND-07E` 代码已收口，仅剩达标环境下的编译/CLI smoke 验证。MED 按自身依赖推进（MED-01 依赖 FND-06/FND-08，均 DONE）。
 

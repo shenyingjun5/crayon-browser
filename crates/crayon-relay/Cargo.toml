@@ -14,6 +14,7 @@ axum = "0.8"
 crayon-domain = { path = "../crayon-domain" }
 crayon-ipc-schema = { path = "../crayon-ipc-schema" }
 crayon-media-probe = { path = "../crayon-media-probe" }
+futures-util = "0.3"
 getrandom = "0.2"
 reqwest = { version = "0.12", default-features = false, features = [
     "rustls-tls",

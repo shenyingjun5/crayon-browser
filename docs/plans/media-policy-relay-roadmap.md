@@ -1,6 +1,6 @@
 # MED：媒体观察、策略与 Session Relay Roadmap
 
-状态：`MED-01/02/03/04/05/06/07/08/09/10/11/12 DONE`，`MED-13 IN_PROGRESS`。本模块不做设备协议、浏览器对象和平台采集。
+状态：`MED-01/02/03/04/05/06/07/08/09/10/11/12/13 DONE`，`MED-14 IN_PROGRESS`。本模块不做设备协议、浏览器对象和平台采集。
 
 ## 原子任务
 
@@ -22,6 +22,7 @@
 - **MED-10（2026-08-10，commit 见 git log）**：`crayon-relay::vault` 新增 `RecipeVault`/`UpstreamRecipe`——完整上游 URL 以 `Zeroizing<String>` 保存、Drop 零化、无 Clone、无 Serialize、Debug 只含脱敏 origin/path 前缀（RL-014，LeakScanner 扫描断言）；header scope 类型级收敛：recipe 只能携带 Referer/User-Agent（Cookie/Authorization 无法表达）；`resolve` 同 origin 约束 + 非 http(s) 拒绝；`header_scope_for` 逐跳 redirect 作用域（同 origin 携带、跨 origin 剥离，RL-015）；revoke_session/revoke_all 幂等撤销（RL-004/005）；每 session 128 条有界。新增依赖 `zeroize 1`（MIT/Apache、广泛使用）。验证：crayon-relay 13/13（vault 新增 6 条：scope 解析、resolve 约束、逐跳 header scope、Debug 脱敏扫描、撤销幂等、容量有界）；严格 Clippy、`check.sh all`、`git diff --check` 通过。Code Review P0/P1/P2/P3 均为 0。
 - **MED-11（2026-08-10，commit 见 git log）**：`crayon-relay::router` 落地双面路由——控制面（loopback，运行时绑定归 MED-16）：`POST /internal/cast/session`（x-crayon-control-secret 常数时间鉴权、body 16KB 上限、deny_unknown_fields）、`DELETE /internal/cast/session/{token}`（幂等 204）、`GET /internal/health`；媒体面（LAN）：仅 `/s/{token}/master.m3u8`、`/s/{token}/manifest.mpd`、`/s/{token}/r/{resource_id}/{name}` 三条 opaque route（RL-001：/api/extract、任意 /proxy、player/probe、跨面路由全部 404 断言）。RL-003：未知 token 401、IP 不匹配 403、过期 401、未注册资源 404，未授权时 fetcher 零调用断言；RL-008：畸形 token/非法资源 id/路径穿越段 400/401/404、POST 405、超长 body 413、未知 JSON 字段 422。媒体获取经 `ResourceFetcher` seam（MED-13/15 实现 MP4/HLS 流式）；FetchPlan 在 vault 锁内构造、锁外 await（不持锁 IO）。无 fetcher 时显式 503 serving_unavailable。验证：`cargo test -p crayon-relay` 19/19（router 新增 6 条 S2：真实 loopback 监听 + reqwest）；严格 Clippy、`check.sh all`、`git diff --check` 通过。Code Review P0/P1/P2/P3 均为 0。
 - **MED-12（2026-08-10，commit 见 git log）**：`crayon-relay::network_guard` 落地——每跳顺序校验：scheme → allow-set（`host`/`host:port` 条目，会话创建时固定）→ DNS（先解析、全答案公开可路由、混合整体拒绝、连接 `resolve` 固定已校验地址，RL-007 防校验-连接间重绑定）→ 手动逐跳 redirect（≤5 跳，GuardedFetch Debug 不含 URL）。RL-015：同 origin 跳携带 Referer/UA、跨 origin 剥离（请求录制断言）；RL-006：allow-set 外/私网字面量/localhost/metadata 地址全部连接前拒绝且不返回内部响应。resolver seam 供确定性测试；`allow_private_addresses` 测试钩子默认关闭。验证：crayon-relay 26/26（network_guard 新增 7 条 S2：同 origin 跳转带头、allow-set 外跳转拒绝、私网字面量/localhost 连接前拒绝、resolver 固定地址建连、跨 origin 剥头、跳数有界、非 http 拒绝）；严格 Clippy、`check.sh all`、`git diff --check` 通过。Code Review P0/P1/P2/P3 均为 0。
+- **MED-13（2026-08-10，commit 见 git log）**：`crayon-relay::mp4` 落地 `Mp4Fetcher`（`ResourceFetcher` 实现）——客户端 Range（`bytes=a-b`/`a-`/`-n`，畸形忽略回全量）转发上游，200/206/416 与白名单头（content-type/length/range、accept-ranges、etag、last-modified、cache-control；set-cookie 等不透传）映射（RL-009）；HEAD 走上游 HEAD 不拉主体（录制断言）；body 经 axum Body 流式转发（背压随流），读空闲超时切断断流（默认 30s 可配，RL-012）；并发无全局串行（卡死请求在飞时另一请求即时完成，锁不跨 await）。配套：`ResourceFetcher` seam 扩展 `FetchRequest`（method/Range）与 `FetchPlan.allow_set`（授权时从 registry 克隆）；`SessionAccess` 携带 allow-set；network_guard 增加 `fetch_with` 方法参数；test-support RangeAware 补 416（`bytes */len`）与 suffix range。验证：`cargo test -p crayon-relay` 31/31（mp4 新增 5 条 S2：全量+头过滤、Range/suffix/越界 416、HEAD、断流超时、并发不串行）；test-support/integration 同步通过；严格 Clippy、`check.sh all`、`git diff --check` 通过。Code Review P0/P1/P2/P3 均为 0。
 | MED-02 | MED-01 | `candidate/store` | candidate 归一化、证据合并、完整 URL 内存保存、脱敏 ID | PL-001、PL-002；query 不丢；无 secret serde | S1 DONE（2026-08-10） |
 | MED-03 | MED-02 | `candidate/ranking` | 当前播放、可见性、输入时间、来源置信排序 | BR-006；稳定排序/相同时间/音频 | S1 DONE（2026-08-10） |
 | MED-04 | MED-02 | `candidate/lifecycle` | navigation/TTL/cancel/generation 失效与有界容量 | BR-007、BR-013、PL-012；满载 eviction | S1 DONE（2026-08-10） |
@@ -33,7 +34,7 @@
 | MED-10 | MED-09 | `relay/vault` | 不可序列化 secret recipe、origin/path/header scope、零化/撤销 | RL-004、RL-005、RL-014、RL-015；无 clone/debug 泄漏 | S1 DONE（2026-08-10） |
 | MED-11 | MED-09 | `relay/router` | loopback control + LAN media router，仅 opaque route | RL-001、RL-003、RL-008；正式路由快照 | S2 DONE（2026-08-10） |
 | MED-12 | MED-10,MED-11 | `relay/network_guard` | IP 分类、全 DNS 校验、固定地址、逐跳 redirect/scope | RL-006、RL-007、RL-015；SSRF/rebinding matrix | S2 DONE（2026-08-10） |
-| MED-13 | MED-11,MED-12 | `relay/mp4` | GET/HEAD/Range、流式背压、状态/header 映射 | RL-009、RL-012；200/206/416/断流 | S2 |
+| MED-13 | MED-11,MED-12 | `relay/mp4` | GET/HEAD/Range、流式背压、状态/header 映射 | RL-009、RL-012；200/206/416/断流 | S2 DONE（2026-08-10） |
 | MED-14 | MED-11,MED-12 | `relay/hls/parser` | AST 保留 tag/顺序、master/media/variant/rendition/map 资源表 | RL-010；循环/深度/总数/加密拒绝 | S2 |
 | MED-15 | MED-14 | `relay/hls/stream` | TS/fMP4 二进制流、live TTL、ETag/Last-Modified、有界缓存 | RL-011..RL-013；hash/304/live 更新 | S2 |
 | MED-16 | MED-13,MED-15 | `relay/runtime` | route 绑定、并发/timeout/stop/navigation/profile/app-exit 收口 | RL-004、RL-005、RL-012、RL-013 | S2 |

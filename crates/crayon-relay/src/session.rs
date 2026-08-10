@@ -150,6 +150,8 @@ pub struct SessionAccess {
     pub session_id: SessionId,
     pub generation: SessionGeneration,
     pub resource: SessionResource,
+    /// Fixed upstream allow-set of the session (cloned for the fetch path).
+    pub upstream_allow_set: Vec<String>,
 }
 
 impl SessionRegistry {
@@ -253,6 +255,7 @@ impl SessionRegistry {
             session_id: session.id.clone(),
             generation: session.generation,
             resource: resource.clone(),
+            upstream_allow_set: session.upstream_allow_set.clone(),
         })
     }
 
