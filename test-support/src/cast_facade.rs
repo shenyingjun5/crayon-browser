@@ -373,10 +373,15 @@ impl FakeCastFacade {
     }
 
     /// The LAN route to the receiver was lost mid-session (CS-007).
+    ///
+    /// Playback mirrors the pinned SDK terminal mapping 1:1
+    /// (`terminate_snapshot`): `ReceiverUnreachable` terminates with
+    /// `Stopped`, not `Failed` — only playback/source/protocol failures map
+    /// to `Failed`.
     pub fn simulate_route_lost(&self) {
         self.drive_session(
             CastSessionPhase::Terminated,
-            CastPlaybackState::Failed,
+            CastPlaybackState::Stopped,
             Some(CastTerminalReason::ReceiverUnreachable),
         );
     }

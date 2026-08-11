@@ -15,7 +15,12 @@ use super::*;
 use crate::dto::CastMediaUrl;
 use cast_sender_core::{CastDevice, DeviceDiscoveryState};
 use cast_sender_session::MediaKind as SdkMediaKind;
+use std::collections::VecDeque;
+use std::io::{Read as _, Write as _};
+use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Condvar, Mutex as StdMutex};
+use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 /// Deadline for event-waiting assertions; generous for loaded CI hosts,
@@ -1068,6 +1073,391 @@ fn live_session_control_failure_surfaces_a_stable_error() {
         Err(CastError::InvalidState)
     );
     facade.stop(&session).expect("cleanup stop");
+}
+
+// -- Terminal-scenario supervision (SDK-11, CS-007) ---------------------------
+// Real receiver-reported terminal transitions, driven deterministically and
+// offline: a loopback status server scripts the CastExtension
+// `GetCastSessionStatus` answer, and `refresh_cast_session_health` — the same
+// status-resync path the SDK disconnect monitor uses — applies it to the
+// supervised session. The asserted (playback, reason) terminal triples are
+// the pinned SDK `terminate_snapshot` mapping and are shared with the fake's
+// CS-007 scenario table, so fake and real facade converge identically.
+
+/// Loopback HTTP server scripting CastExtension session-status answers.
+///
+/// One accepted connection serves one scripted response (default: "active"),
+/// then closes; the accept thread is unblocked and joined on drop. Nothing
+/// leaves the host and no timing is involved.
+struct StatusServer {
+    addr: SocketAddr,
+    url: String,
+    responses: Arc<StdMutex<VecDeque<String>>>,
+    stop: Arc<AtomicBool>,
+    thread: Option<JoinHandle<()>>,
+}
+
+impl StatusServer {
+    fn start() -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback status server");
+        let addr = listener.local_addr().expect("status server address");
+        let url = format!("http://{addr}/control");
+        let responses = Arc::new(StdMutex::new(VecDeque::new()));
+        let stop = Arc::new(AtomicBool::new(false));
+        let thread = {
+            let responses = Arc::clone(&responses);
+            let stop = Arc::clone(&stop);
+            std::thread::spawn(move || loop {
+                if stop.load(Ordering::Acquire) {
+                    return;
+                }
+                let Ok((mut stream, _)) = listener.accept() else {
+                    return;
+                };
+                read_http_request(&mut stream);
+                let body = responses
+                    .lock()
+                    .expect("status responses poisoned")
+                    .pop_front()
+                    .unwrap_or_else(|| {
+                        "<GetCastSessionStatusResponse><Status>active</Status></GetCastSessionStatusResponse>".to_string()
+                    });
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/xml; charset=\"utf-8\"\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = stream.write_all(response.as_bytes());
+            })
+        };
+        Self {
+            addr,
+            url,
+            responses,
+            stop,
+            thread: Some(thread),
+        }
+    }
+
+    /// Scripts the next status answer as a receiver-reported terminal state
+    /// with the given CastExtension terminal-reason string.
+    fn script_terminal(&self, terminal_reason: &str) {
+        self.responses
+            .lock()
+            .expect("status responses poisoned")
+            .push_back(format!(
+                "<GetCastSessionStatusResponse><Status>terminal</Status><TerminalReason>{terminal_reason}</TerminalReason><ReceiverEpochId>epoch-1</ReceiverEpochId></GetCastSessionStatusResponse>"
+            ));
+    }
+}
+
+impl Drop for StatusServer {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Release);
+        // Unblock the accept loop so the thread can observe `stop`.
+        if let Ok(stream) = TcpStream::connect(self.addr) {
+            drop(stream);
+        }
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
+}
+
+/// Reads one HTTP request (headers plus Content-Length body); returns on
+/// end-of-stream or error so a bare wakeup connection never wedges the loop.
+fn read_http_request(stream: &mut TcpStream) {
+    stream
+        .set_read_timeout(Some(EVENT_TIMEOUT))
+        .expect("set read timeout");
+    let mut buffer = Vec::new();
+    let mut chunk = [0_u8; 4096];
+    loop {
+        if let Some(headers_end) = find_subsequence(&buffer, b"\r\n\r\n") {
+            let content_length: usize = String::from_utf8_lossy(&buffer[..headers_end])
+                .lines()
+                .find_map(|line| line.split_once(':'))
+                .filter(|(name, _)| name.eq_ignore_ascii_case("content-length"))
+                .and_then(|(_, value)| value.trim().parse().ok())
+                .unwrap_or(0);
+            if buffer.len() >= headers_end + 4 + content_length {
+                return;
+            }
+        }
+        match stream.read(&mut chunk) {
+            Ok(0) | Err(_) => return,
+            Ok(read) => buffer.extend_from_slice(&chunk[..read]),
+        }
+    }
+}
+
+fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
+}
+
+/// Starts a supervised self-receiver session whose CastExtension control URL
+/// is the scripted status server; returns the product fencing reference and
+/// the SDK handle used to drive status resyncs.
+fn begin_status_session(
+    facade: &SenderCastFacade,
+    session_id: &str,
+    server: &StatusServer,
+) -> (CastSessionRef, CastSessionHandle) {
+    let service = facade.service().expect("facade is live");
+    let registration = service
+        .begin_platform_self_receiver_session(session_id, SdkMediaKind::Video, &server.url)
+        .expect("self session starts");
+    let reference = session_ref(session_id, registration.handle.generation);
+    (reference, registration.handle)
+}
+
+#[test]
+fn receiver_reported_terminal_scenarios_converge_with_stable_reasons() {
+    // (scripted CastExtension reason, product reason, product playback): the
+    // pinned SDK terminal mapping. Shared with the fake CS-007 table.
+    for (scripted, expected_reason, expected_playback) in [
+        (
+            "ended_normally",
+            CastTerminalReason::EndedNormally,
+            CastPlaybackState::Ended,
+        ),
+        (
+            "stopped_by_receiver",
+            CastTerminalReason::StoppedByReceiver,
+            CastPlaybackState::Stopped,
+        ),
+        (
+            "receiver_unreachable",
+            CastTerminalReason::ReceiverUnreachable,
+            CastPlaybackState::Stopped,
+        ),
+        (
+            "receiver_session_lost",
+            CastTerminalReason::ReceiverSessionLost,
+            CastPlaybackState::Stopped,
+        ),
+        (
+            "replaced_by_other_controller",
+            CastTerminalReason::ReplacedByOtherController,
+            CastPlaybackState::Stopped,
+        ),
+    ] {
+        let facade = facade();
+        let server = StatusServer::start();
+        server.script_terminal(scripted);
+        let recording = Arc::new(Recording::default());
+        let subscription = facade.subscribe_session_events(recording.clone(), false);
+        let session_id = format!("sdk11-{}", scripted.replace('_', "-"));
+        let (reference, handle) = begin_status_session(&facade, &session_id, &server);
+
+        // Wait for each non-terminal delivery before driving the next state:
+        // the hub may coalesce still-pending non-terminal snapshots, and the
+        // assertions below want the full sequence.
+        recording.wait_until(|events| events.iter().any(|e| e.session() == &reference));
+        facade
+            .service()
+            .expect("facade is live")
+            .mark_platform_session_playing(&handle)
+            .expect("mark playing");
+        recording.wait_until(|events| {
+            events
+                .iter()
+                .any(|e| e.playback() == CastPlaybackState::Playing)
+        });
+
+        // The receiver reports the terminal state; the resync applies it.
+        facade
+            .service()
+            .expect("facade is live")
+            .refresh_cast_session_health(&handle)
+            .expect("status resync applies");
+        let events = recording.wait_until(|events| events.iter().any(|e| e.is_terminal()));
+        let terminal = events
+            .iter()
+            .find(|e| e.is_terminal())
+            .expect("terminal event recorded");
+        assert_eq!(terminal.session(), &reference, "scenario {scripted}");
+        assert_eq!(terminal.phase(), CastSessionPhase::Terminated);
+        assert_eq!(
+            terminal.playback(),
+            expected_playback,
+            "scenario {scripted}"
+        );
+        assert_eq!(
+            terminal.terminal_reason(),
+            Some(expected_reason),
+            "scenario {scripted}"
+        );
+
+        // The app-observable state converges: `current_session` keeps
+        // reporting exactly the delivered terminal snapshot.
+        let current = facade.current_session().expect("terminal snapshot kept");
+        assert_eq!(&current, terminal, "scenario {scripted}");
+
+        // The CS-006 terminal matrix holds for receiver-originated reasons:
+        // every control is rejected except the idempotent stop.
+        assert_eq!(facade.play(&reference), Err(CastError::NoActiveSession));
+        facade
+            .stop(&reference)
+            .expect("stop on a terminal session is idempotent");
+        facade
+            .stop(&reference)
+            .expect("repeated terminal stop stays idempotent");
+        drop(subscription);
+    }
+}
+
+#[test]
+fn replacement_reports_reason_and_late_old_generation_events_are_dropped() {
+    let facade = facade();
+    let server = StatusServer::start();
+    // The old session's status endpoint still answers (with a terminal
+    // state) after the replacement — the classic late-event race.
+    server.script_terminal("receiver_unreachable");
+    let recording = Arc::new(Recording::default());
+    let subscription = facade.subscribe_session_events(recording.clone(), false);
+    let (old_ref, old_handle) = begin_status_session(&facade, "sdk11-old", &server);
+    recording.wait_until(|events| events.iter().any(|e| e.session() == &old_ref));
+
+    let (new_ref, _new_handle) = begin_status_session(&facade, "sdk11-new", &server);
+    assert!(new_ref.generation().supersedes(old_ref.generation()));
+    // The replaced session terminates with the stable replacement reason
+    // before any event of the new generation arrives.
+    let events = recording.wait_until(|events| {
+        events.iter().any(|e| {
+            e.session() == &old_ref
+                && e.terminal_reason() == Some(CastTerminalReason::ReplacedByNewCast)
+        }) && events.iter().any(|e| e.session() == &new_ref)
+    });
+    let old_terminal = events
+        .iter()
+        .position(|e| {
+            e.session() == &old_ref
+                && e.terminal_reason() == Some(CastTerminalReason::ReplacedByNewCast)
+        })
+        .expect("replacement terminal recorded");
+    let first_new = events
+        .iter()
+        .position(|e| e.session() == &new_ref)
+        .expect("new session event recorded");
+    assert!(
+        old_terminal < first_new,
+        "replacement terminal precedes the new generation"
+    );
+    assert_eq!(events[old_terminal].playback(), CastPlaybackState::Stopped);
+    let current = facade.current_session().expect("new session is current");
+    assert_eq!(current.session(), &new_ref);
+    assert!(!current.is_terminal());
+
+    // A late receiver-reported terminal for the OLD generation is fenced
+    // inside the SDK state machine (stale generation) before the hub: the
+    // resync errors out, nothing is published, the new session is untouched.
+    let delivered_before = recording.snapshots().len();
+    let late = facade
+        .service()
+        .expect("facade is live")
+        .refresh_cast_session_health(&old_handle);
+    assert!(late.is_err(), "late resync of a replaced session is fenced");
+    assert_eq!(
+        recording.snapshots().len(),
+        delivered_before,
+        "the fenced late event is never published"
+    );
+    let current = facade.current_session().expect("new session still current");
+    assert_eq!(current.session(), &new_ref);
+    assert!(
+        !current.is_terminal(),
+        "old-generation event must not stop the new session"
+    );
+
+    // The old handle stays fenced on controls; the new session works.
+    assert_eq!(
+        facade.play(&old_ref),
+        Err(CastError::StaleSessionGeneration)
+    );
+    assert_eq!(
+        facade.stop(&old_ref),
+        Err(CastError::StaleSessionGeneration)
+    );
+    facade.stop(&new_ref).expect("new session accepts stop");
+    drop(subscription);
+}
+
+#[test]
+fn repeated_subscriptions_are_independent_and_each_sees_the_terminal() {
+    let facade = facade();
+    let server = StatusServer::start();
+    server.script_terminal("stopped_by_receiver");
+    let first = Arc::new(Recording::default());
+    let second = Arc::new(Recording::default());
+    let first_subscription = facade.subscribe_session_events(first.clone(), false);
+    let second_subscription = facade.subscribe_session_events(second.clone(), false);
+
+    let (reference, handle) = begin_status_session(&facade, "sdk11-multi", &server);
+    for listener in [&first, &second] {
+        listener.wait_until(|events| events.iter().any(|e| e.session() == &reference));
+    }
+    facade
+        .service()
+        .expect("facade is live")
+        .refresh_cast_session_health(&handle)
+        .expect("status resync applies");
+    for listener in [&first, &second] {
+        listener.wait_until(|events| {
+            events.iter().any(|e| {
+                e.is_terminal()
+                    && e.terminal_reason() == Some(CastTerminalReason::StoppedByReceiver)
+            })
+        });
+    }
+
+    // Dropping one subscription never disturbs the other: the next
+    // generation reaches the surviving listener only. The hub broadcasts to
+    // all live listeners in one batch, so once the surviving listener has
+    // the event the dropped one provably missed it.
+    drop(first_subscription);
+    let (next_ref, _next_handle) = begin_status_session(&facade, "sdk11-multi-2", &server);
+    second.wait_until(|events| events.iter().any(|e| e.session() == &next_ref));
+    assert!(
+        first.snapshots().iter().all(|e| e.session() != &next_ref),
+        "dropped subscription must not receive newer events"
+    );
+    drop(second_subscription);
+}
+
+#[test]
+fn shutdown_ends_delivery_and_late_subscriptions_are_inert() {
+    let facade = facade();
+    let server = StatusServer::start();
+    server.script_terminal("ended_normally");
+    let recording = Arc::new(Recording::default());
+    let subscription = facade.subscribe_session_events(recording.clone(), false);
+    let (reference, handle) = begin_status_session(&facade, "sdk11-shutdown", &server);
+    recording.wait_until(|events| events.iter().any(|e| e.session() == &reference));
+    facade
+        .service()
+        .expect("facade is live")
+        .refresh_cast_session_health(&handle)
+        .expect("status resync applies");
+    recording.wait_until(|events| events.iter().any(|e| e.is_terminal()));
+    let delivered = recording.snapshots().len();
+
+    facade.shutdown();
+    facade.shutdown();
+    // Shutdown drops the SDK service, which closes the event hub and joins
+    // the dispatch thread before returning; no publisher outlives the
+    // service, so the delivered set is final the moment shutdown returns.
+    assert_eq!(recording.snapshots().len(), delivered);
+    assert_eq!(facade.current_session(), None);
+
+    // Subscribing after shutdown yields an inert handle (no immediate
+    // notification); dropping both handles is the idempotent unsubscribe.
+    let late = Arc::new(Recording::default());
+    let late_subscription = facade.subscribe_session_events(late.clone(), true);
+    assert!(late.snapshots().is_empty());
+    drop(subscription);
+    drop(late_subscription);
 }
 
 // -- Concurrent shutdown --------------------------------------------------------

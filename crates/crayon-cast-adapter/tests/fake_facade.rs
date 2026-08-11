@@ -458,23 +458,36 @@ fn cs_006_repeated_controls_forward_each_call_and_values_pass_through() {
     );
 }
 
-/// CS-007: natural end, receiver-side stop and route lost converge to a
-/// terminal state with a stable reason; stale events cannot stop a newer
-/// session; external handoff creates no SDK session.
+/// CS-007: natural end, receiver-side stop, route lost and replacement by
+/// another controller converge to a terminal state with the pinned SDK
+/// (playback, reason) mapping — the same triples the real facade delivers
+/// for the same scenarios (SDK-11 alignment, see `service_tests.rs`).
 #[test]
 fn cs_007_terminal_events_converge_and_stale_events_are_fenced() {
-    for (drive, reason) in [
+    // (drive, playback, reason): shared with the real-facade scenario table.
+    // Route loss terminates with `Stopped`, mirroring the pinned SDK
+    // `terminate_snapshot` mapping — only playback/source/protocol failures
+    // terminate with `Failed`.
+    for (drive, expected_playback, expected_reason) in [
         (
             FakeCastFacade::simulate_natural_end as fn(&FakeCastFacade),
+            CastPlaybackState::Ended,
             CastTerminalReason::EndedNormally,
         ),
         (
             FakeCastFacade::simulate_receiver_stop,
+            CastPlaybackState::Stopped,
             CastTerminalReason::StoppedByReceiver,
         ),
         (
             FakeCastFacade::simulate_route_lost,
+            CastPlaybackState::Stopped,
             CastTerminalReason::ReceiverUnreachable,
+        ),
+        (
+            FakeCastFacade::simulate_replaced_by_other_controller,
+            CastPlaybackState::Stopped,
+            CastTerminalReason::ReplacedByOtherController,
         ),
     ] {
         let fake = fake_with_device();
@@ -484,32 +497,76 @@ fn cs_007_terminal_events_converge_and_stale_events_are_fenced() {
         fake.cast_media(&direct_mp4_request("dev-01"))
             .expect("cast");
         drive(&fake);
-        let terminal = fake
+
+        let terminal = {
+            let events = events.lock().unwrap();
+            let terminal = events.last().expect("terminal event").clone();
+            assert!(
+                terminal.is_terminal(),
+                "terminal transition is delivered ({expected_reason:?})"
+            );
+            terminal
+        };
+        assert_eq!(terminal.phase(), CastSessionPhase::Terminated);
+        assert_eq!(terminal.playback(), expected_playback);
+        assert_eq!(terminal.terminal_reason(), Some(expected_reason));
+
+        // The app-observable state converges: `current_session` keeps
+        // reporting exactly the delivered terminal snapshot.
+        let current = fake
             .current_session()
             .expect("snapshot kept after terminal");
-        assert!(terminal.is_terminal(), "state converges to terminated");
-        assert_eq!(terminal.terminal_reason(), Some(reason));
-        assert_eq!(
-            events
-                .lock()
-                .unwrap()
-                .last()
-                .expect("terminal event")
-                .terminal_reason(),
-            Some(reason),
-            "listeners observe the terminal transition ({reason:?})"
-        );
-    }
+        assert_eq!(current, terminal, "state converges ({expected_reason:?})");
 
-    // An old-generation event must never stop the newer session.
+        // The CS-006 terminal matrix holds for every terminal reason: only
+        // the idempotent stop succeeds.
+        let session = terminal.session().clone();
+        assert_eq!(fake.play(&session), Err(CastError::NoActiveSession));
+        fake.stop(&session).expect("terminal stop is idempotent");
+    }
+}
+
+/// CS-007 (continued): replacement by a new cast terminates the previous
+/// session with `ReplacedByNewCast` before the new generation's events;
+/// old-generation events never stop the newer session; external handoff
+/// creates no SDK session.
+#[test]
+fn cs_007_replacement_stale_injection_and_handoff() {
     let fake = fake_with_device();
     fake.connect(&device("dev-01")).expect("connect");
+    let (events, listener) = collect_events();
+    let _subscription = fake.subscribe_session_events(listener, false);
     let first = fake
         .cast_media(&direct_mp4_request("dev-01"))
         .expect("first cast");
     let second = fake
         .cast_media(&direct_mp4_request("dev-01"))
-        .expect("second cast");
+        .expect("second cast replaces the first");
+    assert!(second.generation().supersedes(first.generation()));
+    {
+        let events = events.lock().unwrap();
+        let replaced = events
+            .iter()
+            .position(|event| {
+                event.terminal_reason() == Some(CastTerminalReason::ReplacedByNewCast)
+            })
+            .expect("replacement terminal delivered");
+        assert_eq!(events[replaced].session(), &first);
+        assert_eq!(events[replaced].playback(), CastPlaybackState::Stopped);
+        let first_new = events
+            .iter()
+            .position(|event| event.session() == &second)
+            .expect("new generation event delivered");
+        assert!(
+            replaced < first_new,
+            "the replacement terminal precedes the new generation"
+        );
+    }
+    let current = fake.current_session().expect("current session");
+    assert_eq!(current.session(), &second);
+    assert!(!current.is_terminal());
+
+    // An old-generation event must never stop the newer session.
     fake.push_session_snapshot(CastSessionSnapshot::new(
         first,
         CastSessionPhase::Terminated,

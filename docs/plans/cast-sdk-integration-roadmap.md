@@ -1,6 +1,6 @@
 # SDK：Cast-SDK 集成 Roadmap
 
-状态：`FND-08 DONE`；`SDK-01..10 DONE`；`SDK-11 READY`；`SDK-15/16` 为 Partner/TV Cast Manifest 的后续外部依赖任务。任务数 16。源码固定为 Cast-SDK `44c3a99871aa1e68cbda71eacefbb41d23a747a8`，通过 `third_party/cast-sdk` submodule 接入；不得依赖开发者本机源码路径。
+状态：`FND-08 DONE`；`SDK-01..11 DONE`；`SDK-12 READY`；`SDK-15/16` 为 Partner/TV Cast Manifest 的后续外部依赖任务。任务数 16。源码固定为 Cast-SDK `44c3a99871aa1e68cbda71eacefbb41d23a747a8`，通过 `third_party/cast-sdk` submodule 接入；不得依赖开发者本机源码路径。
 
 ## 边界
 
@@ -121,6 +121,16 @@
 - 验证：`cargo test -p crayon-cast-adapter` 95/95 PASS（lib 45 = 既有 42 + 新增 3：旧 generation 全七控 fencing、终态全控拒绝+stop 幂等+外来句柄 fencing、活会话 SDK 执行失败映射稳定 `InvalidState`；CS 场景 13 = 既有 10 + 新增 3：无会话/外来/未知新代全控 fail closed 且不记录、终态拒绝+stop 幂等零接收端流量、重复调用逐次转发+u64::MAX seek 逐字节透传+Volume 101 入界拒绝；capability 13；delivery 6；契约 16；链接 2）；`cargo test -p test-support --test cast_facade` 26/26 PASS；`cargo test --workspace` 68 suites / 353 passed / 0 failed PASS；`cargo clippy --workspace --all-targets -- -D warnings` PASS；`cargo fmt --all -- --check` PASS；`cargo run -p repo-guard -- scan --root .` PASS（passed=true；与 HEAD 逐条比对：RG-003 提醒集相同——`facade.rs` trait 块既有提醒 117→142 行（契约注释定稿，warning 级，非同新增条目），`fake_facade.rs` 111 行条目仅位置移动；RG-004 无新增）；`bash scripts/check.sh fast` PASS（guard/format/brand-assets-unit/brand-assets/formal-workspace/legacy-unit 六步全过）；`git diff --check` PASS。
 - Code Review：按 current 标准逐维度审查（需求边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试、可维护性），P0/P1 = 0；P2 一项：播控成功路径与真实 5 秒 SOAP 超时行为需要可应答 SOAP 的接收端（CI 只用 connection-refused loopback 覆盖 fencing 与稳定错误映射），归 SDK-13 Harness；P3 一项：RG-003 `facade.rs` trait 块提醒 117→142 行，属契约注释定稿的既有提醒增长，SDK-14 统一复核。
 - 未覆盖：播控成功路径（play/pause/seek/volume/mute 到达接收端并生效）与真实超时为手工项（未运行），归 SDK-13；SDK-11 会话监听/终态编排与 SDK-12 runtime 用例不在本任务范围；macOS 构建与真机（SDK-13）。
+
+## SDK-11 完成记录（2026-08-11）
+
+- 改动：`crates/crayon-cast-adapter/src/facade.rs`（CS-007 段契约注释定稿：终态收敛三元组、终态事件不合并且恰好一次、非终态快照可合并、listener 生命周期与 shutdown 投递保证、外部交接无 SDK session；`CastSessionSubscription` 注释同步为已接线）、`src/service.rs`（模块文档同步 SDK-11 定稿，生产逻辑零改动——审计确认 SDK-05 冻结的桥接与 fencing 无语义缺口）、`src/service_tests.rs`（新增 4 项真实实现确定性测试与 loopback 状态服务器 harness）、`tests/fake_facade.rs`（CS-007 扩展为终态三元组表并拆成两个测试）、`test-support/src/cast_facade.rs`（`simulate_route_lost` 的 playback `Failed`→`Stopped`，对齐 pinned SDK `terminate_snapshot` 映射——SDK-04 既有偏差修正）、`test-support/tests/cast_facade.rs`（期望表同步并注明 SDK 映射来源）。
+- 终态语义定稿（CS-007）：Fake 与真实实现对同一场景产生相同的产品可观察终态三元组 (phase, playback, reason)——自然结束 (Terminated, Ended, EndedNormally)、电视端 Stop (Terminated, Stopped, StoppedByReceiver)、route lost (Terminated, Stopped, ReceiverUnreachable；SDK 对 route lost/session lost/替换一律映射 `Stopped`，仅 playback/source/protocol 失败映射 `Failed`)、被替换 (Terminated, Stopped, ReplacedByNewCast/ReplacedByOtherController)，真实侧另钉 receiver_session_lost。`current_session` 终态后持续报告同一快照直到下一次投送替换；终态控制矩阵（仅 stop 幂等、其余 `NoActiveSession`）对接收端发起的每种终态原因成立。真实侧驱动方式：loopback 状态服务器编排 CastExtension `GetCastSessionStatus` 应答 + `refresh_cast_session_health`（SDK 断连监控的同一 status-resync 路径，同步应用），全程离线、condvar deadline、无 sleep、无 LAN。
+- listener 生命周期定稿：订阅一次、Drop 退订（幂等、facade 先析构也安全）、重复订阅相互独立（hub 同批广播证明退订者必错过后续事件）；facade shutdown 在返回前 join SDK dispatch 线程，之后无任何回调，shutdown 后订阅得到 inert handle；回调在锁外派发，listener 可重入 facade（SDK-05 既有重入测试复核：覆盖 `current_session`/`list_devices`/`is_discovery_running`/`connected_device` 读路径；写路径重入不属于契约——按官方 desktop app 模式，终态资源清理不在回调内直接做，归 SDK-12 编排）。Fake/真实的已注明行为差异：SDK hub 对未投递的非终态快照只保留最新（可合并），终态快照从不合并；Fake 每次驱动发一条——消费者必须容忍跳过中间非终态状态（契约注释已注明）。
+- 旧 generation 注入矩阵：替换后旧会话的迟到接收端终态 resync 在 SDK 状态机内以 stale generation 拒绝、不到达 hub、不发布——事件计数不变、`current_session` 保持新会话非终态、旧 handle 播控/停止均为 `StaleSessionGeneration`、新会话照常可用；Fake 侧旧代注入只达 listener 不覆盖 `current_session`（消费方以 `supersedes` 丢弃）。
+- 验证：`cargo test -p crayon-cast-adapter` 100/100 PASS（lib 49 = 既有 45 + 新增 4：五场景终态三元组+收敛+终态控制矩阵、替换+旧代迟到事件抑制、重复订阅独立性、shutdown 后无投递+inert 订阅；fake 场景 14 = 13 + CS-007 拆分；capability 13；delivery 6；契约 16；链接 2；lib 连续 5 次重复运行全 PASS）；`cargo test -p test-support --test cast_facade` 26/26 PASS；`cargo test --workspace` 68 suites / 358 passed / 0 failed PASS；`cargo clippy --workspace --all-targets -- -D warnings` PASS；`cargo fmt --all -- --check` PASS；`cargo run -p repo-guard -- scan --root .` PASS（passed=true；RG-003/004 无新增条目——`facade.rs` trait 块提醒 142→172 行为契约注释增长的同一条目，见 Review P3）；`bash scripts/check.sh fast` PASS（guard/format/brand-assets-unit/brand-assets/formal-workspace/legacy-unit 六步全过）；`git diff --check` PASS。
+- Code Review：按 current 标准逐维度审查（需求边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试、可维护性），P0/P1 = 0；P2 一项（延期 SDK-13）：真实接收端主动上报/事件源（DLNA eventing、CastExtension 推送）驱动的终态路径未经真机验证，CI 以 `refresh_cast_session_health` resync 路径驱动同一状态机与 hub；P3 一项：RG-003 `facade.rs` trait 块提醒 142→172 行属契约注释定稿的既有提醒增长，SDK-14 统一复核。
+- 未覆盖：真机终态事件路径（SDK-13）；终态后的 runtime 资源编排（撤销 Direct/Relay、capability cache invalidate、UI 收敛）归 SDK-12；macOS 构建与真机（SDK-13）。
 
 ## SDK 缺口处理
 

@@ -508,6 +508,9 @@ fn controls_without_any_session_report_no_active_session() {
 
 #[test]
 fn terminal_simulations_converge_with_distinct_reasons() {
+    // The expected (playback, reason) pairs mirror the pinned SDK terminal
+    // mapping 1:1 (`terminate_snapshot`) so Fake and real facade produce the
+    // same product-observable terminal snapshot per scenario (CS-007).
     for (drive, expected_playback, expected_reason) in [
         (
             FakeCastFacade::simulate_natural_end as fn(&FakeCastFacade),
@@ -521,7 +524,7 @@ fn terminal_simulations_converge_with_distinct_reasons() {
         ),
         (
             FakeCastFacade::simulate_route_lost,
-            CastPlaybackState::Failed,
+            CastPlaybackState::Stopped,
             CastTerminalReason::ReceiverUnreachable,
         ),
         (

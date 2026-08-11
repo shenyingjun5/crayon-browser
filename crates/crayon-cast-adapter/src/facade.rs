@@ -40,8 +40,9 @@ where
     }
 }
 
-/// Ongoing session-event subscription. Dropping it unsubscribes and must be
-/// idempotent (SDK-11 wires this onto the SDK subscription handle).
+/// Ongoing session-event subscription. Dropping it unsubscribes and is
+/// idempotent — the real facade holds the SDK hub subscription purely for
+/// its `Drop` (SDK-11), and a subscription created after shutdown is inert.
 pub trait CastSessionSubscription: Send {}
 
 /// Sole product boundary over the pinned Cast-SDK sender facade.
@@ -202,6 +203,36 @@ pub trait CastFacade: Send + Sync {
     fn playback_position(&self, session: &CastSessionRef) -> Result<PlaybackPosition, CastError>;
 
     // -- Session supervision (CS-007) --------------------------------------
+    // Finalized semantics (SDK-11):
+    // - terminal convergence: every terminal cause surfaces as exactly one
+    //   terminal snapshot — `Terminated` phase, a stable 1:1
+    //   `CastTerminalReason` and the pinned SDK playback mapping
+    //   (`EndedNormally` -> `Ended`; playback/source/protocol failures ->
+    //   `Failed`; everything else, including route loss and replacement, ->
+    //   `Stopped`). `current_session` keeps reporting that snapshot until the
+    //   next cast replaces it; afterwards every control is rejected except
+    //   the idempotent `stop` (the CS-006 matrix holds for every terminal
+    //   reason). The fake and the real facade produce the same
+    //   product-observable terminal triple per scenario.
+    // - delivery: terminal snapshots are never coalesced and arrive exactly
+    //   once per listener in generation/revision order; intermediate
+    //   non-terminal snapshots may coalesce to the latest one, so consumers
+    //   must tolerate skipped non-terminal states. An event that does not
+    //   `supersede` the last applied snapshot must be dropped by the
+    //   consumer — old-generation events are already fenced inside the SDK
+    //   (state machine plus hub) and never reach the product listener, so a
+    //   late terminal of a replaced session can never stop or pollute the
+    //   newer session.
+    // - listener lifecycle: subscribe once, unsubscribe by dropping the
+    //   handle (idempotent, safe after facade shutdown); repeated
+    //   subscriptions are independent. Callbacks run on the SDK dispatch
+    //   thread outside any adapter/SDK lock, so a listener may re-enter the
+    //   facade without deadlock; terminal resource cleanup is orchestrated
+    //   by the runtime (SDK-12), not inside the callback. Facade shutdown
+    //   joins the dispatch thread before returning — no callback can fire
+    //   afterwards, and a subscription created after shutdown is inert.
+    // - external-client handoff never creates an SDK session and therefore
+    //   never produces supervision events (MED-19).
 
     /// Latest supervised session snapshot, if any.
     fn current_session(&self) -> Option<CastSessionSnapshot>;

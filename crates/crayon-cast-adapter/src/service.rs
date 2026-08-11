@@ -32,8 +32,9 @@
 //!
 //! Delivery execution (SDK-09) lives in `delivery`, capability
 //! synthesis/caching (SDK-08) in `capability`; both layer over this facade.
-//! Terminal-state orchestration beyond the SDK supervision mapping (SDK-11)
-//! and runtime wiring (SDK-12) stay out of this module.
+//! Session-supervision semantics (CS-007) are finalized on the `CastFacade`
+//! trait (SDK-11); terminal resource orchestration and runtime wiring
+//! (SDK-12) stay out of this module.
 //!
 //! Playback-control semantics (finalized in SDK-10, CS-006): the full
 //! contract lives on the `CastFacade` trait. This implementation fences
