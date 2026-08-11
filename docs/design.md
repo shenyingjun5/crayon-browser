@@ -1,5 +1,7 @@
 # get-video 设计方案
 
+> **历史文档 / 已被取代（2026-08-11）**：本文描述旧版 Tauri 视频提取与通用 relay 方案，不是当前产品契约，也不得作为新增 `/api/extract`、通用 `/proxy`、隐藏 WebView 嗅探、Cookie 提取或站点适配的依据。当前定位、架构和安全边界以 [`crayon-private-cast-browser-prd.md`](crayon-private-cast-browser-prd.md)、[`current/architecture.md`](current/architecture.md) 和 [`plans/README.md`](plans/README.md) 为准。
+
 > 版本：v0.3 · 状态：设计稿（仅方案，未进入开发）
 > 参考项目：LibreTV（`/home/user/work/LibreTV`）
 

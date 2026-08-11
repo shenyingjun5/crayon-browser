@@ -1,201 +1,209 @@
 # 蜡笔 AI Agent 投屏浏览器技术方案
 
-- 版本：v0.6
+- 版本：v0.7
 - 日期：2026-08-11
-- 权威边界：`docs/current/architecture.md`
+- 权威边界：`docs/crayon-private-cast-browser-prd.md`、`docs/current/architecture.md`
 
-## 1. 技术目标
+## 1. 技术目标与交付顺序
 
-在 Windows/macOS CEF 和后续 HarmonyOS 电脑 ArkWeb 上建立一个 Agent-native 浏览器：人可以正常浏览和局域网投屏，AI Agent 可以通过自有 `CAAP` 协议、CLI 或 MCP 高性能读取页面，并在用户授权下执行受控操作。模型型总结能力在第二阶段接入。
+在 Windows/macOS CEF 和后续 HarmonyOS 电脑 ArkWeb 上建设 Agent-native 浏览器。交付顺序为：浏览器基本能力 -> LAN Cast-SDK Direct/Relay -> 当前页数据/Markdown -> CAAP/CLI/入站 MCP -> 语义地图与可验证动作 -> Workflow/Challenge -> Capability Hub/合作方 -> 第二阶段模型。后续模块的 feature NO-GO 不阻塞已满足范围的浏览器/LAN 投屏核心版本。
 
-## 2. 分层
+## 2. 分层与进程边界
 
 ```text
-CLI / MCP adapter / Product UI
-            |
-CAAP protocol + agent-gateway
-            |
-task / grant / confirmation / receipt
-            |
-app-runtime normal use cases
-      /          |           \
-browser      content       cast
-engine        page data    SDK/relay
-      \          |           /
-Windows/macOS/Harmony platform adapters
+CLI / Inbound MCP / Product UI
+              |
+     CAAP + agent-gateway
+              |
+ task / grant / confirmation / receipt
+              |
+          app-runtime
+   /        /       |          \
+browser  semantic workflow   capability hub
+engine   action     /challenge  -> outbound connectors
+   \        |       /          /
+ page-data/content       cast SDK/relay
+              |
+ Windows/macOS/Harmony platform adapters
 ```
 
-核心规则：任何入口都不能绕过 app-runtime；MCP 不复制工具；CAAP 不暴露 CEF/CDP 类型；模型不能调用 guard 扩权。
+Browser process 拥有可信 gateway、generation、页面事实缓存、guard 与 app-runtime。Renderer 只做有界事实采集。CLI/入站 MCP worker 只解析、限流和写回。出站 connector worker 只持最小网络/OAuth 能力。第二阶段 model worker 不持有浏览器授权。
 
-## 3. CAAP v1 设计
-
-### 3.1 Envelope
+## 3. CAAP v1、CLI 与入站 MCP
 
 逻辑 envelope 至少包含：
 
 ```text
-protocol_version
-message_id
-client_session_id
-message_kind
-target_ref?
-task_id?
-deadline_ms?
-idempotency_key?
-payload
+protocol_version, message_id, client_session_id, message_kind,
+target_ref?, task_id?, deadline_ms?, idempotency_key?, payload
 ```
 
-- `message_id/task_id/session_id` 为 opaque 高熵或强类型 ID。
-- 长度、递归深度、数组数量、字符串、chunk 数和总结果都有硬限制。
-- 高风险消息拒绝未知字段；错误使用稳定 code + 可本地化参数，不回显敏感 payload。
-- v1 冻结前通过 benchmark 决定 length-prefixed Protobuf/CBOR 或严格 JSON；逻辑 schema、golden 和 adapter 行为不依赖编码选择。
-
-### 3.2 Handshake
-
-1. client 连接本机 transport。
-2. 发送支持的 CAAP 版本、client 类型、feature 与最大 chunk。
-3. browser 验证 OS 用户/短期 secret，返回选定版本、工具摘要、会话 TTL 和限制。
-4. 任何不兼容、过期、重放、远程来源或错误 Profile 都在创建业务 task 前拒绝。
-
-### 3.3 Tool registry
-
-每个工具声明：稳定 ID/version、risk R0～R4、input/output schema、target 类型、是否确认、是否流式、资源预算、所调用的 app-runtime use case。
-
-registry 是唯一事实来源：CLI help、MCP `tools/list`、确认 UI 和 Release surface test 都从同一声明生成或校验。
-
-### 3.4 Target 与 handle
-
+- ID 为 opaque 高熵/强类型值；字符串、数组、递归、消息、chunk 和总结果有硬限制。
 - `TargetRef` 绑定 Profile/tab/navigation/generation。
-- 页面交互节点使用 Browser 签发的 `SemanticNodeHandle`，不接受 CSS/XPath/JS selector 直通。
-- handle 只描述可见语义角色、可允许动作和短 TTL，不包含 DOM 指针。
-- 页面变化、frame/origin 变化或 target 变化后 handle 失效。
+- registry 声明稳定 tool ID/version、risk、schema、target、确认、流式、预算与 app-runtime use case；CLI help、MCP tools/list、确认 UI 和 release scan 使用同一来源。
+- handshake 在创建业务 task 前验证 CAAP 版本、当前 OS 用户、短期 secret、client 类型、Profile 与 feature。
+- Windows CLI 使用 named pipe，macOS 使用 Unix domain socket；机器可读结果走 stdout，脱敏诊断走 stderr。
+- 入站 MCP 默认关闭、loopback only，把 initialize/list/call/cancel 映射 CAAP，不自行实现工具或权限。
 
-## 4. 页面数据面实现
+通用文件上传不在 v1 schema。未来受限上传必须使用用户逐次选择、origin/用途/文件/TTL 绑定 grant，且另立 Roadmap。
 
-### 4.1 采集
+## 4. 页面事实、Markdown 与语义地图
 
-- Renderer collector 从 DOM 与适用 accessibility facts 生成最小结构块。
-- 过滤 script/style、隐藏敏感表单值、密码、跨源 iframe 正文和危险 URL。
-- 消息按 frame/navigation/generation 分块，Browser gateway 验证后合并。
-- collector 不执行页面提供的命令，不自动滚动加载，不点击或修改页面。
+### 4.1 采集与缓存
 
-### 4.2 缓存与索引
+- Renderer collector 从 DOM 和适用 accessibility facts 生成最小、版本化事实块，过滤 script/style、隐藏敏感值、密码/支付/file 值、跨源 iframe 正文和危险 URL。
+- Browser gateway 验证 renderer/frame/origin/navigation/generation 后合并到有界 cache。
+- 缓存按 Profile/tab/navigation 所有，含正文/结构索引和交互事实；导航、关闭、销毁、撤销、TTL 或内存压力清除。
+- mutation 生成 dirty revision 和有界 `ChangeSet`，不承诺每次 DOM mutation 都全量重建。
+- Markdown、R1 读取、语义地图和 Workflow 共享一次验证后的事实。
 
-- Browser owner 为每个当前 navigation 维护一个有界 snapshot generation。
-- 缓存结构块、正文索引、链接/表格/代码索引和可见交互节点索引。
-- DOM/布局变化使用 dirty region 或 revision 标记；不保证每次 mutation 即时全量重建。
-- 多个 Agent R1 工具和 Markdown 共用同一 verified snapshot。
-- navigation、tab close、Profile destroy、内存压力和 TTL 触发清除。
+### 4.2 公共 DTO
 
-### 4.3 输出
+```text
+PageSnapshot {
+  schema_version, target_ref, snapshot_id, revision, title,
+  blocks[], links[], tables[], code_blocks[], provenance, truncation
+}
 
-- 小结果一次返回，大结果通过 `Chunk(sequence,cursor,data)` 流式。
-- consumer 必须 ack/拉取下一页；服务端每 task 最多保留固定未确认 chunk。
-- cancel/deadline 传播到采集、清洗和 transport；迟到 chunk 丢弃。
-- provenance 标识 top frame/同源 frame、可见/截断、采集 revision 和 snapshot hash。
+SemanticMaps {
+  action_map[], form_map[], media_map[], risk_map[], change_set?
+}
 
-### 4.4 性能验证
+ActionDescriptor {
+  action_id, role, accessible_name, allowed_actions[],
+  visible_state, risk_flags[], preconditions[], ttl
+}
+```
 
-基准比较：
+`compact` 返回任务相关摘要，`standard` 返回有界完整公共结构。`full` 仅为内部诊断/验证/受控修复 profile，仍经过字段 allowlist 与预算，禁止外发原始 DOM、HTML、CDP、对象指针或长期 selector。
 
-1. CAAP 结构化读取。
-2. 同一页面重新生成完整 snapshot。
-3. 通用截图/OCR或外部自动化基线（仅 benchmark，不进入产品依赖）。
+`FormMap` 只包含字段语义、required/format/error/filled 状态，不包含值。`MediaMap` 只包含可见媒体事实和经产品策略计算的能力。`RiskMap` 由确定性规则生成，页面或模型不能降低风险。
 
-指标包括 handshake、first chunk、complete、CPU、峰值内存、UI event-loop delay、序列化字节和增量复用率。宣称“快于一般浏览器”前必须保留可重复 fixture、硬件和对照条件；产品初期只承诺内部预算，不作无证据营销比较。
+### 4.3 输出与性能
 
-## 5. 授权与确认
+- 小结果一次返回；大结果使用 sequence/cursor chunk。服务端每 task 的未确认 chunk 固定上限，cancel/deadline 传播到采集与清洗。
+- provenance 标识 frame 范围、可见性、截断、revision 和 hash。
+- cache 命中元数据/R1 标题本机 P95 目标不高于 50ms；100KB 清洗正文结构/Markdown P95 目标不高于 500ms，最终以 `AGT-15` benchmark 固化。
+- benchmark 记录 first chunk、complete、CPU、RSS、UI event-loop delay、序列化字节与增量复用；不得在无对照证据时宣称全面快于其他浏览器。
+- 常规读页不使用 screenshot/OCR；视觉只允许内部有界 fallback，并记录原因和风险。
 
-### 5.1 Grant
+## 5. action_id 与可验证动作
 
-grant 绑定 client/session/Profile/tool/risk/target scope/到期：
+### 5.1 创建和绑定
 
-- 单次：一个 task。
-- 单任务：一个用户可见的 Agent 任务上下文。
-- App 会话：仅适用于明确选择的 R0/R1，浏览器重启失效。
-- R2～R4 不因已有 R1 自动升级。
+`action_id` 由 Browser 根据 verified facts 签发，绑定 Profile、tab、navigation、generation、语义摘要、允许动作、风险、TTL 与随机 nonce，不包含 DOM 指针。内部 `LocatorEvidence` 可保存 role/name/text/结构邻近/可见性/几何等有界特征，但绝不作为外部稳定 API。
 
-### 5.2 Confirmation
+### 5.2 执行协议
 
-副作用确认展示：client、tool、页面标题/脱敏 origin、目标元素语义、关键参数、影响和到期。confirmation nonce 绑定参数 hash 与 generation，变化后无法重放。
+```text
+Resolve target/generation
+ -> re-locate unique visible semantic target
+ -> validate preconditions + monotonic risk
+ -> validate grant/confirmation/parameter hash/idempotency
+ -> app-runtime action use case
+ -> wait bounded declared effect
+ -> Verified | Failed | Indeterminate | AwaitingHuman
+```
 
-### 5.3 Prompt injection
+- 目标不唯一、被遮蔽、跨源、隐藏、过期或风险上升时 fail closed。
+- password/payment/file 不产生可执行 action_id；任意 JS、selector 直通、自动滚动点击挑战均拒绝。
+- effect 可为导航、ChangeSet、字段状态、页面语义或投屏状态。只发送输入事件不算成功。
+- `Indeterminate` 副作用不自动重试；幂等 key 只防重复，并不证明业务成功。
+- 高风险动作始终重新确认；低风险动作也必须在 target/generation 改变后重新读取。
 
-所有页面/模型/工具文本使用 `UntrustedContent` 类型或等价 provenance；不能解释成协议 envelope、tool call、grant、confirmation 或系统指令。一个工具结果不能自动触发第二个工具，除非 Agent 新请求再次通过 guard。
+## 6. grant、确认与不可信内容
 
-## 6. CLI 与 MCP
+grant 绑定 client/session/Profile/tool/risk/target/route/到期，支持单次、单任务及明确选择的 R0/R1 App 会话；重启失效，R1 不可升级 R2-R4。confirmation 展示 client、route、页面/脱敏 origin、目标语义、关键参数、影响、数据外发和到期，其 nonce 绑定参数 hash、generation 和 provider。
 
-### 6.1 CLI
+页面、模型、Recipe、合作方 tool description/response 使用 `UntrustedContent` 或等价 provenance。它们不能被解释为 CAAP envelope、grant、confirmation、route policy 或下一次工具调用。
 
-- Windows named pipe、macOS Unix domain socket。
-- 支持 `version/capabilities/targets/tools/invoke/cancel/task-status`。
-- stdout 使用版本化机器可读结果；stderr 只含脱敏诊断。
-- 无交互环境遇到需要确认的工具返回稳定 `confirmation_required`，不能默认同意。
+## 7. Challenge 与 checkpoint
 
-### 6.2 MCP
+`ChallengeSignal` 只能描述 challenge_type、证据类别、页面区域、confidence band 和时间，不能包含解题内容。确定性检测命中后：
 
-- 默认关闭、loopback only、短期 secret、消息/并发限流。
-- `initialize/tools/list/tools/call/cancel` 映射 CAAP。
-- MCP tool schema 来自 registry，不手写第二份定义。
-- MCP client 的文字描述和模型输出不可信，服务端 guard 始终执行。
-- 不提供 resources/prompts 形式的 Cookie、历史、文件或调试协议后门。
+1. 取消尚未执行的自动步骤并切换 `AwaitingHuman`。
+2. UI 显示原因、目标页面和继续/取消；不隐藏挑战或调用代解服务。
+3. 写入有界、加密、短期 `Checkpoint`：task/recipe/version/target、最后 verified step、下一意图、idempotency 状态、到期；不含 secret、字段值或正文。
+4. 用户完成后重新 snapshot/risk/action/grant/precondition。挑战仍在、页面不匹配、到期或结果不确定则终止。
 
-## 7. 浏览器操作
+## 8. Workflow Learning 与个人 Site Skill
 
-- 导航只接受 http/https 和明确允许的产品 URL；逐跳处理外部协议、下载和弹窗。
-- 标签操作有 Profile/数量/前台目标限制。
-- scroll 使用有界方向/距离或语义区域，不接受脚本。
-- click/type 只接受可见、未被遮蔽、同源且允许动作的语义 handle。
-- password、payment、file、hidden、cross-origin frame 和高风险表单永远拒绝。
-- 提交/发帖等后续能力若要开放必须独立细分工具与确认，不能用通用 click 绕过。
+### 8.1 数据结构
 
-## 8. 投屏
+```text
+WorkflowTrace { trace_id, owner_scope, task_intent, verified_steps[], outcome, provenance, ttl }
+Recipe { recipe_id, version, origin_matcher, parameters[], steps[], expected_effects[], risk_summary }
+SiteSkill { skill_id, owner_profile, recipe_version, health, validation, source, enabled, rollback_ref }
+```
 
-- Direct/Relay 仅 LAN，复用固定 Cast-SDK facade。
-- Agent R3 工具调用相同 `cast_usecase`，必须通过用户播放、DRM、广告、receiver capability 和 Relay 安全门禁。
-- 无可投视频返回外部客户端交接建议；Agent 不能控制该客户端的镜像权限或会话。
-- 浏览器没有 WebRTC、采集、系统音频或编码实现。
+- trace 只记录稳定意图、action semantic、参数 placeholder、结果和 hash；redactor 在写盘前移除输入值、secret、正文、完整 URL query 和账户标识。
+- 仅 `outcome=verified_success` 可生成 candidate；失败、取消、challenge 未完成或 effect unknown 直接丢弃学习候选。
+- 保存是显式用户动作；预览必须显示名称、origin matcher、参数、步骤、权限、风险、数据外发和有效期。
+- store 按 OS user/Profile 加密隔离；schema/version 迁移失败时禁用技能，不进行猜测性升级。
 
-## 9. 第二阶段模型
+### 8.2 验证、健康和修复
 
-### 9.1 Provider gate
+- 保存后先在本地 fixture/沙箱验证 matcher、参数、步骤和预期效果；生产站点健康使用有界失败窗口，不做后台批量巡检。
+- runner 每次重新路由并获取 grant；步骤只引用当前 action_id，不复用记录时 handle。
+- 失败按 drift、challenge、permission、network、effect unknown 分类；版本更新先创建 candidate，可回滚到最近健康版本。
+- controlled healer 只可在低风险、唯一多信号匹配、effect 可验证且无新数据外发时替换 locator evidence；高风险、跨源、低置信度或步骤语义变化只能提出用户审阅的修复候选。
 
-先完成 ADR：本地/云端/BYOK、支持地区、费用、数据保留、安全存储、redirect/origin 和错误语义。未决策前只允许 Fake provider contract。
+## 9. Capability Registry 与 Router
 
-### 9.2 文档总结
+### 9.1 Registry
 
-- 用户选择 snapshot/Markdown范围。
-- UI 展示实际发送字段和长度。
-- provider 只收到清洗 DTO，不收到 Cookie、Authorization、完整 query、隐藏 DOM 或其他标签。
-- 结果带 snapshot hash、引用和 AI 标识。
+```text
+CapabilityDescriptor {
+  id, version, source, trust_state, lifecycle_state,
+  input_schema, output_schema, risk, data_scope,
+  site_matchers, health, cost_hint, confirmations, provider_ref?
+}
+```
 
-### 9.3 视频总结
+来源包括 built-in、personal Site Skill、approved partner。生命周期为 candidate/validated/enabled/degraded/disabled/revoked。相同 ID 不允许未签名覆盖；用户和 kill switch 可禁用。
 
-- 输入只来自页面合法可见字幕/转录、内容方公开提供的文本轨或用户提供文本。
-- 不下载视频/音轨，不绕过 DRM，不探测隐藏字幕 API，不建立云端媒体代理。
-- 无文本来源时明确不支持，不把画面猜测伪装成完整视频总结；未来 ASR 需独立 Roadmap。
+### 9.2 Router
 
-## 10. 进程与生命周期
+Router 输入 task intent、target、user preference、grant、risk、health、trust、数据范围和可用 provider，输出 selected route、ordered alternatives、`route_reason`、required confirmation 和 fallback policy。默认优先 approved Partner API/MCP、healthy Site Skill、Web Automation、Human Handoff、Reject。
 
-- Browser process：engine、trusted gateway、snapshot owner、Agent guard 和 app-runtime owner。
-- Renderer：有界事实采集，不拥有授权/transport。
-- CLI/MCP transport worker：解析、限流、写回，不执行业务。
-- model worker（第二阶段）：独立取消/网络预算，不持有浏览器权限。
+fallback 必须重新校验：
 
-退出时先停接入/撤销 grant，再取消 Agent/内容/模型 task，然后停止 Cast/Relay，最后销毁 engine/Profile 和 transport。
+- 新 route 的 schema、scope、provider、数据外发与风险。
+- idempotency 是否可跨 route；若无法证明则停止。
+- 是否需要新的 OAuth、grant、confirmation 或用户数据预览。
+- 上一路径是否已有不确定副作用；有则不得继续。
 
-## 11. 测试
+## 10. 出站 Partner API/MCP Connector
 
-- CAAP current/previous golden、握手、消息边界、cancel、deadline、幂等、重放和错误映射。
-- FakeAgentClient 覆盖 CLI/MCP 同义性、恶意 client、断流、超并发和旧 generation。
-- 页面 fixture 覆盖长文、表格、iframe、动态变化、隐藏/敏感表单和间接提示注入。
-- 性能 harness 覆盖 first chunk/complete/UI delay/CPU/RSS/字节/增量复用。
-- Release scan 禁止 remote bind、CDP/WebDriver、任意 JS、Cookie/文件上传/通用文件网络工具。
-- FakeModelProvider 只在第二阶段测试 provider、预览、取消、错误和引用，不进入第一阶段 Release。
+出站连接器与入站 MCP 分属独立 crate、配置、token、网络 client、registry namespace 和审计事件。
 
-## 12. 平台与供应链
+- manifest/package：受信来源、固定版本、签名/兼容校验、撤销、禁用与 kill switch；动态 tool description 不可创建本地高权限工具。
+- OAuth：state、nonce、PKCE（适用时）、redirect 精确匹配、最小 scope、provider/tenant/account 绑定；token 仅在 secure vault，通过 opaque handle 使用。
+- 网络：endpoint allowlist、解析后 IP 检查、每次 redirect/DNS 重验，阻断 loopback/private/link-local/metadata；限制方法、header、body、response、时间和并发。
+- runtime：rate limit、retry budget、exponential backoff、circuit breaker、health、quota 和 cancel；副作用调用默认不自动 retry。
+- 输出：严格 schema/内容类型/大小验证；错误不回显 token/正文；审计仅记录 provider、tenant hash、capability、结果类别和延迟。
 
-- Windows/macOS CEF，HarmonyOS 电脑 ArkWeb，Linux 当前不实现。
-- Cast-SDK 固定 git revision，只有 adapter 调用。
-- CAAP/MCP/CLI 新依赖必须检查许可证、维护状态、包体和本地攻击面。
-- 浏览器不实现 WebRTC/采集/编码；模型/provider 依赖与数据处理另立门禁。
+## 11. 投屏与 Partner Cast Manifest
+
+- Direct/Relay 仅 LAN，浏览器只调用固定 Cast-SDK facade；Relay 使用高熵 session/resource ID、设备/route/TTL/upstream allow-set 绑定。
+- Agent/Workflow 的 R3 投屏调用相同 `cast_usecase`，经过用户真实播放、DRM、广告、receiver capability 和确认。
+- 无路由返回 `ExternalClientHandoff`，不创建浏览器 WebRTC/采集/编码会话。
+- Partner/TV Cast Manifest 的签名、能力协商、字幕/队列/结果回报属于 Cast-SDK/receiver。浏览器先做 API 缺口分析；只有外部仓库经授权完成、固定版本发布后，adapter 才消费批准 facade，禁止临时拼协议或控制 URL。
+
+## 12. 第二阶段模型
+
+- 先完成 provider ADR：本地/云端/BYOK、地区、费用、保留、安全存储、endpoint 和错误语义；此前只有 Fake provider contract。
+- 文档总结只接收用户确认的清洗 DTO；视频总结只接收合法可见字幕/转录或用户提供文本。
+- 模型辅助 locator/Recipe 只能生成不可信 candidate；确定性 policy、risk 和用户确认决定是否采纳。
+- 输出绑定 snapshot/hash/provenance；超时/取消/失败不影响本地 Markdown、动作或技能。
+
+## 13. 测试、性能与供应链
+
+- CAAP current/previous golden、握手、边界、取消、deadline、幂等、重放与 CLI/MCP 同义性。
+- 页面 fixture 覆盖长文、表格、iframe、动态变化、隐藏/敏感表单、challenge 和 prompt injection。
+- semantic/action 测试覆盖 ID 稳定窗口、precondition、风险单调、效果验证、旧 generation 和不确定副作用。
+- Workflow 测试覆盖 redaction、verified-only learning、预览保存、Profile 隔离、健康、回滚、低风险修复与高风险禁止。
+- Hub/connector 测试覆盖 route reason、fallback 重授权、签名/revoke、OAuth、SSRF/DNS rebinding、tool injection、限流/熔断和审计脱敏。
+- performance harness 记录 first chunk、complete、UI delay、CPU/RSS、字节、重复任务步骤/时延和增量命中。
+- release scan 禁止 remote bind、原始 CDP/WebDriver、任意 JS、Cookie/通用文件上传/通用网络工具、挑战绕过和浏览器自建 Cast 协议。
+- Windows/macOS CEF、HarmonyOS 电脑 ArkWeb；Linux 不实现。新增依赖检查来源、许可证、维护、包体和跨平台影响。

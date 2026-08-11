@@ -4,11 +4,12 @@
 
 ## 1. 当前产品范围
 
-- Windows/macOS CEF 浏览器与局域网 Direct/Relay 投屏优先。
+- 产品是面向 AI Agent 定制的浏览器；Windows/macOS CEF 浏览器与局域网 Direct/Relay 投屏优先。
 - 无视频推送路由时只交接给独立蜡笔投屏客户端；浏览器不做 WebRTC、采集或编码。
-- 浏览器和投屏主链路完成后再做当前网页的确定性 Markdown 提取。
+- 浏览器和投屏主链路完成后建设当前页数据面与确定性 Markdown；CAAP 协议/权限内核可在浏览器后半段先行。
 - HarmonyOS 只规划鸿蒙电脑 PC 形态技术预览。
-- Linux、AI/模型、Agent、CLI、MCP 没有当前活跃 Roadmap。
+- CAAP、CLI/入站 MCP、高性能读页、语义地图和授权操作是核心范围；Workflow/Challenge 与 Capability Hub 按独立门禁后续交付。真实模型/provider 与文档/视频总结在第二阶段。Linux 没有当前活跃 Roadmap。
+- 出站 Partner API/MCP 与入站 MCP 是不同安全边界；Partner/TV Cast Manifest 属于 Cast-SDK/接收端协议，不在浏览器内复制实现。
 
 ## 2. 权威入口
 
@@ -22,30 +23,31 @@
 | FND | [foundation-migration-roadmap.md](foundation-migration-roadmap.md) | Workspace、契约、质量入口与仓库基线 | 19 个原子任务 `DONE` |
 | MED | [media-policy-relay-roadmap.md](media-policy-relay-roadmap.md) | 媒体观察、策略、LAN Relay、外部客户端交接迁移 | `MED-01..19 DONE` |
 | CEF | [desktop-cef-browser-roadmap.md](desktop-cef-browser-roadmap.md) | Windows/macOS CEF 壳、共享 UI、媒体观察和 IPC | `CEF-01B READY` |
-| SDK | [cast-sdk-integration-roadmap.md](cast-sdk-integration-roadmap.md) | 固定源码 Cast-SDK facade、发现、连接和控制 | `SDK-07 READY` |
+| SDK | [cast-sdk-integration-roadmap.md](cast-sdk-integration-roadmap.md) | 固定源码 Cast-SDK facade、发现、连接和控制；后续 Partner Cast facade | `SDK-07 READY` |
 | PLT | [desktop-platform-adapters-roadmap.md](desktop-platform-adapters-roadmap.md) | Windows/macOS 存储、网络、生命周期、更新和客户端交接 | `PLT-01` |
 | PRV | [privacy-security-roadmap.md](privacy-security-roadmap.md) | Profile、隐私、安全、日志和删除语义 | `PRV-01` |
-| CNT | [content-intelligence-roadmap.md](content-intelligence-roadmap.md) | 当前页确定性提取与 Markdown 预览/导出 | `CNT-01`，等待主链路 |
+| CNT | [content-intelligence-roadmap.md](content-intelligence-roadmap.md) | 页面数据/Markdown 与第二阶段模型总结 | `CNT-01` 等待主链路；`CNT-11` 等待模型门禁 |
+| AGT | [agent-access-roadmap.md](agent-access-roadmap.md) | CAAP、tool registry、CLI/MCP、高性能读页和授权操作 | `AGT-01`，依赖满足后开始 |
+| ACT | [semantic-action-roadmap.md](semantic-action-roadmap.md) | Page/Action/Form/Media/Risk Map、action_id、前置条件和效果验证 | `ACT-01` 等待 `CNT-03/AGT-01` |
+| WFL | [workflow-learning-roadmap.md](workflow-learning-roadmap.md) | Challenge 接管、Workflow Learning、个人 Site Skill、健康与受控修复 | `WFL-01` 等待 `ACT-12/AGT-03` |
+| HUB | [capability-hub-roadmap.md](capability-hub-roadmap.md) | Capability Registry/Router、入站发现与出站 Partner connector | `HUB-01` 等待 `AGT-02/PRV-08` |
 | HM | [harmony-browser-roadmap.md](harmony-browser-roadmap.md) | 鸿蒙电脑 PC 形态 ArkUI/ArkWeb 技术预览 | `HM-01`，后续启动 |
 | QAR | [quality-release-roadmap.md](quality-release-roadmap.md) | Windows/macOS 构建、真实设备、性能、长稳和发布门禁 | `QAR-01` |
 
-当前共 128 个活跃任务，95 个当前测试用例。历史归档、已删除范围和未来设想不计入活跃总数。
+当前共 196 个活跃任务，153 个当前测试用例。Linux、浏览器 WebRTC/采集/编码等已删除范围不计入活跃总数。
 
 ## 4. 当前领取队列
 
 | 顺序 | 任务 | 状态 | 说明 |
 |---:|---|---|---|
-| 1 | `MED-19` | DONE | `Mirror`/WebRTC schema 与 runtime 语义已迁移为 `ExternalClientHandoff`，保留 `mirror` 兼容读取窗口 |
+| 1 | `SDK-07` | READY | connect/disconnect/投屏码解析状态映射；不增加身份认证或授权协议 |
 | 2 | `CEF-01B` | READY | Windows CEF toolchain/bootstrap；不得扩张旧 Mirror 语义 |
-| 3 | `SDK-02` | DONE | 固定版本 Cast-SDK facade 依赖接入完成；未实现 WebRTC 或外部客户端协议 |
-| 4 | `SDK-03` | DONE | 产品侧 `CastFacade` 契约与稳定错误映射已冻结；未接真实 service/Fake |
-| 5 | `SDK-04` | DONE | 确定性 Fake facade 落地 test-support，CS-001..CS-009 全部可确定性编排；未接真实 SDK |
-| 6 | `SDK-05` | DONE | 真实 `SenderCastFacade` 生命周期/线程/回调封装落地；LAN 组播与投屏码发包验证为手工项 |
-| 7 | `SDK-06` | DONE | 发现快照语义定稿：stop 保留快照、可连接设备可见性、稳定 ID 去重与确定性全序；增量事件评审结论为不扩张契约 |
-| 8 | `SDK-07` | READY | connect/disconnect/投屏码解析状态映射；不增加身份认证或授权协议 |
-| 9 | 后续任务 | TODO | 严格按模块依赖和总阶段领取 |
+| 3 | `AGT-01` | TODO | 依赖满足后冻结 CAAP v1；不提前开放 CLI/MCP transport |
+| 4 | `CNT-01` | TODO | 等浏览器/投屏/隐私门禁后开始正式 page-data/Markdown |
+| 5 | `ACT-01` | TODO | 等 `CNT-03/AGT-01`；不提前发明第二页面数据面 |
+| 6 | 后续任务 | TODO | WFL/HUB 严格按语义动作、权限和隐私依赖领取 |
 
-`CNT-01` 即使接口设计已明确，也必须等 `CEF-15`、`SDK-14`、`MED-19`、`PRV-08` 完成后才能进入 `READY`。
+`CNT-01` 必须等 `CEF-15`、`SDK-14`、`MED-19`、`PRV-08` 完成后才能进入 `READY`。`CNT-11` 必须等 `CNT-10`、`AGT-16`、`PRV-13` 完成且模型/provider ADR 获批；不得提前接真实 provider。
 
 ## 5. 当前代码事实
 

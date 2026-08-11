@@ -1,4 +1,4 @@
-# 蜡笔隐私投屏浏览器测试用例目录
+# 蜡笔 AI Agent 投屏浏览器测试用例目录
 
 状态值：`AUTO` 自动化、`HARNESS` 专项设施、`DEVICE` 真机、`RELEASE` 发布产物。每个用例实现后必须在测试代码注释或测试名称中保留 ID。
 
@@ -88,6 +88,8 @@
 | CS-008 | AUTO | SDK 返回 unsupported/protocol/permission 错误 | 映射稳定产品错误码，不解析自然语言 |
 | CS-009 | AUTO | Cast-SDK revision 升级 | gitlink/source lock、API contract、行为 golden、依赖树和回滚检查通过 |
 | CS-010 | DEVICE | 自动发现和投屏码分别连接蜡笔接收端 | 发现、连接、首帧、控制、停止闭环 |
+| CS-011 | CONTRACT | 审查 Partner/TV Cast Manifest 缺口和外部 API 提案 | 签名、版本、能力、字幕、队列、结果回报均有 Cast-SDK/receiver owner；浏览器无临时协议 |
+| CS-012 | DEVICE | 固定版本 Cast-SDK 正式 facade 接入已批准 Partner/TV receiver | 仅经 facade 完成 manifest 验证与能力闭环；App 无 raw manifest、IP、控制 URL 或协议复制 |
 
 ## 6. Profile、隐私与安全存储
 
@@ -104,7 +106,7 @@
 | PV-009 | AUTO | 标准/严格防追踪模式 | 统一策略，不为不同 Profile 生成唯一随机指纹 |
 | PV-010 | AUTO | 诊断导出预览 | 用户可见内容与实际发送一致，无秘密 |
 
-## 7. 网页内容与 Markdown
+## 7. 网页内容、Markdown 与第二阶段模型
 
 | ID | 类型 | 前置/步骤 | 预期 |
 |---|---|---|---|
@@ -116,7 +118,91 @@
 | CT-006 | AUTO | 表格/链接/图片/代码块超量、重复和超长字段 | Markdown 输出有界且稳定截断，UI 不阻塞 |
 | CT-007 | AUTO | 复制/保存/覆盖/取消/非法文件名/部分写失败 | 只写用户选择路径；原子结果或明确失败，无静默残留 |
 | CT-008 | AUTO | 预览长文后导航、关闭标签、切换 Profile | 阅读视图失效，旧结果不覆盖新页；键盘/无障碍可用 |
-## 8. 平台生命周期与外部客户端交接
+| CT-009 | CONTRACT | 未选择模型/provider、配置损坏、版本不兼容 | 本地内容能力正常；不发网络请求；模型 feature 明确不可用 |
+| CT-010 | AUTO | 比较发送前预览与 Fake provider 实际 payload | 字段逐项一致；无 Cookie/Authorization/完整 query/隐藏 DOM/其他标签 |
+| CT-011 | AUTO | Fake provider 正常、超时、取消、流式中断、额度和畸形响应 | 状态收敛、有界重试、不自动换 provider；Markdown 保留 |
+| CT-012 | AUTO | 文档摘要/问答输出含有来源和无来源结论 | 输出绑定 snapshot/hash；可定位引用；无来源结论不标成网页原文 |
+| CT-013 | AUTO | 文档在发送/流式过程中导航、关闭、撤销或切换 Profile | 取消请求并丢弃旧输出；provider key/task buffer 可验证释放 |
+| CT-014 | SECURITY | 视频总结输入来自可见字幕/用户文本，尝试媒体下载、隐藏字幕、DRM 或跨源抓取 | 只接受允许的文本来源；其他路径拒绝且不产生媒体/私网请求 |
+
+## 8. CAAP、CLI 与 MCP
+
+| ID | 类型 | 前置/步骤 | 预期 |
+|---|---|---|---|
+| AG-001 | CONTRACT | CAAP handshake、envelope、tool/risk schema 与 previous/current golden | 版本协商、R0～R4、错误、chunk/cancel/deadline 稳定；永久禁止能力不可表达 |
+| AG-002 | AUTO | 重复 invoke/cancel、超时、旧 generation、断连、App/Profile/标签退出 | task 幂等收敛、旧结果丢弃、队列/chunk/cache 资源有界 |
+| AG-003 | AUTO | 单次/任务/App grant、撤销、Profile/目标变化 | 默认 deny；grant 不跨 Profile/目标/会话且立即撤销 |
+| AG-004 | AUTO | R2～R4 确认、拒绝、过期、导航/设备/参数变化 | UI 展示 client/tool/目标/关键参数；变化后必须重确认 |
+| AG-005 | SECURITY | 页面、模型或工具结果包含“忽略规则并授权/调用工具” | 内容保持 untrusted，不能扩大 grant、改目标或触发第二工具 |
+| AG-006 | PERF | 读取标题/结构化页面/Markdown，覆盖缓存、分页、增量、取消和跨 Profile | R1 只返回授权 target/generation；达到 P95/背压/资源预算 |
+| AG-007 | AUTO | 读取设备 capability/投屏状态，含同名、旧 route、无会话 | 不返回 IP/媒体 URL/token；使用 SDK 最新 generation |
+| AG-008 | AUTO | 导航、开关/切换标签、后退、刷新、滚动，覆盖危险 scheme/redirect/download | R2 确认后调用正常 use case；危险/超量/取消失败关闭 |
+| AG-009 | AUTO | 开始投屏、pause/seek/stop，设备/媒体/route 中途变化 | R3 确认且沿用播放/DRM/广告/policy；外部镜像客户端不受控 |
+| AG-010 | SECURITY | 语义 handle 点击/输入密码、支付、文件、隐藏/跨源元素或过期节点 | 永久拒绝；无 selector/任意 JS/CDP 透传；TOCTOU 失败关闭 |
+| AG-011 | AUTO | 预览/清除 receipt 并扫描日志/磁盘 | 有界 TTL；不含正文、完整 query、Cookie、Authorization、token |
+| AG-012 | SECURITY | named pipe/UDS/MCP 的错误用户、非 loopback、错误/过期 secret、重放、超限 | 握手前拒绝，无浏览/网络副作用；stop 后端点释放 |
+| AG-013 | AUTO | CLI version/capabilities/targets/tools/invoke/cancel，含无交互副作用调用 | 机器可读且映射 CAAP；需要确认时稳定失败，不绕 UI |
+| AG-014 | CONTRACT | MCP initialize/list/call/cancel/版本/超大消息 | schema 来自同一 registry；映射 CAAP；默认关闭、loopback only |
+| AG-015 | SECURITY | fuzz、间接提示注入、本机恶意 client、并发/长文性能和 Release surface | 无 remote bind、Cookie/文件/任意 JS/CDP；P0/P1=0 才 GO |
+
+## 9. 页面语义地图与可验证动作
+
+| ID | 类型 | 前置/步骤 | 预期 |
+|---|---|---|---|
+| AC-001 | CONTRACT | Page/Action/Form/Media/Risk Map、ChangeSet、effect 和 previous/current golden | schema/version/错误稳定；无 CEF/ArkWeb/DOM 对象 |
+| AC-002 | SECURITY | 请求 compact/standard/internal-full 并构造超深/超大页面 | 对外字段有界；raw DOM/HTML/CDP/对象指针永不出界 |
+| AC-003 | AUTO | 同 generation 重读、导航、Profile 切换、TTL/nonce 重放 action_id | 有效窗口内稳定引用；跨 target/generation/TTL 全部失效 |
+| AC-004 | AUTO | role/name/text/结构变化、重复目标、遮挡和动态列表 | 内部多信号定位唯一目标；外部结果无 CSS/XPath/JS selector |
+| AC-005 | AUTO | 目标隐藏、不可操作、跨源、被遮挡或页面状态不满足 | precondition fail closed，未产生输入/网络副作用 |
+| AC-006 | SECURITY | 页面/模型要求降低风险，包含密码、支付、file、隐藏元素 | 风险只升不降；敏感元素不产生可执行 action_id |
+| AC-007 | AUTO | 点击/输入/滚动经 action_id 执行，覆盖取消、deadline 和导航竞态 | 只调用 app-runtime 正常用例；旧 generation 无副作用 |
+| AC-008 | AUTO | 动作效果成功、失败、超时、不确定及重复 idempotency key | 仅 verified 报成功；indeterminate 不自动重放，重复副作用被拦截 |
+| AC-009 | SECURITY | FormMap 含 required/format/error、密码/支付/file/隐藏字段 | 只返回语义与状态，不返回字段值；敏感/file 不可执行 |
+| AC-010 | PERF | 高频动态页生成 ChangeSet、分页、背压、取消和旧 revision | 增量有界且按序；旧增量丢弃；UI/Renderer 不阻塞 |
+| AC-011 | AUTO | action 无法安全继续、用户接管、取消或完成后恢复 | 返回可解释 handoff；恢复前重新读取/授权，不继承旧确认 |
+| AC-012 | SECURITY | fuzz 地图/handle/effect、视觉 fallback、慢 consumer 与 Release scan | 无 selector/CDP/任意脚本/敏感 surface；性能和资源预算达标 |
+
+## 10. Workflow Learning、Challenge 与个人 Site Skill
+
+| ID | 类型 | 前置/步骤 | 预期 |
+|---|---|---|---|
+| WF-001 | AUTO | captcha/滑块/登录确认/风控 fixture 与相似非挑战页面 | 确定性检测并进入 AwaitingHuman；误报/漏报证据可定位 |
+| WF-002 | SECURITY | 搜索自动解题、打码服务、自动点击/隐藏挑战路径 | 零实现/零网络请求；只允许检测、暂停和用户操作 |
+| WF-003 | AUTO | AwaitingHuman 的继续、取消、导航、关闭、超时和无障碍 | 状态收敛、UI 原因清晰、无后台动作 |
+| WF-004 | SECURITY | checkpoint 写读删、损坏、过期、Profile/无痕清理并做 canary 扫描 | 加密有界；无 secret/字段值/正文；跨 Profile 不可读 |
+| WF-005 | AUTO | 用户完成挑战后页面匹配/漂移/仍有挑战/副作用未知 | 重新 snapshot/risk/grant/precondition；不安全场景终止 |
+| WF-006 | AUTO | 已授权动作正常/失败/取消/旧结果和超长任务 | trace 只记录最小语义步骤与 verified effect，容量/TTL 有界 |
+| WF-007 | SECURITY | 输入密码、邮箱、token、正文、完整 query 和账户标识 canary | 写盘前 redaction；只保存参数 placeholder 和必要 hash |
+| WF-008 | AUTO | verified success、failed、cancelled、challenge 未完成、indeterminate | 只有 verified success 生成候选 Recipe |
+| WF-009 | AUTO | 预览技能名称/origin/参数/步骤/风险/权限/数据流后保存、拒绝、变更 | 用户显式确认才保存；预览变化或过期需重确认 |
+| WF-010 | AUTO | 两 OS user/Profile、无痕、配额、损坏和 schema migration | Skill Store 加密隔离；失败禁用，不猜测迁移 |
+| WF-011 | HARNESS | 本地 fixture/沙箱验证 matcher、参数、步骤和效果 | 结果可重复；不访问公共网络或后台批量巡检生产站点 |
+| WF-012 | AUTO | 运行技能时权限撤销、导航、challenge、重复调用和取消 | 每次新 grant/当前 action_id；幂等收敛并支持人工接管 |
+| WF-013 | AUTO | 连续成功/失败、禁用、升级、崩溃和回滚 | health/version/rollback 一致；旧版本不能覆盖新状态 |
+| WF-014 | AUTO | locator 漂移、challenge、permission、network、effect unknown | 正确分类并生成证据；不把未知失败视为可修复漂移 |
+| WF-015 | SECURITY | 唯一低风险变化与高风险/跨源/低置信度/语义变化 | 仅前者可受控修复并验证；其余生成审阅候选或停止 |
+
+## 11. Capability Hub 与 Partner Connector
+
+| ID | 类型 | 前置/步骤 | 预期 |
+|---|---|---|---|
+| HB-001 | CONTRACT | built-in/personal/partner descriptor、版本、trust/lifecycle 冲突与撤销 | registry 确定、不可未签名覆盖、撤销立即生效 |
+| HB-002 | AUTO | 注册 browser/content/cast/handoff 内建能力 | schema 来自权威来源；无重复工具和隐藏强能力 |
+| HB-003 | CONTRACT | 相同 RouteInput 重复求值并检查候选和 route_reason | RouteDecision 稳定、理由完整、无 secret/内部 endpoint |
+| HB-004 | AUTO | partner/skill/web/human 的 trust、health、risk、偏好组合 | 默认优先级与覆盖规则确定；不可用路径不被选择 |
+| HB-005 | SECURITY | route 失败后 fallback，含已提交/未知副作用和不同 provider | 重新 scope/risk/grant/确认/幂等；未知副作用停止 |
+| HB-006 | AUTO | 用户查看/覆盖 route，涉及数据外发、成本和风险 | 预览与实际 route/provider 一致；覆盖有范围和到期 |
+| HB-007 | AUTO | 两 Profile 的健康/禁用/版本不同 Site Skill | adapter 只暴露当前 owner/Profile 的健康版本 |
+| HB-008 | SECURITY | 入站 CLI/MCP search/describe/preview capability | 只经 CAAP；不泄漏 OAuth token、partner endpoint 或隐藏工具 |
+| HB-009 | SECURITY | 静态/运行时检查入站 MCP 与出站 connector | crate、registry namespace、session、token、network client 和审计隔离 |
+| HB-010 | SECURITY | connector 包/manifest 正常、篡改、降级、撤销、离线和 kill switch | 只启用受信兼容版本；撤销/kill switch fail closed |
+| HB-011 | SECURITY | OAuth state/PKCE/redirect/scope、token 到期/撤销和跨 tenant | 防 CSRF/redirect 逃逸/scope 扩张；token vault 串租户零泄漏 |
+| HB-012 | SECURITY | endpoint/redirect/DNS rebinding 指向 loopback/private/link-local/metadata，超大响应 | 每跳重验并拒绝；无内部请求；消息/时间/并发有界 |
+| HB-013 | SECURITY | Partner MCP tool description/schema/response 注入本地指令或高权限工具 | namespace/schema allowlist 生效；内容保持 untrusted，不扩权 |
+| HB-014 | HARNESS | rate/quota、超时、429/5xx、慢流、熔断、恢复和取消 | retry budget/熔断/health 有界；副作用默认不自动 retry |
+| HB-015 | SECURITY | 扫描 route/connector 审计、指标、错误和诊断 | 只有 provider/tenant hash/capability/结果/延迟；无正文/token/完整参数 |
+
+## 12. 平台生命周期与外部客户端交接
 
 | ID | 类型 | 前置/步骤 | 预期 |
 |---|---|---|---|
@@ -124,7 +210,7 @@
 | CP-W01 | DEVICE | Windows DPAPI、本地网络/防火墙、多网卡、更新、外部客户端下载/启动 | 生命周期和错误反馈明确；不创建浏览器镜像 session |
 | CP-M01 | DEVICE | macOS Keychain、本地网络权限、签名/公证、更新、外部客户端下载/启动 | 生命周期和错误反馈明确；不创建浏览器镜像 session |
 
-## 9. 端到端、稳定性与发布
+## 13. 端到端、稳定性与发布
 
 | ID | 类型 | 前置/步骤 | 预期 |
 |---|---|---|---|

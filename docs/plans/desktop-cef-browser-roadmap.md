@@ -68,7 +68,7 @@
 
 ## 接口冻结
 
-`BrowserEngineAdapter` 只包含导航、标签、Profile、权限、输入事实和 observation 订阅；不得暴露 CEF 对象给 UI/Core。新增接口必须先写 contract test 和 Harmony 可实现性说明。
+`BrowserEngineAdapter` 首次冻结只包含导航、标签、Profile、权限、输入事实和 observation 订阅；不得暴露 CEF 对象给 UI/Core。后续 `CNT-02` 以独立 contract 扩展有界 page snapshot stream/cancel，`ACT-04/ACT-07` 扩展能力受限的 semantic discovery/action；`AGT-15` 只把正式 ACT 能力接入 CAAP。禁止为了 Agent 暴露 raw DOM/CDP/selector/JavaScript。每次新增接口必须先写 contract test 和 Harmony 可实现性说明。
 
 ## 每项通用验证
 

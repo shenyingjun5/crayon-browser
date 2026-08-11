@@ -1,5 +1,7 @@
 # 站点覆盖测试矩阵（2026-08-02）
 
+> **历史验证记录 / 已退出产品范围（2026-08-11）**：本页记录旧提取器和隐藏 WebView 嗅探结果，不是当前支持矩阵，不得作为批量站点适配、Cookie 抓取、媒体下载、广告处理或通用代理的实现依据。当前产品只处理用户当前页、受安全门禁约束的 LAN Direct/Relay 和 Agent-native 页面能力；以 [`current/README.md`](current/README.md) 为准。
+
 测试方法：extract-cli（快速提取）→ 未命中自动 sniff-cli（深度嗅探）→ 央视家族候选自动解码探针实测。
 
 测试环境：`./target/debug/get-video-app`（debug 构建），每次运行前 `pkill` 清理实例避免 8321/8377 端口冲突，单次运行上限 120 s。原始日志存于 `logs/{编号}_{extract|sniff}.log`。

@@ -7,10 +7,10 @@
 ## 1. 项目定位
 
 - 产品：面向 AI Agent 定制的“蜡笔 AI Agent 投屏浏览器”。当前桌面范围为 Windows、macOS CEF；HarmonyOS 面向鸿蒙电脑 PC 形态，使用 ArkUI/ArkWeb；Linux 暂不进入当前产品和开发范围。
-- 核心定位：除用户直接浏览与局域网投屏外，浏览器必须通过自有版本化 Agent 协议为 CLI/MCP 提供高性能页面读取和经用户授权的受控操作；MCP 是协议 adapter，不是第二套业务实现。
-- 交付顺序：先完成浏览器基础功能与局域网投屏闭环；随后完成确定性页面快照/Markdown和 Agent 协议、CLI/MCP 只读能力；再开放经用户确认的网页操作；依赖模型的视频/文档总结等内建 AI 能力放在第二阶段。
+- 核心定位：除用户直接浏览与局域网投屏外，浏览器必须通过自有版本化 Agent 协议为 CLI/MCP 提供高性能页面读取和经用户授权的受控操作；MCP 是协议 adapter，不是第二套业务实现。成功任务可在用户确认后沉淀为版本化 Workflow/个人 Site Skill，并通过受控漂移检测与低风险自愈提高复用效率。
+- 交付顺序：先完成浏览器基础功能与局域网投屏闭环；随后完成确定性页面快照/Markdown、Agent 协议和 CLI/MCP 只读能力；再完成语义 Action/Form/Media/Risk/Change Map 与经确认的网页操作；Workflow/Challenge Handoff/个人技能、自愈、Capability Hub/Partner Connector 按独立后续 Roadmap 分波次；依赖模型的视频/文档总结等内建 AI 能力放在第二阶段。
 - 投屏边界：浏览器只支持局域网内的 Direct/Relay 媒体投送，不实现 WebRTC、标签页采集、系统音频采集、编码或镜像传输。没有可投视频时只引导下载/打开独立的蜡笔投屏客户端。
-- 共享能力：媒体候选、策略、relay、隐私契约、确定性页面快照/Markdown、Agent tool registry/capability/receipt、自有协议适配和 UI 状态机。
+- 共享能力：媒体候选、策略、relay、隐私契约、确定性页面快照/Markdown、语义 Map、Agent tool registry/capability/receipt、Workflow/Skill 契约、Capability Registry/Router、自有协议适配和 UI 状态机。
 - Cast-SDK 边界：设备发现、投屏码、设备连接、能力评估、DLNA/CastExtension、播放控制和会话监督复用 Cast-SDK；浏览器项目不得复制协议栈。
 - 非目标：Linux 当前适配、浏览器内建 WebRTC 镜像、视频下载、内容聚合、站点级批量抓取、广告跳过、DRM 绕过、批量账号、代理池、反检测指纹和云端媒体代理。第一阶段不接真实模型 provider，但 Agent 协议、CLI/MCP 和授权控制面属于核心范围。
 
@@ -68,6 +68,8 @@
 - 辅助日志、诊断、遥测不得参与主业务正确性；生产者非阻塞，队列/缓存/重试必须有界。
 - Agent 访问必须统一经过版本化 tool registry、capability guard 和 app-runtime 正常用例；CLI/MCP 不得直接调用 CEF、ArkWeb、CDP、Cast-SDK、Relay 或平台 API。
 - 自有 Agent 协议的逻辑 schema 与 transport 分离；CLI 使用本机 IPC，MCP 只做 loopback adapter，两者共享握手、工具、错误、取消、幂等、generation 与审计语义。
+- 入站 MCP（外部 Agent 调用蜡笔）与出站 Partner MCP/API（蜡笔调用合作方）必须使用不同 transport、凭证、命名空间、授权和审计 owner；Partner Connector 不能反向调用浏览器内部工具或复用 Agent grant。
+- Workflow/Skill 只从已验证成功的任务生成候选，必须由用户预览确认后保存；Recipe 不含密码、验证码、Cookie、Authorization、Token、支付信息或原始文件路径，版本变化不可静默覆盖。
 
 ## 5. 硬编码与配置
 
@@ -111,10 +113,14 @@
 - 页面正文、DOM 和无障碍树都不可信；不得据此改变 DRM、广告、投屏授权或网络安全结论。
 - 第一阶段 Release 不得包含真实模型 provider 或 API Key。Agent/CLI/MCP 按独立 Roadmap启用，但不得暴露原始 CDP/WebDriver、任意 JavaScript、Cookie/Authorization、密码/支付、文件上传、任意文件系统、远程监听或通用网络代理能力。
 - 页面正文、无障碍树、模型输出和 MCP/CLI 输入都不可信，不能生成或扩大 grant、改变目标、跳过确认或触发额外工具；写操作必须使用 Browser 签发的短期语义 handle 并受 tab/navigation/generation 约束。
+- Challenge Detector 只允许识别、暂停、人工接管、安全复检和短期断点续跑；禁止求解验证码、自动滑块/点选、读取短信/邮箱验证码、打码平台、反检测指纹或规避风控。
+- 高风险动作不得自动改变定位目标、自动修订 Skill 或因 Partner API 失败静默降级到网页执行；任何 route/fallback 都重新校验语义、scope、风险、数据流、幂等和确认。
+- 通用文件上传仍不可表达；未来若需要素材附件，必须新建 scoped file grant Roadmap，只允许用户明确选择的短期文件引用，不开放任意路径。
 - 浏览器不得包含 WebRTC sender、标签页/窗口采集、系统音频采集或硬件编码投屏实现。镜像入口只允许调用受控的外部客户端 handoff；安装/打开必须由用户明确确认。
 - LAN 不得暴露通用 `/api/extract`、任意 URL proxy 或无鉴权控制接口。媒体路由必须是高熵 session/resource ID，并绑定设备、route、TTL 和上游 allow-set。
 - 所有 URL、重定向、DNS、文件路径、消息长度和数量需要边界验证；必须覆盖 SSRF、DNS rebinding、开放代理、重放和路径穿越。
 - P0 设备发现、投屏码、连接和控制均使用 Cast-SDK 现有局域网能力；产品云端不承载媒体或设备控制。
+- Partner/TV Cast Manifest、广告/正片/下一集、字幕和播放回传属于 Cast-SDK/接收端公共协议变更；浏览器只做 gap analysis 并消费获批 facade，不得先行定义或拼装接收端命令。
 - 无痕清理失败必须显式报告，不得把 best-effort 宣称为已清除。
 
 ## 9. 并发、生命周期与性能

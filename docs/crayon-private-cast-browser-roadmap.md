@@ -1,29 +1,32 @@
 # 蜡笔 AI Agent 投屏浏览器总 Roadmap
 
-- 版本：v0.6
+- 版本：v0.7
 - 日期：2026-08-11
 - 状态：活跃
-- 当前任务总数：150
-- 当前测试用例总数：116
+- 当前任务总数：196
+- 当前测试用例总数：153
 
 ## 1. 当前结论
 
-- Foundation 19 个原子任务、`MED-01..18`、`CEF-01A`、`SDK-01` 已完成，共 39 项。
-- `MED-19` 优先把历史 `Mirror`/WebRTC 语义迁移为外部客户端交接。
-- `CEF-01B`、`SDK-02` 已就绪；CEF 壳和真实 Cast-SDK 闭环尚未完成。
-- 产品仍是 Agent-native 浏览器：CAAP 自有协议、CLI/MCP、高性能读页和授权操作是核心，不是模型功能的附属项。
-- 具体模型/provider 与视频/文档总结属于第二阶段；当前先定义任务和门禁，不预选模型。
-- 当前桌面为 Windows/macOS；HarmonyOS 只做鸿蒙电脑 PC 形态技术预览；Linux 无活跃任务。
+- Foundation 19 项、`MED-01..19`、`CEF-01A`、`SDK-01..06` 已完成，共 45 项。
+- 当前可领取 `CEF-01B` 和 `SDK-07`；CEF 壳、真实接收端闭环与页面数据面尚未完成。
+- 产品仍按“浏览器与 LAN 投屏 -> 页面数据/Markdown -> Agent 协议与语义动作 -> Workflow/Challenge -> Capability Hub/合作方 -> 模型”的依赖顺序交付。
+- CAAP、CLI/入站 MCP、高性能读页和授权操作是核心；具体模型/provider 与视频/文档总结属于第二阶段。
+- Windows/macOS 为当前桌面；HarmonyOS 只做鸿蒙电脑 PC 形态技术预览；Linux 无活跃任务。
+- 新增 `ACT`、`WFL`、`HUB` 三个独立模块 Roadmap，避免把公共 schema、持久化状态机和 connector 安全边界塞进 AGT 或 CNT。
 
 ## 2. 交付不变量
 
-1. 浏览器基础与 LAN Direct/Relay 投屏先形成闭环，再开始当前页 Markdown。
-2. CAAP 协议/权限内核可在浏览器基础阶段后半段设计，但 R1 读页工具必须复用正式 page data/Markdown 管线。
-3. CLI 与 MCP 共用 CAAP/tool registry/guard/app-runtime；没有第二套浏览器自动化实现。
-4. R2～R4 副作用操作必须用户确认，页面/模型内容不能扩大授权。
-5. 模型型 AI 必须等 Markdown、Agent 权限与 provider 数据门禁稳定后进入第二阶段。
-6. 浏览器内投屏仅 LAN Direct/Relay；无路由只交接独立客户端，不做 WebRTC/采集/编码。
-7. Linux、新模型/provider、远程 Agent transport 和放宽永久禁止工具都需独立评审。
+1. 浏览器基础与 LAN Direct/Relay 投屏先形成闭环，再开始正式当前页 Markdown。
+2. CAAP 协议/权限内核可先设计，但 R1 页面工具和语义地图必须复用正式 page-data 管线。
+3. 入站 MCP 是 CAAP adapter；出站 Partner MCP/API 是隔离 connector，二者不共享 session、token、registry 或授权。
+4. Agent 外部只看语义地图/action_id，不看 raw DOM/CDP/长期 selector；动作必须前置检查、用户确认和效果验证。
+5. Workflow 只从 verified success 生成候选，用户预览保存；Challenge 只检测/暂停/接管，不自动解题。
+6. self-heal 只覆盖唯一、低风险、效果可验证的漂移；高风险、跨源、低置信度变化 fail closed。
+7. 每次 Hub fallback 重新做 scope、risk、grant、confirmation 和幂等判断，未知副作用不得跨路径重试。
+8. 模型型 AI 必须等 Markdown、Agent 权限与 provider 数据门禁稳定；模型不参与确定性安全决策。
+9. 浏览器投屏仅 LAN Direct/Relay；无路由只 ExternalClientHandoff，不做 WebRTC/采集/编码。
+10. Partner/TV Cast Manifest 由 Cast-SDK/接收端拥有；浏览器只做缺口分析并消费受审 facade。
 
 ## 3. 模块与任务数
 
@@ -32,14 +35,17 @@
 | FND | 19 | Workspace、契约、质量入口与仓库基线 |
 | CEF | 19 | Windows/macOS CEF 浏览器壳 |
 | MED | 19 | 媒体观察、LAN Relay 与外部客户端交接语义 |
-| SDK | 14 | Cast-SDK 发现、连接、投送与控制 |
+| SDK | 16 | Cast-SDK 发现/投送/控制；后续 Partner Cast facade |
 | PLT | 7 | Windows/macOS 系统与本机 IPC/客户端交接适配 |
 | PRV | 13 | Profile、隐私、安全、日志与删除语义 |
 | CNT | 16 | 页面数据/Markdown；第二阶段模型总结 |
-| AGT | 16 | CAAP、tool registry、CLI/MCP、高性能读页和授权操作 |
+| ACT | 12 | 语义地图、action_id、前置条件与效果验证 |
+| AGT | 16 | CAAP、入站 registry、CLI/MCP 与授权访问 |
+| WFL | 16 | Workflow、Challenge、个人 Site Skill 与受控修复 |
+| HUB | 16 | Capability Registry、Router 与 Partner connector |
 | HM | 12 | HarmonyOS 电脑 PC 形态技术预览 |
 | QAR | 15 | 质量、性能、安全、发布和回滚 |
-| **合计** | **150** | |
+| **合计** | **196** | |
 
 ## 4. 依赖关系
 
@@ -57,50 +63,56 @@ flowchart LR
   CEF --> CNT["CNT 页面数据/Markdown"]
   SDK --> CNT
   PRV --> CNT
-  CEF --> AGT["AGT CAAP/CLI/MCP"]
-  PRV --> AGT
-  CNT --> AGT
-  SDK --> AGT
+  CEF --> AGT0["AGT A0 协议/权限"]
+  PRV --> AGT0
+  CNT --> AGT1["AGT A1/A2 入站访问"]
+  CNT --> ACT["ACT 语义地图/动作"]
+  AGT0 --> ACT
+  AGT0 --> AGT1
+  ACT --> AGT1
+  ACT --> WFL["WFL Workflow/Challenge"]
+  AGT1 --> WFL
+  WFL --> HUB["HUB Registry/Router/Partner"]
+  AGT1 --> HUB
+  PRV --> HUB
   CNT --> MODEL["CNT 第二阶段模型"]
-  AGT --> MODEL
+  AGT1 --> MODEL
+  HUB --> PC["Partner Cast gap/facade"]
+  SDK --> PC
   PLT --> QAR
-  AGT --> QAR
-  MODEL --> QAR
+  AGT1 --> QAR
   MED --> HM
   SDK --> HM
-  AGT -. 适用协议复用 .-> HM
+  AGT1 -. "适用协议复用" .-> HM
 ```
+
+`AGT` 与 `ACT` 采用垂直切片：AGT-01..05 先冻结协议/权限，ACT 构建语义动作，随后 AGT-15 接入 R4；不允许形成循环领取。
 
 ## 5. 阶段安排
 
-### V0：工程与领域基线（已完成）
+### V0：工程、投屏语义与 SDK discovery 基线（已完成）
 
-- Foundation 19 项、`MED-01..18`、`CEF-01A`、`SDK-01`。
-
-### V0.1：投屏语义收口
-
-- `MED-19`。
-- 产出：`Direct/Relay/ExternalClientHandoff/Reject`，删除新实现对 Mirror/WebRTC 的依赖。
+- Foundation 19 项、`MED-01..19`、`CEF-01A`、`SDK-01..06`。
+- 产出：`Direct/Relay/ExternalClientHandoff/Reject`，固定 SDK source/facade/Fake/真实 service 生命周期与 discovery 快照语义。
 
 ### V1：Windows 浏览器可用
 
 - `CEF-01B..01D`、`CEF-02..12`、`PLT-01/02/W04` 与适用 PRV。
-- 验收：浏览、标签、Profile、下载、权限、崩溃、生命周期可用。
+- 验收：浏览、标签、Profile、下载、权限、崩溃和生命周期可用。
 
 ### A0：Agent 协议与权限内核
 
-- 在 `CEF-08` 与基础隐私契约稳定后推进 `AGT-01..05`、`AGT-11`。
-- 产出：CAAP v1、tool registry、task、grant、确认和 receipt；此阶段不开 transport、不宣称 Agent 可用。
-- 该阶段可与 V1 后半段/投屏工作有限并行，不依赖模型。
+- 在 `CEF-08` 与基础隐私契约稳定后推进 `AGT-01..05,11`。
+- 产出：CAAP v1、入站 registry、task、grant、确认和 receipt；不开 transport，不宣称 Agent 可用。
 
 ### V2：LAN FakeCastSdk 闭环
 
-- `SDK-02..08`、`CEF-13` 和相应 PRV/MED 用例。
-- 验收：发现、连接、Direct/Relay、控制、停止、外部客户端交接，无 WebRTC。
+- `SDK-07..12`、`CEF-13` 与相应 PRV/MED 用例。
+- 验收：发现、连接、Direct/Relay、控制、停止、ExternalClientHandoff，无 WebRTC。
 
 ### V3：真实接收端闭环
 
-- `SDK-09..14`、`CEF-14..15`、`PRV-01..13`。
+- `SDK-13..14`、`CEF-14..15`、`PRV-01..13`。
 - 验收：Windows/macOS 真实 Cast-SDK 与接收端通过 LAN Direct/Relay。
 
 ### V4W/V4M：Windows/macOS Alpha
@@ -110,71 +122,98 @@ flowchart LR
 
 ### C1：高性能页面数据与 Markdown
 
-- `CNT-01..10`。
-- 前置：`CEF-15`、`SDK-14`、`MED-19`、`PRV-08`。
+- `CNT-01..10`；前置 `CEF-15`、`SDK-14`、`MED-19`、`PRV-08`。
 - 验收：当前页结构化快照、缓存/分页/增量、Markdown 预览/复制/保存和性能基线。
+
+### S1：语义地图与可验证动作内核
+
+- `ACT-01..12`，与 AGT A1 后半段按依赖垂直切片。
+- 验收：Page/Action/Form/Media/Risk Map、ChangeSet、短期 action_id、风险、前置条件、效果验证和人工接管结果。
 
 ### A1：只读 Agent Developer Preview
 
-- `AGT-06/07/12..14`。
-- 验收：CLI/MCP 通过 CAAP 提供 R0/R1；默认关闭、local only；页面读取达到 P95 预算。
+- `AGT-06..08,12..14`。
+- 验收：CLI/入站 MCP 经 CAAP 提供 R0/R1；默认关闭、local only；页面读取达到 P95 预算。
 
 ### A2：受控 Agent 操作 Preview
 
-- `AGT-08..10/15/16`。
-- 验收：R2/R3 确认、R4 语义 handle、prompt injection/confused deputy/恶意 client/性能与 Release surface Review 通过。
+- `AGT-09,10,15,16`，依赖 `ACT-12`。
+- 验收：R2/R3 确认、R4 action_id/effect 接入、prompt injection/confused deputy/恶意 client/性能与 Release surface Review 通过。
+
+### W1：Challenge 与个人 Site Skill Preview
+
+- `WFL-01..13`。
+- 验收：challenge 检测/暂停/接管/checkpoint/恢复；verified-only 学习、用户预览保存、隔离 store、fixture 验证、runner、健康/版本/回滚。
+
+### W2：漂移与受控修复
+
+- `WFL-14..16`。
+- 验收：失败分类、drift 证据、低风险受控修复；高风险和低置信度不静默修改。
+
+### H0：本地 Capability Hub
+
+- `HUB-01..08`。
+- 验收：built-in/Site Skill/Web/Human 能力统一 registry、route_reason、fallback 重授权、入站 CAAP 能力发现。
+
+### H1：合作方 API/MCP Preview
+
+- `HUB-09..16`。
+- 验收：出站 connector 隔离、信任/签名/kill switch、OAuth/scope/token、SSRF、tool injection、限流/熔断和审计。
+
+### X1：Partner/TV Cast 能力
+
+- `SDK-15` 做浏览器侧缺口分析与外部 API 提案；外部 Cast-SDK/接收端获批发布后才执行 `SDK-16`。
+- 验收：浏览器无 raw manifest/协议拼接，只消费固定版本正式 facade。
 
 ### M2：模型型 AI 第二阶段
 
-- `CNT-11..16`。
-- 前置：`CNT-10`、`AGT-16`、`PRV-13`。
-- 验收：模型/provider ADR、发送前预览、文档总结、合法文本来源的视频总结、引用和降级。
+- `CNT-11..16`；前置 `CNT-10`、`AGT-16`、`PRV-13`。
+- 验收：provider ADR、发送预览、文档总结、合法文本来源的视频总结、引用和降级。可与 W/H 后期按资源并行，但不能替代其确定性门禁。
 
 ### V5：Windows/macOS 稳定发布
 
-- `QAR-01..12`、`QAR-14..16`。
-- Agent Developer Preview 与模型功能分别做 feature/Go-NoGo；任一 NO-GO 不阻塞浏览器/投屏核心发布。
+- `QAR` 适用任务。Agent、Workflow、Partner、模型分别做 feature GO/NO-GO；任一后续 feature NO-GO 不阻塞浏览器/LAN 投屏核心发布。
 
 ### VH：HarmonyOS 电脑技术预览
 
-- `HM-01..12`；共享 CAAP 逻辑协议，平台 transport 能力单独验证。
+- `HM-01..12`；共享 CAAP 和适用语义契约，平台 transport/ArkWeb 能力单独验证。
 
 ## 6. 资源与工期建议
 
-以 2～3 名工程师、共享 Core 已有但 CEF 壳/真实 SDK 未完成为前提：
+以 2～3 名工程师、共享 Core 已有但 CEF 壳/真实接收端未完成为前提：
 
 | 阶段 | 建议工期 | 说明 |
 |---|---:|---|
-| V0.1 | 2～4 个工作日 | 先消除 Mirror/WebRTC 返工 |
 | V1 | 4～6 周 | Windows CEF 浏览器主链路 |
-| A0 | 2～3 周 | 可与 V1 后半段有限并行；先协议/权限，不开 transport |
-| V2 | 2～3 周 | FakeCastSdk 闭环 |
-| V3 | 2～3 周 | 真实 SDK/接收端，受外部环境影响 |
-| V4W | 2～3 周 | Windows Alpha |
-| V4M | 3～4 周 | 可与 V4W 后半段并行 |
-| C1 | 3～4 周 | 页面数据面、Markdown与性能基线 |
-| A1 | 2～3 周 | CAAP transport、CLI/MCP 只读 Preview |
-| A2 | 3～5 周 | 受控写操作、安全和性能专项 |
-| M2 | 3～5 周 | 模型决策后估算；不含新 ASR 能力 |
+| A0 | 2～3 周 | 可与 V1 后半段有限并行；先协议/权限 |
+| V2/V3 | 4～6 周 | Fake 到真实 LAN 接收端，受外部环境影响 |
+| V4W/V4M | 4～6 周 | 两平台可错峰并行 |
+| C1 | 3～4 周 | 页面数据、Markdown 与性能基线 |
+| S1 | 3～4 周 | 语义地图、动作和效果验证 |
+| A1/A2 | 5～8 周 | 入站 transport、只读与受控写 Preview |
+| W1/W2 | 4～6 周 | 人机接管、个人技能、健康与修复 |
+| H0 | 2～3 周 | 本地 registry/router |
+| H1 | 4～6 周 | 合作方信任、OAuth、网络与运维门禁 |
+| X1 | 待外部 API 评审 | 不把外部仓库工作伪装为浏览器任务 |
+| M2 | 3～5 周 | provider 决策后估算；不含新 ASR |
 | V5 | 2～3 周 | 长稳、发布、升级/回滚 |
 | VH | 4～6 周 | 独立技术预览 |
 
-这是容量估算，不是发布日期承诺。单人串行按约 1.8～2.2 倍放大。建议在 V1 期间由一名工程师负责 CAAP/权限内核，避免浏览器完成后才反向改造数据面。
+这是容量估算，不是发布日期承诺；单人串行按约 1.8～2.2 倍放大。
 
 ## 7. 当前领取顺序
 
-1. `MED-19`：外部客户端交接语义迁移。
-2. `CEF-01B`：Windows CEF bootstrap。
-3. `SDK-02`：Cast-SDK facade 下一任务。
-4. `AGT-01` 在其依赖满足后冻结 CAAP v1；不得提前开放 CLI/MCP。
-5. `CNT-01` 等浏览器/投屏门禁完成；`CNT-11` 等 A1/隐私门禁完成。
+1. `SDK-07`：连接、断开与投屏码解析状态映射。
+2. `CEF-01B`：Windows CEF toolchain/bootstrap。
+3. `AGT-01` 在 `FND-08/PRV-08` 满足后冻结 CAAP v1；不得提前开放 CLI/MCP。
+4. `CNT-01` 等 `CEF-15/SDK-14/MED-19/PRV-08` 完成。
+5. `ACT-01` 等 `CNT-03/AGT-01` 完成；`WFL/HUB` 不得越过语义动作和权限依赖。
 
 ## 8. 发布门禁
 
-- 150 项范围任务的状态和证据符合各阶段实际发布选择。
-- 116 个当前测试 ID 可追踪，P0/P1 Review 问题为零。
-- CLI/MCP 共享 CAAP/tool registry，无 raw CDP/WebDriver/任意 JS/remote bind。
-- R1 数据最小化，R2～R4 用户确认，grant/handle/generation/replay 安全通过。
-- Agent 页面读取 benchmark 可重复，不以无证据口号宣称性能优势。
-- 模型 feature 不满足 provider/隐私门禁时保持关闭，不影响本地 Markdown。
-- Direct/Relay/外部交接、隐私、生命周期、性能、长稳、安装、升级和回滚有真实证据。
+- 196 项任务按所选发布范围提供真实状态、命令与证据；153 个测试 ID 可追踪，P0/P1 Review 为零。
+- CLI/入站 MCP 共用 CAAP；出站 connector 独立；无 raw CDP/WebDriver/任意 JS/remote bind/通用文件上传。
+- 页面数据有界、action 有前置与效果、Workflow verified-only、Challenge 不绕过、self-heal 高风险 fail closed。
+- Hub route_reason/fallback 重授权和 Partner 信任/OAuth/SSRF/kill switch 通过后才开放对应 feature。
+- 模型门禁未满足则保持关闭；Partner Cast facade 未发布则 `SDK-16` 保持阻塞，二者都不影响核心浏览器/LAN Cast。
+- Direct/Relay/ExternalClientHandoff、隐私、生命周期、性能、长稳、安装、升级和回滚有真实平台证据。

@@ -1,5 +1,7 @@
 # get-video 测试用例
 
+> **历史测试目录 / 已被取代（2026-08-11）**：本文只记录旧提取器与通用 relay 的验证，不是当前产品验收或 CI 事实源。当前 153 个权威测试 ID 位于 [`current/test-cases.md`](current/test-cases.md)，测试设施和证据规则以 [`current/testing-standard.md`](current/testing-standard.md) 为准；不得新增依赖公网影视站、通用 `/api/extract`/`/proxy` 或 Cookie 提取的正式用例。
+
 > 版本：v0.1 · 更新日期：2026-07-30
 > 说明：所有公网 URL 均已用 curl 实测可达（HTTP 200 / 206，见各项标注）。
 > 约定：**[在线]** 依赖公网资源，可能随时间失效；**[夹具]** 本地构造，确定性测试，CI 必须可跑。

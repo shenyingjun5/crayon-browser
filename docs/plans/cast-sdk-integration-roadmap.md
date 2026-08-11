@@ -1,10 +1,10 @@
 # SDK：Cast-SDK 集成 Roadmap
 
-状态：`FND-08 DONE`；`SDK-01 DONE`；`SDK-02 DONE`；`SDK-03 DONE`；`SDK-04 DONE`；`SDK-05 DONE`；`SDK-06 DONE`；`SDK-07 READY`。源码固定为 Cast-SDK `44c3a99871aa1e68cbda71eacefbb41d23a747a8`，通过 `third_party/cast-sdk` submodule 接入；不得依赖开发者本机源码路径。
+状态：`FND-08 DONE`；`SDK-01..06 DONE`；`SDK-07 READY`；`SDK-15/16` 为 Partner/TV Cast Manifest 的后续外部依赖任务。任务数 16。源码固定为 Cast-SDK `44c3a99871aa1e68cbda71eacefbb41d23a747a8`，通过 `third_party/cast-sdk` submodule 接入；不得依赖开发者本机源码路径。
 
 ## 边界
 
-只通过稳定 facade 复用发现、投屏码、连接、能力、远程媒体投送、播控和会话监督。网页、Cookie、relay recipe、CEF 与产品 UI 不进入 Cast-SDK。
+只通过稳定 facade 复用发现、投屏码、连接、能力、远程媒体投送、播控和会话监督。网页、Cookie、relay recipe、CEF 与产品 UI 不进入 Cast-SDK。Partner/TV Cast Manifest 的签名、设备能力、字幕/队列和结果回报属于 Cast-SDK/接收端协议；浏览器只做缺口分析并消费正式发布的 facade。
 
 ## 接入决策（2026-08-10）
 
@@ -33,6 +33,8 @@
 | SDK-12 | SDK-07,SDK-08,SDK-10,SDK-11,MED-19 | `crayon-app-runtime/cast_usecase` | UI/runtime 与 SDK 事件编排；撤销 Direct/Relay；外部交接不创建 SDK session | Fake E2E V2；每个终态资源清理；PL-015 | S2 |
 | SDK-13 | SDK-12 | 真接收端 Harness | 自动发现、投屏码、能力、投送、控制、终态 | CS-010、E2E-001、E2E-002；记录接收端版本/网络 | S4 |
 | SDK-14 | SDK-02,SDK-12,SDK-13 | Review/升级说明 | API contract、source revision、错误映射、并发生命周期 Review | 全 CS；无 P0/P1；锁定 SDK gitlink/revision | S4 |
+| SDK-15 | SDK-14,HUB-16 | `docs/plans/**`、Cast-SDK API proposal | 对 Partner/TV signed manifest、能力协商、字幕/队列/结果回报做浏览器侧缺口分析；形成外部 Cast-SDK/receiver 独立 Roadmap/API 提案，不改外部仓库 | `CS-011`; 所有字段有 owner/trust/compat/失败语义；浏览器无临时协议 | X1 |
+| SDK-16 | SDK-15，且外部 API 已获批、发布并固定 revision | `crayon-cast-adapter/**`,`crayon-app-runtime/cast_usecase/**` | 仅通过正式 facade 消费 Partner/TV Cast Manifest 能力和事件 | `CS-012`; 签名/版本/能力/字幕/队列/结果；无 raw manifest/控制 URL/协议复制 | X1 |
 
 ## SDK-01 完成记录（2026-08-10）
 
@@ -91,6 +93,7 @@
 2. 在 Cast-SDK 建独立 Roadmap、测试和公共 API 评审。
 3. SDK 合入并推送新 commit 后执行 `SDK-01/02/09` revision 升级验证。
 4. 浏览器仓库不得调用 private crate、复制 SOAP/CastExtension、缓存设备 IP 或建立临时协议分支。
+5. 修改 Cast-SDK/接收端外部仓库、推送或发布仍需用户明确授权；`SDK-15` 本身只产出缺口和 API 提案。
 
 ## Review 专项
 
