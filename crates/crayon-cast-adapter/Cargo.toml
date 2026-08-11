@@ -17,5 +17,9 @@ crayon-domain = { path = "../crayon-domain" }
 serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
+crayon-cast-policy = { path = "../crayon-cast-policy" }
+crayon-ipc-schema = { path = "../crayon-ipc-schema" }
+crayon-media-observer = { path = "../crayon-media-observer" }
+crayon-media-probe = { path = "../crayon-media-probe" }
 serde_json = "1"
 test-support = { path = "../../test-support" }

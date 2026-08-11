@@ -160,10 +160,10 @@ pub enum CastMediaKind {
 /// Outcome of a receiver capability assessment for one media kind.
 ///
 /// The pinned SDK assesses per media type only; it does not report the
-/// codec/resolution matrix of `ReceiverCapabilities`. SDK-08 owns the
-/// conservative mapping from this assessment into `ReceiverCapabilities`
-/// (including TTL/cache invalidation); unknown or risky must never be
-/// presented as supported there.
+/// codec/resolution matrix of `ReceiverCapabilities`. The conservative
+/// mapping into `ReceiverCapabilities` (including TTL/epoch caching) lives
+/// in `crate::capability` (SDK-08): unknown or risky is never presented as
+/// supported there.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AssessmentStatus {

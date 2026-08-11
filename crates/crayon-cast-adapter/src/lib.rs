@@ -11,14 +11,23 @@
 //!   (`SenderCastFacade`): lifecycle/thread/callback encapsulation,
 //!   session-event bridging and fail-closed fencing. The deterministic fake
 //!   (SDK-04) lives in `test-support`.
+//! - SDK-08 adds receiver capability synthesis and caching
+//!   (`ReceiverCapabilityCache`): conservative assessment ->
+//!   `ReceiverCapabilities` mapping (fail closed), TTL/epoch invalidation
+//!   (CS-004).
 //!
 //! Browser, UI, and media crates must never see SDK-internal types.
 
+mod capability;
 mod dto;
 mod error;
 mod facade;
 mod service;
 
+pub use capability::{
+    synthesize_receiver_capabilities, CapabilityCacheConfig, ReceiverCapabilityCache,
+    DEFAULT_ASSESSMENT_TTL, MAX_CACHED_DEVICES,
+};
 pub use dto::{
     AssessmentStatus, CastCode, CastMediaKind, CastMediaRequest, CastMediaUrl, CastPlaybackState,
     CastSessionPhase, CastSessionRef, CastSessionSnapshot, CastTerminalReason, DeliveryProtocol,

@@ -1,6 +1,6 @@
 # SDK：Cast-SDK 集成 Roadmap
 
-状态：`FND-08 DONE`；`SDK-01..07 DONE`；`SDK-08 READY`；`SDK-15/16` 为 Partner/TV Cast Manifest 的后续外部依赖任务。任务数 16。源码固定为 Cast-SDK `44c3a99871aa1e68cbda71eacefbb41d23a747a8`，通过 `third_party/cast-sdk` submodule 接入；不得依赖开发者本机源码路径。
+状态：`FND-08 DONE`；`SDK-01..08 DONE`；`SDK-09 READY`；`SDK-15/16` 为 Partner/TV Cast Manifest 的后续外部依赖任务。任务数 16。源码固定为 Cast-SDK `44c3a99871aa1e68cbda71eacefbb41d23a747a8`，通过 `third_party/cast-sdk` submodule 接入；不得依赖开发者本机源码路径。
 
 ## 边界
 
@@ -94,6 +94,16 @@
 - 验证：`cargo test -p crayon-cast-adapter` 64/64 PASS（lib 36 = 既有 32 + 新增 4：codec 三类拒绝重映射 InvalidCastCode 且通用 InvalidInput 不受影响、幂等/切换/断开后重连、双注册 connect 命中快照代表条目、老化设备 DeviceNotFound；契约 16；链接 2；CS 场景 10）；`cargo test -p test-support --test cast_facade` 26/26 PASS；`cargo test --workspace` 66 suites / 322 passed / 0 failed PASS；`cargo clippy --workspace --all-targets -- -D warnings` PASS；`cargo fmt --all -- --check` PASS；`cargo run -p repo-guard -- scan --root .` PASS（RG-003/004 仅 `app/` 与既有提醒，无新增）；`bash scripts/check.sh fast` PASS；`git diff --check` PASS。
 - Code Review：按 current 标准逐维度审查（需求边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试、可维护性），P0/P1 = 0；P2 一项（延期）：真实 `RouteLost` 路径（visible-but-route-expired）CI 不可构造，如上由 Fake 脚本 + SDK-13 真机 Harness 覆盖，跟踪 SDK-13。
 - 未覆盖：投屏码成功/码过期/无人应答的真实 LAN 发包路径为手工项（未运行，CI 不发包）；真实协作式取消依赖 SDK 新 API（缺口已记录）；macOS 构建与真机（SDK-13）。
+
+## SDK-08 完成记录（2026-08-11）
+
+- 改动：`crates/crayon-cast-adapter/src/capability.rs`（`synthesize_receiver_capabilities` 保守合成 + `ReceiverCapabilityCache`/`CapabilityCacheConfig`/`DEFAULT_ASSESSMENT_TTL`/`MAX_CACHED_DEVICES`）、`src/capability_tests.rs`（3 项 crate 内测试：合成 4×4 矩阵、真实 facade 对齐）、`tests/capability.rs`（13 项 Fake 驱动行为测试 + CS-004 policy golden 一致性）、`src/lib.rs`（导出）、`src/service.rs`（`service()` 升 `pub(crate)` 供 crate 内测试注册 SDK mock 设备；模块文档同步）、`src/dto.rs`/`src/facade.rs`（注释指向已实现的 capability 模块）、`Cargo.toml`（dev 依赖新增 `crayon-cast-policy`/`crayon-ipc-schema`/`crayon-media-observer`/`crayon-media-probe`，仅测试使用，生产依赖图不变）。
+- 合成语义定稿（CS-004、PL-013 fail closed）：仅 `Supported` 映射为 `true`；`Risky`/`Unsupported`/`Unknown` 与评估失败一律不呈现为支持。pinned SDK 只有 media-type 粒度评估、无 codec/分辨率矩阵（SDK-03 P2），故 `dash`/`h264`/`hevc`/`av1`/`max_height` 恒为 `false`/`0`——呈现为支持即猜测；放宽需 Cast-SDK 能力 API 变更（缺口跟踪 SDK-14/SDK-15）。
+- TTL/epoch 语义定稿：缓存条目仅在 TTL（默认 30s，可配置）内、设备 epoch 未变、设备仍在发现快照中时可用；`invalidate(device)`（断连/切机/route lost）与 `invalidate_all`（facade 重启，全局 generation 递增）由运行时（SDK-12）在生命周期事件上调用；刷新进行中发生失效时以 (generation, epoch) compare-and-set 丢弃旧评估，旧代际评估永远不会覆盖新代际；TTL 内老化消失的设备读路径 fail closed（`DeviceNotFound`），同一稳定 ID 重现即重新评估（设备替换）。缓存有界（64 设备）：满载先逐出过期项、再逐出普通缓存项（丢一次命中永远安全），绝不逐出 tombstone；仅剩 tombstone 时跳过缓存并计数。连接语义遵从 SDK-07 冻结：评估不依赖连接，重连是普通新 connect，缓存不跟踪连接状态，由运行时显式失效。
+- SDK-03 P2 关闭：`ReceiverAssessment` → `ReceiverCapabilities` 的保守合成与 TTL/generation 缓存已实现并有测试钉死；codec/分辨率部分作为 SDK 能力缺口转入 SDK-14/SDK-15 gap analysis。
+- 验证：`cargo test -p crayon-cast-adapter` 80/80 PASS（lib 39 = 既有 36 + 新增 3；契约 16；链接 2；CS 场景 10；capability 集成 13：新鲜命中不重复评估、TTL 过期重评估、TTL 内 invalidate 后取最新、Risky/Unknown 不当支持、刷新失败 fail closed 不留旧缓存、老化设备 fail closed + 替换重评估、invalidate_all、刷新中失效丢弃旧 store、容量有界/tombstone 满载行为、并发 smoke、CS-004 policy 三条：变更后 policy 用最新评估/TTL 兜底/Unknown 全程 fail closed）；`cargo test -p test-support --test cast_facade` 26/26 PASS；`cargo test --workspace` PASS；`cargo clippy --workspace --all-targets -- -D warnings` PASS；`cargo fmt --all -- --check` PASS；`cargo run -p repo-guard -- scan --root .` PASS（passed=true；RG-003 无新增；RG-004 新增 1 条警告级 finding：`capability.rs` 默认 TTL 常量命中 `Duration::from_secs(` 字面量规则——已是命名常量且可经 `CapabilityCacheConfig` 覆盖，与 `crayon-relay` 既有同类警告一致，见 Review P3）；`bash scripts/check.sh fast` 在当前工作区失败于 `brand-assets` 步骤——该步骤由另一会话未提交的 BRD 改动加入（`tools/brand-assets` 仍未跟踪，与 SDK-08 无关）；HEAD 版 fast 的四个步骤已逐一实跑：guard PASS、format PASS、`cargo test --workspace` PASS（同上）、`cargo test -p get-video --no-default-features --features legacy-dev --lib` 58/58 PASS；`git diff --check` PASS。
+- Code Review：按 current 标准逐维度审查（需求边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试、可维护性），P0/P1 = 0；P2 一项：真实 LAN 路径的评估（设备发现后真实接收端的 assess）为手工项（未运行，CI 不发组播），真机证据归 SDK-13；P3 一项：RG-004 对 `DEFAULT_ASSESSMENT_TTL` 的 `Duration::from_secs` 字面量报警告级 finding，常量已命名且经 `CapabilityCacheConfig` 可覆盖，规则为字符串匹配、对命名常量不可区分，延期到 SDK-14 统一复核。
+- 未覆盖：`start_discovery` LAN 路径上的真实评估为手工项（未运行）；codec/分辨率能力矩阵依赖 SDK 新 API（缺口转入 SDK-14/SDK-15）；`invalidate`/`invalidate_all` 的运行时接线归 SDK-12；macOS 构建与真机（SDK-13）。
 
 ## SDK 缺口处理
 

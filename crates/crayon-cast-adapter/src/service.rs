@@ -30,8 +30,9 @@
 //! restart never collides with the previous instance's sockets, and
 //! device/session state deliberately does not carry over.
 //!
-//! Deliberately out of scope here (later roadmap tasks): capability
-//! caching/TTL (SDK-08), delivery orchestration policy (SDK-09).
+//! Deliberately out of scope here (later roadmap tasks): delivery
+//! orchestration policy (SDK-09). Capability synthesis/caching (SDK-08)
+//! lives in `capability`, layered over this facade.
 //!
 //! Discovery snapshot semantics (finalized in SDK-06, CS-001/CS-002):
 //! - `list_devices` serves the SDK product-visible list — connectable
@@ -185,7 +186,10 @@ impl SenderCastFacade {
 
     /// Clones the Arc-based SDK handle under a brief lock; the lock is never
     /// held across an SDK call. Fails closed once shutdown began.
-    fn service(&self) -> Result<SenderCommandService, CastError> {
+    ///
+    /// `pub(crate)` so in-crate tests can drive the deterministic SDK
+    /// registry entry points (`add_mock_device`) without LAN traffic.
+    pub(crate) fn service(&self) -> Result<SenderCommandService, CastError> {
         self.service
             .lock()
             .unwrap_or_else(|error| error.into_inner())

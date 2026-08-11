@@ -137,8 +137,9 @@ pub trait CastFacade: Send + Sync {
     // -- Capability assessment (CS-004) -----------------------------------
 
     /// Assesses one media kind against a discovered device. The result is a
-    /// point-in-time fact; SDK-08 owns caching/TTL and the conservative
-    /// mapping into `ReceiverCapabilities`.
+    /// point-in-time fact; `ReceiverCapabilityCache` (SDK-08) owns the
+    /// conservative synthesis into `ReceiverCapabilities` and TTL/epoch
+    /// caching on top of this call.
     fn assess_receiver(
         &self,
         device: &DeviceId,
