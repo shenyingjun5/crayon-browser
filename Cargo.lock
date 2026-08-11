@@ -409,6 +409,7 @@ dependencies = [
  "crayon-domain",
  "serde",
  "serde_json",
+ "test-support",
 ]
 
 [[package]]
@@ -1556,6 +1557,7 @@ dependencies = [
 name = "test-support"
 version = "0.1.0"
 dependencies = [
+ "crayon-cast-adapter",
  "crayon-domain",
  "crayon-ipc-schema",
  "tokio",

@@ -9,6 +9,7 @@
 //! - no real secrets — fixtures use documented example values only.
 
 pub mod browser_fixture;
+pub mod cast_facade;
 pub mod clock;
 pub mod leak_scanner;
 pub mod platform;
