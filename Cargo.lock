@@ -406,6 +406,7 @@ version = "0.1.0"
 dependencies = [
  "cast-sender-core",
  "cast-sender-service",
+ "cast-sender-session",
  "crayon-domain",
  "serde",
  "serde_json",

@@ -12,6 +12,7 @@ workspace = true
 [dependencies]
 cast-sender-core = { path = "../../third_party/cast-sdk/sender/rust/crates/cast-sender-core" }
 cast-sender-service = { path = "../../third_party/cast-sdk/sender/rust/crates/cast-sender-service" }
+cast-sender-session = { path = "../../third_party/cast-sdk/sender/rust/crates/cast-sender-session" }
 crayon-domain = { path = "../crayon-domain" }
 serde = { version = "1", features = ["derive"] }
 

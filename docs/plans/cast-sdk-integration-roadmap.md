@@ -1,6 +1,6 @@
 # SDK：Cast-SDK 集成 Roadmap
 
-状态：`FND-08 DONE`；`SDK-01 DONE`；`SDK-02 DONE`；`SDK-03 DONE`；`SDK-04 DONE`；`SDK-05 READY`。源码固定为 Cast-SDK `44c3a99871aa1e68cbda71eacefbb41d23a747a8`，通过 `third_party/cast-sdk` submodule 接入；不得依赖开发者本机源码路径。
+状态：`FND-08 DONE`；`SDK-01 DONE`；`SDK-02 DONE`；`SDK-03 DONE`；`SDK-04 DONE`；`SDK-05 DONE`；`SDK-06 READY`。源码固定为 Cast-SDK `44c3a99871aa1e68cbda71eacefbb41d23a747a8`，通过 `third_party/cast-sdk` submodule 接入；不得依赖开发者本机源码路径。
 
 ## 边界
 
@@ -64,6 +64,14 @@
 - 验证：`cargo test -p crayon-cast-adapter` 31/31 PASS（4 单测 + 16 契约 + 2 链接冒烟 + 9 CS 场景）；`cargo test -p test-support --test cast_facade` 23/23 PASS；`cargo test --workspace` 66 suites / 286 passed / 0 failed PASS；`cargo clippy --workspace --all-targets -- -D warnings` PASS（`--all-features` 因根 crate `formal-product` 与 `legacy-dev` 互斥而无法运行，属既有结构约束，与 SDK-02/03 证据口径一致；Fake 无 cargo feature，不存在 feature 组合遗漏）；`cargo fmt --all -- --check` PASS；`cargo run -p repo-guard -- scan --root .` PASS（RG-001/RG-002/RG-005/RG-007/RG-008 passed；RG-003/RG-004 仅 `app/` 既有 warning，无新增；RG-006 not_applicable，Release artifact 扫描需 `--artifact-path`，Fake 所在 test-support 不在任何生产依赖图中）；`bash scripts/check.sh fast` PASS（guard/format/formal-workspace/legacy-unit 全过）；`git diff --check` PASS。
 - Code Review：按 current 标准逐维度审查（需求边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试、可维护性），P0/P1 = 0；P2 一项：Fake 的 `list_devices` 不随 discovery 停止清空快照（沿用 SDK 设备 registry 语义“快照是既有事实”），真实 service 的发现快照语义由 SDK-06 定稿时复核（跟踪 SDK-06/SDK-14）。
 - 未覆盖：真实 `SenderCommandService` 生命周期/线程模型（SDK-05）；发现增量事件通道——SDK-03 契约只有快照式 `list_devices`，若 SDK-06 需要增量事件需先评审契约；投屏码取消的最终错误映射（SDK-07）；macOS 构建与真机（SDK-13）。
+
+## SDK-05 完成记录（2026-08-11）
+
+- 改动：`crates/crayon-cast-adapter/src/service.rs`（`SenderCastFacade` + `SenderCastFacadeConfig`，实现 `CastFacade` 全部 21 个方法）、`src/service_tests.rs`（22 项）、`src/lib.rs`（导出与模块说明）、`Cargo.toml`（新增锁定 submodule 内 `cast-sender-session` path 依赖，RG-008 passed）。设计要点：SDK 服务是唯一状态所有者，adapter 不镜像设备/会话状态；唯一一把 `Mutex<Option<SenderCommandService>>` 只在 clone/take Arc 句柄期间持有，从不跨 SDK 调用、callback 或 join；`shutdown`/Drop 幂等并按逆序释放（监督会话内存态终止 → disconnect（媒体活跃时至多一次有界 SOAP stop）→ stop_discovery join worker → drop service 由 SDK hub/server 各自 Drop join/关闭），SDK runtime 失败全部 best-effort 吞掉、不 panic；shutdown 后所有可失败调用 fail closed 为 `InvalidState`，无返回值读降级为空。会话桥接：`subscribe_cast_session` → 纯转换 `SessionBridge`，SDK hub 只在 strictly-newer 时发布且按 listener 过滤，旧 generation 事件不到达产品 listener；转换丢弃 health/ownership/receiver 字段与 `error_code`，`playback_position` 在边界丢弃 `track_uri`（RL-014）。播控 fencing 与 Fake 逐条对齐：无会话→`NoActiveSession`、旧 generation→`StaleSessionGeneration`、同/新 generation 未知身份→`NoActiveSession`、终态仅 stop 幂等成功；fence 判定实时重读 SDK supervisor，竞态由 SDK 内部 `CAST_SESSION_STALE_GENERATION` 二次 fencing 兜底。`cast_media` 先 fail-closed 校验连接设备再投送，成功后从 `current_cast_session()` 取真实 handle（含 media_kind）组装 `CastSessionRef`。设备 ID 用 `stable_device_key()`；`disconnect` 先经监督终止活动会话再 `disconnect_device`。
+- 决策：`restart` = 新实例（全部端口 ephemeral loopback，状态不跨实例携带，文档化）；`PresentingStatic` 无产品对应态，防御性映射 `Unknown`（facade 永不投图片）；投屏码解码失败当前经通用映射得 `InvalidInput`，语境化重映射 `InvalidCastCode` 与取消缺口留给 SDK-07（结构未堵死：错误映射集中在调用点一行）；生命周期 CI 测试不调用 `start_discovery`/`resolve_device_by_cast_code`（LAN 组播/发包），改用"构造 + 不 start 的调用 + SDK `add_mock_device` loopback 设备 + `begin_platform_self_receiver_session`（仅绑定 ephemeral loopback 控制服务）"驱动确定性监督会话。
+- 验证：`cargo test -p crayon-cast-adapter` 53/53 PASS（lib 26 = 4 既有 error + 22 新增：构造无副作用/幂等 stop-discovery/disconnect/shutdown fail-closed/drop+restart/无会话 fencing/cast_media fail-closed/loopback 不可达映射 NetworkUnavailable/connect-disconnect 往返/assess 委托/桥接全流程+generation 单调+stop 幂等/退订不再投递+notify_immediately/callback 内重入 facade 不死锁/并发调用+shutdown 不 panic/转换映射穷尽钉扎/设备 DTO 无定位键）；`cargo test --workspace` 66 suites / 308 passed / 0 failed PASS；`cargo clippy --workspace --all-targets -- -D warnings` PASS；`cargo fmt --all -- --check` PASS；`cargo run -p repo-guard -- scan --root .` PASS（RG-003/004 仅 `app/` 既有 warning，无新增）；`bash scripts/check.sh fast` PASS；`git diff --check` PASS。
+- Code Review：按 current 标准逐维度审查（需求边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试、可维护性），P0/P1 = 0；P2 一项：Drop/shutdown 中 `stop_discovery` join discovery worker 的最坏耗时 ≈ 一个在途 SSDP 周期（默认 `discovery_timeout_ms` 10s，可配置）——有界但不可忽略，SDK 未提供更细粒度取消，复核跟踪 SDK-14。
+- 未覆盖：`start_discovery`/`refresh_discovery` 的 LAN 组播路径与 `resolve_device_by_cast_code` 真实发包验证为手工项（未运行）；`cast_media` 成功路径需要可应答 SOAP 的接收端（loopback 只覆盖失败映射），由 SDK-13 Harness 负责；orphan 线程依赖代码审查与 SDK hub/server 的 Drop join 保证（CI 无跨平台线程枚举断言）；macOS 构建与真机（SDK-13）。
 
 ## SDK 缺口处理
 
