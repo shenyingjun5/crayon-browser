@@ -53,17 +53,39 @@ pub trait CastFacade: Send + Sync {
     // -- Discovery (CS-001/CS-002) ----------------------------------------
     // Lifecycle is idempotent: repeated start/stop is not an error. UI and
     // Agent reads consume snapshots only; no IP or location ever crosses.
+    //
+    // Finalized snapshot semantics (SDK-06):
+    // - the snapshot contains currently connectable receivers only: a device
+    //   that aged out (stale/offline) or never resolved disappears from the
+    //   list instead of showing a degraded entry, and reappears under the
+    //   same stable `DeviceId` once it resolves again;
+    // - stopping discovery never clears the snapshot — the last known
+    //   connectable set stays readable until devices age out or the facade
+    //   is restarted;
+    // - one logical receiver appears exactly once under one stable
+    //   `DeviceId`, even across same-name receivers, duplicate-UDN
+    //   registrations and multi-interface/IP-change re-announces; the id
+    //   never embeds an IP, so an address change keeps the identity;
+    // - the snapshot has a deterministic total order (friendly name, then
+    //   device id) so UI diffing never flickers;
+    // - there is deliberately no incremental event channel: the pinned SDK
+    //   publishes discovery deltas only inside its worker, and CS-001
+    //   consumers poll the snapshot (SDK-06 review decision).
 
     /// Starts (or keeps running) LAN device discovery.
     fn start_discovery(&self) -> Result<(), CastError>;
 
-    /// Stops discovery; a no-op when not running.
+    /// Stops discovery; a no-op when not running. The device snapshot is
+    /// retained (see the discovery contract above).
     fn stop_discovery(&self) -> Result<(), CastError>;
 
-    /// Re-queries immediately while discovery runs.
+    /// Re-queries immediately. Also starts discovery when it is not running
+    /// (pinned SDK behaviour), so it never fails just because discovery was
+    /// off.
     fn refresh_discovery(&self) -> Result<(), CastError>;
 
-    /// Current device snapshot (stable `DeviceId`s, never IPs).
+    /// Current device snapshot: connectable receivers only, stable
+    /// `DeviceId`s (never IPs), deterministic order.
     fn list_devices(&self) -> Vec<DiscoveredDevice>;
 
     fn is_discovery_running(&self) -> bool;

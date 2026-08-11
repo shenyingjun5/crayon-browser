@@ -1,6 +1,6 @@
 # SDK：Cast-SDK 集成 Roadmap
 
-状态：`FND-08 DONE`；`SDK-01 DONE`；`SDK-02 DONE`；`SDK-03 DONE`；`SDK-04 DONE`；`SDK-05 DONE`；`SDK-06 READY`。源码固定为 Cast-SDK `44c3a99871aa1e68cbda71eacefbb41d23a747a8`，通过 `third_party/cast-sdk` submodule 接入；不得依赖开发者本机源码路径。
+状态：`FND-08 DONE`；`SDK-01 DONE`；`SDK-02 DONE`；`SDK-03 DONE`；`SDK-04 DONE`；`SDK-05 DONE`；`SDK-06 DONE`；`SDK-07 READY`。源码固定为 Cast-SDK `44c3a99871aa1e68cbda71eacefbb41d23a747a8`，通过 `third_party/cast-sdk` submodule 接入；不得依赖开发者本机源码路径。
 
 ## 边界
 
@@ -72,6 +72,16 @@
 - 验证：`cargo test -p crayon-cast-adapter` 53/53 PASS（lib 26 = 4 既有 error + 22 新增：构造无副作用/幂等 stop-discovery/disconnect/shutdown fail-closed/drop+restart/无会话 fencing/cast_media fail-closed/loopback 不可达映射 NetworkUnavailable/connect-disconnect 往返/assess 委托/桥接全流程+generation 单调+stop 幂等/退订不再投递+notify_immediately/callback 内重入 facade 不死锁/并发调用+shutdown 不 panic/转换映射穷尽钉扎/设备 DTO 无定位键）；`cargo test --workspace` 66 suites / 308 passed / 0 failed PASS；`cargo clippy --workspace --all-targets -- -D warnings` PASS；`cargo fmt --all -- --check` PASS；`cargo run -p repo-guard -- scan --root .` PASS（RG-003/004 仅 `app/` 既有 warning，无新增）；`bash scripts/check.sh fast` PASS；`git diff --check` PASS。
 - Code Review：按 current 标准逐维度审查（需求边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试、可维护性），P0/P1 = 0；P2 一项：Drop/shutdown 中 `stop_discovery` join discovery worker 的最坏耗时 ≈ 一个在途 SSDP 周期（默认 `discovery_timeout_ms` 10s，可配置）——有界但不可忽略，SDK 未提供更细粒度取消，复核跟踪 SDK-14。
 - 未覆盖：`start_discovery`/`refresh_discovery` 的 LAN 组播路径与 `resolve_device_by_cast_code` 真实发包验证为手工项（未运行）；`cast_media` 成功路径需要可应答 SOAP 的接收端（loopback 只覆盖失败映射），由 SDK-13 Harness 负责；orphan 线程依赖代码审查与 SDK hub/server 的 Drop join 保证（CI 无跨平台线程枚举断言）；macOS 构建与真机（SDK-13）。
+
+## SDK-06 完成记录（2026-08-11）
+
+- 改动：`crates/crayon-cast-adapter/src/facade.rs`（discovery 契约注释定稿快照语义，trait 签名不变，Fake/契约测试无需同步签名）、`src/service.rs`（新增 `device_snapshot_of`：按稳定 `DeviceId` 折叠 UDN 冲突与投屏码+SSDP 重复注册，代表取最小 SDK id——与 SDK registry `HashMap` 迭代顺序无关的确定性规则；输出重排为 (friendly_name, device_id) 确定性全序，消除同名设备的随机哈希序；模块文档把 SDK-06 移出 out-of-scope）、`src/service_tests.rs`（新增 6 项真实实现确定性测试，全部走 SDK `add_mock_device` registry 入口，不触 LAN）、`test-support/src/cast_facade.rs`（Fake `list_devices` 过滤非 `Ready` 状态并按同一全序排序；registry 内部保留非 Ready 设备以支撑 `connect` 的 `RouteLost` 分支）、`test-support/tests/cast_facade.rs`（新增 1 项 Fake 对齐测试）。
+- 快照语义定稿（CS-001/CS-002）：① 快照只含当前可连接接收端——设备老化（Stale/Offline）、未解析或占位名即从快照消失而非降级展示，重新解析后以同一稳定 `DeviceId` 回归；② `stop_discovery` 不清空快照（pinned SDK 只停 worker/翻 flag，registry 保留），重复 stop 幂等；③ 同一逻辑接收端（同名、UDN 冲突、多网卡/IP 漂移、投屏码+SSDP 双注册）在快照中只出现一次，ID 不含 IP；④ 快照有确定性全序（friendly name，再 device id）；⑤ `refresh_discovery` 在未运行时等同启动（pinned SDK 行为，文档化）。
+- 增量事件评审结论：不需要增量通道，契约不扩张。依据：pinned SDK 的 `DiscoveryCycleResult.events` 只在 `discover_devices_cycle*` 返回值中、由内部 discovery worker 消费，公开 facade 无订阅入口（暴露增量须先走 SDK 缺口流程）；CS-001 明确 UI 只消费设备快照，快照轮询 + `refresh_discovery` 触发已满足 CS-001/002 全部验收。
+- SDK-04 P2 关闭：确认 pinned SDK `stop_discovery` 不清空设备 registry（`cast-sender-core` `stop_discovery` 仅翻 `discovery_running` flag；service 层 join worker），Fake 语义与真实实现一致并各有测试钉死（真实：`snapshot_survives_stop_and_lists_in_deterministic_order`；Fake：`discovery_snapshot_hides_non_ready_orders_deterministically_and_survives_stop`）。
+- 验证：`cargo test -p crayon-cast-adapter` 59/59 PASS（lib 32 = 既有 26 + 新增 6：stop 保留+全序、同名不同 ID、IP 漂移单条目同 ID、UDN 冲突折叠、老化不降级/不可见/再解析回归、无控制 URL/占位名不可见；契约 16；链接 2；CS 场景 9）；`cargo test -p test-support --test cast_facade` 24/24 PASS；`cargo test --workspace` 66 suites / 315 passed / 0 failed PASS；`cargo clippy --workspace --all-targets -- -D warnings` PASS；`cargo fmt --all -- --check` PASS；`cargo run -p repo-guard -- scan --root .` PASS（RG-003/004 仅既有 warning——含 SDK-05 遗留的 `session_bridge_flow_fencing_and_stop_idempotency` ~122 行函数提醒，HEAD 已存在，无新增）；`bash scripts/check.sh fast` PASS；`git diff --check` PASS。
+- Code Review：按 current 标准逐维度审查（需求边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试、可维护性），P0/P1 = 0；P2 一项：Fake `connect` 对 Stale/Offline 设备报 `RouteLost`，真实实现因老化设备不可见而在 `find_sdk_device_id` 报 `DeviceNotFound`——两者都是契约内稳定的“先重新发现”错误，但行为不完全同形；真实 `RouteLost`（registry Ready 而 route 过期）路径需要可过期 route 的环境，延期 SDK-07（connection owner）评估是否对齐 Fake，真机证据 SDK-13。
+- 未覆盖：`start_discovery`/`refresh_discovery` 的 LAN 组播路径与 worker 驱动的老化/合并为手工项（未运行，CI 不发组播）；`refresh` 未运行时启动 discovery 的 SDK 行为仅文档化、CI 未覆盖；macOS 构建与真机（SDK-13）。
 
 ## SDK 缺口处理
 

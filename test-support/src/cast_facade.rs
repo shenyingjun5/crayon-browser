@@ -1,6 +1,17 @@
 //! `FakeCastFacade`: a scripted, deterministic implementation of the product
 //! `CastFacade` contract (SDK-03) for dev/test targets only (SDK-04).
 //!
+//! Discovery snapshot semantics (finalized in SDK-06) mirror the real
+//! facade: `list_devices` exposes connectable receivers only — devices
+//! orchestrated with a non-`Ready` state stay in the fake's registry (so
+//! `connect` can report `RouteLost` for an expired route) but never appear
+//! in the snapshot — and `stop_discovery` never clears the snapshot. The
+//! fake approximates the SDK's product-visible gate (ready state plus
+//! control URLs and a non-placeholder name) with the `DeviceState::Ready`
+//! check, the only part expressible at the product DTO level. The snapshot
+//! is sorted by friendly name then device id, matching the real facade's
+//! deterministic total order.
+//!
 //! Every facade behaviour is orchestrated from the test: device snapshots and
 //! incremental changes (same-name/UDN-conflict/multi-interface receivers),
 //! cast-code resolution branches (success / not found / expired / scripted
@@ -511,7 +522,21 @@ impl CastFacade for FakeCastFacade {
     fn list_devices(&self) -> Vec<DiscoveredDevice> {
         let mut state = self.state.lock().unwrap();
         state.record(FakeCall::ListDevices);
-        state.devices.clone()
+        // SDK-06 snapshot semantics: connectable receivers only, in the same
+        // deterministic total order as the real facade; stopping discovery
+        // never clears the snapshot.
+        let mut snapshot: Vec<DiscoveredDevice> = state
+            .devices
+            .iter()
+            .filter(|device| device.state() == DeviceState::Ready)
+            .cloned()
+            .collect();
+        snapshot.sort_by(|left, right| {
+            left.friendly_name()
+                .cmp(right.friendly_name())
+                .then_with(|| left.device_id().as_str().cmp(right.device_id().as_str()))
+        });
+        snapshot
     }
 
     fn is_discovery_running(&self) -> bool {

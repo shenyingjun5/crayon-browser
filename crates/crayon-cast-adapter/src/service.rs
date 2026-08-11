@@ -30,10 +30,21 @@
 //! restart never collides with the previous instance's sockets, and
 //! device/session state deliberately does not carry over.
 //!
-//! Deliberately out of scope here (later roadmap tasks): discovery
-//! snapshot/incremental semantics (SDK-06), cast-code branch mapping
-//! including the missing cancel API (SDK-07), capability caching/TTL
+//! Deliberately out of scope here (later roadmap tasks): cast-code branch
+//! mapping including the missing cancel API (SDK-07), capability caching/TTL
 //! (SDK-08), delivery orchestration policy (SDK-09).
+//!
+//! Discovery snapshot semantics (finalized in SDK-06, CS-001/CS-002):
+//! - `list_devices` serves the SDK product-visible list — connectable
+//!   receivers only; aged-out (stale/offline), unresolved and
+//!   placeholder-named devices never appear, so expiry shows up as
+//!   disappearance, not as a degraded entry;
+//! - stopping discovery never clears the snapshot (the pinned SDK keeps its
+//!   device registry across stop; the snapshot is a known fact);
+//! - the adapter collapses duplicate SDK registrations of one logical
+//!   receiver (UDN conflict, cast-code + SSDP double registration) into one
+//!   entry per stable `DeviceId` and imposes a deterministic total order, so
+//!   the product snapshot never flickers (see `device_snapshot_of`).
 
 use crate::dto::AssessmentStatus;
 use crate::dto::{
@@ -53,6 +64,7 @@ use cast_sender_session::{
     StopReason as SdkStopReason, TerminalReason as SdkTerminalReason,
 };
 use crayon_domain::{DeviceId, SessionGeneration, SessionId};
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 /// Default SSDP discovery cycle timeout handed to the SDK. The SDK default
@@ -240,11 +252,7 @@ impl CastFacade for SenderCastFacade {
 
     fn list_devices(&self) -> Vec<DiscoveredDevice> {
         match self.service() {
-            Ok(service) => service
-                .list_devices()
-                .iter()
-                .filter_map(discovered_device_of)
-                .collect(),
+            Ok(service) => device_snapshot_of(service.list_devices()),
             Err(_) => Vec::new(),
         }
     }
@@ -467,6 +475,50 @@ fn discovered_device_of(device: &CastDevice) -> Option<DiscoveredDevice> {
         device_state_of(&device.discovery_state),
         device.is_labi_receiver,
     ))
+}
+
+/// Maps the SDK product-visible device list onto the product snapshot
+/// (SDK-06, CS-002).
+///
+/// The SDK registry keys entries by announcement id, so one logical receiver
+/// can occupy two entries that resolve to the same stable device key — a
+/// duplicate-UDN registration or a double registration via cast code and
+/// SSDP with differing description locations. The snapshot shows one entry
+/// per stable `DeviceId`; the representative is the registration with the
+/// smallest SDK id, a rule independent of the SDK registry's `HashMap`
+/// iteration order. For the same reason the output is re-sorted into a
+/// deterministic total order (friendly name, then device id): the SDK only
+/// sorts by name, leaving same-name receivers in random hash order.
+fn device_snapshot_of(devices: Vec<CastDevice>) -> Vec<DiscoveredDevice> {
+    let mut representative: HashMap<DeviceId, &str> = HashMap::new();
+    for device in &devices {
+        if let Some(device_id) = device_id_of(device) {
+            representative
+                .entry(device_id)
+                .and_modify(|sdk_id| {
+                    if device.id.as_str() < *sdk_id {
+                        *sdk_id = device.id.as_str();
+                    }
+                })
+                .or_insert(device.id.as_str());
+        }
+    }
+    let mut snapshot: Vec<DiscoveredDevice> = devices
+        .iter()
+        .filter(|device| {
+            device_id_of(device)
+                .as_ref()
+                .and_then(|device_id| representative.get(device_id))
+                .is_some_and(|sdk_id| *sdk_id == device.id.as_str())
+        })
+        .filter_map(discovered_device_of)
+        .collect();
+    snapshot.sort_by(|left, right| {
+        left.friendly_name()
+            .cmp(right.friendly_name())
+            .then_with(|| left.device_id().as_str().cmp(right.device_id().as_str()))
+    });
+    snapshot
 }
 
 fn device_state_of(state: &DeviceDiscoveryState) -> DeviceState {

@@ -95,6 +95,45 @@ fn discovery_snapshot_upsert_replaces_same_id_and_remove_drops() {
     assert_eq!(fake.list_devices().len(), 1);
 }
 
+/// SDK-06 alignment: the snapshot exposes connectable receivers only, keeps
+/// the facade's deterministic total order, and survives `stop_discovery`.
+#[test]
+fn discovery_snapshot_hides_non_ready_orders_deterministically_and_survives_stop() {
+    let fake = FakeCastFacade::new();
+    fake.upsert_device(discovered("dev-zeta", "Zeta", DeviceState::Ready));
+    fake.upsert_device(discovered("dev-alpha", "Alpha", DeviceState::Ready));
+    fake.upsert_device(discovered("dev-stale", "Stale TV", DeviceState::Stale));
+    fake.upsert_device(discovered("dev-off", "Offline TV", DeviceState::Offline));
+    fake.upsert_device(discovered("dev-inc", "Half TV", DeviceState::Incomplete));
+
+    let snapshot = fake.list_devices();
+    let ids: Vec<&str> = snapshot
+        .iter()
+        .map(|device| device.device_id().as_str())
+        .collect();
+    assert_eq!(ids, ["dev-alpha", "dev-zeta"], "ready only, name-ordered");
+
+    fake.stop_discovery().expect("stop");
+    fake.stop_discovery().expect("repeated stop is a no-op");
+    assert_eq!(
+        fake.list_devices(),
+        snapshot,
+        "stop never clears the snapshot"
+    );
+
+    // An aged-out device stays in the registry (connect reports the expired
+    // route) but only re-enters the snapshot once it resolves again.
+    assert_eq!(
+        fake.connect(&device("dev-stale")),
+        Err(CastError::RouteLost)
+    );
+    fake.upsert_device(discovered("dev-stale", "Stale TV", DeviceState::Ready));
+    assert!(fake
+        .list_devices()
+        .iter()
+        .any(|entry| entry.device_id() == &device("dev-stale")));
+}
+
 #[test]
 fn scripted_start_failure_is_one_shot_and_preserves_state() {
     let fake = FakeCastFacade::new();

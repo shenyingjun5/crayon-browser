@@ -387,6 +387,250 @@ fn assess_receiver_delegates_to_sdk_assessment() {
     assert_eq!(assessment.status(), AssessmentStatus::Unknown);
 }
 
+// -- Discovery snapshot semantics (SDK-06, CS-001/CS-002) ---------------------
+// Deterministic through the SDK's `add_mock_device` registry entry point:
+// no discovery worker, no LAN traffic. The SSDP/worker-driven aging paths
+// are covered by the same registry transitions exercised here.
+
+/// Mock device with caller-controlled identity, visibility and aging fields.
+/// Control URLs point at dead loopback ports; nothing leaves the host.
+fn mock_device(
+    id: &str,
+    udn: &str,
+    friendly_name: &str,
+    location_port: u16,
+    state: DeviceDiscoveryState,
+    last_resolved_ms: Option<u64>,
+) -> CastDevice {
+    CastDevice {
+        id: id.to_string(),
+        udn: udn.to_string(),
+        friendly_name: friendly_name.to_string(),
+        location: format!("http://127.0.0.1:{location_port}/description.xml"),
+        host: "127.0.0.1".to_string(),
+        port: Some(location_port),
+        av_transport_control_url: Some(format!("http://127.0.0.1:{location_port}/avt")),
+        av_transport_event_sub_url: None,
+        rendering_control_url: Some(format!("http://127.0.0.1:{location_port}/rc")),
+        cast_extension_control_url: None,
+        capabilities: vec!["urn:schemas-upnp-org:device:MediaRenderer:1".to_string()],
+        last_seen_ms: 1,
+        last_resolved_ms,
+        discovery_state: state,
+        description_error: None,
+        is_labi_receiver: false,
+        same_host_group_key: String::new(),
+        receiver_app: None,
+    }
+}
+
+fn ready_mock(id: &str, udn: &str, friendly_name: &str, location_port: u16) -> CastDevice {
+    mock_device(
+        id,
+        udn,
+        friendly_name,
+        location_port,
+        DeviceDiscoveryState::Ready,
+        Some(1),
+    )
+}
+
+fn register(facade: &SenderCastFacade, device: CastDevice) -> DeviceId {
+    let device_id = DeviceId::new(&device.stable_device_key()).expect("stable key is a valid id");
+    facade
+        .service()
+        .expect("facade is live")
+        .add_mock_device(device);
+    device_id
+}
+
+#[test]
+fn snapshot_survives_stop_and_lists_in_deterministic_order() {
+    let facade = facade();
+    let zeta = register(
+        &facade,
+        ready_mock("sdk06-zeta", "uuid:sdk06-zeta", "Zeta", 9),
+    );
+    let alpha = register(
+        &facade,
+        ready_mock("sdk06-alpha", "uuid:sdk06-alpha", "Alpha", 10),
+    );
+
+    // CS-001: stopping discovery never clears the snapshot; repeated stop is
+    // a no-op and the snapshot content is unchanged.
+    facade.stop_discovery().expect("first stop");
+    facade.stop_discovery().expect("second stop");
+    assert!(!facade.is_discovery_running());
+    let snapshot = facade.list_devices();
+    let ids: Vec<&DeviceId> = snapshot.iter().map(DiscoveredDevice::device_id).collect();
+    assert_eq!(
+        ids,
+        [&alpha, &zeta],
+        "connectable devices only, deterministic friendly-name order"
+    );
+}
+
+#[test]
+fn same_name_receivers_keep_distinct_stable_ids() {
+    let facade = facade();
+    // Two physically distinct receivers announce the same friendly name.
+    let first = register(
+        &facade,
+        ready_mock("sdk06-dup-a", "uuid:sdk06-dup-a", "TV", 9),
+    );
+    let second = register(
+        &facade,
+        ready_mock("sdk06-dup-b", "uuid:sdk06-dup-b", "TV", 10),
+    );
+
+    let snapshot = facade.list_devices();
+    assert_eq!(snapshot.len(), 2, "same display name does not merge");
+    assert_ne!(first, second);
+    let ids: Vec<&DeviceId> = snapshot.iter().map(DiscoveredDevice::device_id).collect();
+    assert!(ids.contains(&&first) && ids.contains(&&second));
+    assert!(
+        snapshot.iter().all(|device| device.friendly_name() == "TV"),
+        "both receivers keep their untrusted display name"
+    );
+}
+
+#[test]
+fn reannounce_with_new_ip_keeps_identity_and_single_entry() {
+    let facade = facade();
+    let before = register(
+        &facade,
+        ready_mock("sdk06-roam", "uuid:sdk06-roam", "Roaming TV", 9),
+    );
+    // Multi-interface/IP-change re-announce: same announcement id and UDN,
+    // new host and description location.
+    let mut moved = ready_mock("sdk06-roam", "uuid:sdk06-roam", "Roaming TV", 11);
+    moved.host = "127.0.0.2".to_string();
+    let after = register(&facade, moved);
+
+    assert_eq!(before, after, "stable id survives the address change");
+    let snapshot = facade.list_devices();
+    assert_eq!(snapshot.len(), 1, "re-announce never duplicates the entry");
+    assert_eq!(snapshot[0].device_id(), &before);
+}
+
+#[test]
+fn duplicate_udn_registrations_collapse_to_one_stable_entry() {
+    let facade = facade();
+    // UDN conflict: two registry entries (SSDP usn id and a cast-code style
+    // id) share one UDN, so both derive the same stable device key. Their
+    // description locations differ, so the SDK's same-location dedup does
+    // not fire and both registrations reach the adapter.
+    let ssdp = ready_mock("sdk06-udn-ssdp", "uuid:sdk06-shared", "Conflict TV", 9);
+    let via_code = ready_mock(
+        "cast-code:127.0.0.1",
+        "uuid:sdk06-shared",
+        "Conflict TV",
+        10,
+    );
+    let ssdp_id = register(&facade, ssdp);
+    let code_id = register(&facade, via_code);
+    assert_eq!(ssdp_id, code_id, "same UDN resolves to one stable id");
+
+    let snapshot = facade.list_devices();
+    assert_eq!(
+        snapshot.len(),
+        1,
+        "one logical receiver appears exactly once (CS-002)"
+    );
+    assert_eq!(snapshot[0].device_id(), &ssdp_id);
+}
+
+#[test]
+fn aged_out_devices_leave_the_snapshot_without_downgrading_visible_entries() {
+    let facade = facade();
+    let visible = register(
+        &facade,
+        ready_mock("sdk06-aging", "uuid:sdk06-aging", "Aging TV", 9),
+    );
+
+    // A transient failed refresh (stale/offline update without a resolved
+    // description) must not downgrade the visible ready entry — no flicker.
+    for state in [DeviceDiscoveryState::Stale, DeviceDiscoveryState::Offline] {
+        register(
+            &facade,
+            mock_device(
+                "sdk06-aging",
+                "uuid:sdk06-aging",
+                "Aging TV",
+                9,
+                state,
+                None,
+            ),
+        );
+        let snapshot = facade.list_devices();
+        assert_eq!(
+            snapshot.len(),
+            1,
+            "degraded re-announce keeps the resolved entry"
+        );
+        assert_eq!(snapshot[0].state(), DeviceState::Ready);
+    }
+
+    // A device only ever seen aged-out never enters the snapshot at all.
+    register(
+        &facade,
+        mock_device(
+            "sdk06-gone",
+            "uuid:sdk06-gone",
+            "Gone TV",
+            12,
+            DeviceDiscoveryState::Stale,
+            None,
+        ),
+    );
+    register(
+        &facade,
+        mock_device(
+            "sdk06-offline",
+            "uuid:sdk06-offline",
+            "Offline TV",
+            13,
+            DeviceDiscoveryState::Offline,
+            Some(1),
+        ),
+    );
+    let snapshot = facade.list_devices();
+    assert_eq!(snapshot.len(), 1, "aged-out devices are not listed");
+    assert_eq!(snapshot[0].device_id(), &visible);
+
+    // Once the receiver resolves again it reappears under the same id.
+    let gone = register(
+        &facade,
+        ready_mock("sdk06-gone", "uuid:sdk06-gone", "Gone TV", 12),
+    );
+    let snapshot = facade.list_devices();
+    assert_eq!(snapshot.len(), 2, "re-resolved device reappears");
+    let ids: Vec<&DeviceId> = snapshot.iter().map(DiscoveredDevice::device_id).collect();
+    assert!(ids.contains(&&gone) && ids.contains(&&visible));
+}
+
+#[test]
+fn unresolved_or_placeholder_devices_are_not_listed() {
+    let facade = facade();
+    // Ready state but no rendering-control URL: not connectable.
+    let mut no_control = ready_mock("sdk06-noctl", "uuid:sdk06-noctl", "No Control", 9);
+    no_control.rendering_control_url = None;
+    register(&facade, no_control);
+    // Placeholder display name (SDK visibility gate).
+    register(
+        &facade,
+        ready_mock("sdk06-empty", "uuid:sdk06-empty", "   ", 10),
+    );
+    register(
+        &facade,
+        ready_mock("sdk06-uuid", "uuid:sdk06-uuid", "uuid:sdk06-uuid", 11),
+    );
+    assert!(
+        facade.list_devices().is_empty(),
+        "only product-visible receivers reach the snapshot"
+    );
+}
+
 // -- Session supervision bridge ------------------------------------------------
 
 /// Drives one supervised session lifecycle through the SDK's public
