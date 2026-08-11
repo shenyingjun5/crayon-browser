@@ -4,13 +4,21 @@
 //! Discovery snapshot semantics (finalized in SDK-06) mirror the real
 //! facade: `list_devices` exposes connectable receivers only — devices
 //! orchestrated with a non-`Ready` state stay in the fake's registry (so
-//! `connect` can report `RouteLost` for an expired route) but never appear
-//! in the snapshot — and `stop_discovery` never clears the snapshot. The
-//! fake approximates the SDK's product-visible gate (ready state plus
-//! control URLs and a non-placeholder name) with the `DeviceState::Ready`
-//! check, the only part expressible at the product DTO level. The snapshot
-//! is sorted by friendly name then device id, matching the real facade's
-//! deterministic total order.
+//! `connect` can tell an aged-out device apart from a never-seen one) but
+//! never appear in the snapshot — and `stop_discovery` never clears the
+//! snapshot. The fake approximates the SDK's product-visible gate (ready
+//! state plus control URLs and a non-placeholder name) with the
+//! `DeviceState::Ready` check, the only part expressible at the product DTO
+//! level. The snapshot is sorted by friendly name then device id, matching
+//! the real facade's deterministic total order.
+//!
+//! Connection semantics (finalized in SDK-07) also mirror the real facade:
+//! `connect` is idempotent for the same device and switches when another
+//! device is connected; a device absent from the snapshot — unknown or
+//! aged-out — reports `DeviceNotFound`. The real facade reserves `RouteLost`
+//! for a visible device whose validated route expired before connect; the
+//! fake has no route-TTL concept, so that branch is orchestrated with
+//! `fail_next_connect(CastError::RouteLost)`.
 //!
 //! Every facade behaviour is orchestrated from the test: device snapshots and
 //! incremental changes (same-name/UDN-conflict/multi-interface receivers),
@@ -564,13 +572,16 @@ impl CastFacade for FakeCastFacade {
         let mut state = self.state.lock().unwrap();
         state.record(FakeCall::Connect(device.clone()));
         ScriptedErrors::take(&mut state.scripted.connect)?;
+        // A device absent from the snapshot — unknown or aged-out — is
+        // reported as not found, mirroring the real facade (SDK-07); the
+        // route-expired `RouteLost` branch is orchestrated via scripting.
         let Some(known) = state.device(device) else {
             return Err(CastError::DeviceNotFound);
         };
-        // A stale/offline announcement means the validated route expired.
-        if matches!(known.state(), DeviceState::Stale | DeviceState::Offline) {
-            return Err(CastError::RouteLost);
+        if known.state() != DeviceState::Ready {
+            return Err(CastError::DeviceNotFound);
         }
+        // Idempotent for the same device; another device switches.
         state.connected = Some(device.clone());
         Ok(())
     }

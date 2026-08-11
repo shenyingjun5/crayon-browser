@@ -121,11 +121,12 @@ fn discovery_snapshot_hides_non_ready_orders_deterministically_and_survives_stop
         "stop never clears the snapshot"
     );
 
-    // An aged-out device stays in the registry (connect reports the expired
-    // route) but only re-enters the snapshot once it resolves again.
+    // An aged-out device stays in the registry but is absent from the
+    // snapshot, so connect reports it as not found (SDK-07 alignment with
+    // the real facade); it re-enters the snapshot once it resolves again.
     assert_eq!(
         fake.connect(&device("dev-stale")),
-        Err(CastError::RouteLost)
+        Err(CastError::DeviceNotFound)
     );
     fake.upsert_device(discovered("dev-stale", "Stale TV", DeviceState::Ready));
     assert!(fake
@@ -203,10 +204,44 @@ fn connect_rejects_unknown_and_expired_devices() {
     fake.upsert_device(discovered("dev-01", "TV", DeviceState::Stale));
     assert_eq!(
         fake.connect(&device("dev-01")),
-        Err(CastError::RouteLost),
-        "stale announcement means the validated route expired"
+        Err(CastError::DeviceNotFound),
+        "an aged-out device is absent from the snapshot (SDK-07 alignment)"
     );
     assert_eq!(fake.connected_device(), None);
+}
+
+#[test]
+fn connect_route_lost_is_scripted_one_shot() {
+    let (fake, id) = connected_fake();
+    // The route-expired-but-visible branch of the real facade; the fake has
+    // no route-TTL concept, so it is orchestrated (SDK-07).
+    fake.fail_next_connect(CastError::RouteLost);
+    assert_eq!(fake.connect(&id), Err(CastError::RouteLost));
+    assert_eq!(
+        fake.connected_device(),
+        Some(id.clone()),
+        "a failed connect does not drop the current connection"
+    );
+    fake.connect(&id).expect("one-shot error consumed");
+}
+
+#[test]
+fn connect_is_idempotent_and_switches_devices() {
+    let fake = FakeCastFacade::new();
+    fake.upsert_device(discovered("dev-01", "TV", DeviceState::Ready));
+    fake.upsert_device(discovered("dev-02", "Kitchen", DeviceState::Ready));
+    fake.connect(&device("dev-01")).expect("first connect");
+    fake.connect(&device("dev-01"))
+        .expect("repeated connect to the same device is idempotent");
+    assert_eq!(fake.connected_device(), Some(device("dev-01")));
+    fake.connect(&device("dev-02"))
+        .expect("connecting another device switches");
+    assert_eq!(fake.connected_device(), Some(device("dev-02")));
+    // Disconnect then reconnect is an ordinary fresh connect.
+    fake.disconnect();
+    assert_eq!(fake.connected_device(), None);
+    fake.connect(&device("dev-01")).expect("reconnect");
+    assert_eq!(fake.connected_device(), Some(device("dev-01")));
 }
 
 #[test]

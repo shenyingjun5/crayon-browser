@@ -1,6 +1,6 @@
 # SDK：Cast-SDK 集成 Roadmap
 
-状态：`FND-08 DONE`；`SDK-01..06 DONE`；`SDK-07 READY`；`SDK-15/16` 为 Partner/TV Cast Manifest 的后续外部依赖任务。任务数 16。源码固定为 Cast-SDK `44c3a99871aa1e68cbda71eacefbb41d23a747a8`，通过 `third_party/cast-sdk` submodule 接入；不得依赖开发者本机源码路径。
+状态：`FND-08 DONE`；`SDK-01..07 DONE`；`SDK-08 READY`；`SDK-15/16` 为 Partner/TV Cast Manifest 的后续外部依赖任务。任务数 16。源码固定为 Cast-SDK `44c3a99871aa1e68cbda71eacefbb41d23a747a8`，通过 `third_party/cast-sdk` submodule 接入；不得依赖开发者本机源码路径。
 
 ## 边界
 
@@ -84,6 +84,16 @@
 - 验证：`cargo test -p crayon-cast-adapter` 59/59 PASS（lib 32 = 既有 26 + 新增 6：stop 保留+全序、同名不同 ID、IP 漂移单条目同 ID、UDN 冲突折叠、老化不降级/不可见/再解析回归、无控制 URL/占位名不可见；契约 16；链接 2；CS 场景 9）；`cargo test -p test-support --test cast_facade` 24/24 PASS；`cargo test --workspace` 66 suites / 315 passed / 0 failed PASS；`cargo clippy --workspace --all-targets -- -D warnings` PASS；`cargo fmt --all -- --check` PASS；`cargo run -p repo-guard -- scan --root .` PASS（RG-003/004 仅既有 warning——含 SDK-05 遗留的 `session_bridge_flow_fencing_and_stop_idempotency` ~122 行函数提醒，HEAD 已存在，无新增）；`bash scripts/check.sh fast` PASS；`git diff --check` PASS。
 - Code Review：按 current 标准逐维度审查（需求边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试、可维护性），P0/P1 = 0；P2 一项：Fake `connect` 对 Stale/Offline 设备报 `RouteLost`，真实实现因老化设备不可见而在 `find_sdk_device_id` 报 `DeviceNotFound`——两者都是契约内稳定的“先重新发现”错误，但行为不完全同形；真实 `RouteLost`（registry Ready 而 route 过期）路径需要可过期 route 的环境，延期 SDK-07（connection owner）评估是否对齐 Fake，真机证据 SDK-13。
 - 未覆盖：`start_discovery`/`refresh_discovery` 的 LAN 组播路径与 worker 驱动的老化/合并为手工项（未运行，CI 不发组播）；`refresh` 未运行时启动 discovery 的 SDK 行为仅文档化、CI 未覆盖；macOS 构建与真机（SDK-13）。
+
+## SDK-07 完成记录（2026-08-11）
+
+- 改动：`crates/crayon-cast-adapter/src/service.rs`（`resolve_device_by_cast_code` 调用点新增 `map_cast_code_error`：DTO 只放行 ASCII alphanumeric 超集，该调用唯一的 `InvalidInput` 来源是 pinned codec 拒绝精确字母表/取值范围/校验和，故语境化重映射为 `InvalidCastCode`，其余错误仍走 CS-008 通用表；`find_sdk_device_id` 由"取 list 首个匹配"改为"取最小 SDK id"，与快照代表规则一致——`list_devices` 同名条目是 `HashMap` 随机序，原实现对双注册设备的 connect 目标不确定；模块文档定稿连接/投屏码语义并移出 out-of-scope）、`src/facade.rs`（契约注释定稿：resolve 稳定结果集、取消语义、connect 幂等/切换/DeviceNotFound/RouteLost、disconnect 幂等与重连；trait 签名未变）、`src/service_tests.rs`（新增 4 项真实实现确定性测试，全部走 `add_mock_device` 或 codec 预解码拒绝，不触 LAN）、`test-support/src/cast_facade.rs`（Fake `connect` 对齐：非 Ready 设备报 `DeviceNotFound`；`RouteLost` 分支改由 `fail_next_connect` 一次性脚本编排，模块文档同步）、`test-support/tests/cast_facade.rs`（2 项既有断言改对齐 + 新增 2 项：RouteLost 一次性脚本/失败不掉线、幂等重复连接/切换/断开后重连）、`crates/crayon-cast-adapter/tests/fake_facade.rs`（CS-003 场景扩展：码过期=DeviceNotFound、取消语义定稿注释；新增 `cs_003_connect_disconnect_state_mapping` 覆盖未知/老化/重复/切换/route lost/断开后重连）。
+- 状态映射定稿（CS-003）：成功 Ok；码格式/字母表/校验和错误 `InvalidCastCode`（DTO 入界 + codec 调用点重映射双层）；码过期与无人应答同形 `DeviceNotFound`；LAN/route 失败 `NetworkUnavailable`/`ReceiverUnreachable`/`RouteLost`（CS-008 表）；connect 对同一设备幂等、连接他机切换、快照外（未知/老化）设备 `DeviceNotFound`、可见但 route 过期 `RouteLost`；disconnect 幂等 no-op，断开后重连是普通新 connect。
+- 取消语义定稿：pinned SDK `resolve_device_by_cast_code` 无协作式取消 API，调用有界（每候选描述路由一个 discovery timeout × SDK 固定候选端口集）；取消=调用方放弃该有界调用，迟到结果被丢弃，迟到成功只等价于一次新 resolve 的设备注册，facade 不产生任何"已取消"错误。CS-003 取消分支以一次性脚本钉死"任何中止上报只能是稳定码、绝不透传 SDK 字符串"。**SDK 缺口记录**（按「SDK 缺口处理」第 1 条）：调用场景为 UI 投屏码输入后用户取消等待；需要 SDK 提供可取消的 resolve API 才能提前终止在途发包，提案与修订需 Cast-SDK 外部仓库授权，复核点 SDK-14。
+- SDK-06 P2 关闭：Fake `connect` 对 Stale/Offline 设备改报 `DeviceNotFound`，与真实实现（老化设备不在快照 → `find_sdk_device_id` fail closed）同形；真实 `RouteLost`（可见但已验证 route 过期）需要可过期 route 环境，pinned SDK 只在 LAN 解析路径建 route record、无公开注入入口，CI 不可确定性构造——Fake 以脚本覆盖该分支，真机证据归 SDK-13。
+- 验证：`cargo test -p crayon-cast-adapter` 64/64 PASS（lib 36 = 既有 32 + 新增 4：codec 三类拒绝重映射 InvalidCastCode 且通用 InvalidInput 不受影响、幂等/切换/断开后重连、双注册 connect 命中快照代表条目、老化设备 DeviceNotFound；契约 16；链接 2；CS 场景 10）；`cargo test -p test-support --test cast_facade` 26/26 PASS；`cargo test --workspace` 66 suites / 322 passed / 0 failed PASS；`cargo clippy --workspace --all-targets -- -D warnings` PASS；`cargo fmt --all -- --check` PASS；`cargo run -p repo-guard -- scan --root .` PASS（RG-003/004 仅 `app/` 与既有提醒，无新增）；`bash scripts/check.sh fast` PASS；`git diff --check` PASS。
+- Code Review：按 current 标准逐维度审查（需求边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试、可维护性），P0/P1 = 0；P2 一项（延期）：真实 `RouteLost` 路径（visible-but-route-expired）CI 不可构造，如上由 Fake 脚本 + SDK-13 真机 Harness 覆盖，跟踪 SDK-13。
+- 未覆盖：投屏码成功/码过期/无人应答的真实 LAN 发包路径为手工项（未运行，CI 不发包）；真实协作式取消依赖 SDK 新 API（缺口已记录）；macOS 构建与真机（SDK-13）。
 
 ## SDK 缺口处理
 

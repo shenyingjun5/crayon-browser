@@ -99,7 +99,7 @@ fn cs_002_same_name_udn_conflict_multi_interface_keep_stable_ids() {
 }
 
 /// CS-003: six-character cast code — success, format error, not found,
-/// cancellation. The browser never reimplements the codec.
+/// expired, cancellation. The browser never reimplements the codec.
 #[test]
 fn cs_003_cast_code_branches_map_to_stable_outcomes() {
     let fake = fake_with_device();
@@ -124,25 +124,83 @@ fn cs_003_cast_code_branches_map_to_stable_outcomes() {
         Err(CastError::DeviceNotFound)
     );
 
-    // Expired/error mid-resolution: LAN failure surfaces as a stable code.
+    // Expired: the code was bound but the receiver is gone — the same stable
+    // "not found" outcome as an unanswered code (finalized in SDK-07).
+    fake.remove_device(&device("dev-01"));
+    assert_eq!(
+        fake.resolve_device_by_cast_code(&code),
+        Err(CastError::DeviceNotFound),
+        "expired code maps to DeviceNotFound"
+    );
+    fake.upsert_device(discovered("dev-01", "Living Room TV", DeviceState::Ready));
+
+    // Error mid-resolution: LAN failure surfaces as a stable code.
     fake.fail_next_resolve_cast_code(CastError::NetworkUnavailable);
     assert_eq!(
         fake.resolve_device_by_cast_code(&code),
         Err(CastError::NetworkUnavailable)
     );
 
-    // Cancellation: the pinned SDK revision has no cancel API on
-    // `resolve_device_by_cast_code` (gap recorded by SDK-03; SDK-07 owns the
-    // final mapping). The fake demonstrates the branch as a scripted stable
-    // error passing through unchanged.
+    // Cancellation (finalized in SDK-07): the pinned SDK revision has no
+    // cooperative cancel API on `resolve_device_by_cast_code`; the call is
+    // bounded and cancel is caller-side abandonment — a late result is
+    // discarded and no facade error surfaces. The scripted one-shot error
+    // pins that any mid-flight abort the product layer reports is a stable
+    // code, never an SDK string.
     fake.fail_next_resolve_cast_code(CastError::InvalidState);
     assert_eq!(
         fake.resolve_device_by_cast_code(&code),
         Err(CastError::InvalidState),
-        "caller-side cancel surfaces as a stable code, never an SDK string"
+        "caller-side abort surfaces as a stable code, never an SDK string"
     );
     // One-shot scripting: the code resolves again afterwards.
     assert!(fake.resolve_device_by_cast_code(&code).is_ok());
+}
+
+/// CS-003 (connection side, finalized in SDK-07): connect/disconnect state
+/// mapping — success, idempotent repeat, device switch, unknown and aged-out
+/// devices, route lost, disconnect and reconnect.
+#[test]
+fn cs_003_connect_disconnect_state_mapping() {
+    let fake = fake_with_device();
+    let first = device("dev-01");
+
+    // Unknown device.
+    assert_eq!(
+        fake.connect(&device("dev-99")),
+        Err(CastError::DeviceNotFound)
+    );
+
+    // Aged-out device: absent from the snapshot, reported as not found.
+    fake.upsert_device(discovered("dev-02", "Kitchen", DeviceState::Stale));
+    assert_eq!(
+        fake.connect(&device("dev-02")),
+        Err(CastError::DeviceNotFound)
+    );
+
+    // Success, then an idempotent repeat.
+    fake.connect(&first).expect("connect");
+    fake.connect(&first)
+        .expect("repeated connect to the same device is idempotent");
+    assert_eq!(fake.connected_device(), Some(first.clone()));
+
+    // Visible device with an expired validated route: RouteLost, scripted
+    // one-shot; the current connection is not dropped by the failed attempt.
+    fake.fail_next_connect(CastError::RouteLost);
+    assert_eq!(fake.connect(&first), Err(CastError::RouteLost));
+    assert_eq!(fake.connected_device(), Some(first.clone()));
+
+    // Connecting another device switches.
+    fake.upsert_device(discovered("dev-02", "Kitchen", DeviceState::Ready));
+    fake.connect(&device("dev-02")).expect("switch");
+    assert_eq!(fake.connected_device(), Some(device("dev-02")));
+
+    // Disconnect is an idempotent no-op and reconnect works afterwards.
+    fake.disconnect();
+    fake.disconnect();
+    assert_eq!(fake.connected_device(), None);
+    fake.connect(&first).expect("reconnect after disconnect");
+    assert_eq!(fake.connected_device(), Some(first));
 }
 
 /// CS-004: receiver capability change — the facade answers with the latest

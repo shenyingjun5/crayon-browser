@@ -333,6 +333,113 @@ fn connect_disconnect_roundtrip_with_registered_device() {
     facade.disconnect();
 }
 
+// -- Connection state mapping (SDK-07, CS-003) ---------------------------------
+
+#[test]
+fn cast_code_codec_rejection_maps_to_invalid_cast_code() {
+    let facade = facade();
+    // Every code below passes the DTO's ASCII alphanumeric superset but is
+    // rejected by the pinned SDK codec before any network access (the decode
+    // is the first step of `resolve_device_by_cast_code`), so this test is
+    // deterministic and offline:
+    // - "IIIIII": `I` is outside the codec alphabet (InvalidCharacter);
+    // - "000001": alphabet-valid but the checksum does not match;
+    // - "ZZZZZZ": decodes above the encodable range (OutOfRange).
+    for raw in ["IIIIII", "000001", "ZZZZZZ"] {
+        let code = CastCode::new(raw).expect("DTO superset admits the code");
+        assert_eq!(
+            facade.resolve_device_by_cast_code(&code),
+            Err(CastError::InvalidCastCode),
+            "codec rejection of {raw} remaps at the call site"
+        );
+    }
+    // The generic mapping is untouched: a non-cast-code `InvalidInput` still
+    // maps to `InvalidInput` (the call-site remap is contextual).
+    assert_eq!(
+        map_error(CastSenderError::invalid_input("some other argument")),
+        CastError::InvalidInput
+    );
+}
+
+#[test]
+fn connect_repeat_switch_and_reconnect_after_disconnect() {
+    let facade = facade();
+    // Distinct description locations: the SDK registry dedups by location.
+    let first = register(
+        &facade,
+        ready_mock("sdk07-first", "uuid:sdk07-first", "First TV", 9),
+    );
+    let second = register(
+        &facade,
+        ready_mock("sdk07-second", "uuid:sdk07-second", "Second TV", 10),
+    );
+
+    facade.connect(&first).expect("connect succeeds");
+    facade
+        .connect(&first)
+        .expect("repeated connect to the same device is idempotent");
+    assert_eq!(facade.connected_device(), Some(first.clone()));
+
+    facade
+        .connect(&second)
+        .expect("connecting another device switches");
+    assert_eq!(facade.connected_device(), Some(second));
+
+    facade.disconnect();
+    assert_eq!(facade.connected_device(), None);
+    facade
+        .connect(&first)
+        .expect("reconnect after disconnect is a fresh connect");
+    assert_eq!(facade.connected_device(), Some(first));
+}
+
+#[test]
+fn connect_targets_the_snapshot_representative_of_duplicate_registrations() {
+    let facade = facade();
+    // Cast-code + SSDP double registration of one logical receiver: two
+    // registry entries share one UDN, hence one stable product id (SDK-06).
+    let ssdp = ready_mock("sdk07-udn-ssdp", "uuid:sdk07-shared", "Shared TV", 9);
+    let via_code = ready_mock("cast-code:127.0.0.1", "uuid:sdk07-shared", "Shared TV", 10);
+    let ssdp_id = register(&facade, ssdp);
+    let code_id = register(&facade, via_code);
+    assert_eq!(ssdp_id, code_id);
+
+    facade.connect(&ssdp_id).expect("connect succeeds");
+    // The connected registry entry is the same deterministic representative
+    // the snapshot shows: the smallest SDK id (not `HashMap` order).
+    let service = facade.service().expect("facade is live");
+    let connected = service
+        .get_session_state()
+        .device
+        .expect("device connected");
+    assert_eq!(connected.id, "cast-code:127.0.0.1");
+    assert_eq!(facade.connected_device(), Some(ssdp_id));
+}
+
+#[test]
+fn connect_to_aged_out_device_reports_device_not_found() {
+    let facade = facade();
+    // A device only ever seen aged-out is absent from the snapshot; connect
+    // fails closed as not found, exactly like an unknown device (SDK-07
+    // alignment with the fake). The visible-but-route-expired `RouteLost`
+    // branch needs an expirable validated route, which the pinned SDK only
+    // creates through LAN resolution — covered manually and by SDK-13.
+    let stale = register(
+        &facade,
+        mock_device(
+            "sdk07-stale",
+            "uuid:sdk07-stale",
+            "Stale TV",
+            9,
+            DeviceDiscoveryState::Stale,
+            None,
+        ),
+    );
+    assert!(facade.list_devices().is_empty());
+    assert_eq!(facade.connect(&stale), Err(CastError::DeviceNotFound));
+    assert_eq!(facade.connected_device(), None);
+}
+
 #[test]
 fn cast_media_to_other_device_is_rejected_before_reaching_sdk() {
     let facade = facade();

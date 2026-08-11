@@ -30,9 +30,8 @@
 //! restart never collides with the previous instance's sockets, and
 //! device/session state deliberately does not carry over.
 //!
-//! Deliberately out of scope here (later roadmap tasks): cast-code branch
-//! mapping including the missing cancel API (SDK-07), capability caching/TTL
-//! (SDK-08), delivery orchestration policy (SDK-09).
+//! Deliberately out of scope here (later roadmap tasks): capability
+//! caching/TTL (SDK-08), delivery orchestration policy (SDK-09).
 //!
 //! Discovery snapshot semantics (finalized in SDK-06, CS-001/CS-002):
 //! - `list_devices` serves the SDK product-visible list — connectable
@@ -45,6 +44,23 @@
 //!   receiver (UDN conflict, cast-code + SSDP double registration) into one
 //!   entry per stable `DeviceId` and imposes a deterministic total order, so
 //!   the product snapshot never flickers (see `device_snapshot_of`).
+//!
+//! Connection and cast-code semantics (finalized in SDK-07, CS-003):
+//! - cast-code decode failures are contextually remapped to
+//!   `InvalidCastCode` at the call site (the pinned SDK reports them under
+//!   the generic `InvalidInput` category; see `map_cast_code_error`); a valid
+//!   but unanswered or expired code surfaces as `DeviceNotFound`, LAN/route
+//!   failures via the CS-008 table;
+//! - the pinned SDK has no cooperative cancel on cast-code resolution:
+//!   cancel is caller-side abandonment of the bounded call, a late success
+//!   only registers the device like a fresh resolve, and no facade error
+//!   surfaces (gap recorded in the roadmap, tracked by SDK-14);
+//! - `connect` is idempotent for the same device and switches when another
+//!   device is connected; an aged-out device (absent from the snapshot)
+//!   reports `DeviceNotFound`, while `RouteLost` is reserved for a visible
+//!   device whose validated route expired before connect;
+//! - `disconnect` is an idempotent no-op without a connection and a
+//!   reconnect afterwards is an ordinary fresh `connect`.
 
 use crate::dto::AssessmentStatus;
 use crate::dto::{
@@ -180,6 +196,13 @@ impl SenderCastFacade {
     /// Finds the SDK device id behind a product `DeviceId` (the SDK stable
     /// device key) in the current snapshot. Unknown devices fail closed with
     /// `DeviceNotFound` before any SDK call.
+    ///
+    /// One logical receiver can hold several registry entries (cast-code +
+    /// SSDP double registration, duplicate UDN); the pick is the same
+    /// deterministic representative the snapshot shows — the smallest SDK id
+    /// (SDK-06 rule) — so connect always targets the entry the UI listed.
+    /// `list_devices` only sorts by friendly name, leaving same-name entries
+    /// in `HashMap` order, so a plain `find` would be nondeterministic.
     fn find_sdk_device_id(
         service: &SenderCommandService,
         device: &DeviceId,
@@ -187,8 +210,9 @@ impl SenderCastFacade {
         service
             .list_devices()
             .into_iter()
-            .find(|candidate| device_id_of(candidate).as_ref() == Some(device))
+            .filter(|candidate| device_id_of(candidate).as_ref() == Some(device))
             .map(|candidate| candidate.id)
+            .min()
             .ok_or(CastError::DeviceNotFound)
     }
 
@@ -263,13 +287,10 @@ impl CastFacade for SenderCastFacade {
     }
 
     fn resolve_device_by_cast_code(&self, code: &CastCode) -> Result<DiscoveredDevice, CastError> {
-        // NOTE: the pinned SDK reports cast-code decode failures and argument
-        // errors under the same `InvalidInput` category; contextual remapping
-        // to `InvalidCastCode` and the missing cancel API are SDK-07 scope.
         let device = self
             .service()?
             .resolve_device_by_cast_code(code.as_str())
-            .map_err(map_error)?;
+            .map_err(map_cast_code_error)?;
         discovered_device_of(&device).ok_or(CastError::Internal)
     }
 
@@ -444,6 +465,20 @@ impl SdkSessionListener for SessionBridge {
 /// only the category and the stable machine code — never the message.
 fn map_error(error: CastSenderError) -> CastError {
     CastError::from_sender_error(sender_error_kind_of(&error), &error.code)
+}
+
+/// Contextual error mapping for `resolve_device_by_cast_code` (SDK-07,
+/// CS-003). The `CastCode` DTO admits an ASCII alphanumeric superset of the
+/// SDK codec alphabet, and the only `InvalidInput` this call can produce is
+/// the pinned codec rejecting the exact alphabet, value range or checksum —
+/// so it remaps to `InvalidCastCode` here. Every other failure (no answer,
+/// LAN/route problems) uses the generic CS-008 table.
+fn map_cast_code_error(error: CastSenderError) -> CastError {
+    if error.kind == ErrorKind::InvalidInput {
+        CastError::InvalidCastCode
+    } else {
+        map_error(error)
+    }
 }
 
 /// Exhaustive conversion pinned to the SDK enum: an added or renamed

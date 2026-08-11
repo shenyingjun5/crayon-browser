@@ -91,22 +91,44 @@ pub trait CastFacade: Send + Sync {
     fn is_discovery_running(&self) -> bool;
 
     // -- Connection & cast code (CS-003) ----------------------------------
+    // Stable state mapping (finalized in SDK-07):
+    // - resolve: Ok(device) / `InvalidCastCode` (the SDK codec rejects the
+    //   exact alphabet, range or checksum) / `DeviceNotFound` (a valid but
+    //   unanswered or expired code) / `NetworkUnavailable` /
+    //   `ReceiverUnreachable` (LAN failure). The product never reimplements
+    //   the codec.
+    // - cancel: the pinned SDK has no cooperative cancel on resolution; the
+    //   call is bounded (per-route discovery timeout over the SDK's fixed
+    //   candidate port set) and cancel is caller-side abandonment — a late
+    //   result is simply discarded and a late success only registers the
+    //   device like a fresh resolve, so no facade error ever surfaces for a
+    //   cancelled resolve (SDK gap recorded in the roadmap).
+    // - connect: idempotent for the same device, switches when another
+    //   device is connected; `DeviceNotFound` when the device is absent from
+    //   the current snapshot (including aged-out devices), `RouteLost` when
+    //   it is visible but its validated route expired (re-discover first).
+    // - disconnect: infallible and idempotent; reconnect afterwards is an
+    //   ordinary fresh connect.
 
     /// Resolves a receiver by its six-character cast code.
     ///
-    /// Stable outcomes: Ok(device) / `InvalidCastCode` (format) /
-    /// `DeviceNotFound` (no match) / `NetworkUnavailable` or
-    /// `ReceiverUnreachable` (LAN failure). The product never reimplements
+    /// Stable outcomes: Ok(device) / `InvalidCastCode` (codec rejection) /
+    /// `DeviceNotFound` (unanswered or expired code) / `NetworkUnavailable`
+    /// or `ReceiverUnreachable` (LAN failure). The product never reimplements
     /// the codec.
     fn resolve_device_by_cast_code(&self, code: &CastCode) -> Result<DiscoveredDevice, CastError>;
 
-    /// Connects to a discovered device. `DeviceNotFound` when unknown or its
-    /// routes expired (`RouteLost`: re-discover first).
+    /// Connects to a discovered device. Idempotent for the same device and
+    /// switches when another device is connected. `DeviceNotFound` when the
+    /// device is absent from the snapshot (including aged-out devices);
+    /// `RouteLost` when it is visible but its routes expired (re-discover
+    /// first).
     fn connect(&self, device: &DeviceId) -> Result<(), CastError>;
 
     /// Disconnects the current device, if any. Infallible and idempotent:
-    /// disconnecting with no active connection is a no-op, and any active
-    /// cast session is torn down through normal supervision.
+    /// disconnecting with no active connection is a no-op, any active cast
+    /// session is torn down through normal supervision, and a reconnect
+    /// afterwards is an ordinary fresh `connect`.
     fn disconnect(&self);
 
     /// Currently connected device, if any.
