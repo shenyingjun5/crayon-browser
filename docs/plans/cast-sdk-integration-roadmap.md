@@ -1,6 +1,6 @@
 # SDK：Cast-SDK 集成 Roadmap
 
-状态：`FND-08 DONE`；`SDK-01..09 DONE`；`SDK-10 READY`；`SDK-15/16` 为 Partner/TV Cast Manifest 的后续外部依赖任务。任务数 16。源码固定为 Cast-SDK `44c3a99871aa1e68cbda71eacefbb41d23a747a8`，通过 `third_party/cast-sdk` submodule 接入；不得依赖开发者本机源码路径。
+状态：`FND-08 DONE`；`SDK-01..10 DONE`；`SDK-11 READY`；`SDK-15/16` 为 Partner/TV Cast Manifest 的后续外部依赖任务。任务数 16。源码固定为 Cast-SDK `44c3a99871aa1e68cbda71eacefbb41d23a747a8`，通过 `third_party/cast-sdk` submodule 接入；不得依赖开发者本机源码路径。
 
 ## 边界
 
@@ -112,6 +112,15 @@
 - 验证：`cargo test -p crayon-cast-adapter` 89/89 PASS（lib 42 = 既有 39 + 新增 3；capability 13；delivery 6 新增：Direct MP4 精确调用序列与 Starting→Playing 事件、HLS 分支来自计划而非 URL、Relay token URL 逐字节转发×2 协议、设备不匹配/未连接无接收端流量、unsupported/协议/启动失败各恰好一次尝试不重试、重复投送替换语义；契约 16；链接 2；CS 场景 10）；`cargo test -p test-support --test cast_facade` 26/26 PASS；`cargo test --workspace` 68 suites 全 PASS（0 failed）；`cargo clippy --workspace --all-targets -- -D warnings` PASS；`cargo fmt --all -- --check` PASS；`cargo run -p repo-guard -- scan --root .` PASS（passed=true；RG-003/004 的 cast-adapter 相关提醒与 HEAD worktree 基线逐条一致，无新增）；`bash scripts/check.sh fast` PASS（guard/format/brand-assets-unit/brand-assets/formal-workspace/legacy-unit 六步全过——brand-assets 已随 HEAD `62af4cc` 提交，SDK-08 记录的“另一会话未提交 brand-assets 步骤失败”前提消失）；`git diff --check` PASS。
 - Code Review：按 current 标准逐维度审查（需求边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试、可维护性），P0/P1 = 0；P3 一项：stale-plan 前置校验与 facade 内部校验之间存在理论 TOCTOU 窗口，由 facade 调用点的原子复查兜底（fail closed），双层防御为有意设计并已在模块文档注明。
 - 未覆盖：真实 LAN 投送成功路径（`cast_media` 成功需可应答 SOAP 的接收端，loopback 只覆盖 fail-closed 分支）为手工项（未运行），归 SDK-13 Harness；runtime 编排接线（单次降级、relay 资源回收、capability cache invalidate）归 SDK-12；macOS 构建与真机（SDK-13）。
+
+## SDK-10 完成记录（2026-08-11）
+
+- 改动：`crates/crayon-cast-adapter/src/facade.rs`（CS-006 段契约注释定稿：fencing 矩阵、终态 stop 幂等且不补发远端 Stop、重复调用逐次转发、值在 DTO 入界、阻塞事实如实记录）、`src/service.rs`（模块文档同步 SDK-10 定稿语义，并把已完成的 SDK-08/09 移出 out-of-scope；生产逻辑零改动——审计确认 SDK-05 冻结的 `fence_current` 与 SDK-04 Fake 已逐条对齐，三处无语义缺口可修）、`src/service_tests.rs`（新增 3 项真实实现确定性测试，全部走 `begin_platform_self_receiver_session` loopback 入口，不触 LAN）、`tests/fake_facade.rs`（新增 3 项 CS-006 矩阵测试 + 1 个断言辅助函数）。Fake（test-support）零改动。
+- 行为矩阵定稿（CS-006）：无会话/终态→`NoActiveSession`；旧 generation→`StaleSessionGeneration`；同/新 generation 未知身份（外来句柄）→`NoActiveSession`；被 fencing 拒绝的调用不到达接收端，竞态由 SDK 内 `CAST_SESSION_STALE_GENERATION` 二次 fencing 兜底为同一稳定码。终态仅 stop 幂等成功，SDK 对已终态会话短路返回、不补发远端 Stop（无论终态原因，与官方 desktop app 一致）。重复 play/pause/seek/volume/mute 逐次转发（facade 不去重，接收端协议幂等），仅终态 stop 去重。值在 DTO 入界：`Volume` 0..=100（>100 → `InvalidInput`，serde 同界）；seek 为绝对 `u64` 秒，负值/NaN/无穷在类型上不可表达，facade 不做时长钳制（越界 seek 归接收端）；`PlaybackPosition` 为 `Option<u64>` 并在边界丢弃 track_uri（RL-014）。
+- 超时事实（如实记录，不伪造能力）：pinned SDK 每个播控至多一次有界 SOAP 交换，`SoapControlClient` 固定 5 秒/阶段（connect/read/write），无重试、无协作式取消 API；最坏阻塞有界但不可忽略，调用方须把播控移出 UI 线程，deadline/取消编排归调用方（SDK-12）。SDK 缺口沿用既有条目：协作式取消需 SDK 新 API，复核点 SDK-14。
+- 验证：`cargo test -p crayon-cast-adapter` 95/95 PASS（lib 45 = 既有 42 + 新增 3：旧 generation 全七控 fencing、终态全控拒绝+stop 幂等+外来句柄 fencing、活会话 SDK 执行失败映射稳定 `InvalidState`；CS 场景 13 = 既有 10 + 新增 3：无会话/外来/未知新代全控 fail closed 且不记录、终态拒绝+stop 幂等零接收端流量、重复调用逐次转发+u64::MAX seek 逐字节透传+Volume 101 入界拒绝；capability 13；delivery 6；契约 16；链接 2）；`cargo test -p test-support --test cast_facade` 26/26 PASS；`cargo test --workspace` 68 suites / 353 passed / 0 failed PASS；`cargo clippy --workspace --all-targets -- -D warnings` PASS；`cargo fmt --all -- --check` PASS；`cargo run -p repo-guard -- scan --root .` PASS（passed=true；与 HEAD 逐条比对：RG-003 提醒集相同——`facade.rs` trait 块既有提醒 117→142 行（契约注释定稿，warning 级，非同新增条目），`fake_facade.rs` 111 行条目仅位置移动；RG-004 无新增）；`bash scripts/check.sh fast` PASS（guard/format/brand-assets-unit/brand-assets/formal-workspace/legacy-unit 六步全过）；`git diff --check` PASS。
+- Code Review：按 current 标准逐维度审查（需求边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试、可维护性），P0/P1 = 0；P2 一项：播控成功路径与真实 5 秒 SOAP 超时行为需要可应答 SOAP 的接收端（CI 只用 connection-refused loopback 覆盖 fencing 与稳定错误映射），归 SDK-13 Harness；P3 一项：RG-003 `facade.rs` trait 块提醒 117→142 行，属契约注释定稿的既有提醒增长，SDK-14 统一复核。
+- 未覆盖：播控成功路径（play/pause/seek/volume/mute 到达接收端并生效）与真实超时为手工项（未运行），归 SDK-13；SDK-11 会话监听/终态编排与 SDK-12 runtime 用例不在本任务范围；macOS 构建与真机（SDK-13）。
 
 ## SDK 缺口处理
 

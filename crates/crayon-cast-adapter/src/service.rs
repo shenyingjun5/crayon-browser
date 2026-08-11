@@ -30,9 +30,22 @@
 //! restart never collides with the previous instance's sockets, and
 //! device/session state deliberately does not carry over.
 //!
-//! Deliberately out of scope here (later roadmap tasks): delivery
-//! orchestration policy (SDK-09). Capability synthesis/caching (SDK-08)
-//! lives in `capability`, layered over this facade.
+//! Delivery execution (SDK-09) lives in `delivery`, capability
+//! synthesis/caching (SDK-08) in `capability`; both layer over this facade.
+//! Terminal-state orchestration beyond the SDK supervision mapping (SDK-11)
+//! and runtime wiring (SDK-12) stay out of this module.
+//!
+//! Playback-control semantics (finalized in SDK-10, CS-006): the full
+//! contract lives on the `CastFacade` trait. This implementation fences
+//! every control against the SDK supervisor re-read at call time
+//! (`fence_current`) and uses the supervisor's own handle, mirroring the
+//! official desktop app's double-check; a race past the fence is fenced
+//! again inside the SDK (`CAST_SESSION_STALE_GENERATION`) and surfaces as
+//! the same stable error. `stop` on a terminal session short-circuits to
+//! success inside the SDK without re-sending a remote Stop. Every control
+//! is at most one bounded SOAP exchange (SDK-fixed 5 s per connect/read/
+//! write phase, no retry, no cancel); the blocking bound is documented on
+//! the trait, not compensated here.
 //!
 //! Discovery snapshot semantics (finalized in SDK-06, CS-001/CS-002):
 //! - `list_devices` serves the SDK product-visible list — connectable

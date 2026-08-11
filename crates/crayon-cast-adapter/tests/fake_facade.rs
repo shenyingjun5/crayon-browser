@@ -4,10 +4,10 @@
 
 use crayon_cast_adapter::{
     AssessmentStatus, CastCode, CastError, CastFacade, CastMediaKind, CastMediaRequest,
-    CastMediaUrl, CastPlaybackState, CastSessionPhase, CastSessionSnapshot, CastTerminalReason,
-    DeliveryProtocol, DeviceState, DiscoveredDevice, Volume,
+    CastMediaUrl, CastPlaybackState, CastSessionPhase, CastSessionRef, CastSessionSnapshot,
+    CastTerminalReason, DeliveryProtocol, DeviceState, DiscoveredDevice, Volume,
 };
-use crayon_domain::DeviceId;
+use crayon_domain::{DeviceId, SessionGeneration, SessionId};
 use std::sync::{Arc, Mutex};
 use test_support::cast_facade::{FakeCall, FakeCastFacade};
 
@@ -320,6 +320,141 @@ fn cs_006_stale_session_handle_rejected_on_all_controls() {
     assert_eq!(
         fake.current_session().expect("snapshot").playback(),
         CastPlaybackState::Paused
+    );
+}
+
+/// Asserts every session-bound control fails with `expected` and none of
+/// them reaches the fake receiver (CS-006 matrix helper).
+fn assert_all_controls_fail(fake: &FakeCastFacade, session: &CastSessionRef, expected: CastError) {
+    let recorded_before = fake.calls().len();
+    assert_eq!(fake.play(session), Err(expected));
+    assert_eq!(fake.pause(session), Err(expected));
+    assert_eq!(fake.seek(session, 10), Err(expected));
+    assert_eq!(
+        fake.set_volume(session, Volume::new(10).expect("volume")),
+        Err(expected)
+    );
+    assert_eq!(fake.set_muted(session, true), Err(expected));
+    assert_eq!(fake.stop(session), Err(expected));
+    assert_eq!(fake.playback_position(session), Err(expected));
+    assert_eq!(
+        fake.calls().len(),
+        recorded_before,
+        "fenced calls never reach the receiver"
+    );
+}
+
+/// CS-006 matrix: with no session at all, every control fails closed; with
+/// a live session, a foreign identity at the current generation and an
+/// unknown newer generation are both `NoActiveSession` (only an older
+/// generation is `StaleSessionGeneration`).
+#[test]
+fn cs_006_no_session_and_foreign_handles_fail_closed_on_all_controls() {
+    let fake = fake_with_device();
+    fake.connect(&device("dev-01")).expect("connect");
+    let unknown = CastSessionRef::new(
+        SessionId::new("fake-session-999").expect("id"),
+        SessionGeneration::INITIAL,
+    );
+    assert_all_controls_fail(&fake, &unknown, CastError::NoActiveSession);
+
+    let current = fake
+        .cast_media(&direct_mp4_request("dev-01"))
+        .expect("cast");
+    let foreign = CastSessionRef::new(
+        SessionId::new("fake-session-999").expect("id"),
+        current.generation(),
+    );
+    let newer = CastSessionRef::new(
+        current.session_id().clone(),
+        current.generation().advance().expect("generation advances"),
+    );
+    assert_all_controls_fail(&fake, &foreign, CastError::NoActiveSession);
+    assert_all_controls_fail(&fake, &newer, CastError::NoActiveSession);
+}
+
+/// CS-006 matrix: a terminal session rejects every control except `stop`,
+/// which stays idempotent and never re-sends a remote Stop — whatever the
+/// terminal reason (here: natural end, not stopped by the sender).
+#[test]
+fn cs_006_terminal_session_rejects_controls_and_stop_stays_idempotent() {
+    let fake = fake_with_device();
+    fake.connect(&device("dev-01")).expect("connect");
+    let session = fake
+        .cast_media(&direct_mp4_request("dev-01"))
+        .expect("cast");
+    fake.simulate_natural_end();
+    assert!(fake.current_session().expect("snapshot").is_terminal());
+
+    let recorded_before = fake.calls().len();
+    assert_eq!(fake.play(&session), Err(CastError::NoActiveSession));
+    assert_eq!(fake.pause(&session), Err(CastError::NoActiveSession));
+    assert_eq!(fake.seek(&session, 10), Err(CastError::NoActiveSession));
+    assert_eq!(
+        fake.set_volume(&session, Volume::new(10).expect("volume")),
+        Err(CastError::NoActiveSession)
+    );
+    assert_eq!(
+        fake.set_muted(&session, true),
+        Err(CastError::NoActiveSession)
+    );
+    assert_eq!(
+        fake.playback_position(&session),
+        Err(CastError::NoActiveSession)
+    );
+    fake.stop(&session)
+        .expect("stop on terminal is idempotent success");
+    fake.stop(&session)
+        .expect("repeated terminal stop stays idempotent");
+    assert_eq!(
+        fake.calls().len(),
+        recorded_before,
+        "no terminal control re-sends receiver traffic"
+    );
+}
+
+/// CS-006 matrix: repeated controls are each forwarded (the facade never
+/// dedups; only terminal `stop` does), and values are bounded at the DTO
+/// boundary while an in-range seek position passes through verbatim.
+#[test]
+fn cs_006_repeated_controls_forward_each_call_and_values_pass_through() {
+    let fake = fake_with_device();
+    fake.connect(&device("dev-01")).expect("connect");
+    let session = fake
+        .cast_media(&direct_mp4_request("dev-01"))
+        .expect("cast");
+
+    let recorded_before = fake.calls().len();
+    for _ in 0..2 {
+        fake.play(&session).expect("play");
+        fake.pause(&session).expect("pause");
+        fake.seek(&session, u64::MAX).expect("seek");
+        fake.set_volume(&session, Volume::new(100).expect("volume"))
+            .expect("volume");
+        fake.set_muted(&session, true).expect("mute");
+    }
+    let forwarded = &fake.calls()[recorded_before..];
+    assert_eq!(forwarded.len(), 10, "no control call is deduplicated");
+    assert!(
+        forwarded.contains(&FakeCall::Seek {
+            session: session.clone(),
+            position_seconds: u64::MAX,
+        }),
+        "the facade forwards the seek position verbatim; the receiver owns range checks"
+    );
+    // DTO boundary: volume > 100 is `InvalidInput` before any facade call; a
+    // negative or NaN/infinite position is inexpressible (`u64`).
+    assert_eq!(Volume::new(101), Err(CastError::InvalidInput));
+
+    // Only terminal `stop` dedups: the first stop reaches the receiver, the
+    // second is an idempotent success without receiver traffic.
+    let before_stop = fake.calls().len();
+    fake.stop(&session).expect("first stop");
+    fake.stop(&session).expect("terminal stop is idempotent");
+    assert_eq!(
+        fake.calls().len(),
+        before_stop + 1,
+        "only the first stop reaches the receiver"
     );
 }
 

@@ -975,6 +975,101 @@ impl CastSessionListener for ReentrantListener {
     }
 }
 
+// -- Playback-control matrix (SDK-10, CS-006) --------------------------------
+// Real-implementation branches that are deterministic offline: fencing,
+// terminal idempotency and stable error mapping, all driven through the
+// SDK's platform self-session entry point (loopback control server only).
+// Control success needs an answering SOAP receiver (SDK-13 harness); the
+// bounded SOAP blocking is a documented fact (facade contract), not an
+// emulated timeout.
+
+/// Starts a supervised self-receiver session and returns its product
+/// fencing reference.
+fn begin_self_session(facade: &SenderCastFacade, session_id: &str) -> CastSessionRef {
+    let service = facade.service().expect("facade is live");
+    let registration = service
+        .begin_platform_self_receiver_session(
+            session_id,
+            SdkMediaKind::Video,
+            "http://127.0.0.1:9/control",
+        )
+        .expect("self session starts");
+    session_ref(session_id, registration.handle.generation)
+}
+
+#[test]
+fn stale_generation_is_fenced_on_every_control() {
+    let facade = facade();
+    let first = begin_self_session(&facade, "sdk10stale1");
+    let second = begin_self_session(&facade, "sdk10stale2");
+    assert!(second.generation().supersedes(first.generation()));
+
+    for result in [
+        facade.play(&first),
+        facade.pause(&first),
+        facade.seek(&first, 10),
+        facade.set_volume(&first, Volume::new(10).expect("valid volume")),
+        facade.set_muted(&first, true),
+        facade.stop(&first),
+    ] {
+        assert_eq!(result, Err(CastError::StaleSessionGeneration));
+    }
+    assert_eq!(
+        facade.playback_position(&first),
+        Err(CastError::StaleSessionGeneration)
+    );
+    // The current generation stays usable.
+    facade.stop(&second).expect("current generation accepted");
+}
+
+#[test]
+fn terminal_session_rejects_every_control_except_idempotent_stop() {
+    let facade = facade();
+    let session = begin_self_session(&facade, "sdk10terminal");
+    facade.stop(&session).expect("first stop terminates");
+    assert!(facade.current_session().expect("snapshot").is_terminal());
+
+    for result in [
+        facade.play(&session),
+        facade.pause(&session),
+        facade.seek(&session, 10),
+        facade.set_volume(&session, Volume::new(10).expect("valid volume")),
+        facade.set_muted(&session, true),
+    ] {
+        assert_eq!(result, Err(CastError::NoActiveSession));
+    }
+    assert_eq!(
+        facade.playback_position(&session),
+        Err(CastError::NoActiveSession)
+    );
+    // Idempotent success without re-sending a remote Stop (the SDK
+    // short-circuits an already-terminal session).
+    facade.stop(&session).expect("terminal stop is idempotent");
+    facade
+        .stop(&session)
+        .expect("repeated terminal stop stays idempotent");
+    // A foreign handle at the same generation is still fenced.
+    let foreign = session_ref("sdk10foreign", session.generation().get());
+    assert_eq!(facade.stop(&foreign), Err(CastError::NoActiveSession));
+}
+
+#[test]
+fn live_session_control_failure_surfaces_a_stable_error() {
+    let facade = facade();
+    let session = begin_self_session(&facade, "sdk10state");
+    // The supervised session is live, so fencing passes; the SDK then
+    // rejects the control because no media is loaded on the sender
+    // (`SENDER_INVALID_STATE`), which maps to the stable `InvalidState` —
+    // never a panic or an SDK message string.
+    assert_eq!(facade.play(&session), Err(CastError::InvalidState));
+    assert_eq!(facade.seek(&session, 10), Err(CastError::InvalidState));
+    assert_eq!(
+        facade.playback_position(&session),
+        Err(CastError::InvalidState)
+    );
+    facade.stop(&session).expect("cleanup stop");
+}
+
 // -- Concurrent shutdown --------------------------------------------------------
 
 #[test]

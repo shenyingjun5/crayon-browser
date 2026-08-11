@@ -156,13 +156,36 @@ pub trait CastFacade: Send + Sync {
     fn cast_media(&self, request: &CastMediaRequest) -> Result<CastSessionRef, CastError>;
 
     // -- Session-bound playback control (CS-006) ---------------------------
-    // Every method fences on the session reference: a stale generation is
-    // rejected with `StaleSessionGeneration` and never reaches the receiver.
+    // Finalized semantics (SDK-10):
+    // - every method fences on the session reference against the supervised
+    //   current session, re-read at call time: no or terminal session ->
+    //   `NoActiveSession`; an older generation -> `StaleSessionGeneration`;
+    //   a same/newer generation with unknown identity (foreign handle) ->
+    //   `NoActiveSession`. A fenced call never reaches the receiver; a race
+    //   past the fence is fenced again inside the SDK with the same error.
+    // - `stop` is the only control allowed on a terminal session and is
+    //   idempotent there: success without re-sending a remote Stop, whatever
+    //   the terminal reason. Only stale/foreign references error.
+    // - repeated play/pause/seek/volume/mute calls are each forwarded (no
+    //   facade dedup; receiver effects are idempotent by protocol). Only
+    //   terminal `stop` dedups.
+    // - values are bounded at the DTO boundary: `Volume` rejects > 100 with
+    //   `InvalidInput`; the seek position is an absolute `u64` (a negative
+    //   or NaN/infinite position is inexpressible) and is never clamped
+    //   here — the receiver owns out-of-range seeks; `PlaybackPosition`
+    //   carries `Option<u64>` and drops the SDK track URI (RL-014).
+    // - blocking truth (pinned SDK, recorded not fabricated): one bounded
+    //   SOAP exchange per call with the SDK-fixed timeout (5 s per
+    //   connect/read/write phase, no retry, no cancel) — callers keep
+    //   controls off the UI thread. A bounded block is not a timeout
+    //   feature; deadline/cancellation orchestration belongs to the caller.
 
     fn play(&self, session: &CastSessionRef) -> Result<(), CastError>;
 
     fn pause(&self, session: &CastSessionRef) -> Result<(), CastError>;
 
+    /// Seeks to an absolute position in seconds (never clamped by the
+    /// facade; see the control contract above).
     fn seek(&self, session: &CastSessionRef, position_seconds: u64) -> Result<(), CastError>;
 
     fn set_volume(&self, session: &CastSessionRef, volume: Volume) -> Result<(), CastError>;
@@ -170,10 +193,12 @@ pub trait CastFacade: Send + Sync {
     fn set_muted(&self, session: &CastSessionRef, muted: bool) -> Result<(), CastError>;
 
     /// Stops the session. Idempotent: an already-terminated session reports
-    /// success; only a stale or foreign reference is an error.
+    /// success without receiver traffic; only a stale or foreign reference
+    /// is an error.
     fn stop(&self, session: &CastSessionRef) -> Result<(), CastError>;
 
-    /// Current playback position of the session (no track URI, ever).
+    /// Current playback position of the session, fenced like every other
+    /// control (no track URI, ever).
     fn playback_position(&self, session: &CastSessionRef) -> Result<PlaybackPosition, CastError>;
 
     // -- Session supervision (CS-007) --------------------------------------
