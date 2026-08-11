@@ -44,6 +44,8 @@ case "$mode" in
     fast)
         run_step guard cargo run --quiet -p repo-guard -- scan --root "$repo_root"
         run_step format cargo fmt --all -- --check
+        run_step brand-assets-unit node --test tools/brand-assets/tests/managed-paths.test.mjs
+        run_step brand-assets node tools/brand-assets/verify.mjs
         run_step formal-workspace cargo test --workspace
         run_step legacy-unit cargo test -p get-video --no-default-features --features legacy-dev --lib
         ;;
@@ -56,14 +58,20 @@ case "$mode" in
         run_step relay-unit cargo test -p get-video --no-default-features --features legacy-dev relay::
         run_step relay-security cargo test --no-default-features --features legacy-dev --test fixtures security::
         ;;
+    brand-assets)
+        run_step brand-assets-unit node --test tools/brand-assets/tests/managed-paths.test.mjs
+        run_step brand-assets node tools/brand-assets/verify.mjs
+        ;;
     all)
         run_step guard cargo run --quiet -p repo-guard -- scan --root "$repo_root"
         run_step format cargo fmt --all -- --check
+        run_step brand-assets-unit node --test tools/brand-assets/tests/managed-paths.test.mjs
+        run_step brand-assets node tools/brand-assets/verify.mjs
         run_step formal-workspace cargo test --workspace
         run_step legacy-package cargo test -p get-video --no-default-features --features legacy-dev
         ;;
     *)
-        echo "usage: scripts/check.sh [fast|core|security|all]" >&2
+        echo "usage: scripts/check.sh [fast|core|security|brand-assets|all]" >&2
         overall_passed=false
         failure="unsupported mode"
         exit 2

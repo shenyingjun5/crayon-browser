@@ -3,12 +3,12 @@
 - 版本：v0.7
 - 日期：2026-08-11
 - 状态：活跃
-- 当前任务总数：196
-- 当前测试用例总数：153
+- 当前任务总数：200
+- 当前测试用例总数：166
 
 ## 1. 当前结论
 
-- Foundation 19 项、`MED-01..19`、`CEF-01A`、`SDK-01..06` 已完成，共 45 项。
+- 品牌资产 `BRD-01..04`、Foundation 19 项、`MED-01..19`、`CEF-01A`、`SDK-01..06` 已完成，共 49 项。
 - 当前可领取 `CEF-01B` 和 `SDK-07`；CEF 壳、真实接收端闭环与页面数据面尚未完成。
 - 产品仍按“浏览器与 LAN 投屏 -> 页面数据/Markdown -> Agent 协议与语义动作 -> Workflow/Challenge -> Capability Hub/合作方 -> 模型”的依赖顺序交付。
 - CAAP、CLI/入站 MCP、高性能读页和授权操作是核心；具体模型/provider 与视频/文档总结属于第二阶段。
@@ -32,6 +32,7 @@
 
 | 模块 | 任务数 | 目标 |
 |---|---:|---|
+| BRD | 4 | 品牌图标母版、跨平台确定性资产与接入门禁 |
 | FND | 19 | Workspace、契约、质量入口与仓库基线 |
 | CEF | 19 | Windows/macOS CEF 浏览器壳 |
 | MED | 19 | 媒体观察、LAN Relay 与外部客户端交接语义 |
@@ -45,12 +46,15 @@
 | HUB | 16 | Capability Registry、Router 与 Partner connector |
 | HM | 12 | HarmonyOS 电脑 PC 形态技术预览 |
 | QAR | 15 | 质量、性能、安全、发布和回滚 |
-| **合计** | **196** | |
+| **合计** | **200** | |
 
 ## 4. 依赖关系
 
 ```mermaid
 flowchart LR
+  BRD --> CEF
+  BRD --> HM
+  BRD --> QAR
   FND --> CEF
   FND --> MED
   FND --> SDK
@@ -92,7 +96,7 @@ flowchart LR
 
 ### V0：工程、投屏语义与 SDK discovery 基线（已完成）
 
-- Foundation 19 项、`MED-01..19`、`CEF-01A`、`SDK-01..06`。
+- 品牌资产 `BRD-01..04`、Foundation 19 项、`MED-01..19`、`CEF-01A`、`SDK-01..06`。
 - 产出：`Direct/Relay/ExternalClientHandoff/Reject`，固定 SDK source/facade/Fake/真实 service 生命周期与 discovery 快照语义。
 
 ### V1：Windows 浏览器可用
@@ -211,7 +215,7 @@ flowchart LR
 
 ## 8. 发布门禁
 
-- 196 项任务按所选发布范围提供真实状态、命令与证据；153 个测试 ID 可追踪，P0/P1 Review 为零。
+- 200 项任务按所选发布范围提供真实状态、命令与证据；166 个测试 ID 可追踪，P0/P1 Review 为零。
 - CLI/入站 MCP 共用 CAAP；出站 connector 独立；无 raw CDP/WebDriver/任意 JS/remote bind/通用文件上传。
 - 页面数据有界、action 有前置与效果、Workflow verified-only、Challenge 不绕过、self-heal 高风险 fail closed。
 - Hub route_reason/fallback 重授权和 Partner 信任/OAuth/SSRF/kill switch 通过后才开放对应 feature。

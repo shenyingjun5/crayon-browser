@@ -1,0 +1,164 @@
+{
+  "schema_version": 1,
+  "brand_version": "app-icon-v1",
+  "renderer": "Chromium 151.0.7922.77",
+  "source_files": [
+    {
+      "path": "assets/brand/manifest.json",
+      "bytes": 1221,
+      "sha256": "30d129e0f7b37db5ee931fbd32ded892a0bd961000d6f748895fcdc82db5649e"
+    },
+    {
+      "path": "assets/brand/source/app-icon-master.svg",
+      "bytes": 2141,
+      "sha256": "444ffaa204f253d8c54c4e208745cbbef598d6438ebae917305b6cba6f0290e7"
+    },
+    {
+      "path": "assets/brand/source/app-icon-micro.svg",
+      "bytes": 993,
+      "sha256": "a35d749cc9e1a04f06cbf76a90065c24407c77f8a08af344e6d93f43910a0ae3"
+    },
+    {
+      "path": "assets/brand/source/app-glyph-monochrome.svg",
+      "bytes": 811,
+      "sha256": "b571f54e71f3b0b0e727ce8703dcf2d2d2ce1512c68d7f6b4d3f9a06e8cb7fdb"
+    }
+  ],
+  "generated_files": [
+    {
+      "path": "assets/brand/generated/harmony/app-icon/app-icon-1024.png",
+      "bytes": 189723,
+      "sha256": "774e33caa9afad204882b0510ff9c31e5fedcc7bd6764a5d119f61cadae0ea7e"
+    },
+    {
+      "path": "assets/brand/generated/harmony/app-icon/app-icon-256.png",
+      "bytes": 13286,
+      "sha256": "266cf089f9d0147e1eb5d3808211006652eff93ba78a2ffb2bd04049b24a4d5e"
+    },
+    {
+      "path": "assets/brand/generated/harmony/app-icon/app-icon-512.png",
+      "bytes": 44834,
+      "sha256": "7454c2c00e19aec922e42fb90beb8d4ff6626d7c3ff1989ca9e2f59bd75f3553"
+    },
+    {
+      "path": "assets/brand/generated/macos/app.icns",
+      "bytes": 252837,
+      "sha256": "f1bdf82f497afdf0762288ffbf9b2d74accc8affb59515fb45939809f2540508"
+    },
+    {
+      "path": "assets/brand/generated/macos/AppIcon.iconset/icon_128x128.png",
+      "bytes": 5536,
+      "sha256": "47182143161855bfda4b3533bb39cc0036c570e81eeab4c5b8c4c9cf7da6ee49"
+    },
+    {
+      "path": "assets/brand/generated/macos/AppIcon.iconset/icon_128x128@2x.png",
+      "bytes": 12679,
+      "sha256": "312e81c44bd6f12265845b218c84c796c30aea2f59cfa6e2dd27e3e36c348b80"
+    },
+    {
+      "path": "assets/brand/generated/macos/AppIcon.iconset/icon_16x16.png",
+      "bytes": 382,
+      "sha256": "a2ffd14c748bf8c540290d39f804ef063c19bc789c1e626e4cc3b8b7ffe928d7"
+    },
+    {
+      "path": "assets/brand/generated/macos/AppIcon.iconset/icon_16x16@2x.png",
+      "bytes": 700,
+      "sha256": "1d9c23061a0fcabd8eeebac56017380259ac847ef82f3712401cb3cee11c345a"
+    },
+    {
+      "path": "assets/brand/generated/macos/AppIcon.iconset/icon_256x256.png",
+      "bytes": 12679,
+      "sha256": "312e81c44bd6f12265845b218c84c796c30aea2f59cfa6e2dd27e3e36c348b80"
+    },
+    {
+      "path": "assets/brand/generated/macos/AppIcon.iconset/icon_256x256@2x.png",
+      "bytes": 43472,
+      "sha256": "5aa0e173bca937dc2abec41c629a61c25da3d91276806371806607ae2b7bdae6"
+    },
+    {
+      "path": "assets/brand/generated/macos/AppIcon.iconset/icon_32x32.png",
+      "bytes": 700,
+      "sha256": "1d9c23061a0fcabd8eeebac56017380259ac847ef82f3712401cb3cee11c345a"
+    },
+    {
+      "path": "assets/brand/generated/macos/AppIcon.iconset/icon_32x32@2x.png",
+      "bytes": 2867,
+      "sha256": "79cb13a767acd16373fd39ff745d84e951be2861ad9d539f754613285fb22b70"
+    },
+    {
+      "path": "assets/brand/generated/macos/AppIcon.iconset/icon_512x512.png",
+      "bytes": 43472,
+      "sha256": "5aa0e173bca937dc2abec41c629a61c25da3d91276806371806607ae2b7bdae6"
+    },
+    {
+      "path": "assets/brand/generated/macos/AppIcon.iconset/icon_512x512@2x.png",
+      "bytes": 187137,
+      "sha256": "3865f63c7604fb1d233f0cd55c041b1fccc4217cb154f73cf5333e3c7eda2a0f"
+    },
+    {
+      "path": "assets/brand/generated/previews/contact-sheet.png",
+      "bytes": 845373,
+      "sha256": "5c619be98311486cbbc4a215926d35bd3a9ce836f2cdadda42800ab14c3ef1db"
+    },
+    {
+      "path": "assets/brand/generated/previews/macos-1024.png",
+      "bytes": 187137,
+      "sha256": "3865f63c7604fb1d233f0cd55c041b1fccc4217cb154f73cf5333e3c7eda2a0f"
+    },
+    {
+      "path": "assets/brand/generated/previews/master-1024.png",
+      "bytes": 189723,
+      "sha256": "774e33caa9afad204882b0510ff9c31e5fedcc7bd6764a5d119f61cadae0ea7e"
+    },
+    {
+      "path": "assets/brand/generated/windows/app.ico",
+      "bytes": 26623,
+      "sha256": "775f13a688b579b87db949320484a54c8a072673e0c67f7608030ebe593b05f1"
+    },
+    {
+      "path": "assets/brand/generated/windows/png/app-icon-128.png",
+      "bytes": 5809,
+      "sha256": "a4fbe520d53ee687f7cd15a70516d0d52d4fde06d6d258d0c95cdc2690f2c8d2"
+    },
+    {
+      "path": "assets/brand/generated/windows/png/app-icon-16.png",
+      "bytes": 414,
+      "sha256": "f8f0cee916e1adfb9212662bf96aede8cee6c7a19b11b6fc5d3c33dd64f762a8"
+    },
+    {
+      "path": "assets/brand/generated/windows/png/app-icon-20.png",
+      "bytes": 504,
+      "sha256": "0b3e8ec251e775ee91a9a09d722fa91d7c67f521e167040ec28c2fd8c6f478f5"
+    },
+    {
+      "path": "assets/brand/generated/windows/png/app-icon-24.png",
+      "bytes": 582,
+      "sha256": "1f135a56ca4fa50ac8e2dfd067ef24847155d48d0b6b17c78fa2fcf1b64dfd54"
+    },
+    {
+      "path": "assets/brand/generated/windows/png/app-icon-256.png",
+      "bytes": 13286,
+      "sha256": "266cf089f9d0147e1eb5d3808211006652eff93ba78a2ffb2bd04049b24a4d5e"
+    },
+    {
+      "path": "assets/brand/generated/windows/png/app-icon-32.png",
+      "bytes": 774,
+      "sha256": "bb8f8558e3985304bfbf2c5f253586791b544c8feabe80d15cfd039e662b0052"
+    },
+    {
+      "path": "assets/brand/generated/windows/png/app-icon-40.png",
+      "bytes": 960,
+      "sha256": "93e9bdf2f6d3aa67967843113baef32a9b1ebf6ad3c1cf6d199f9f485bc59258"
+    },
+    {
+      "path": "assets/brand/generated/windows/png/app-icon-48.png",
+      "bytes": 1145,
+      "sha256": "ceaa92700e2cc82a3ac0eb5a8ec4d8226658c643425859482d9d3669863c0f48"
+    },
+    {
+      "path": "assets/brand/generated/windows/png/app-icon-64.png",
+      "bytes": 2999,
+      "sha256": "e44cd21606faad330e9455456abe0e0ef3f1f97c3cfa91b384d9843827766861"
+    }
+  ]
+}

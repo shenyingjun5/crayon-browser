@@ -1,0 +1,8 @@
+/assets/brand/manifest.json text eol=lf
+/assets/brand/source/*.svg text eol=lf
+/assets/brand/generated/manifest-lock.json text eol=lf
+/tools/brand-assets/** text eol=lf
+
+/assets/brand/**/*.png binary
+/assets/brand/**/*.ico binary
+/assets/brand/**/*.icns binary

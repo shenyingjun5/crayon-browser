@@ -9,7 +9,7 @@ $results = [System.Collections.Generic.List[object]]::new()
 $overallPassed = $true
 $failure = $null
 
-if ($Mode -notin @('fast', 'core', 'security', 'all')) {
+if ($Mode -notin @('fast', 'core', 'security', 'brand-assets', 'all')) {
     [pscustomobject]@{
         schema_version = 1
         mode = $Mode
@@ -17,7 +17,7 @@ if ($Mode -notin @('fast', 'core', 'security', 'all')) {
         failure = 'unsupported mode'
         steps = @()
     } | ConvertTo-Json -Depth 4 -Compress
-    throw "unsupported mode '$Mode'; expected fast, core, security, or all"
+    throw "unsupported mode '$Mode'; expected fast, core, security, brand-assets, or all"
 }
 
 function Invoke-CheckStep {
@@ -43,15 +43,18 @@ function Invoke-CheckStep {
 Push-Location -LiteralPath $repoRoot
 try {
     $steps = switch ($Mode) {
-        'fast' { @('guard', 'format', 'formal-workspace', 'legacy-unit') }
+        'fast' { @('guard', 'format', 'brand-assets-unit', 'brand-assets', 'formal-workspace', 'legacy-unit') }
         'core' { @('formal-workspace', 'legacy-package') }
         'security' { @('guard', 'relay-unit', 'relay-security') }
-        'all' { @('guard', 'format', 'formal-workspace', 'legacy-package') }
+        'brand-assets' { @('brand-assets-unit', 'brand-assets') }
+        'all' { @('guard', 'format', 'brand-assets-unit', 'brand-assets', 'formal-workspace', 'legacy-package') }
     }
     foreach ($step in $steps) {
         switch ($step) {
             'guard' { Invoke-CheckStep $step { cargo run --quiet -p repo-guard -- scan --root $repoRoot } }
             'format' { Invoke-CheckStep $step { cargo fmt --all -- --check } }
+            'brand-assets-unit' { Invoke-CheckStep $step { node --test tools/brand-assets/tests/managed-paths.test.mjs } }
+            'brand-assets' { Invoke-CheckStep $step { node tools/brand-assets/verify.mjs } }
             'formal-workspace' { Invoke-CheckStep $step { cargo test --workspace } }
             'legacy-unit' { Invoke-CheckStep $step { cargo test -p get-video --no-default-features --features legacy-dev --lib } }
             'legacy-package' { Invoke-CheckStep $step { cargo test -p get-video --no-default-features --features legacy-dev } }

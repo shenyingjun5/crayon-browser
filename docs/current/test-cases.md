@@ -15,6 +15,19 @@
 | RG-007 | AUTO | 修改 IPC/schema 后运行兼容检查 | 当前与前一协议版本 golden vectors 均通过 |
 | RG-008 | AUTO | 检查 Cast-SDK source lock、`.gitmodules`、checkout HEAD 与后续 Cargo 依赖；gitlink 由 submodule 状态命令复核 | 固定 commit；无 branch 漂移或本机 path dependency |
 
+## 1A. 品牌图标资产
+
+| ID | 类型 | 前置/步骤 | 预期 |
+|---|---|---|---|
+| BI-001 | AUTO | 校验参考源路径、SHA-256、尺寸和像素格式 | 与 `brand-assets.md`/manifest 一致；参考 PNG 不进入平台产物 |
+| BI-002 | AUTO | 解析三个 SVG 源并扫描外部资源、脚本、嵌入位图 | SVG 可解析；无 script、foreignObject、网络 URL 或 data image |
+| BI-003 | AUTO | 在相同输入上连续生成两次 | 全部生成文件 SHA-256 一致 |
+| BI-004 | AUTO | 读取所有 PNG 的 IHDR/alpha 与尺寸 | 尺寸匹配 manifest；Windows/Harmony 透明角无黑边；macOS 方形底板完整 |
+| BI-005 | HARNESS | 生成 16/20/24/32/48/64/128/256/512/1024 contact sheet，在明/暗背景检查 | micro/master 切换正确；浏览器+蜡笔可辨；无脏边/裁切/不可见细节 |
+| BI-006 | AUTO | 解析 `app.ico` 目录和 PNG payload | 16/20/24/32/40/48/64/128/256 齐全，32-bit alpha，offset/length 合法 |
+| BI-007 | AUTO | 解析 macOS iconset 与 ICNS chunk | 16～1024 变体齐全，chunk 类型/长度合法；macOS runner 后续复核包内资源 |
+| BI-008 | AUTO | 校验 Harmony 输出、manifest 和目标路径契约；模拟路径逃逸与 symlink/junction | 1024/512/256 资产来自同一版本；`HM-02` 可直接消费且无 Windows 路径假设；受管删除拒绝仓库外路径与 reparse parent |
+
 ## 2. 浏览器、播放门禁与媒体观察
 
 | ID | 类型 | 前置/步骤 | 预期 |

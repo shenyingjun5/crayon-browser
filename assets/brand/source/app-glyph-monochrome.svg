@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-labelledby="title description">
+  <title id="title">蜡笔浏览器单色品牌标识</title>
+  <desc id="description">浏览器窗口与蜡笔的单色轮廓</desc>
+  <g fill="none" stroke="currentColor" stroke-linejoin="round">
+    <path d="M 10 31 V 11.5 C 10 8.8 12 7 14.7 7 H 36 C 39 7 41 9 41 12 V 36 C 41 39 39 41 36 41 H 21" stroke-width="4"/>
+    <path d="M 10 15 H 41" stroke-width="3.5"/>
+    <path d="M 8.5 31 L 25.5 19.2 L 31 26 L 20.3 42.5 Z" fill="currentColor" stroke-width="1.5"/>
+    <path d="M 25.5 19.2 Q 32.8 14.7 34 16 Q 35.2 17.4 31 26 Z" fill="currentColor" stroke-width="1.5"/>
+    <ellipse cx="10.5" cy="38" rx="5" ry="7" transform="rotate(-39 10.5 38)" fill="currentColor" stroke-width="1.5"/>
+  </g>
+</svg>

@@ -17,8 +17,8 @@
 | QAR-06 | TODO | QAR-02,QAR-03,QAR-05 | 稳定性 harness | 重复导航、设备切换、网络切换、睡眠唤醒和退出 | `E2E-005`; 资源归零 | V5 |
 | QAR-07 | TODO | QAR-06 | 长稳报告 | 30 分钟 Relay、8 小时 Direct/浏览/Profile | `RL-013`,`E2E-006`; 无趋势泄漏 | V5 |
 | QAR-08 | TODO | PRV-13,QAR-02,AGT-16 | 安全/隐私门禁 | 核心覆盖威胁模型、LeakScanner、SSRF、CAAP replay/prompt injection/confused deputy；所选 Workflow/Partner feature 必须追加 AC/WF/HB 专项证据 | 所选范围全安全用例；P0/P1=0 | V5 |
-| QAR-09 | TODO | QAR-01,PLT-W05 | Windows packaging | 安装、签名、更新、卸载、回滚和防火墙提示 | `UP-001..003`; clean VM | V5 |
-| QAR-10 | TODO | QAR-01,PLT-M05 | macOS packaging | universal 包、签名、公证、更新、卸载和回滚 | `UP-001..003`; clean VM | V5 |
+| QAR-09 | TODO | QAR-01,PLT-W05,BRD-04 | Windows packaging | 安装、签名、更新、卸载、回滚、防火墙提示；验证 EXE、安装器、快捷方式和任务栏均消费 `app-icon-v1` | `UP-001..003`,`BI-003`,`BI-004`; clean VM；安装/升级/回滚后图标无旧缓存或黑边 | V5 |
+| QAR-10 | TODO | QAR-01,PLT-M05,BRD-04 | macOS packaging | universal 包、签名、公证、更新、卸载和回滚；验证 bundle/Dock/Finder 均消费 `app-icon-v1` | `UP-001..003`,`BI-006`; clean VM；系统遮罩、安装/升级/回滚图标复核 | V5 |
 | QAR-11 | TODO | QAR-09,QAR-10 | SBOM/许可 | CEF、Cast-SDK、Rust/C++/Ark 依赖 SBOM 与许可证产物 | source/revision/hash 可追踪 | V5 |
 | QAR-12 | TODO | QAR-09,QAR-10 | 升级/回滚矩阵 | Profile/schema/SDK 兼容、失败回滚、数据保留与清理 | `UP-001..003`; previous/current | V5 |
 | QAR-14 | TODO | QAR-11,QAR-12 | 发布演练 | Windows/macOS 候选包、离线安装、升级、回滚与事故演练 | 演练记录；无外部发布 | V5 |

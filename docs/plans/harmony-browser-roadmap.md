@@ -10,7 +10,7 @@
 | ID | 状态 | 依赖 | 允许修改路径 | 交付目标 | 验收/测试 | 阶段 |
 |---|---|---|---|---|---|---|
 | HM-01 | TODO | FND-12 | `apps/harmony/**`, `platform/harmony/**` | 建立 DevEco/ArkUI PC 窗口、键盘、鼠标与多任务工程基线 | build；PC-form harness | VH |
-| HM-02 | TODO | HM-01 | `apps/harmony/**` | 实现 ArkWeb 导航、标签页、下载和权限基础能力 | Harmony browser integration | VH |
+| HM-02 | TODO | HM-01,BRD-04 | `apps/harmony/**` | 实现 ArkWeb 导航、标签页、下载和权限基础能力；按当前 DevEco 模板消费 `assets/brand/generated/harmony`，不套用 Windows 遮罩规则 | Harmony browser integration；PC-form 图标尺寸、系统遮罩与包内资源验证 | VH |
 | HM-03 | TODO | HM-02,MED-04 | `platform/harmony/**` | ArkWeb 媒体观察与可信 Browser-side 验证 adapter | `MO-001..007`; integration | VH |
 | HM-04 | TODO | HM-02,PLT-02,AGT-01 | `platform/harmony/**` | 定义 ArkWeb、本地 LAN、PC 窗口/输入、文件、CAAP 本机 transport 与外部客户端交接能力 | capability golden | VH |
 | HM-05 | TODO | HM-03,HM-04 | `crates/crayon-harmony-ffi/**`, `platform/harmony/**` | 建立有界、可取消、版本化的 Rust C ABI/CAAP bridge | ABI/unit/fuzz；AG-001/002 | VH |

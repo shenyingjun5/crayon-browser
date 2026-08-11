@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "brand_version": "app-icon-v1",
+  "reference": {
+    "path": "assets/brand/source/reference-v1.png",
+    "sha256": "aa807f170a73b5d8130b03f45ad36228cf45c97037dcf73d1363400b668db870",
+    "width": 1254,
+    "height": 1254,
+    "png_color_type": 2
+  },
+  "sources": {
+    "master": "assets/brand/source/app-icon-master.svg",
+    "micro": "assets/brand/source/app-icon-micro.svg",
+    "monochrome": "assets/brand/source/app-glyph-monochrome.svg"
+  },
+  "render": {
+    "canvas_size": 1024,
+    "micro_max_size": 48
+  },
+  "windows": {
+    "sizes": [16, 20, 24, 32, 40, 48, 64, 128, 256]
+  },
+  "macos": {
+    "iconset": [
+      { "file": "icon_16x16.png", "size": 16 },
+      { "file": "icon_16x16@2x.png", "size": 32 },
+      { "file": "icon_32x32.png", "size": 32 },
+      { "file": "icon_32x32@2x.png", "size": 64 },
+      { "file": "icon_128x128.png", "size": 128 },
+      { "file": "icon_128x128@2x.png", "size": 256 },
+      { "file": "icon_256x256.png", "size": 256 },
+      { "file": "icon_256x256@2x.png", "size": 512 },
+      { "file": "icon_512x512.png", "size": 512 },
+      { "file": "icon_512x512@2x.png", "size": 1024 }
+    ]
+  },
+  "harmony": {
+    "sizes": [256, 512, 1024]
+  }
+}

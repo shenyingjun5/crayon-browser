@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-labelledby="title description">
+  <title id="title">蜡笔 AI Agent 投屏浏览器小尺寸图标</title>
+  <desc id="description">简化的浏览器窗口与蜡笔</desc>
+  <rect id="background" width="48" height="48" rx="7" fill="#377bf1"/>
+  <path d="M 11.5 31 V 13.5 C 11.5 10.8 13.4 9 16 9 H 35 C 37.8 9 39.5 11 39.5 13.6 V 34.5 C 39.5 37.2 37.5 39 35 39 H 21" fill="none" stroke="#f8f4ec" stroke-width="4.2" stroke-linejoin="round"/>
+  <path d="M 12 16 H 39" fill="none" stroke="#f8f4ec" stroke-width="3.6"/>
+  <path d="M 10 31 L 25.5 20.2 L 30.2 26.1 L 20.5 41.2 Z" fill="#f8f4ec" stroke="#377bf1" stroke-width="1.5" stroke-linejoin="round"/>
+  <path d="M 25.5 20.2 Q 32.2 16.1 33.4 17.5 Q 34.5 18.8 30.2 26.1 Z" fill="#1e9b7f" stroke="#377bf1" stroke-width="1.2"/>
+  <ellipse cx="11.7" cy="37.2" rx="4.7" ry="6.6" transform="rotate(-39 11.7 37.2)" fill="#f8f4ec" stroke="#377bf1" stroke-width="1.5"/>
+</svg>

@@ -9,8 +9,8 @@
 | CEF-01A | DONE | FND-08 | `cmake/cef`、`tests/contracts`、第三方文档 | 固定 CEF Standard revision、四平台官方 hash、许可和本地缓存/离线根契约 | 确定性 contract test；错误平台/缺失根/错误版本/校验失败；Windows 包实下载校验 | S1 |
 | CEF-01B | READY | CEF-01A | `browser/engine-api` | 不含 CEF 类型和产品策略的 C++17 `BrowserEngineAdapter` 最小接口、独立 Fake 与 compile contract | 接口 contract；Fake 生命周期/错误/重复释放；Harmony 可实现性说明 | S1 |
 | CEF-01C | TODO | CEF-01B | 根 `CMakeLists.txt`、`CMakePresets.json`、`cmake/cef` | 共享 CMake/preset、离线 CEF root 接入和最小 test target | preset/schema、无网络 configure、错误 root、RG-005 | S1 |
-| CEF-01D | TODO | CEF-01C | `browser/cef-shell` Windows 构建文件、验证记录 | Windows x64 CEF 最小壳 configure/build 与 Debug/Release 资源装配证据 | VS2022 configure/build；启动前依赖 smoke；包不入 Git | S2 |
-| CEF-01E | TODO | CEF-01D | macOS 构建文件、CI/验证记录 | macOS x64/arm64 configure/build 门禁并收口 bootstrap Review | 两个 macOS 架构 CI/configure/build；P0/P1=0；未实机项显式记录 | S2 |
+| CEF-01D | TODO | CEF-01C,BRD-04 | `browser/cef-shell` Windows 构建文件、验证记录 | Windows x64 CEF 最小壳 configure/build；只消费 `assets/brand/generated/windows/app.ico`/PNG 完成 Debug/Release 资源装配 | VS2022 configure/build；启动前依赖 smoke；验证 EXE/窗口/任务栏图标；包不入 Git | S2 |
+| CEF-01E | TODO | CEF-01D | macOS 构建文件、CI/验证记录 | macOS x64/arm64 configure/build；只消费 `assets/brand/generated/macos/AppIcon.iconset`/`app.icns` 并收口 bootstrap Review | 两个 macOS 架构 CI/configure/build；`iconutil`/包内图标资源复核；P0/P1=0；未实机项显式记录 | S2 |
 | CEF-02 | TODO | CEF-01E | `browser/cef-shell/src/process` | Browser/render/GPU 子进程入口与 sandbox 开关；正式构建强制 sandbox | Windows/macOS 启动/退出；sandbox smoke；无业务代码在 main | S3 |
 | CEF-03 | TODO | CEF-02 | `src/browser/window` | 单窗口/标签生命周期、导航、前后退、刷新、停止、缩放 | BR-001、重复关闭、崩溃恢复；资源无泄漏 | S3 |
 | CEF-04 | TODO | CEF-03 | `src/browser/context` | 临时/持久 `CefRequestContext` factory，Profile ID 不用名称作路径 | BR-002、PV-001、PV-004 基础；context 隔离 | S3 |
@@ -63,8 +63,8 @@
 ### CEF-01C～CEF-01E 边界
 
 - `CEF-01C` 只建立共享构建图；输入为 01A/01B，输出限 CMake/preset/test target，不实现平台进程或产品行为。
-- `CEF-01D` 只负责 Windows x64 bootstrap；不改公共接口，不用单平台结果代替 macOS。
-- `CEF-01E` 只补齐 macOS x64/arm64 门禁并 Review；没有对应 runner 时必须保留为 `BLOCKED/VERIFIED`，不得伪造 S2 证据。
+- `CEF-01D` 只负责 Windows x64 bootstrap；不改公共接口，不用单平台结果代替 macOS；不得手工改动 `assets/brand/generated` 或从参考 PNG 重新制图。
+- `CEF-01E` 只补齐 macOS x64/arm64 门禁并 Review；没有对应 runner 时必须保留为 `BLOCKED/VERIFIED`，不得伪造 S2 证据；系统遮罩效果必须在真实 macOS 包复核。
 
 ## 接口冻结
 

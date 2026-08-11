@@ -10,9 +10,10 @@
 | [当前架构](architecture.md) | v0.7 CAAP、语义动作、Workflow/Challenge、Hub/connector、投屏、模型与平台边界 |
 | [技术方案](../crayon-private-cast-browser-technical-design.md) | 当前实现方案与构建/供应链考虑 |
 | [测试标准](testing-standard.md) | 分层、设施、平台矩阵和证据规则 |
-| [测试用例](test-cases.md) | 153 个当前权威测试 ID |
+| [测试用例](test-cases.md) | 166 个当前权威测试 ID |
 | [Code Review 标准](code-review-standard.md) | 审查顺序、门禁和交付格式 |
-| [总 Roadmap](../crayon-private-cast-browser-roadmap.md) | 196 项活跃任务、阶段和当前领取顺序 |
+| [品牌图标契约](brand-assets.md) | `app-icon-v1` 参考源、母版、平台组合与禁用规则 |
+| [总 Roadmap](../crayon-private-cast-browser-roadmap.md) | 200 项活跃任务、阶段和当前领取顺序 |
 | [模块 Roadmap 索引](../plans/README.md) | 每个模块的原子任务、依赖与状态 |
 
 ## 2. 专项当前契约
@@ -39,7 +40,7 @@ Cast-SDK source lock 的当前事实位于 `config/cast-sdk-source.toml`、`.git
 
 ## 4. 真实现状
 
-- Foundation 19 个原子任务、`MED-01..19`、`CEF-01A`、`SDK-01..06` 已完成，共 45 项。
+- 品牌资产 `BRD-01..04`、Foundation 19 个原子任务、`MED-01..19`、`CEF-01A`、`SDK-01..06` 已完成，共 49 项。
 - CEF 固定基线为 `150.0.10+g8042e43+chromium-150.0.7871.101` Standard。历史四平台 hash 已锁定，Windows x64 archive 已校验；后续产品构建只推进 Windows/macOS。
 - Cast-SDK source revision 已由 `SDK-01` 固定并通过 `RG-008`；facade、Fake 和真实 service 生命周期已完成，LAN 发现/连接/投送与接收端闭环尚未完成。
 - `MED-19` 已完成：投屏决策集合为 `Direct/Relay/ExternalClientHandoff/Reject`，旧 `mirror` wire 值保留兼容读取窗口且不再发出；`tab_video`/`system_audio` 仅作为 `crayon-domain` 遗留字段存在，策略与 runtime 代码不再引用，不得继续扩张。
