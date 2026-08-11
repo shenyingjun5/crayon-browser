@@ -8,8 +8,8 @@
 
 ## 1. 当前结论
 
-- 品牌资产 `BRD-01..04`、Foundation 19 项、`MED-01..19`、`CEF-01A..01C`、`SDK-01..12` 已完成，共 57 项。
-- 当前 `CEF-01D IN_PROGRESS`；`SDK-13 BLOCKED`，等待真实接收端 Harness。CEF 构建图已完成，正在实现 Windows 可运行壳；真实接收端闭环与页面数据面尚未完成。
+- 品牌资产 `BRD-01..04`、Foundation 19 项、`MED-01..19`、`CEF-01A..01D`、`BUX-01`、`SDK-01..12` 已完成，共 59 项。
+- 当前 `CEF-01E READY`，`BUX-02` 等待 `CEF-02`；`SDK-13 BLOCKED`，等待真实接收端 Harness。Windows x64 最小 CEF 壳、真实标题栏品牌图标和完整退出已验证，桌面信息架构与规范功能 glyph 已冻结；实际完整 UI、macOS bootstrap、真实接收端闭环与页面数据面尚未完成。
 - 产品仍按“浏览器与 LAN 投屏 -> 页面数据/Markdown -> Agent 协议与语义动作 -> Workflow/Challenge -> Capability Hub/合作方 -> 模型”的依赖顺序交付。
 - CAAP、CLI/入站 MCP、高性能读页和授权操作是核心；具体模型/provider 与视频/文档总结属于第二阶段。
 - Windows/macOS 为当前桌面；HarmonyOS 只做鸿蒙电脑 PC 形态技术预览；Linux 无活跃任务。
@@ -211,8 +211,8 @@ flowchart LR
 ## 7. 当前领取顺序
 
 1. `SDK-13`：等待真实接收端 Harness，当前 `BLOCKED`，不得用 Fake 冒充真机证据。
-2. `CEF-01D`：Windows x64 CEF 最小壳、启动依赖 smoke 与品牌资源装配；当前 `IN_PROGRESS`。
-3. `BUX-01` 等 `CEF-01D` 完成后冻结 Chrome-inspired 蜡笔浏览器体验规格；不得把空白 bootstrap 当成最终 UI。
+2. `CEF-01E`：macOS x64/arm64 bootstrap 已 `READY`，不用 Windows 结果代替 macOS 证据。
+3. `BUX-02`：`BUX-01 DONE`，等待 `CEF-02` 后把规范 token/glyph 接入实际 UI shell；不得把空白 bootstrap 当成最终 UI。
 4. `AGT-01` 在 `FND-08/PRV-08` 满足后冻结 CAAP v1；不得提前开放 CLI/MCP。
 5. `CNT-01` 等 `CEF-15/BUX-18/SDK-14/MED-19/PRV-08` 完成。
 6. `ACT-01` 等 `CNT-03/AGT-01` 完成；`WFL/HUB` 不得越过语义动作和权限依赖。

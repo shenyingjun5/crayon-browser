@@ -13,6 +13,7 @@
 | [测试用例](test-cases.md) | 186 个唯一当前权威测试 ID |
 | [Code Review 标准](code-review-standard.md) | 审查顺序、门禁和交付格式 |
 | [品牌图标契约](brand-assets.md) | `app-icon-v1` 参考源、母版、平台组合与禁用规则 |
+| [桌面浏览器体验契约](browser-ux.md) | `browser-design-v1` 顶部信息架构、共享 token、标题栏/功能 icon、键盘与无障碍规则 |
 | [总 Roadmap](../crayon-private-cast-browser-roadmap.md) | 218 项活跃任务、阶段和当前领取顺序 |
 | [模块 Roadmap 索引](../plans/README.md) | 每个模块的原子任务、依赖与状态 |
 
@@ -41,11 +42,11 @@ Cast-SDK source lock 的当前事实位于 `config/cast-sdk-source.toml`、`.git
 
 ## 4. 真实现状
 
-- 品牌资产 `BRD-01..04`、Foundation 19 个原子任务、`MED-01..19`、`CEF-01A..01C`、`SDK-01..12` 已完成，共 57 项。
+- 品牌资产 `BRD-01..04`、Foundation 19 个原子任务、`MED-01..19`、`CEF-01A..01D`、`BUX-01`、`SDK-01..12` 已完成，共 59 项。
 - CEF 固定基线为 `150.0.10+g8042e43+chromium-150.0.7871.101` Standard。历史四平台 hash 已锁定，Windows x64 archive 已校验；后续产品构建只推进 Windows/macOS。
 - Cast-SDK source revision 已由 `SDK-01` 固定并通过 `RG-008`；facade、Fake、真实 service 生命周期、能力缓存、投送执行、会话监督与 runtime 用例编排已完成；真机接收端闭环（`SDK-13`）尚未完成。
 - `MED-19` 已完成：投屏决策集合为 `Direct/Relay/ExternalClientHandoff/Reject`，旧 `mirror` wire 值保留兼容读取窗口且不再发出；`tab_video`/`system_audio` 仅作为 `crayon-domain` 遗留字段存在，策略与 runtime 代码不再引用，不得继续扩张。
-- `browser/engine-api` 的 C++17 跨 CEF/ArkWeb 契约已由 `CEF-01B` 冻结并通过 GCC/MSVC 双编译器与 contract；`CEF-01C` 已建立 Windows/macOS 共用的离线 CEF 构建图，但仍不是可运行浏览器。`CEF-01D IN_PROGRESS`、`SDK-13 BLOCKED`（需真实接收端 Harness）；`CNT-01..10` 等待浏览器/投屏门禁；`AGT/ACT/WFL/HUB` 分别规划入站访问、语义动作、工作流/挑战和能力生态；`CNT-11..16` 是第二阶段模型能力。
+- `browser/engine-api` 的 C++17 跨 CEF/ArkWeb 契约已由 `CEF-01B` 冻结并通过 GCC/MSVC 双编译器与 contract；`CEF-01C` 已建立 Windows/macOS 共用的离线 CEF 构建图，`CEF-01D` 已交付可启动、可关闭且无残留进程的 Windows x64 最小 CEF 壳和受管标题栏品牌图标。`BUX-01` 已冻结 Chrome-inspired 两层信息架构、共享 token、21 个自有功能 glyph 和 8 份规格 golden；实际 UI 接入仍等待 `CEF-02/BUX-02`。`CEF-01E READY`、`SDK-13 BLOCKED`（需真实接收端 Harness）；`CNT-01..10` 等待浏览器/投屏门禁；`AGT/ACT/WFL/HUB` 分别规划入站访问、语义动作、工作流/挑战和能力生态；`CNT-11..16` 是第二阶段模型能力。
 
 ## 5. 权威与历史
 

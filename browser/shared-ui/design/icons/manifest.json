@@ -1,0 +1,164 @@
+{
+  "schemaVersion": "browser-design-v1",
+  "canvas": "0 0 24 24",
+  "source": "crayon-original-glyphs",
+  "windowIdentity": {
+    "role": "app.window-identity",
+    "source": "app-icon-v1:micro",
+    "allowedSurfaces": [
+      "native-titlebar",
+      "taskbar",
+      "dock",
+      "window-switcher"
+    ]
+  },
+  "glyphs": [
+    {
+      "id": "window.minimize",
+      "file": "window-minimize.svg",
+      "labelKey": "window.minimize",
+      "surfaces": ["custom-titlebar"],
+      "mirrorInRtl": false
+    },
+    {
+      "id": "window.maximize",
+      "file": "window-maximize.svg",
+      "labelKey": "window.maximize",
+      "surfaces": ["custom-titlebar"],
+      "mirrorInRtl": false
+    },
+    {
+      "id": "window.restore",
+      "file": "window-restore.svg",
+      "labelKey": "window.restore",
+      "surfaces": ["custom-titlebar"],
+      "mirrorInRtl": false
+    },
+    {
+      "id": "window.close",
+      "file": "window-close.svg",
+      "labelKey": "window.close",
+      "surfaces": ["custom-titlebar"],
+      "mirrorInRtl": false
+    },
+    {
+      "id": "tab.new",
+      "file": "tab-new.svg",
+      "labelKey": "tab.new",
+      "surfaces": ["tab-strip"],
+      "mirrorInRtl": false
+    },
+    {
+      "id": "tab.close",
+      "file": "tab-close.svg",
+      "labelKey": "tab.close",
+      "surfaces": ["tab-strip"],
+      "mirrorInRtl": false
+    },
+    {
+      "id": "tab.search",
+      "file": "tab-search.svg",
+      "labelKey": "tab.search",
+      "surfaces": ["tab-strip"],
+      "mirrorInRtl": false
+    },
+    {
+      "id": "nav.back",
+      "file": "nav-back.svg",
+      "labelKey": "nav.back",
+      "surfaces": ["navigation-bar"],
+      "mirrorInRtl": true
+    },
+    {
+      "id": "nav.forward",
+      "file": "nav-forward.svg",
+      "labelKey": "nav.forward",
+      "surfaces": ["navigation-bar"],
+      "mirrorInRtl": true
+    },
+    {
+      "id": "nav.reload",
+      "file": "nav-reload.svg",
+      "labelKey": "nav.reload",
+      "surfaces": ["navigation-bar"],
+      "mirrorInRtl": false
+    },
+    {
+      "id": "nav.stop",
+      "file": "nav-stop.svg",
+      "labelKey": "nav.stop",
+      "surfaces": ["navigation-bar"],
+      "mirrorInRtl": false
+    },
+    {
+      "id": "nav.home",
+      "file": "nav-home.svg",
+      "labelKey": "nav.home",
+      "surfaces": ["navigation-bar", "overflow-menu"],
+      "mirrorInRtl": false
+    },
+    {
+      "id": "omnibox.site-info",
+      "file": "omnibox-site-info.svg",
+      "labelKey": "omnibox.site_info",
+      "surfaces": ["omnibox"],
+      "mirrorInRtl": false
+    },
+    {
+      "id": "bookmark.outline",
+      "file": "bookmark-outline.svg",
+      "labelKey": "bookmark.add",
+      "surfaces": ["omnibox", "navigation-bar"],
+      "mirrorInRtl": false
+    },
+    {
+      "id": "bookmark.filled",
+      "file": "bookmark-filled.svg",
+      "labelKey": "bookmark.saved",
+      "surfaces": ["omnibox", "navigation-bar"],
+      "mirrorInRtl": false
+    },
+    {
+      "id": "cast.device",
+      "file": "cast-device.svg",
+      "labelKey": "cast.select_receiver",
+      "surfaces": ["navigation-bar", "new-tab"],
+      "mirrorInRtl": false
+    },
+    {
+      "id": "menu.more",
+      "file": "menu-more.svg",
+      "labelKey": "menu.more",
+      "surfaces": ["navigation-bar"],
+      "mirrorInRtl": false
+    },
+    {
+      "id": "download.open",
+      "file": "download-open.svg",
+      "labelKey": "download.open",
+      "surfaces": ["navigation-bar", "overflow-menu"],
+      "mirrorInRtl": false
+    },
+    {
+      "id": "history.open",
+      "file": "history-open.svg",
+      "labelKey": "history.open",
+      "surfaces": ["overflow-menu", "new-tab"],
+      "mirrorInRtl": false
+    },
+    {
+      "id": "settings.open",
+      "file": "settings-open.svg",
+      "labelKey": "settings.open",
+      "surfaces": ["overflow-menu"],
+      "mirrorInRtl": false
+    },
+    {
+      "id": "profile.open",
+      "file": "profile-open.svg",
+      "labelKey": "profile.open",
+      "surfaces": ["navigation-bar", "overflow-menu"],
+      "mirrorInRtl": false
+    }
+  ]
+}

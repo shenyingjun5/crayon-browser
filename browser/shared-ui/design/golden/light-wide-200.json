@@ -1,0 +1,53 @@
+{
+  "schemaVersion": "browser-design-v1",
+  "theme": "light",
+  "viewport": "wide",
+  "deviceScaleFactor": 2,
+  "logical": {
+    "widthDip": 1280,
+    "tabStripHeightDip": 40,
+    "navigationBarHeightDip": 48,
+    "shellHeightDip": 88,
+    "iconCanvasDip": 24,
+    "glyphDip": 20,
+    "minimumHitTargetDip": 32,
+    "focusRingDip": 2
+  },
+  "physical": {
+    "widthPx": 2560,
+    "shellHeightPx": 176,
+    "iconCanvasPx": 48,
+    "glyphPx": 40,
+    "minimumHitTargetPx": 64,
+    "focusRingPx": 4
+  },
+  "colors": {
+    "toolbarBackground": "#FFFFFF",
+    "tabStripBackground": "#E8EEF8",
+    "activeTabBackground": "#FFFFFF",
+    "inactiveTabForeground": "#475467",
+    "foreground": "#1D2939",
+    "mutedForeground": "#667085",
+    "hoverBackground": "#E7ECF5",
+    "pressedBackground": "#D8E1F0",
+    "focusRing": "#2F6FED",
+    "separator": "#D0D5DD",
+    "brandAction": "#2F6FED",
+    "success": "#168568",
+    "warning": "#B54708",
+    "error": "#D92D20"
+  },
+  "visibleControls": [
+    "nav.back",
+    "nav.forward",
+    "nav.reload-stop",
+    "nav.home",
+    "omnibox",
+    "bookmark.outline",
+    "download.open",
+    "cast.device",
+    "profile.open",
+    "menu.more"
+  ],
+  "overflowControls": []
+}

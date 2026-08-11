@@ -1,6 +1,6 @@
 # CEF：Desktop 浏览器壳 Roadmap
 
-状态：`CEF-01A..01C DONE`，`CEF-01D IN_PROGRESS`；当前建立 Windows x64 最小 CEF 壳、运行依赖 smoke 和品牌资源装配。当前目标平台为 Windows、macOS；Linux 不在当前范围。每项以目标路径、测试 ID 和证据作为验收，不以单平台截图替代。
+状态：`CEF-01A..01D DONE`，`CEF-01E READY`；Windows x64 最小 CEF 壳、运行依赖 smoke 和品牌资源装配已经完成，下一平台任务为 macOS bootstrap。当前目标平台为 Windows、macOS；Linux 不在当前范围。每项以目标路径、测试 ID 和证据作为验收，不以单平台截图替代。
 
 ## 原子任务
 
@@ -9,8 +9,8 @@
 | CEF-01A | DONE | FND-08 | `cmake/cef`、`tests/contracts`、第三方文档 | 固定 CEF Standard revision、四平台官方 hash、许可和本地缓存/离线根契约 | 确定性 contract test；错误平台/缺失根/错误版本/校验失败；Windows 包实下载校验 | S1 |
 | CEF-01B | DONE | CEF-01A | `browser/engine-api` | 不含 CEF 类型和产品策略的 C++17 `BrowserEngineAdapter` 最小接口、独立 Fake 与 compile contract | 接口 contract；Fake 生命周期/错误/重复释放；Harmony 可实现性说明 | S1 |
 | CEF-01C | DONE | CEF-01B | 根 `CMakeLists.txt`、`CMakePresets.json`、`cmake/cef` | 共享 CMake/preset、离线 CEF root 接入和最小 test target | preset/schema、无网络 configure、错误 root、RG-005 | S1 |
-| CEF-01D | IN_PROGRESS | CEF-01C,BRD-04 | `browser/cef-shell` Windows 构建文件、验证记录 | Windows x64 CEF 最小壳 configure/build；只消费 `assets/brand/generated/windows/app.ico`/PNG 完成 Debug/Release 资源装配 | VS2022 configure/build；启动前依赖 smoke；验证 EXE/窗口/任务栏图标；包不入 Git | S2 |
-| CEF-01E | TODO | CEF-01D | macOS 构建文件、CI/验证记录 | macOS x64/arm64 configure/build；只消费 `assets/brand/generated/macos/AppIcon.iconset`/`app.icns` 并收口 bootstrap Review | 两个 macOS 架构 CI/configure/build；`iconutil`/包内图标资源复核；P0/P1=0；未实机项显式记录 | S2 |
+| CEF-01D | DONE | CEF-01C,BRD-04 | `browser/cef-shell` Windows 构建文件、验证记录 | Windows x64 CEF 最小壳 configure/build；只消费 `assets/brand/generated/windows/app.ico`/PNG 完成 Debug/Release 资源装配 | VS2022 configure/build；启动前依赖 smoke；验证 EXE/窗口/任务栏图标；包不入 Git | S2 |
+| CEF-01E | READY | CEF-01D | macOS 构建文件、CI/验证记录 | macOS x64/arm64 configure/build；只消费 `assets/brand/generated/macos/AppIcon.iconset`/`app.icns` 并收口 bootstrap Review | 两个 macOS 架构 CI/configure/build；`iconutil`/包内图标资源复核；P0/P1=0；未实机项显式记录 | S2 |
 | CEF-02 | TODO | CEF-01E | `browser/cef-shell/src/process` | Browser/render/GPU 子进程入口与 sandbox 开关；正式构建强制 sandbox | Windows/macOS 启动/退出；sandbox smoke；无业务代码在 main | S3 |
 | CEF-03 | TODO | CEF-02 | `src/browser/window` | 单窗口/标签生命周期、导航、前后退、刷新、停止、缩放 | BR-001、重复关闭、崩溃恢复；资源无泄漏 | S3 |
 | CEF-04 | TODO | CEF-03 | `src/browser/context` | 临时/持久 `CefRequestContext` factory，Profile ID 不用名称作路径 | BR-002、PV-001、PV-004 基础；context 隔离 | S3 |
@@ -95,9 +95,9 @@
 - Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和维护性审查；关闭根 CTest 未注册、Windows 路径宏转义、configure 间接加载 downloader、repo-guard 误扫固定缓存、contract 临时目录依赖 `%TEMP%` 等 P1/P2，最终 P0/P1/P2/P3 均为 `0`。
 - 未覆盖与风险：当前机器的 VS2022 未安装 ATL，CEF 官方配置自动关闭 `USE_ATL`，wrapper 和测试仍成功；01D 的 Windows 壳需继续验证这不影响 EXE。macOS x64/arm64 preset 已冻结但没有 macOS runner/configure/build 证据，留给 `CEF-01E`，不得用 Windows 结果代替。
 
-### CEF-01D Windows x64 最小 CEF 壳（执行中）
+### CEF-01D Windows x64 最小 CEF 壳（已完成）
 
-- 状态：`IN_PROGRESS`；依赖 `CEF-01C DONE`、`BRD-04 DONE`。
+- 状态：`DONE`；依赖 `CEF-01C DONE`、`BRD-04 DONE`。
 - 单一目标：产出可由 Windows 10/11 x64 启动、显示一个 CEF 页面窗口并可正常关闭的最小产品 EXE，同时确定性装配官方 CEF 运行依赖和受管蜡笔品牌图标；本任务不实现完整浏览器功能。
 - 输入：01C 的 `windows-cef-debug`/离线 root 与官方 `FindCEF`/wrapper target，BRD-04 的 `assets/brand/generated/windows/app.ico` 和 Windows PNG，CEF 150 Standard 的 Windows process/window/lifecycle API。
 - 输出与允许修改：`browser/cef-shell/CMakeLists.txt`、`browser/cef-shell/src/windows/` 的最小 entry/app/client 生命周期、`browser/cef-shell/resources/windows/` 的 `.rc`/manifest/resource ID 与本地化产品名引用、`browser/cef-shell/tests/` 的 Windows 独立 contract；根 `CMakeLists.txt` 只允许条件装配 shell/test，`CMakePresets.json` 只允许固定本任务明确需要的 Windows CEF build option；本 Roadmap/current/index 状态文档。
@@ -109,6 +109,15 @@
 - 平台验收：VS2022 x64 Debug 和 Release configure/build；两配置 contract 通过；实际启动 Debug EXE，观察窗口、任务栏/标题栏品牌图标和产品名，关闭后确认主进程及子进程全部退出。启动不访问公共网络；自动化不得以固定长 `sleep` 判成功。
 - 测试命令：先记录缺 `crayon_browser` target 的失败基线；实现后设置真实 `CRAYON_CEF_ROOT`，运行 `cmake --preset windows-cef-debug`、`cmake --build --preset windows-cef-debug --config Debug`、`ctest --preset windows-cef-debug`，再构建/测试 `Release`；运行 `scripts/check.ps1 brand-assets`、`scripts/check.ps1 fast`、`scripts/check.ps1 security` 和 `git diff --check`。GUI 启停/图标由 Windows 实际运行证据补充。
 - 完成证据：失败基线、Debug/Release 产物与 contract、实际运行/退出/图标证据、进程残留检查、Code Review 和未覆盖项；全部满足后转 `DONE` 并解锁 `CEF-01E`。
+
+完成记录（2026-08-11）：
+
+- 实现：新增 Windows x64 CEF bootstrap、最小 app/client 生命周期、受管产品名/manifest/ICO 资源和运行依赖 contract；Browser process 创建受限 `about:blank`，最后 Browser 关闭后退出消息循环并逆序执行 `CefShutdown`。生产源码未引入地址栏、标签、投屏、媒体观察、Cast-SDK 或网络初始页。
+- 构建：真实固定 CEF root 下，VS2022 x64 Debug 与 Release configure/build 均成功；EXE、官方声明的 binary/resource 及 locale 资源装配到配置输出目录，所有 build/vendor/CEF 产物均留在被忽略的 `.cache`。
+- 自动验证：Debug 与 Release 的 `ctest --preset windows-cef-debug -C <config> --output-on-failure` 均为 `7/7` 通过；最终 Debug 复验为 `7/7`，覆盖 distribution、build graph、engine API、公开头编译、production boundary、Windows package 和 source contract。`scripts/check.ps1 brand-assets`、`fast`、`security`、C++ clang-format dry-run 与 `git diff --check` 均通过。
+- 平台验证：在 Windows 桌面实际启动 Debug EXE，窗口标题为“蜡笔 AI Agent 投屏浏览器”，CEF `RootWebArea` 可见；标题栏使用 `app.ico` 内的 `micro` 小尺寸品牌图标。通过窗口关闭按钮退出后，Computer Use 返回目标窗口数 `0`，按完整 EXE 路径查询的主/子进程残留数为 `0`。
+- Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性完成独立复核；最终 P0/P1/P2/P3 均为 `0`。
+- 未覆盖与风险：当前 VS2022 未安装 ATL，CEF 官方配置自动关闭 `USE_ATL`；bootstrap 使用 `USE_SANDBOX=OFF`，正式多进程 sandbox 强制仍由 `CEF-02` 完成。macOS x64/arm64 未用 Windows 证据代替，由已解锁的 `CEF-01E` 验证。
 
 ### CEF-01C～CEF-01E 边界
 

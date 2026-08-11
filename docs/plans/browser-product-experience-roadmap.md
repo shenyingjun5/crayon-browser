@@ -1,6 +1,6 @@
 # BUX：桌面浏览器产品体验 Roadmap
 
-状态：`BUX-01 TODO`，等待 `CEF-01D`。本 Roadmap 把“基本浏览器有的功能”拆成可审查原子任务；UI 参考 Chrome/Chromium 桌面端的信息架构和快捷键心智，视觉、品牌、内置页面与服务均为蜡笔自有实现。
+状态：`BUX-01 DONE`；Chrome-inspired 信息架构、共享 design token、标题栏/标签栏/导航栏自有 glyph 与平台适配边界已经冻结。`BUX-02 TODO`，等待 `CEF-02` 后接入实际 UI shell。本 Roadmap 把“基本浏览器有的功能”拆成可审查原子任务；视觉、品牌、内置页面与服务均为蜡笔自有实现。
 
 ## 产品设计结论
 
@@ -14,7 +14,7 @@
 
 | ID | 状态 | 依赖 | 目标路径 | 单一交付 | 测试/验收 |
 |---|---|---|---|---|---|
-| BUX-01 | TODO | CEF-01D | `docs/current/browser-ux.md`,`browser/shared-ui/design` | 冻结 Chrome-inspired 信息架构、密度、token、组件状态、键盘/无障碍和品牌禁用规则 | UX-001；light/dark、窄/宽窗口、100%/200% 规格 golden |
+| BUX-01 | DONE | CEF-01D | `docs/current/browser-ux.md`,`browser/shared-ui/design` | 冻结 Chrome-inspired 信息架构、密度、token、组件状态、键盘/无障碍和品牌禁用规则 | UX-001；light/dark、窄/宽窗口、100%/200% 规格 golden |
 | BUX-02 | TODO | BUX-01,CEF-02 | `browser/shared-ui/shell` | UI shell、命令 registry、focus owner 与 engine event adapter 骨架 | UX-001；重复 command、旧 tab event、窗口释放 |
 | BUX-03 | TODO | BUX-02,CEF-03 | `browser/shared-ui/new-tab` | 本地 `crayon://newtab`、普通/无痕差异、固定快捷入口模型 | UX-002；零默认公网请求、损坏配置、安全 resource handler |
 | BUX-04 | TODO | BUX-02,CEF-03,PRV-06 | `browser/shared-ui/omnibox` | omnibox 编辑/提交、URL/搜索判定、建议 owner 与 provider 配置契约 | UX-003；scheme/长度/取消/旧建议/Profile 隔离 |
@@ -40,3 +40,24 @@
 - 所有可见文案进入本地化资源；图标来自自有 glyph/品牌资产，不从 Chrome 安装包或 Google 页面提取。
 - 内置页面只从签名/编译期本地资源提供，有独立 origin、CSP、资源上限和禁用任意网络/脚本能力；网页内容不能绘制或覆盖浏览器安全 UI。
 - 自动化只使用本地 fixture；UI golden 不能替代键盘、读屏、IME、多屏/DPI 与真实平台验证。
+
+## BUX-01 原子范围（已完成）
+
+- 状态：`DONE`；依赖 `CEF-01D DONE`。
+- 单一目标：冻结桌面浏览器顶层信息架构和平台中立视觉契约，提供可由后续 Windows/macOS UI shell 消费的版本化 design token、自有 SVG glyph manifest 与确定性规格 golden；本任务不把空白 CEF bootstrap 改造成完整浏览器。
+- 输入：当前 PRD/架构、`app-icon-v1` 品牌契约、Chrome/Chromium 用户熟悉的桌面信息架构与快捷键心智、Windows/macOS 100%/200% DPI 和窄/宽窗口需求。
+- 输出与允许修改：`docs/current/browser-ux.md`；`browser/shared-ui/design/` 下的平台中立 token、SVG glyph、manifest、规格 golden、contract 测试和模块说明；本 Roadmap/current/index 的状态与证据。
+- 禁止修改：`assets/brand/generated/` 与品牌生成器、`browser/cef-shell` 平台窗口实现、CEF/Win32/AppKit/ArkUI adapter、Rust workspace/schema、Cast-SDK、媒体/Relay/Profile/权限/Agent 逻辑；不得复制 Chrome/Google 图标或专有资源，不得把 App 图标复用为投屏、连接、权限、Agent 或错误状态。
+- 图标边界：Windows/macOS 窗口身份图标只消费 `app-icon-v1` 的平台 `micro` 资产；后退、前进、刷新、停止、主页、标签、书签、下载、投屏、菜单等功能图标使用自有单色 glyph，并通过语义 role/state 着色，不在 SVG 内硬编码业务状态颜色。
+- 错误与边界：未知 token/glyph/state、重复 ID、非 24×24 viewBox、外部引用、脚本/事件属性、内联位图、硬编码品牌文件路径和缺失 light/dark/窄/宽/100%/200% 组合必须由 contract 稳定拒绝；本任务不声明像素级真机一致。
+- 验收与测试：UX-001；检查信息架构、命令/焦点/无障碍契约、功能 icon role 完整性和品牌禁用；使用确定性 contract 生成/比对 light/dark × narrow/wide × 100%/200% 的八份规格 golden；运行 `scripts/check.ps1 brand-assets`、适用 fast/security、格式检查和 `git diff --check`。
+- 明确不做：实际 CEF UI shell、按钮点击、标签状态机、本地新标签页、omnibox、投屏业务绑定和平台截图；分别由 `BUX-02..06`、`CEF-02/03/08/13` 实现和验证。
+
+完成记录（2026-08-11）：
+
+- 失败基线：先建立独立 CMake/Node contract；首次 `ctest --test-dir .cache/build/browser-design --output-on-failure` 因 `tokens.json` 不存在按预期 `0/1` 失败，证明验收不是在缺失实现时预先通过。
+- 规范与资产：新增 `browser-design-v1` 两层桌面信息架构、DIP 密度、light/dark 语义色、窄/宽优先级、组件状态、键盘/焦点/无障碍契约；21 个自有 24×24 单色功能 glyph 覆盖窗口控制、标签、导航、书签、投屏和常用入口。应用身份继续只引用 `app-icon-v1:micro`，没有修改 `assets/brand/generated/`。
+- Golden：确定性生成并比对 light/dark × narrow/wide × 100%/200% 共 8 份规格 golden；重复生成前后 SHA-256 集合不变。全部 21 个 SVG 经 XML 解析器验证为 well-formed。
+- 自动验证：独立 configure 成功，`ctest --test-dir .cache/build/browser-design --output-on-failure` 为 `2/2` 通过；正向 contract 检查闭合 token/role/surface/state、App-icon 禁用、SVG 主动内容/外链/状态色和 golden，拒绝 contract 证明缺投屏 role、外链 SVG、stale golden、缺主题、未审状态和未注册图标均 fail closed。Node 三个脚本 `--check`、`scripts/check.ps1 brand-assets`、`fast`、`security` 和 `git diff --check` 通过。
+- Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；发现并关闭 1 个 P1（SVG 主动内容与 token/surface/state 未完全闭合），最终 P0/P1/P2/P3 均为 `0`。
+- 未覆盖与风险：这些是平台中立规范、SVG 和数据 golden，不是 Windows/macOS 像素截图或交互 UI。实际 shell 接入、tooltip 本地化、平台高对比度/IME/读屏/多屏 DPI 和投屏状态绑定分别由 `BUX-02`、`UX-016`、`CEF-13`、`BUX-18` 验证；不得把 BUX-01 描述为完整浏览器 UI 已完成。

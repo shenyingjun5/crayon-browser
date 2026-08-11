@@ -23,8 +23,8 @@
 | BRD | [brand-assets-roadmap.md](brand-assets-roadmap.md) | 品牌图标母版、跨平台确定性资产与接入门禁 | `BRD-01..04 DONE` |
 | FND | [foundation-migration-roadmap.md](foundation-migration-roadmap.md) | Workspace、契约、质量入口与仓库基线 | 19 个原子任务 `DONE` |
 | MED | [media-policy-relay-roadmap.md](media-policy-relay-roadmap.md) | 媒体观察、策略、LAN Relay、外部客户端交接迁移 | `MED-01..19 DONE` |
-| CEF | [desktop-cef-browser-roadmap.md](desktop-cef-browser-roadmap.md) | Windows/macOS CEF 壳、共享 UI、媒体观察和 IPC | `CEF-01A..01C DONE`，`CEF-01D IN_PROGRESS` |
-| BUX | [browser-product-experience-roadmap.md](browser-product-experience-roadmap.md) | Chrome-inspired 蜡笔桌面浏览器 UI 与日用基础功能 | `BUX-01` 等待 `CEF-01D` |
+| CEF | [desktop-cef-browser-roadmap.md](desktop-cef-browser-roadmap.md) | Windows/macOS CEF 壳、共享 UI、媒体观察和 IPC | `CEF-01A..01D DONE`，`CEF-01E READY` |
+| BUX | [browser-product-experience-roadmap.md](browser-product-experience-roadmap.md) | Chrome-inspired 蜡笔桌面浏览器 UI 与日用基础功能 | `BUX-01 DONE`，`BUX-02` 等待 `CEF-02` |
 | SDK | [cast-sdk-integration-roadmap.md](cast-sdk-integration-roadmap.md) | 固定源码 Cast-SDK facade、发现、连接和控制；后续 Partner Cast facade | `SDK-13 BLOCKED`（需真实接收端 Harness） |
 | PLT | [desktop-platform-adapters-roadmap.md](desktop-platform-adapters-roadmap.md) | Windows/macOS 存储、网络、生命周期、更新和客户端交接 | `PLT-01` |
 | PRV | [privacy-security-roadmap.md](privacy-security-roadmap.md) | Profile、隐私、安全、日志和删除语义 | `PRV-01` |
@@ -43,8 +43,8 @@
 | 顺序 | 任务 | 状态 | 说明 |
 |---:|---|---|---|
 | 1 | `SDK-13` | BLOCKED | 真接收端 Harness（CS-010、E2E-001/002）；当前环境无真机，Harness 就绪后领取 |
-| 2 | `CEF-01D` | IN_PROGRESS | 建立 Windows x64 CEF 最小壳、启动依赖 smoke 与品牌资源装配 |
-| 3 | `BUX-01` | TODO | 等 01D 完成后冻结 Chrome-inspired 蜡笔 UI；本地起始页与完整日用浏览器基线按 BUX 原子任务推进 |
+| 2 | `CEF-01E` | READY | macOS x64/arm64 bootstrap 已解锁；完成后解锁正式多进程/sandbox 任务 `CEF-02` |
+| 3 | `BUX-02` | TODO | `BUX-01 DONE`；等待 `CEF-02` 后把规范 icon/token 接入实际 UI shell |
 | 4 | `AGT-01` | TODO | 依赖满足后冻结 CAAP v1；不提前开放 CLI/MCP transport |
 | 5 | `CNT-01` | TODO | 等浏览器/投屏/隐私门禁后开始正式 page-data/Markdown |
 | 6 | `ACT-01` | TODO | 等 `CNT-03/AGT-01`；不提前发明第二页面数据面 |
@@ -54,7 +54,7 @@
 
 ## 5. 当前代码事实
 
-- 品牌资产 `BRD-01..04`、Foundation 19 个原子任务、`MED-01..19`、`CEF-01A..01C`、`SDK-01..12` 已完成，共 57 项。
+- 品牌资产 `BRD-01..04`、Foundation 19 个原子任务、`MED-01..19`、`CEF-01A..01D`、`BUX-01`、`SDK-01..12` 已完成，共 59 项。
 - `browser/engine-api` 已冻结为不含 CEF/ArkWeb/OS/Cast/Relay 类型的 C++17 契约，并通过 GCC/MSVC 双编译器、公开头独立编译、生命周期 contract 和 production boundary scan；它还不是可运行浏览器。
 - Cast-SDK 固定源码 revision 为 `44c3a99871aa1e68cbda71eacefbb41d23a747a8`，由 `third_party/cast-sdk` gitlink 与 `config/cast-sdk-source.toml` 约束；后续以 `SDK-01` 最终 Review 记录为准。
 - `CastPolicyDecision::Mirror` / `DeliveryPlan::Mirror` 已由 `MED-19` 迁移为 `ExternalClientHandoff`（纯建议 DTO + 稳定 reason + 用户确认要求）；旧 `mirror` wire 值仅作兼容读取，新代码不得再引用 Mirror 语义。
