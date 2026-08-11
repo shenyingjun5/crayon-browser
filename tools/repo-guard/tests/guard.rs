@@ -264,6 +264,36 @@ fn nested_git_submodule_is_not_scanned_as_product_source() {
 }
 
 #[test]
+fn repository_cache_root_is_not_scanned_as_product_source() {
+    let repo = TestRepo::new("cache-boundary");
+    repo.write("Cargo.toml", &basic_manifest("browser"));
+    repo.write("src/lib.rs", "pub fn value() {}\n");
+    repo.write(
+        ".cache/cef/vendor/tests/generated.rs",
+        &"// generated vendor fixture\n".repeat(3_000),
+    );
+    repo.write(
+        ".cache/build/generated/src/lib.rs",
+        "#[test]\nfn generated_test_body() {}\n",
+    );
+
+    let report = repo.report();
+    assert!(report.passed);
+    assert_eq!(report.check("RG-002").unwrap().status, CheckStatus::Passed);
+    assert_eq!(report.check("RG-003").unwrap().status, CheckStatus::Passed);
+}
+
+#[test]
+fn nested_cache_name_does_not_create_a_source_scan_exemption() {
+    let repo = TestRepo::new("nested-cache-boundary");
+    repo.write("Cargo.toml", &basic_manifest("browser"));
+    repo.write("src/lib.rs", "pub fn value() {}\n");
+    repo.write("src/.cache/large.rs", &"// owned source\n".repeat(3_000));
+
+    assert_eq!(status(&repo, "RG-003"), CheckStatus::Warning);
+}
+
+#[test]
 fn domain_rejects_network_or_platform_dependencies() {
     let repo = TestRepo::new("domain-boundary");
     repo.write(

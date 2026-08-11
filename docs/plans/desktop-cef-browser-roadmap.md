@@ -1,15 +1,15 @@
 # CEF：Desktop 浏览器壳 Roadmap
 
-状态：`CEF-01A DONE`，`CEF-01B READY`；用户切换到 SDK 源码接入后本任务退回待领取，尚未创建 `browser/engine-api` 生产代码。当前目标平台为 Windows、macOS；Linux 不在当前范围。每项以目标路径、测试 ID 和证据作为验收，不以单平台截图替代。
+状态：`CEF-01A..01C DONE`，`CEF-01D IN_PROGRESS`；当前建立 Windows x64 最小 CEF 壳、运行依赖 smoke 和品牌资源装配。当前目标平台为 Windows、macOS；Linux 不在当前范围。每项以目标路径、测试 ID 和证据作为验收，不以单平台截图替代。
 
 ## 原子任务
 
 | ID | 状态 | 依赖 | 目标路径 | 实现输出 | 测试/验收 | 证据 |
 |---|---|---|---|---|---|---|
 | CEF-01A | DONE | FND-08 | `cmake/cef`、`tests/contracts`、第三方文档 | 固定 CEF Standard revision、四平台官方 hash、许可和本地缓存/离线根契约 | 确定性 contract test；错误平台/缺失根/错误版本/校验失败；Windows 包实下载校验 | S1 |
-| CEF-01B | READY | CEF-01A | `browser/engine-api` | 不含 CEF 类型和产品策略的 C++17 `BrowserEngineAdapter` 最小接口、独立 Fake 与 compile contract | 接口 contract；Fake 生命周期/错误/重复释放；Harmony 可实现性说明 | S1 |
-| CEF-01C | TODO | CEF-01B | 根 `CMakeLists.txt`、`CMakePresets.json`、`cmake/cef` | 共享 CMake/preset、离线 CEF root 接入和最小 test target | preset/schema、无网络 configure、错误 root、RG-005 | S1 |
-| CEF-01D | TODO | CEF-01C,BRD-04 | `browser/cef-shell` Windows 构建文件、验证记录 | Windows x64 CEF 最小壳 configure/build；只消费 `assets/brand/generated/windows/app.ico`/PNG 完成 Debug/Release 资源装配 | VS2022 configure/build；启动前依赖 smoke；验证 EXE/窗口/任务栏图标；包不入 Git | S2 |
+| CEF-01B | DONE | CEF-01A | `browser/engine-api` | 不含 CEF 类型和产品策略的 C++17 `BrowserEngineAdapter` 最小接口、独立 Fake 与 compile contract | 接口 contract；Fake 生命周期/错误/重复释放；Harmony 可实现性说明 | S1 |
+| CEF-01C | DONE | CEF-01B | 根 `CMakeLists.txt`、`CMakePresets.json`、`cmake/cef` | 共享 CMake/preset、离线 CEF root 接入和最小 test target | preset/schema、无网络 configure、错误 root、RG-005 | S1 |
+| CEF-01D | IN_PROGRESS | CEF-01C,BRD-04 | `browser/cef-shell` Windows 构建文件、验证记录 | Windows x64 CEF 最小壳 configure/build；只消费 `assets/brand/generated/windows/app.ico`/PNG 完成 Debug/Release 资源装配 | VS2022 configure/build；启动前依赖 smoke；验证 EXE/窗口/任务栏图标；包不入 Git | S2 |
 | CEF-01E | TODO | CEF-01D | macOS 构建文件、CI/验证记录 | macOS x64/arm64 configure/build；只消费 `assets/brand/generated/macos/AppIcon.iconset`/`app.icns` 并收口 bootstrap Review | 两个 macOS 架构 CI/configure/build；`iconutil`/包内图标资源复核；P0/P1=0；未实机项显式记录 | S2 |
 | CEF-02 | TODO | CEF-01E | `browser/cef-shell/src/process` | Browser/render/GPU 子进程入口与 sandbox 开关；正式构建强制 sandbox | Windows/macOS 启动/退出；sandbox smoke；无业务代码在 main | S3 |
 | CEF-03 | TODO | CEF-02 | `src/browser/window` | 单窗口/标签生命周期、导航、前后退、刷新、停止、缩放 | BR-001、重复关闭、崩溃恢复；资源无泄漏 | S3 |
@@ -47,9 +47,9 @@
 - Code Review：需求/边界、正确性、架构、安全、并发/生命周期、测试和维护性逐项审查；发现并关闭 1 个 P1（离线根未校验 revision），最终 P0/P1/P2/P3 均为 0。
 - 未覆盖：macOS x64/arm64 只锁定官方 hash，尚未实际下载/configure；由 CEF-01E 完成。Linux x64 不再进入当前任务。CEF archive 未解压，产品构建图由 01C、Windows 壳由 01D 负责。
 
-### CEF-01B 跨引擎接口冻结（待领取）
+### CEF-01B 跨引擎接口冻结（已完成）
 
-- 状态：`READY`；依赖 `CEF-01A DONE`，尚无生产代码改动。
+- 状态：`DONE`；依赖 `CEF-01A DONE`。
 - 单一目标：冻结桌面 native 编排可消费、CEF 后端可实现且能映射到 ArkWeb 的最小 C++17 浏览器引擎契约；本任务不创建可运行浏览器。
 - 输入：`docs/current/architecture.md` 的依赖方向与状态所有权、FND-08 的强类型 ID/Core 错误语义、BR-001/BR-013 与 PV-001/PV-004 的后续调用需求，以及 CEF/ArkWeb 均可表达的导航、标签、Profile、权限、可信输入事实和 observation 订阅能力。
 - 输出与允许修改：`browser/engine-api/include/crayon/browser_engine/` 的纯抽象接口/强类型值对象，`browser/engine-api/README.md` 的线程、所有权、错误和 Harmony 语义映射，`browser/engine-api/tests/` 的独立 Fake/contract，以及仅供该模块独立编译测试的 `browser/engine-api/CMakeLists.txt`。
@@ -59,6 +59,56 @@
 - 验收：所有 public header 可独立包含；Fake 完整实现每个纯虚方法；contract 覆盖正常命令、无效输入、重复调用、事件顺序、unsubscribe 后无回调和 adapter 销毁；扫描证明 public/production 文件不含 CEF/ArkWeb/OS/Cast/relay/测试类型；Harmony 说明逐项给出 ArkWeb 可实现、需 native bridge 或后续 capability 降级，不把桌面结果冒充 Harmony 真机证据。
 - 测试命令：先以缺少 public header 的 compile contract 记录失败；再运行 `cmake -S browser/engine-api -B .cache/build/engine-api -G Ninja -DCRAYON_ENGINE_API_BUILD_TESTS=ON`、`cmake --build .cache/build/engine-api`、`ctest --test-dir .cache/build/engine-api --output-on-failure`、`scripts/check.ps1 fast`、`scripts/check.ps1 security` 和 `git diff --check`。
 - 完成证据：编译器/CMake/Ninja 版本、测试数量与结果、public include 扫描、Code Review 结论和未覆盖项；只有实现、测试、Review 均完成后才转 `DONE` 并解锁 `CEF-01C`。
+
+完成记录（2026-08-11）：
+
+- 失败基线：实现前运行 `cmake -S browser/engine-api -B .cache/build/engine-api -G Ninja -DCRAYON_ENGINE_API_BUILD_TESTS=ON`，因 `browser/engine-api` 不存在按预期退出 `1`；不是把缺失实现记成通过。
+- 实现：新增纯 C++17 `BrowserEngineAdapter`、opaque Profile/Tab/Permission/Subscription ID、受限 HTTP(S) URL/zoom、稳定错误码和最小事件 DTO；命令与异步 event sink 分离，adapter 为单次生命周期，Stop/close/destroy/unsubscribe 幂等，旧 navigation、退订、Stop 和析构均有 callback fence。独立 Fake 完整实现全部纯虚方法；生产模块不启动线程、计时器、IO 或等待。
+- 工具链：CMake `4.4.1`、Ninja `1.13.2`、MinGW GCC `16.1.0`；额外以 Windows SDK `10.0.26100.0`、Visual Studio 2022/MSVC `19.44.35228.0` 完成 Debug 编译验证。
+- 独立测试：规定的 Ninja configure/build 成功；`ctest --test-dir .cache/build/engine-api --output-on-failure` 为 `3/3` 通过，分别覆盖接口行为、每个 public header 独立编译和 production forbidden API 扫描。额外 MSVC Debug 下同一组 `3/3` 通过。
+- 格式/静态：Visual Studio 附带 clang-format `19.1.5`；仓库没有 `.clang-format`，因此以显式 `--style=Google --dry-run --Werror` 检查本模块 17 个 C++ 文件通过。GCC 使用 `-Wall -Wextra -Wpedantic -Werror`，MSVC 使用 `/W4 /WX /permissive-`，两套编译均无告警。
+- 仓库门禁：`scripts/check.ps1 fast`、`scripts/check.ps1 security` 全部通过；RG-003/RG-004 只报告任务前已有文件的 warning，本任务路径无 finding。`git diff --check` 通过。
+- Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和维护性独立复核；关闭 URL authority/port/locale-dependent ASCII 校验过宽和 stale permission/input/observation callback fence 两类 P1，并关闭析构断言与 Stop 后重启语义不明确两类 P2；最终 P0/P1/P2/P3 均为 `0`。
+- Harmony 映射：README 已逐项说明 CEF 与 ArkWeb/native bridge/capability 降级关系；这只是契约可实现性说明，不是 HarmonyOS 真机证据。macOS 编译器、真实 CEF/ArkWeb 后端和运行浏览器不属于本任务；IPv6/IDN authority 当前显式 fail closed，后续只能通过共享 URL parser 独立扩展。
+
+### CEF-01C 共享构建图与离线 CEF root（已完成）
+
+- 状态：`DONE`；依赖 `CEF-01A..01B DONE`。
+- 单一目标：建立 Windows/macOS 共用的根 CMake 构建图、版本化 presets 和离线 CEF root integration，使 engine-api 与 CEF wrapper 能由同一构建入口确定性配置；本任务不创建进程入口、窗口、资源、产品 UI 或可运行浏览器。
+- 输入：`cmake/cef/CefDistribution.cmake` 与 `DownloadCef.cmake` 的固定版本/离线根验证契约、`browser/engine-api` 的独立 CMake target、Windows VS2022 与 macOS Ninja/Xcode 后续平台需求。
+- 输出与允许修改：根 `CMakeLists.txt`、根 `CMakePresets.json`、`.gitignore` 的 `.cache/build/` 规则、`cmake/cef/CefRoot.cmake`/`IntegrateCef.cmake`、`DownloadCef.cmake` 对纯 root validator 的机械改引、`tests/contracts/cef_build_graph_contract.cmake` 及其最小确定性 fixture/失败脚本、`tools/repo-guard` 对仓库 `.cache` 根的遍历排除与回归测试，以及本 Roadmap/current 状态文档。
+- 禁止修改：`browser/engine-api` 接口/行为、`browser/cef-shell`、`browser/harmony-shell`、Rust workspace/schema、品牌生成资产、Cast-SDK、媒体/Relay/隐私/Agent 逻辑和 01A 固定版本/hash；不得提交 CEF archive/解压目录，不得在 configure 隐式下载或使用 FetchContent/ExternalProject。
+- 构建契约：`CRAYON_BUILD_TESTS` 统一控制测试，`CRAYON_ENABLE_CEF` 默认关闭；启用时 `CRAYON_CEF_ROOT` 必须是绝对、存在、版本匹配的解压根。integration 只设置 `CEF_ROOT`/module path、执行官方 `find_package(CEF REQUIRED)` 并建立唯一 `libcef_dll_wrapper`，不得复制官方 CEF flags、库清单或平台判断。
+- Preset 契约：提供无 CEF 的跨平台 `engine-api` 开发 preset，以及 Windows x64、macOS x64/arm64 CEF Debug presets；CEF root 只从调用者环境变量注入，不写本机绝对路径。每个 configure preset 有对应 build/test preset，二进制只进入 `.cache/build`。
+- 错误/边界：缺失、空值、相对、错误 revision、缺必要文件或 `FindCEF`/wrapper target 缺失必须在 configure 稳定失败；重复 configure 幂等；CEF 关闭时不得读取 root、加载 CEF package 或访问网络；Linux preset/产品支持不进入当前构建图。仓库级质量扫描必须跳过固定 `.cache` 根但不能按任意嵌套目录名扩大豁免，确保解压 vendor/build 产物不冒充产品源码。
+- 验收：JSON preset 可由 CMake 列举；无 CEF preset configure/build/ctest 通过；本地 fixture 的 CEF-on configure 成功并证明官方 module/wrapper 被接入；缺失/相对/错误 root、错误 version、缺 wrapper 稳定失败；源码扫描无网络下载 primitive、无 CEF 版本/hash 复制；`RG-005` 通过。
+- 测试命令：先运行不存在 preset 的失败基线；实现后运行 `cmake --list-presets`、`cmake --preset engine-api`、`cmake --build --preset engine-api`、`ctest --preset engine-api`、`cmake -P tests/contracts/cef_build_graph_contract.cmake`、`scripts/check.ps1 fast`、`scripts/check.ps1 security` 和 `git diff --check`。Windows 额外使用真实已校验 CEF root 执行 `windows-cef-debug` configure；wrapper build 由本任务验证，EXE/窗口留给 01D。
+- 完成证据：失败基线、CMake/preset 版本、fixture/真实 root configure 与 wrapper build、测试数、离线/错误路径证据、Code Review、未覆盖 macOS runner；全部完成后转 `DONE` 并解锁 `CEF-01D`。
+
+完成记录（2026-08-11）：
+
+- 失败基线：实现前 `cmake --preset engine-api` 因根目录不存在 `CMakePresets.json` 按预期退出 `1`；repo-guard 的缓存边界回归测试在修复前也按预期失败，证明解压 CEF vendor 会被误扫而不是预先通过。
+- 构建图：新增根 CMake、schema v3 presets、纯 `CefRoot.cmake` validator 与 `IntegrateCef.cmake`；CEF 默认关闭，启用时只接受绝对、存在且版本匹配的离线根，并只通过官方 `FindCEF.cmake`/`libcef_dll_wrapper` 接入。configure 图不包含下载、`FetchContent`、`ExternalProject` 或复制的 CEF revision/hash。
+- Preset/fixture：CMake `4.4.1` 可列举 `engine-api` 与 Windows 条件 preset；contract 覆盖成功/重复 configure、CEF-off 忽略错误 root，以及空、相对、不存在、错误版本、缺 `FindCEF`、缺 wrapper target 的稳定失败。fixture 固定落入 `.cache/build/contracts`，不依赖 Windows `%TEMP%`。
+- 真实 CEF：使用已校验的 Windows x64 Standard 根成功运行 `cmake --preset windows-cef-debug`，成功编译官方 `libcef_dll_wrapper` 与完整当前 target 图；生成 `Debug/libcef_dll_wrapper.lib`，CEF archive、解压根与 build 产物均留在被忽略的 `.cache`，未进入 Git。
+- 自动验证：`cmake --preset engine-api`、`cmake --build --preset engine-api`、`cmake -P tests/contracts/cef_distribution_contract.cmake` 和最终 `cmake -P tests/contracts/cef_build_graph_contract.cmake` 均通过；`ctest --preset engine-api`、Windows `ctest --preset windows-cef-debug` 均为 `5/5` 通过；`cargo test -p repo-guard` 为 `24/24` 通过；`scripts/check.ps1 fast`、`scripts/check.ps1 security` 与 `git diff --check` 通过。
+- Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和维护性审查；关闭根 CTest 未注册、Windows 路径宏转义、configure 间接加载 downloader、repo-guard 误扫固定缓存、contract 临时目录依赖 `%TEMP%` 等 P1/P2，最终 P0/P1/P2/P3 均为 `0`。
+- 未覆盖与风险：当前机器的 VS2022 未安装 ATL，CEF 官方配置自动关闭 `USE_ATL`，wrapper 和测试仍成功；01D 的 Windows 壳需继续验证这不影响 EXE。macOS x64/arm64 preset 已冻结但没有 macOS runner/configure/build 证据，留给 `CEF-01E`，不得用 Windows 结果代替。
+
+### CEF-01D Windows x64 最小 CEF 壳（执行中）
+
+- 状态：`IN_PROGRESS`；依赖 `CEF-01C DONE`、`BRD-04 DONE`。
+- 单一目标：产出可由 Windows 10/11 x64 启动、显示一个 CEF 页面窗口并可正常关闭的最小产品 EXE，同时确定性装配官方 CEF 运行依赖和受管蜡笔品牌图标；本任务不实现完整浏览器功能。
+- 输入：01C 的 `windows-cef-debug`/离线 root 与官方 `FindCEF`/wrapper target，BRD-04 的 `assets/brand/generated/windows/app.ico` 和 Windows PNG，CEF 150 Standard 的 Windows process/window/lifecycle API。
+- 输出与允许修改：`browser/cef-shell/CMakeLists.txt`、`browser/cef-shell/src/windows/` 的最小 entry/app/client 生命周期、`browser/cef-shell/resources/windows/` 的 `.rc`/manifest/resource ID 与本地化产品名引用、`browser/cef-shell/tests/` 的 Windows 独立 contract；根 `CMakeLists.txt` 只允许条件装配 shell/test，`CMakePresets.json` 只允许固定本任务明确需要的 Windows CEF build option；本 Roadmap/current/index 状态文档。
+- 禁止修改：`browser/engine-api` 接口/行为、macOS/Harmony 壳、Rust workspace/schema、受管品牌资产及生成器、Cast-SDK、媒体/Relay/隐私/Agent 逻辑、CEF revision/hash/download；不得把 CEF archive、解压根、DLL/PAK/EXE/build 目录提交 Git，不得访问公共网络或第三方页面。
+- 产品行为：Browser process 在 CEF 初始化后只创建一个受限 `about:blank` 初始页窗口；关闭最后窗口后退出消息循环并逆序 `CefShutdown`。Renderer/GPU 等子进程只走同一 entry 的 `CefExecuteProcess`，不承载产品业务；地址栏、标签、Profile、下载、权限、媒体观察和投屏 UI 均留给后续任务。
+- 资源/构建契约：只引用受管 `app.ico`，产品名来自 Windows string resource；通过 CEF 官方 flags、`libcef`、`libcef_dll_wrapper`、`CEF_BINARY_FILES`/`CEF_RESOURCE_FILES` 完成 Debug/Release 资源装配，不手写官方 DLL/PAK 清单。输出仅进 `.cache/build`。01D 明确使用 `USE_SANDBOX=OFF` 的 bootstrap，正式 sandbox 强制与多进程细化仍由 `CEF-02` 完成，不得把本任务描述为 Release 安全完成。
+- 错误/生命周期：子进程返回码直接返回；Browser 初始化失败返回稳定非零；窗口创建失败必须退出消息循环而非挂起；重复/迟到 close 不产生负计数或二次 shutdown；最后 Browser `OnBeforeClose` 后才 quit。生产热路径不写浏览 URL/标题或高频日志。
+- 自动验收：非 Windows 或未启用 CEF 时不得生成 shell target；Windows contract 验证 EXE 可作为 data image 打开、主/小 ICO resource 均存在，且官方声明的每个 binary/resource 运行依赖均位于 EXE 同目录；源码 boundary scan 拒绝 CEF 下载 primitive、网络初始 URL、Cast/Relay/WebRTC/采集/编码和测试实现进入生产文件。
+- 平台验收：VS2022 x64 Debug 和 Release configure/build；两配置 contract 通过；实际启动 Debug EXE，观察窗口、任务栏/标题栏品牌图标和产品名，关闭后确认主进程及子进程全部退出。启动不访问公共网络；自动化不得以固定长 `sleep` 判成功。
+- 测试命令：先记录缺 `crayon_browser` target 的失败基线；实现后设置真实 `CRAYON_CEF_ROOT`，运行 `cmake --preset windows-cef-debug`、`cmake --build --preset windows-cef-debug --config Debug`、`ctest --preset windows-cef-debug`，再构建/测试 `Release`；运行 `scripts/check.ps1 brand-assets`、`scripts/check.ps1 fast`、`scripts/check.ps1 security` 和 `git diff --check`。GUI 启停/图标由 Windows 实际运行证据补充。
+- 完成证据：失败基线、Debug/Release 产物与 contract、实际运行/退出/图标证据、进程残留检查、Code Review 和未覆盖项；全部满足后转 `DONE` 并解锁 `CEF-01E`。
 
 ### CEF-01C～CEF-01E 边界
 

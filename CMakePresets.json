@@ -1,0 +1,135 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/.cache/build/${presetName}",
+      "cacheVariables": {
+        "CRAYON_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "engine-api",
+      "displayName": "Engine API contracts",
+      "description": "Cross-platform C++17 engine API without CEF",
+      "inherits": "base",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CRAYON_ENABLE_CEF": "OFF"
+      }
+    },
+    {
+      "name": "windows-cef-debug",
+      "displayName": "Windows x64 CEF Debug",
+      "inherits": "base",
+      "generator": "Visual Studio 17 2022",
+      "architecture": {
+        "value": "x64",
+        "strategy": "set"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "cacheVariables": {
+        "CRAYON_ENABLE_CEF": "ON",
+        "CRAYON_CEF_ROOT": "$env{CRAYON_CEF_ROOT}",
+        "USE_SANDBOX": "OFF"
+      }
+    },
+    {
+      "name": "macos-x64-cef-debug",
+      "displayName": "macOS x64 CEF Debug",
+      "inherits": "base",
+      "generator": "Ninja",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_OSX_ARCHITECTURES": "x86_64",
+        "PROJECT_ARCH": "x86_64",
+        "CRAYON_ENABLE_CEF": "ON",
+        "CRAYON_CEF_ROOT": "$env{CRAYON_CEF_ROOT}"
+      }
+    },
+    {
+      "name": "macos-arm64-cef-debug",
+      "displayName": "macOS arm64 CEF Debug",
+      "inherits": "base",
+      "generator": "Ninja",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_OSX_ARCHITECTURES": "arm64",
+        "PROJECT_ARCH": "arm64",
+        "CRAYON_ENABLE_CEF": "ON",
+        "CRAYON_CEF_ROOT": "$env{CRAYON_CEF_ROOT}"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "engine-api",
+      "configurePreset": "engine-api"
+    },
+    {
+      "name": "windows-cef-debug",
+      "configurePreset": "windows-cef-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "macos-x64-cef-debug",
+      "configurePreset": "macos-x64-cef-debug"
+    },
+    {
+      "name": "macos-arm64-cef-debug",
+      "configurePreset": "macos-arm64-cef-debug"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "engine-api",
+      "configurePreset": "engine-api",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "windows-cef-debug",
+      "configurePreset": "windows-cef-debug",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "macos-x64-cef-debug",
+      "configurePreset": "macos-x64-cef-debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "macos-arm64-cef-debug",
+      "configurePreset": "macos-arm64-cef-debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

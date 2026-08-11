@@ -10,10 +10,10 @@
 | [当前架构](architecture.md) | v0.7 CAAP、语义动作、Workflow/Challenge、Hub/connector、投屏、模型与平台边界 |
 | [技术方案](../crayon-private-cast-browser-technical-design.md) | 当前实现方案与构建/供应链考虑 |
 | [测试标准](testing-standard.md) | 分层、设施、平台矩阵和证据规则 |
-| [测试用例](test-cases.md) | 166 个当前权威测试 ID |
+| [测试用例](test-cases.md) | 186 个唯一当前权威测试 ID |
 | [Code Review 标准](code-review-standard.md) | 审查顺序、门禁和交付格式 |
 | [品牌图标契约](brand-assets.md) | `app-icon-v1` 参考源、母版、平台组合与禁用规则 |
-| [总 Roadmap](../crayon-private-cast-browser-roadmap.md) | 200 项活跃任务、阶段和当前领取顺序 |
+| [总 Roadmap](../crayon-private-cast-browser-roadmap.md) | 218 项活跃任务、阶段和当前领取顺序 |
 | [模块 Roadmap 索引](../plans/README.md) | 每个模块的原子任务、依赖与状态 |
 
 ## 2. 专项当前契约
@@ -30,6 +30,7 @@ Cast-SDK source lock 的当前事实位于 `config/cast-sdk-source.toml`、`.git
 ## 3. 已确认产品范围
 
 - 当前产品名/定位：蜡笔 AI Agent 投屏浏览器；从协议、页面数据面和授权边界为 AI Agent 定制。
+- 桌面 UI 采用 Chrome/Chromium 用户熟悉的信息架构与快捷键心智，但使用蜡笔品牌和自有本地页面；`BUX-01..18` 覆盖起始页、omnibox、标签、书签、历史、下载、设置、Profile/无痕与日用基础功能。
 - Windows/macOS CEF 浏览器与 LAN Direct/Relay 投屏优先。
 - 无 Direct/Relay 路由时只交接给独立蜡笔投屏客户端；浏览器不做 WebRTC、屏幕/标签页/系统音频采集或编码。
 - 浏览器与投屏主链路完成后建设当前页数据/Markdown；CAAP、CLI/MCP、高性能读页与授权操作是核心分阶段能力。
@@ -40,11 +41,11 @@ Cast-SDK source lock 的当前事实位于 `config/cast-sdk-source.toml`、`.git
 
 ## 4. 真实现状
 
-- 品牌资产 `BRD-01..04`、Foundation 19 个原子任务、`MED-01..19`、`CEF-01A`、`SDK-01..12` 已完成，共 55 项。
+- 品牌资产 `BRD-01..04`、Foundation 19 个原子任务、`MED-01..19`、`CEF-01A..01C`、`SDK-01..12` 已完成，共 57 项。
 - CEF 固定基线为 `150.0.10+g8042e43+chromium-150.0.7871.101` Standard。历史四平台 hash 已锁定，Windows x64 archive 已校验；后续产品构建只推进 Windows/macOS。
 - Cast-SDK source revision 已由 `SDK-01` 固定并通过 `RG-008`；facade、Fake、真实 service 生命周期、能力缓存、投送执行、会话监督与 runtime 用例编排已完成；真机接收端闭环（`SDK-13`）尚未完成。
 - `MED-19` 已完成：投屏决策集合为 `Direct/Relay/ExternalClientHandoff/Reject`，旧 `mirror` wire 值保留兼容读取窗口且不再发出；`tab_video`/`system_audio` 仅作为 `crayon-domain` 遗留字段存在，策略与 runtime 代码不再引用，不得继续扩张。
-- `CEF-01B READY`、`SDK-13 BLOCKED`（需真实接收端 Harness）；`CNT-01..10` 等待浏览器/投屏门禁；`AGT/ACT/WFL/HUB` 分别规划入站访问、语义动作、工作流/挑战和能力生态；`CNT-11..16` 是第二阶段模型能力。
+- `browser/engine-api` 的 C++17 跨 CEF/ArkWeb 契约已由 `CEF-01B` 冻结并通过 GCC/MSVC 双编译器与 contract；`CEF-01C` 已建立 Windows/macOS 共用的离线 CEF 构建图，但仍不是可运行浏览器。`CEF-01D IN_PROGRESS`、`SDK-13 BLOCKED`（需真实接收端 Harness）；`CNT-01..10` 等待浏览器/投屏门禁；`AGT/ACT/WFL/HUB` 分别规划入站访问、语义动作、工作流/挑战和能力生态；`CNT-11..16` 是第二阶段模型能力。
 
 ## 5. 权威与历史
 

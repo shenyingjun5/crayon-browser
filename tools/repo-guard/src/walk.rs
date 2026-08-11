@@ -11,6 +11,7 @@ const SKIPPED_DIRECTORIES: &[&str] = &[
     "gen",
     "vendor",
 ];
+const ROOT_SKIPPED_DIRECTORIES: &[&str] = &[".cache"];
 
 pub fn collect_files(root: &Path) -> io::Result<Vec<PathBuf>> {
     let mut files = Vec::new();
@@ -29,10 +30,14 @@ fn visit(root: &Path, directory: &Path, files: &mut Vec<PathBuf>) -> io::Result<
         }
         if file_type.is_dir() {
             let name = entry.file_name();
-            if SKIPPED_DIRECTORIES
+            let name_is_skipped = SKIPPED_DIRECTORIES
                 .iter()
-                .any(|item| name.to_string_lossy().eq_ignore_ascii_case(item))
-            {
+                .any(|item| name.to_string_lossy().eq_ignore_ascii_case(item));
+            let root_cache_is_skipped = directory == root
+                && ROOT_SKIPPED_DIRECTORIES
+                    .iter()
+                    .any(|item| name.to_string_lossy().eq_ignore_ascii_case(item));
+            if name_is_skipped || root_cache_is_skipped {
                 continue;
             }
             // Git submodules are separately versioned source inputs. Their production

@@ -77,4 +77,4 @@ Linux 不在当前矩阵；不能用 Linux runner 结果代替 Windows/macOS 证
 
 ## 7. 当前用例集
 
-当前权威用例为 [test-cases.md](test-cases.md) 中 166 个唯一 ID。任务必须引用适用 ID，新增/删除用例时同步总 Roadmap 与计划索引。
+当前权威用例为 [test-cases.md](test-cases.md) 中 186 个唯一 ID。任务必须引用适用 ID，新增/删除用例时同步总 Roadmap 与计划索引。

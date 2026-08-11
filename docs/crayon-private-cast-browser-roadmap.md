@@ -3,17 +3,17 @@
 - 版本：v0.7
 - 日期：2026-08-11
 - 状态：活跃
-- 当前任务总数：200
-- 当前测试用例总数：166
+- 当前任务总数：218
+- 当前测试用例总数：186
 
 ## 1. 当前结论
 
-- 品牌资产 `BRD-01..04`、Foundation 19 项、`MED-01..19`、`CEF-01A`、`SDK-01..06` 已完成，共 49 项。
-- 当前可领取 `CEF-01B` 和 `SDK-07`；CEF 壳、真实接收端闭环与页面数据面尚未完成。
+- 品牌资产 `BRD-01..04`、Foundation 19 项、`MED-01..19`、`CEF-01A..01C`、`SDK-01..12` 已完成，共 57 项。
+- 当前 `CEF-01D IN_PROGRESS`；`SDK-13 BLOCKED`，等待真实接收端 Harness。CEF 构建图已完成，正在实现 Windows 可运行壳；真实接收端闭环与页面数据面尚未完成。
 - 产品仍按“浏览器与 LAN 投屏 -> 页面数据/Markdown -> Agent 协议与语义动作 -> Workflow/Challenge -> Capability Hub/合作方 -> 模型”的依赖顺序交付。
 - CAAP、CLI/入站 MCP、高性能读页和授权操作是核心；具体模型/provider 与视频/文档总结属于第二阶段。
 - Windows/macOS 为当前桌面；HarmonyOS 只做鸿蒙电脑 PC 形态技术预览；Linux 无活跃任务。
-- 新增 `ACT`、`WFL`、`HUB` 三个独立模块 Roadmap，避免把公共 schema、持久化状态机和 connector 安全边界塞进 AGT 或 CNT。
+- `BUX` 独立承接完整桌面浏览器体验；`ACT`、`WFL`、`HUB` 分别承接语义动作、持久化工作流和 connector 安全边界，避免把大模块塞进 CEF、AGT 或 CNT。
 
 ## 2. 交付不变量
 
@@ -35,6 +35,7 @@
 | BRD | 4 | 品牌图标母版、跨平台确定性资产与接入门禁 |
 | FND | 19 | Workspace、契约、质量入口与仓库基线 |
 | CEF | 19 | Windows/macOS CEF 浏览器壳 |
+| BUX | 18 | Chrome-inspired 蜡笔浏览器 UI 与日用基础功能 |
 | MED | 19 | 媒体观察、LAN Relay 与外部客户端交接语义 |
 | SDK | 16 | Cast-SDK 发现/投送/控制；后续 Partner Cast facade |
 | PLT | 7 | Windows/macOS 系统与本机 IPC/客户端交接适配 |
@@ -46,7 +47,7 @@
 | HUB | 16 | Capability Registry、Router 与 Partner connector |
 | HM | 12 | HarmonyOS 电脑 PC 形态技术预览 |
 | QAR | 15 | 质量、性能、安全、发布和回滚 |
-| **合计** | **200** | |
+| **合计** | **218** | |
 
 ## 4. 依赖关系
 
@@ -56,6 +57,8 @@ flowchart LR
   BRD --> HM
   BRD --> QAR
   FND --> CEF
+  CEF --> BUX
+  PRV --> BUX
   FND --> MED
   FND --> SDK
   MED --> SDK
@@ -96,13 +99,13 @@ flowchart LR
 
 ### V0：工程、投屏语义与 SDK discovery 基线（已完成）
 
-- 品牌资产 `BRD-01..04`、Foundation 19 项、`MED-01..19`、`CEF-01A`、`SDK-01..06`。
-- 产出：`Direct/Relay/ExternalClientHandoff/Reject`，固定 SDK source/facade/Fake/真实 service 生命周期与 discovery 快照语义。
+- 品牌资产 `BRD-01..04`、Foundation 19 项、`MED-01..19`、`CEF-01A..01B`、`SDK-01..12`。
+- 产出：`Direct/Relay/ExternalClientHandoff/Reject`，固定 SDK source/facade/Fake/真实 service/discovery/连接/投送/监督与 runtime 语义，以及 CEF/ArkWeb 共享的 C++17 engine-api 契约。
 
 ### V1：Windows 浏览器可用
 
-- `CEF-01B..01D`、`CEF-02..12`、`PLT-01/02/W04` 与适用 PRV。
-- 验收：浏览、标签、Profile、下载、权限、崩溃和生命周期可用。
+- `CEF-01D`、`CEF-02..12`、`BUX-01..18`、`PLT-01/02/W04` 与适用 PRV。
+- 验收：Chrome-inspired 蜡笔 UI、本地起始页、地址栏、导航、标签/窗口、书签、历史、下载、设置、Profile/无痕、权限、安全反馈、崩溃恢复、快捷键/无障碍和生命周期可用。
 
 ### A0：Agent 协议与权限内核
 
@@ -126,7 +129,7 @@ flowchart LR
 
 ### C1：高性能页面数据与 Markdown
 
-- `CNT-01..10`；前置 `CEF-15`、`SDK-14`、`MED-19`、`PRV-08`。
+- `CNT-01..10`；前置 `CEF-15`、`BUX-18`、`SDK-14`、`MED-19`、`PRV-08`。
 - 验收：当前页结构化快照、缓存/分页/增量、Markdown 预览/复制/保存和性能基线。
 
 ### S1：语义地图与可验证动作内核
@@ -207,15 +210,16 @@ flowchart LR
 
 ## 7. 当前领取顺序
 
-1. `SDK-07`：连接、断开与投屏码解析状态映射。
-2. `CEF-01B`：Windows CEF toolchain/bootstrap。
-3. `AGT-01` 在 `FND-08/PRV-08` 满足后冻结 CAAP v1；不得提前开放 CLI/MCP。
-4. `CNT-01` 等 `CEF-15/SDK-14/MED-19/PRV-08` 完成。
-5. `ACT-01` 等 `CNT-03/AGT-01` 完成；`WFL/HUB` 不得越过语义动作和权限依赖。
+1. `SDK-13`：等待真实接收端 Harness，当前 `BLOCKED`，不得用 Fake 冒充真机证据。
+2. `CEF-01D`：Windows x64 CEF 最小壳、启动依赖 smoke 与品牌资源装配；当前 `IN_PROGRESS`。
+3. `BUX-01` 等 `CEF-01D` 完成后冻结 Chrome-inspired 蜡笔浏览器体验规格；不得把空白 bootstrap 当成最终 UI。
+4. `AGT-01` 在 `FND-08/PRV-08` 满足后冻结 CAAP v1；不得提前开放 CLI/MCP。
+5. `CNT-01` 等 `CEF-15/BUX-18/SDK-14/MED-19/PRV-08` 完成。
+6. `ACT-01` 等 `CNT-03/AGT-01` 完成；`WFL/HUB` 不得越过语义动作和权限依赖。
 
 ## 8. 发布门禁
 
-- 200 项任务按所选发布范围提供真实状态、命令与证据；166 个测试 ID 可追踪，P0/P1 Review 为零。
+- 218 项任务按所选发布范围提供真实状态、命令与证据；186 个唯一测试 ID 可追踪，P0/P1 Review 为零。
 - CLI/入站 MCP 共用 CAAP；出站 connector 独立；无 raw CDP/WebDriver/任意 JS/remote bind/通用文件上传。
 - 页面数据有界、action 有前置与效果、Workflow verified-only、Challenge 不绕过、self-heal 高风险 fail closed。
 - Hub route_reason/fallback 重授权和 Partner 信任/OAuth/SSRF/kill switch 通过后才开放对应 feature。
