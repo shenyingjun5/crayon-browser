@@ -146,7 +146,7 @@ pub trait CastFacade: Send + Sync {
         media: CastMediaKind,
     ) -> Result<ReceiverAssessment, CastError>;
 
-    // -- Delivery (CS-005) -------------------------------------------------
+    // -- Delivery (CS-005; SDK-09 `crate::delivery` executes above this) ----
 
     /// Starts casting one planned Direct/HLS/Relay URL to the connected
     /// device. The request device must equal `connected_device()`; the

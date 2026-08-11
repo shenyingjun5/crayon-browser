@@ -15,10 +15,15 @@
 //!   (`ReceiverCapabilityCache`): conservative assessment ->
 //!   `ReceiverCapabilities` mapping (fail closed), TTL/epoch invalidation
 //!   (CS-004).
+//! - SDK-09 adds delivery execution (`deliver`): a policy-planned
+//!   Direct/HLS/Relay URL becomes exactly one facade `cast_media` call with
+//!   a stale-plan guard; external-client handoff stays unexpressible
+//!   (CS-005).
 //!
 //! Browser, UI, and media crates must never see SDK-internal types.
 
 mod capability;
+mod delivery;
 mod dto;
 mod error;
 mod facade;
@@ -28,6 +33,7 @@ pub use capability::{
     synthesize_receiver_capabilities, CapabilityCacheConfig, ReceiverCapabilityCache,
     DEFAULT_ASSESSMENT_TTL, MAX_CACHED_DEVICES,
 };
+pub use delivery::{deliver, DeliveryRoute, PlannedDelivery};
 pub use dto::{
     AssessmentStatus, CastCode, CastMediaKind, CastMediaRequest, CastMediaUrl, CastPlaybackState,
     CastSessionPhase, CastSessionRef, CastSessionSnapshot, CastTerminalReason, DeliveryProtocol,

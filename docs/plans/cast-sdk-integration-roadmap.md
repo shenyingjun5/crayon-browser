@@ -1,6 +1,6 @@
 # SDK：Cast-SDK 集成 Roadmap
 
-状态：`FND-08 DONE`；`SDK-01..08 DONE`；`SDK-09 READY`；`SDK-15/16` 为 Partner/TV Cast Manifest 的后续外部依赖任务。任务数 16。源码固定为 Cast-SDK `44c3a99871aa1e68cbda71eacefbb41d23a747a8`，通过 `third_party/cast-sdk` submodule 接入；不得依赖开发者本机源码路径。
+状态：`FND-08 DONE`；`SDK-01..09 DONE`；`SDK-10 READY`；`SDK-15/16` 为 Partner/TV Cast Manifest 的后续外部依赖任务。任务数 16。源码固定为 Cast-SDK `44c3a99871aa1e68cbda71eacefbb41d23a747a8`，通过 `third_party/cast-sdk` submodule 接入；不得依赖开发者本机源码路径。
 
 ## 边界
 
@@ -104,6 +104,14 @@
 - 验证：`cargo test -p crayon-cast-adapter` 80/80 PASS（lib 39 = 既有 36 + 新增 3；契约 16；链接 2；CS 场景 10；capability 集成 13：新鲜命中不重复评估、TTL 过期重评估、TTL 内 invalidate 后取最新、Risky/Unknown 不当支持、刷新失败 fail closed 不留旧缓存、老化设备 fail closed + 替换重评估、invalidate_all、刷新中失效丢弃旧 store、容量有界/tombstone 满载行为、并发 smoke、CS-004 policy 三条：变更后 policy 用最新评估/TTL 兜底/Unknown 全程 fail closed）；`cargo test -p test-support --test cast_facade` 26/26 PASS；`cargo test --workspace` PASS；`cargo clippy --workspace --all-targets -- -D warnings` PASS；`cargo fmt --all -- --check` PASS；`cargo run -p repo-guard -- scan --root .` PASS（passed=true；RG-003 无新增；RG-004 新增 1 条警告级 finding：`capability.rs` 默认 TTL 常量命中 `Duration::from_secs(` 字面量规则——已是命名常量且可经 `CapabilityCacheConfig` 覆盖，与 `crayon-relay` 既有同类警告一致，见 Review P3）；`bash scripts/check.sh fast` 在当前工作区失败于 `brand-assets` 步骤——该步骤由另一会话未提交的 BRD 改动加入（`tools/brand-assets` 仍未跟踪，与 SDK-08 无关）；HEAD 版 fast 的四个步骤已逐一实跑：guard PASS、format PASS、`cargo test --workspace` PASS（同上）、`cargo test -p get-video --no-default-features --features legacy-dev --lib` 58/58 PASS；`git diff --check` PASS。
 - Code Review：按 current 标准逐维度审查（需求边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试、可维护性），P0/P1 = 0；P2 一项：真实 LAN 路径的评估（设备发现后真实接收端的 assess）为手工项（未运行，CI 不发组播），真机证据归 SDK-13；P3 一项：RG-004 对 `DEFAULT_ASSESSMENT_TTL` 的 `Duration::from_secs` 字面量报警告级 finding，常量已命名且经 `CapabilityCacheConfig` 可覆盖，规则为字符串匹配、对命名常量不可区分，延期到 SDK-14 统一复核。
 - 未覆盖：`start_discovery` LAN 路径上的真实评估为手工项（未运行）；codec/分辨率能力矩阵依赖 SDK 新 API（缺口转入 SDK-14/SDK-15）；`invalidate`/`invalidate_all` 的运行时接线归 SDK-12；macOS 构建与真机（SDK-13）。
+
+## SDK-09 完成记录（2026-08-11）
+
+- 改动：`crates/crayon-cast-adapter/src/delivery.rs`（`DeliveryRoute`/`PlannedDelivery`/`deliver` 投送执行器）、`src/delivery_tests.rs`（3 项 crate 内测试：真实 facade 未连接 fail closed、relay token URL 的 Debug 脱敏、访问器）、`tests/delivery.rs`（6 项 Fake 驱动 CS-005 行为测试）、`src/lib.rs`（导出与模块说明）、`src/facade.rs`（Delivery 段注释指向 executor）。无新依赖；单次降级与 relay 资源回收的编排按边界留给 SDK-12（runtime）。
+- 执行语义定稿（CS-005）：`deliver` 把 policy 的 Direct/HLS/Relay 计划翻译为恰好一次 facade `cast_media`——Direct/Relay 路由不改变 SDK 调用（session relay 按上游协议服务 MP4/HLS，路由作为可审计的产品事实保留在类型上）；HLS/MP4 分支来自计划携带的候选协议，不做 URL 后缀嗅探；媒体 URL 逐字节转发（PL-002），executor 不拼 SOAP/DLNA/接收端控制 URL/descriptor。前置 stale-plan 校验（官方 desktop app 的 SessionExpired 语义，以产品稳定码 `InvalidState` 表达）：计划设备必须仍是当前连接设备，设备切换或未连接在任何接收端流量前 fail closed，重规划归 runtime。失败按稳定 `CastError` 原样传播——不重试、不提权、不静默降级（PL-014），`UnsupportedByReceiver` 保持显式；投送成功即 Playing，不补 `play`（pinned SDK 语义，与官方 app 一致）；重复投送替换旧会话并经监督报 `ReplacedByNewCast`；不做能力复查——Unknown 接收端已在 SDK-08/policy 层 fail closed 为 handoff；外部客户端交接在该层类型上不可表达，不创建 SDK session。
+- 验证：`cargo test -p crayon-cast-adapter` 89/89 PASS（lib 42 = 既有 39 + 新增 3；capability 13；delivery 6 新增：Direct MP4 精确调用序列与 Starting→Playing 事件、HLS 分支来自计划而非 URL、Relay token URL 逐字节转发×2 协议、设备不匹配/未连接无接收端流量、unsupported/协议/启动失败各恰好一次尝试不重试、重复投送替换语义；契约 16；链接 2；CS 场景 10）；`cargo test -p test-support --test cast_facade` 26/26 PASS；`cargo test --workspace` 68 suites 全 PASS（0 failed）；`cargo clippy --workspace --all-targets -- -D warnings` PASS；`cargo fmt --all -- --check` PASS；`cargo run -p repo-guard -- scan --root .` PASS（passed=true；RG-003/004 的 cast-adapter 相关提醒与 HEAD worktree 基线逐条一致，无新增）；`bash scripts/check.sh fast` PASS（guard/format/brand-assets-unit/brand-assets/formal-workspace/legacy-unit 六步全过——brand-assets 已随 HEAD `62af4cc` 提交，SDK-08 记录的“另一会话未提交 brand-assets 步骤失败”前提消失）；`git diff --check` PASS。
+- Code Review：按 current 标准逐维度审查（需求边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试、可维护性），P0/P1 = 0；P3 一项：stale-plan 前置校验与 facade 内部校验之间存在理论 TOCTOU 窗口，由 facade 调用点的原子复查兜底（fail closed），双层防御为有意设计并已在模块文档注明。
+- 未覆盖：真实 LAN 投送成功路径（`cast_media` 成功需可应答 SOAP 的接收端，loopback 只覆盖 fail-closed 分支）为手工项（未运行），归 SDK-13 Harness；runtime 编排接线（单次降级、relay 资源回收、capability cache invalidate）归 SDK-12；macOS 构建与真机（SDK-13）。
 
 ## SDK 缺口处理
 
