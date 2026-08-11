@@ -93,7 +93,11 @@ impl ResourceFetcher for CompositeFetcher {
 struct Servers {
     media: JoinHandle<()>,
     control: JoinHandle<()>,
-    shutdown: Arc<tokio::sync::Notify>,
+    /// Stored-state shutdown signal: a `watch` value persists until the
+    /// server tasks observe it, unlike a `Notify` whose `notify_waiters` is
+    /// lost when a task has not polled `notified()` yet (a runtime stopped
+    /// before serving any request must still shut down — SDK-12 regression).
+    shutdown: tokio::sync::watch::Sender<bool>,
 }
 
 /// Running relay. Construct via `RelayRuntime::start`.
@@ -133,7 +137,7 @@ impl RelayRuntime {
         );
         hls.bind(&core);
 
-        let shutdown = Arc::new(tokio::sync::Notify::new());
+        let (shutdown, shutdown_rx) = tokio::sync::watch::channel(false);
         let media_listener =
             tokio::net::TcpListener::bind((config.media_host.as_str(), config.media_port)).await?;
         let control_listener =
@@ -148,22 +152,26 @@ impl RelayRuntime {
         ));
         let control_app = control_router(core.clone());
 
-        let media_shutdown = shutdown.clone();
+        let mut media_shutdown = shutdown_rx.clone();
         let media = tokio::spawn(async move {
             let _ = axum::serve(
                 media_listener,
                 media_app.into_make_service_with_connect_info::<SocketAddr>(),
             )
-            .with_graceful_shutdown(async move { media_shutdown.notified().await })
+            .with_graceful_shutdown(async move {
+                let _ = media_shutdown.changed().await;
+            })
             .await;
         });
-        let control_shutdown = shutdown.clone();
+        let mut control_shutdown = shutdown_rx;
         let control = tokio::spawn(async move {
             let _ = axum::serve(
                 control_listener,
                 control_app.into_make_service_with_connect_info::<SocketAddr>(),
             )
-            .with_graceful_shutdown(async move { control_shutdown.notified().await })
+            .with_graceful_shutdown(async move {
+                let _ = control_shutdown.changed().await;
+            })
             .await;
         });
 
@@ -217,7 +225,9 @@ impl RelayRuntime {
         }
         let servers = self.servers.lock().unwrap().take();
         if let Some(servers) = servers {
-            servers.shutdown.notify_waiters();
+            // watch 持久化信号：即使 server 任务尚未被 poll 也能观察到（不丢
+            // 一次性通知）；send 仅在接收端全部离开时失败，忽略即可。
+            let _ = servers.shutdown.send(true);
             let _ = servers.media.await;
             let _ = servers.control.await;
         }

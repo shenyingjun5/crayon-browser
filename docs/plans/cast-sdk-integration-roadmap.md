@@ -1,6 +1,6 @@
 # SDK：Cast-SDK 集成 Roadmap
 
-状态：`FND-08 DONE`；`SDK-01..11 DONE`；`SDK-12 READY`；`SDK-15/16` 为 Partner/TV Cast Manifest 的后续外部依赖任务。任务数 16。源码固定为 Cast-SDK `44c3a99871aa1e68cbda71eacefbb41d23a747a8`，通过 `third_party/cast-sdk` submodule 接入；不得依赖开发者本机源码路径。
+状态：`FND-08 DONE`；`SDK-01..12 DONE`；`SDK-13 BLOCKED`（需真实接收端 Harness，当前环境无真机）；`SDK-15/16` 为 Partner/TV Cast Manifest 的后续外部依赖任务。任务数 16。源码固定为 Cast-SDK `44c3a99871aa1e68cbda71eacefbb41d23a747a8`，通过 `third_party/cast-sdk` submodule 接入；不得依赖开发者本机源码路径。
 
 ## 边界
 
@@ -131,6 +131,15 @@
 - 验证：`cargo test -p crayon-cast-adapter` 100/100 PASS（lib 49 = 既有 45 + 新增 4：五场景终态三元组+收敛+终态控制矩阵、替换+旧代迟到事件抑制、重复订阅独立性、shutdown 后无投递+inert 订阅；fake 场景 14 = 13 + CS-007 拆分；capability 13；delivery 6；契约 16；链接 2；lib 连续 5 次重复运行全 PASS）；`cargo test -p test-support --test cast_facade` 26/26 PASS；`cargo test --workspace` 68 suites / 358 passed / 0 failed PASS；`cargo clippy --workspace --all-targets -- -D warnings` PASS；`cargo fmt --all -- --check` PASS；`cargo run -p repo-guard -- scan --root .` PASS（passed=true；RG-003/004 无新增条目——`facade.rs` trait 块提醒 142→172 行为契约注释增长的同一条目，见 Review P3）；`bash scripts/check.sh fast` PASS（guard/format/brand-assets-unit/brand-assets/formal-workspace/legacy-unit 六步全过）；`git diff --check` PASS。
 - Code Review：按 current 标准逐维度审查（需求边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试、可维护性），P0/P1 = 0；P2 一项（延期 SDK-13）：真实接收端主动上报/事件源（DLNA eventing、CastExtension 推送）驱动的终态路径未经真机验证，CI 以 `refresh_cast_session_health` resync 路径驱动同一状态机与 hub；P3 一项：RG-003 `facade.rs` trait 块提醒 142→172 行属契约注释定稿的既有提醒增长，SDK-14 统一复核。
 - 未覆盖：真机终态事件路径（SDK-13）；终态后的 runtime 资源编排（撤销 Direct/Relay、capability cache invalidate、UI 收敛）归 SDK-12；macOS 构建与真机（SDK-13）。
+
+## SDK-12 完成记录（2026-08-11）
+
+- 改动：`crates/crayon-app-runtime/src/cast_usecase.rs`（`CastUsecase`：Idle/Browsing/PlaybackEligible/SelectingReceiver/Planning/Starting/Casting/Stopping/Failed 九态编排，`CastStartOutcome` 四态结果，`RelayRevocation` 撤销接缝及 `RelayRuntime` 生产实现，有界监督事件队列 + `drain_session_events` 泵）、`src/cast_usecase_tests.rs`（8 项 crate 内测试）、`tests/cast_usecase.rs`（9 项 Fake E2E V2）、`src/lib.rs`（导出）、`Cargo.toml`（新增 `crayon-cast-adapter` 生产依赖）；`crates/crayon-relay/src/runtime.rs`（停止信号修复，见下）与 `crates/crayon-relay/tests/runtime.rs`（回归测试 `stop_without_any_request_still_shuts_down`）。adapter 契约（facade/dto/error/delivery/capability）零改动。
+- 编排语义定稿：listener 回调（SDK dispatch 线程）只向有界队列（128，非终态可合并、终态不合并，溢出计数）记录事件，终态资源清理由 `drain_session_events` 在线程外编排（官方 desktop app 同模式）；消费侧以 `supersedes` fencing，旧代/旧 revision 事件只计数不生效。终态收敛（自然结束/电视端 Stop/route lost/替换/用户停止）= 撤销该接收端 relay session（终态原因映射 `Stopped`/`RouteLost`/`DeviceReplaced`）+ capability cache `invalidate(device)` + 旧 `CastSessionRef` 作废；导航/Profile 销毁/App exit 撤销全部 relay session 并停止活动会话，但不失效能力事实（设备未变化，SDK-08 的失效分工）。connect 失败与计划失败直接 Failed/Rejected（PL-014 不降级不提权）；仅 deliver 失败经 `downgrade_once` 单次降级为外部交接建议（MED-17，无循环）；Handoff/Reject 不创建 SDK session 与 relay token、不显示"投屏已开始"（PL-015）。Relay 计划在 connect/deliver 失败时立即撤销刚开的 session，无孤儿 token。新 attempt 先收口旧会话再规划（同设备重投不会误杀新 relay session）；`attempt_lock` 序列化整个 attempt 与生命周期触发，消除 receiver 级撤销的交错窗口；attempt 锁与 state/backend 锁互不嵌套。播控 5 秒/阶段有界阻塞、无协作取消的事实如实记录，runtime 不伪造超时能力（deadline/取消归调用方）。
+- 越界缺陷修复（按"先复现后修复"）：Fake E2E 的 `connect_failure`/`deliver_failure` 用例稳定复现 `RelayRuntime::stop` 挂起——停止信号用 `Notify::notify_waiters`，server 任务在停止前若从未被 poll（无任何请求的 runtime）则通知丢失、`JoinHandle` 永不完成；修复为 `watch` 持久信号并加 relay 层回归测试。该缺陷只影响"启动后无流量即停止"的时序，生产路径（停止前必有会话流量）不可达，但停止可靠性属 MED-16 契约。
+- 验证：`cargo test -p crayon-app-runtime` 29/29 PASS（lib 8 = 状态门禁/幂等停止/无会话播控拒绝/旧事件 fencing/外来代际事件/有界队列合并策略/stop 失败回退/后端零触碰；E2E 9 = Relay 全链路用户停止收口、CS-007 四终态路径资源清理、connect 失败、PL-014/015 无会话物料、单次降级不重试、PL-012 设备切换作废旧计划、旧代际事件不收敛新会话、生命周期触发幂等、Direct 链路 URL 逐字节）；`cargo test -p crayon-cast-adapter` 100/100 PASS；`cargo test -p crayon-relay` 全 PASS（含新回归）；`cargo test --workspace` 69 suites / 376 passed / 0 failed PASS；`cargo clippy --workspace --all-targets -- -D warnings` PASS；`cargo fmt --all -- --check` PASS；`cargo run -p repo-guard -- scan --root .` PASS（passed=true；RG-003/004 无新增条目）；`bash scripts/check.sh fast` PASS（guard/format/brand-assets-unit/brand-assets/formal-workspace/legacy-unit 六步全过）；`git diff --check` PASS。
+- Code Review：按 current 标准逐维度审查（需求边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试、可维护性），P0/P1 = 0；P2 一项（延期 SDK-13）：终态收敛依赖调用方泵送 `drain_session_events`，生产 shell 的事件循环/生命周期接线尚不存在（CEF-13/PLT 任务），Fake E2E 已钉死泵语义本身；P3 一项：`register_delivered_session` 的三态 `Option<Option<_>>` 返回值可读性一般，SDK-14 统一复核时可扁平化。
+- 未覆盖：真实接收端 Harness（自动发现/投屏码/投送/控制/真机终态路径）归 SDK-13（BLOCKED：当前环境无真机）；生产 shell 的 drain 泵与生命周期事件接线归 CEF-13/PLT；macOS 构建与真机（SDK-13）。
 
 ## SDK 缺口处理
 

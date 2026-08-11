@@ -1,5 +1,6 @@
 //! Platform-neutral product runtime composition.
 
+pub mod cast_usecase;
 pub mod delivery;
 
 use crayon_domain::{ProductIdentity, ProductIdentityError, ProductMode};

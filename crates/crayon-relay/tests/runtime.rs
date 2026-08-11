@@ -268,3 +268,19 @@ async fn stop_is_idempotent_and_releases_ports() {
         "停止时撤销全部 session"
     );
 }
+
+#[tokio::test]
+async fn stop_without_any_request_still_shuts_down() {
+    // SDK-12 回归：启动后没有任何请求到达任一平面时（server 任务可能从未被
+    // 运行时 poll），stop 必须可靠完成——一次性通知在该时序下会丢失，停止
+    // 信号必须是持久状态。
+    let runtime = RelayRuntime::start(RelayRuntimeConfig {
+        media_host: "127.0.0.1".to_string(),
+        allow_private_upstreams: true,
+        ..RelayRuntimeConfig::default()
+    })
+    .await
+    .unwrap();
+    runtime.stop().await;
+    runtime.stop().await; // 幂等
+}

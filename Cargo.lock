@@ -387,6 +387,7 @@ dependencies = [
 name = "crayon-app-runtime"
 version = "0.1.0"
 dependencies = [
+ "crayon-cast-adapter",
  "crayon-cast-policy",
  "crayon-domain",
  "crayon-ipc-schema",

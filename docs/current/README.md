@@ -40,11 +40,11 @@ Cast-SDK source lock 的当前事实位于 `config/cast-sdk-source.toml`、`.git
 
 ## 4. 真实现状
 
-- 品牌资产 `BRD-01..04`、Foundation 19 个原子任务、`MED-01..19`、`CEF-01A`、`SDK-01..06` 已完成，共 49 项。
+- 品牌资产 `BRD-01..04`、Foundation 19 个原子任务、`MED-01..19`、`CEF-01A`、`SDK-01..12` 已完成，共 55 项。
 - CEF 固定基线为 `150.0.10+g8042e43+chromium-150.0.7871.101` Standard。历史四平台 hash 已锁定，Windows x64 archive 已校验；后续产品构建只推进 Windows/macOS。
-- Cast-SDK source revision 已由 `SDK-01` 固定并通过 `RG-008`；facade、Fake 和真实 service 生命周期已完成，LAN 发现/连接/投送与接收端闭环尚未完成。
+- Cast-SDK source revision 已由 `SDK-01` 固定并通过 `RG-008`；facade、Fake、真实 service 生命周期、能力缓存、投送执行、会话监督与 runtime 用例编排已完成；真机接收端闭环（`SDK-13`）尚未完成。
 - `MED-19` 已完成：投屏决策集合为 `Direct/Relay/ExternalClientHandoff/Reject`，旧 `mirror` wire 值保留兼容读取窗口且不再发出；`tab_video`/`system_audio` 仅作为 `crayon-domain` 遗留字段存在，策略与 runtime 代码不再引用，不得继续扩张。
-- `CEF-01B READY`、`SDK-07 READY`；`CNT-01..10` 等待浏览器/投屏门禁；`AGT/ACT/WFL/HUB` 分别规划入站访问、语义动作、工作流/挑战和能力生态；`CNT-11..16` 是第二阶段模型能力。
+- `CEF-01B READY`、`SDK-13 BLOCKED`（需真实接收端 Harness）；`CNT-01..10` 等待浏览器/投屏门禁；`AGT/ACT/WFL/HUB` 分别规划入站访问、语义动作、工作流/挑战和能力生态；`CNT-11..16` 是第二阶段模型能力。
 
 ## 5. 权威与历史
 
