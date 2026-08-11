@@ -1,6 +1,6 @@
 # SDK：Cast-SDK 集成 Roadmap
 
-状态：`FND-08 DONE`；`SDK-01..12 DONE`；`SDK-13 BLOCKED`（需真实接收端 Harness，当前环境无真机）；`SDK-15/16` 为 Partner/TV Cast Manifest 的后续外部依赖任务。任务数 16。源码固定为 Cast-SDK `44c3a99871aa1e68cbda71eacefbb41d23a747a8`，通过 `third_party/cast-sdk` submodule 接入；不得依赖开发者本机源码路径。
+状态：`FND-08 DONE`；`SDK-01..12 DONE`；`SDK-13 BLOCKED`（需真实接收端 Harness，当前环境无真机）；`SDK-14 BLOCKED`（依赖 SDK-13 的真机证据，同步阻塞）；`SDK-15/16` 为 Partner/TV Cast Manifest 的后续外部依赖任务。任务数 16。源码固定为 Cast-SDK `44c3a99871aa1e68cbda71eacefbb41d23a747a8`，通过 `third_party/cast-sdk` submodule 接入；不得依赖开发者本机源码路径。
 
 ## 边界
 
