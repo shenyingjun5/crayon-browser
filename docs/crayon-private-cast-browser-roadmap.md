@@ -3,13 +3,13 @@
 - 版本：v0.7
 - 日期：2026-08-11
 - 状态：活跃
-- 当前任务总数：218
+- 当前任务总数：227
 - 当前测试用例总数：186
 
 ## 1. 当前结论
 
 - 品牌资产 `BRD-01..04`、Foundation 19 项、`MED-01..19`、`CEF-01A..01D`、`BUX-01`、`SDK-01..12` 已完成，共 59 项。
-- 当前阶段优先完成并实机跑通 Windows 全部基础浏览器功能：`CEF-02W DONE` 已交付正式多进程/sandbox，`CEF-03 IN_PROGRESS`，`BUX-02 READY`；`CEF-01E VERIFIED` 的 macOS 双架构/实机证据及 `CEF-02M` 后置，不再阻塞 Windows。`SDK-13 BLOCKED`，等待真实接收端 Harness。Windows x64 CEF 壳、真实标题栏品牌图标、Debug/Release sandbox 和完整退出已验证，macOS App/Helper Bundle 构建图与 CI 已实现，桌面信息架构与规范功能 glyph 已冻结；实际完整 UI、macOS 平台验收、真实接收端闭环与页面数据面尚未完成。
+- 当前先执行 `RNM-01..08`，将历史 `get-video` 仓库/package/README/GitHub/本地目录统一迁移为 `crayon-browser`；`CEF-03` checkpoint 已提交并退回 `READY`，命名迁移完成后恢复 Windows 基础浏览器功能主线。`CEF-02W DONE` 已交付正式多进程/sandbox，`BUX-02 READY`；`CEF-01E VERIFIED` 的 macOS 双架构/实机证据及 `CEF-02M` 后置，不再阻塞 Windows。`SDK-13 BLOCKED`，等待真实接收端 Harness。Windows x64 CEF 壳、真实标题栏品牌图标、Debug/Release sandbox 和完整退出已验证，macOS App/Helper Bundle 构建图与 CI 已实现，桌面信息架构与规范功能 glyph 已冻结；实际完整 UI、macOS 平台验收、真实接收端闭环与页面数据面尚未完成。
 - 产品仍按“浏览器与 LAN 投屏 -> 页面数据/Markdown -> Agent 协议与语义动作 -> Workflow/Challenge -> Capability Hub/合作方 -> 模型”的依赖顺序交付。
 - CAAP、CLI/入站 MCP、高性能读页和授权操作是核心；具体模型/provider 与视频/文档总结属于第二阶段。
 - Windows/macOS 为当前桌面；HarmonyOS 只做鸿蒙电脑 PC 形态技术预览；Linux 无活跃任务。
@@ -211,8 +211,9 @@ flowchart LR
 ## 7. 当前领取顺序
 
 1. `SDK-13`：等待真实接收端 Harness，当前 `BLOCKED`，不得用 Fake 冒充真机证据。
-2. `CEF-03`：当前 `IN_PROGRESS`，在已完成的 Windows 正式多进程/sandbox 上实现窗口、标签生命周期和基础导航控制。
-3. `BUX-02`：当前 `READY`，把规范 token/glyph 接入实际 Windows UI shell；不得把空白 bootstrap 当成最终 UI。
+2. `RNM-01..08`：当前 `RNM-01 IN_PROGRESS`，完成仓库、package、README、GitHub 和本地目录命名迁移。
+3. `CEF-03`：当前 `READY`，checkpoint 已提交；命名迁移完成后恢复窗口、标签生命周期和基础导航控制。
+4. `BUX-02`：当前 `READY`，后续把规范 token/glyph 接入实际 Windows UI shell；不得把空白 bootstrap 当成最终 UI。
 4. `CEF-01E/CEF-02M`：macOS bootstrap 为 `VERIFIED`，平台证据和正式 sandbox 后置；不阻塞 Windows，也不用 Windows 结果转 `DONE`。
 4. `AGT-01` 在 `FND-08/PRV-08` 满足后冻结 CAAP v1；不得提前开放 CLI/MCP。
 5. `CNT-01` 等 `CEF-15/BUX-18/SDK-14/MED-19/PRV-08` 完成。
@@ -220,7 +221,7 @@ flowchart LR
 
 ## 8. 发布门禁
 
-- 218 项任务按所选发布范围提供真实状态、命令与证据；186 个唯一测试 ID 可追踪，P0/P1 Review 为零。
+- 227 项任务按所选发布范围提供真实状态、命令与证据；186 个唯一测试 ID 可追踪，P0/P1 Review 为零。
 - CLI/入站 MCP 共用 CAAP；出站 connector 独立；无 raw CDP/WebDriver/任意 JS/remote bind/通用文件上传。
 - 页面数据有界、action 有前置与效果、Workflow verified-only、Challenge 不绕过、self-heal 高风险 fail closed。
 - Hub route_reason/fallback 重授权和 Partner 信任/OAuth/SSRF/kill switch 通过后才开放对应 feature。

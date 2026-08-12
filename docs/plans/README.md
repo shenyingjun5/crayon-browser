@@ -23,7 +23,7 @@
 | BRD | [brand-assets-roadmap.md](brand-assets-roadmap.md) | 品牌图标母版、跨平台确定性资产与接入门禁 | `BRD-01..04 DONE` |
 | FND | [foundation-migration-roadmap.md](foundation-migration-roadmap.md) | Workspace、契约、质量入口与仓库基线 | 19 个原子任务 `DONE` |
 | MED | [media-policy-relay-roadmap.md](media-policy-relay-roadmap.md) | 媒体观察、策略、LAN Relay、外部客户端交接迁移 | `MED-01..19 DONE` |
-| CEF | [desktop-cef-browser-roadmap.md](desktop-cef-browser-roadmap.md) | Windows/macOS CEF 壳、共享 UI、媒体观察和 IPC | `CEF-02W DONE`，`CEF-03 IN_PROGRESS`；`CEF-01E VERIFIED`（待 macOS runner/实机） |
+| CEF | [desktop-cef-browser-roadmap.md](desktop-cef-browser-roadmap.md) | Windows/macOS CEF 壳、共享 UI、媒体观察和 IPC | `CEF-02W DONE`，`CEF-03 READY`（RNM 后恢复）；`CEF-01E VERIFIED`（待 macOS runner/实机） |
 | BUX | [browser-product-experience-roadmap.md](browser-product-experience-roadmap.md) | Chrome-inspired 蜡笔桌面浏览器 UI 与日用基础功能 | Windows 优先；`BUX-01 DONE`，`BUX-02 READY` |
 | SDK | [cast-sdk-integration-roadmap.md](cast-sdk-integration-roadmap.md) | 固定源码 Cast-SDK facade、发现、连接和控制；后续 Partner Cast facade | `SDK-13 BLOCKED`（需真实接收端 Harness） |
 | PLT | [desktop-platform-adapters-roadmap.md](desktop-platform-adapters-roadmap.md) | Windows/macOS 存储、网络、生命周期、更新和客户端交接 | `PLT-01` |
@@ -35,16 +35,18 @@
 | HUB | [capability-hub-roadmap.md](capability-hub-roadmap.md) | Capability Registry/Router、入站发现与出站 Partner connector | `HUB-01` 等待 `AGT-02/PRV-08` |
 | HM | [harmony-browser-roadmap.md](harmony-browser-roadmap.md) | 鸿蒙电脑 PC 形态 ArkUI/ArkWeb 技术预览 | `HM-01`，后续启动 |
 | QAR | [quality-release-roadmap.md](quality-release-roadmap.md) | Windows/macOS 构建、真实设备、性能、长稳和发布门禁 | `QAR-01` |
+| RNM | [naming-migration-roadmap.md](naming-migration-roadmap.md) | `get-video` → `crayon-browser` 仓库、包、README、GitHub 与本地路径迁移 | `RNM-01 DONE`，`RNM-02 READY` |
 
-当前共 219 个活跃任务，186 个唯一当前测试用例。`CEF-02` 已按 Windows 首发/macOS 后置拆为 `CEF-02W/02M`；Linux、浏览器 WebRTC/采集/编码等已删除范围不计入活跃总数。
+当前共 227 个活跃任务，186 个唯一当前测试用例。新增 `RNM-01..08` 命名迁移任务；`CEF-02` 已按 Windows 首发/macOS 后置拆为 `CEF-02W/02M`；Linux、浏览器 WebRTC/采集/编码等已删除范围不计入活跃总数。
 
 ## 4. 当前领取队列
 
 | 顺序 | 任务 | 状态 | 说明 |
 |---:|---|---|---|
 | 1 | `SDK-13` | BLOCKED | 真接收端 Harness（CS-010、E2E-001/002）；当前环境无真机，Harness 就绪后领取 |
-| 2 | `CEF-03` | IN_PROGRESS | `CEF-02W DONE`；正在实现 Windows 窗口/标签生命周期与基础导航控制 |
-| 3 | `BUX-02` | READY | `CEF-02W DONE`；可把规范 icon/token 接入 Windows 实际 UI shell，按单任务领取规则与 CEF-03 串行推进 |
+| 2 | `RNM-02` | READY | 命名契约已冻结；迁移 Cargo package/library/binary、活动 Rust imports 与检查脚本 |
+| 3 | `CEF-03` | READY | checkpoint 已提交；`RNM-08` 完成后从状态模型单测恢复窗口/标签主线 |
+| 4 | `BUX-02` | READY | `CEF-02W DONE`；命名迁移和 CEF-03 按单任务规则串行推进 |
 | 4 | `CEF-01E`/`CEF-02M` | VERIFIED/TODO | macOS bootstrap 已实现但平台证据后置；不得阻塞 Windows 主线，也不得用 Windows 证据完成 macOS |
 | 5 | `AGT-01` | TODO | 依赖满足后冻结 CAAP v1；不提前开放 CLI/MCP transport |
 | 6 | `CNT-01` | TODO | 等浏览器/投屏/隐私门禁后开始正式 page-data/Markdown |
