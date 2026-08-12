@@ -4,8 +4,8 @@ if(NOT DEFINED CRAYON_CEF_SHELL_SOURCE OR
 endif()
 
 file(GLOB_RECURSE production_files
-     "${CRAYON_CEF_SHELL_SOURCE}/src/*.cc"
-     "${CRAYON_CEF_SHELL_SOURCE}/src/*.h")
+     "${CRAYON_CEF_SHELL_SOURCE}/src/windows/*.cc"
+     "${CRAYON_CEF_SHELL_SOURCE}/src/windows/*.h")
 if(NOT production_files)
   message(FATAL_ERROR "CEF shell production sources are missing")
 endif()

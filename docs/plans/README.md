@@ -23,7 +23,7 @@
 | BRD | [brand-assets-roadmap.md](brand-assets-roadmap.md) | 品牌图标母版、跨平台确定性资产与接入门禁 | `BRD-01..04 DONE` |
 | FND | [foundation-migration-roadmap.md](foundation-migration-roadmap.md) | Workspace、契约、质量入口与仓库基线 | 19 个原子任务 `DONE` |
 | MED | [media-policy-relay-roadmap.md](media-policy-relay-roadmap.md) | 媒体观察、策略、LAN Relay、外部客户端交接迁移 | `MED-01..19 DONE` |
-| CEF | [desktop-cef-browser-roadmap.md](desktop-cef-browser-roadmap.md) | Windows/macOS CEF 壳、共享 UI、媒体观察和 IPC | `CEF-01A..01D DONE`，`CEF-01E READY` |
+| CEF | [desktop-cef-browser-roadmap.md](desktop-cef-browser-roadmap.md) | Windows/macOS CEF 壳、共享 UI、媒体观察和 IPC | `CEF-01A..01D DONE`，`CEF-01E VERIFIED`（待 macOS runner/实机） |
 | BUX | [browser-product-experience-roadmap.md](browser-product-experience-roadmap.md) | Chrome-inspired 蜡笔桌面浏览器 UI 与日用基础功能 | `BUX-01 DONE`，`BUX-02` 等待 `CEF-02` |
 | SDK | [cast-sdk-integration-roadmap.md](cast-sdk-integration-roadmap.md) | 固定源码 Cast-SDK facade、发现、连接和控制；后续 Partner Cast facade | `SDK-13 BLOCKED`（需真实接收端 Harness） |
 | PLT | [desktop-platform-adapters-roadmap.md](desktop-platform-adapters-roadmap.md) | Windows/macOS 存储、网络、生命周期、更新和客户端交接 | `PLT-01` |
@@ -43,7 +43,7 @@
 | 顺序 | 任务 | 状态 | 说明 |
 |---:|---|---|---|
 | 1 | `SDK-13` | BLOCKED | 真接收端 Harness（CS-010、E2E-001/002）；当前环境无真机，Harness 就绪后领取 |
-| 2 | `CEF-01E` | READY | macOS x64/arm64 bootstrap 已解锁；完成后解锁正式多进程/sandbox 任务 `CEF-02` |
+| 2 | `CEF-01E` | VERIFIED | macOS x64/arm64 bootstrap 已实现；等待 workflow 双架构与真实系统图标/启停证据，`DONE` 后才解锁 `CEF-02` |
 | 3 | `BUX-02` | TODO | `BUX-01 DONE`；等待 `CEF-02` 后把规范 icon/token 接入实际 UI shell |
 | 4 | `AGT-01` | TODO | 依赖满足后冻结 CAAP v1；不提前开放 CLI/MCP transport |
 | 5 | `CNT-01` | TODO | 等浏览器/投屏/隐私门禁后开始正式 page-data/Markdown |

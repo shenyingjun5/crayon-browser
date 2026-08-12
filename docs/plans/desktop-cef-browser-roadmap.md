@@ -1,6 +1,6 @@
 # CEF：Desktop 浏览器壳 Roadmap
 
-状态：`CEF-01A..01D DONE`，`CEF-01E READY`；Windows x64 最小 CEF 壳、运行依赖 smoke 和品牌资源装配已经完成，下一平台任务为 macOS bootstrap。当前目标平台为 Windows、macOS；Linux 不在当前范围。每项以目标路径、测试 ID 和证据作为验收，不以单平台截图替代。
+状态：`CEF-01A..01D DONE`，`CEF-01E VERIFIED`；Windows x64 最小 CEF 壳、运行依赖 smoke 和品牌资源装配已经完成，macOS bootstrap 已实现并通过本地静态/可移植编译门禁，仍等待两个 macOS runner 和真实系统图标/启停证据。当前目标平台为 Windows、macOS；Linux 不在当前范围。每项以目标路径、测试 ID 和证据作为验收，不以单平台截图替代。
 
 ## 原子任务
 
@@ -10,7 +10,7 @@
 | CEF-01B | DONE | CEF-01A | `browser/engine-api` | 不含 CEF 类型和产品策略的 C++17 `BrowserEngineAdapter` 最小接口、独立 Fake 与 compile contract | 接口 contract；Fake 生命周期/错误/重复释放；Harmony 可实现性说明 | S1 |
 | CEF-01C | DONE | CEF-01B | 根 `CMakeLists.txt`、`CMakePresets.json`、`cmake/cef` | 共享 CMake/preset、离线 CEF root 接入和最小 test target | preset/schema、无网络 configure、错误 root、RG-005 | S1 |
 | CEF-01D | DONE | CEF-01C,BRD-04 | `browser/cef-shell` Windows 构建文件、验证记录 | Windows x64 CEF 最小壳 configure/build；只消费 `assets/brand/generated/windows/app.ico`/PNG 完成 Debug/Release 资源装配 | VS2022 configure/build；启动前依赖 smoke；验证 EXE/窗口/任务栏图标；包不入 Git | S2 |
-| CEF-01E | READY | CEF-01D | macOS 构建文件、CI/验证记录 | macOS x64/arm64 configure/build；只消费 `assets/brand/generated/macos/AppIcon.iconset`/`app.icns` 并收口 bootstrap Review | 两个 macOS 架构 CI/configure/build；`iconutil`/包内图标资源复核；P0/P1=0；未实机项显式记录 | S2 |
+| CEF-01E | VERIFIED | CEF-01D | macOS 构建文件、CI/验证记录 | macOS x64/arm64 configure/build；只消费 `assets/brand/generated/macos/AppIcon.iconset`/`app.icns` 并收口 bootstrap Review | 两个 macOS 架构 CI/configure/build；`iconutil`/包内图标资源复核；P0/P1=0；未实机项显式记录 | Windows/static 证据已完成；S2 待运行 |
 | CEF-02 | TODO | CEF-01E | `browser/cef-shell/src/process` | Browser/render/GPU 子进程入口与 sandbox 开关；正式构建强制 sandbox | Windows/macOS 启动/退出；sandbox smoke；无业务代码在 main | S3 |
 | CEF-03 | TODO | CEF-02 | `src/browser/window` | 单窗口/标签生命周期、导航、前后退、刷新、停止、缩放 | BR-001、重复关闭、崩溃恢复；资源无泄漏 | S3 |
 | CEF-04 | TODO | CEF-03 | `src/browser/context` | 临时/持久 `CefRequestContext` factory，Profile ID 不用名称作路径 | BR-002、PV-001、PV-004 基础；context 隔离 | S3 |
@@ -118,6 +118,30 @@
 - 平台验证：在 Windows 桌面实际启动 Debug EXE，窗口标题为“蜡笔 AI Agent 投屏浏览器”，CEF `RootWebArea` 可见；标题栏使用 `app.ico` 内的 `micro` 小尺寸品牌图标。通过窗口关闭按钮退出后，Computer Use 返回目标窗口数 `0`，按完整 EXE 路径查询的主/子进程残留数为 `0`。
 - Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性完成独立复核；最终 P0/P1/P2/P3 均为 `0`。
 - 未覆盖与风险：当前 VS2022 未安装 ATL，CEF 官方配置自动关闭 `USE_ATL`；bootstrap 使用 `USE_SANDBOX=OFF`，正式多进程 sandbox 强制仍由 `CEF-02` 完成。macOS x64/arm64 未用 Windows 证据代替，由已解锁的 `CEF-01E` 验证。
+
+### CEF-01E macOS x64/arm64 最小 CEF 壳（已实现，待平台证据）
+
+- 状态：`VERIFIED`；依赖 `CEF-01D DONE`；未达到 `DONE`，因此尚未解锁 `CEF-02`。
+- 单一目标：让与 Windows bootstrap 行为一致的最小产品壳在 macOS x64/arm64 形成可复现的 App/Helper Bundle 构建和验证门禁；本任务不实现地址栏、标签、Profile、权限、媒体观察或投屏业务。
+- 输入：01D 已验证的最小生命周期与 `about:blank` 边界、CEF 150 固定发行包中的 macOS 官方 main/helper 装配方式、BRD-04 受管 `assets/brand/generated/macos/app.icns` 与 `AppIcon.iconset`、现有两个 macOS preset。
+- 输出与允许修改：根/`browser/cef-shell` CMake、`browser/cef-shell/src/macos/`、`browser/cef-shell/resources/macos/`、该模块独立 contract、macOS CI workflow，以及本 Roadmap/current 索引的任务状态和证据。CI 只允许通过仓库固定 manifest/downloader 获取对应架构 Standard archive，产物仅进入 runner/build 缓存。
+- 禁止修改：`browser/engine-api` 接口/行为、Windows 产品行为、Harmony 壳、Rust workspace/schema、受管品牌资产及生成器、Cast-SDK、媒体/Relay/隐私/Agent 逻辑、CEF revision/hash；不得提交 CEF archive、解压根、Framework、App/Helper Bundle 或 build 产物，不得引入公网初始页、WebRTC/采集/编码或真实模型 provider。
+- 产品行为：Browser process 初始化后仅创建一个受限 `about:blank` 窗口；最后 Browser 关闭后退出消息循环并逆序 `CefShutdown`。macOS 主进程通过 `CefScopedLibraryLoader::LoadInMain` 加载 Framework；Renderer/GPU 等子进程只由独立 Helper 入口执行 `LoadInHelper`/`CefExecuteProcess`，不承载产品业务。
+- Bundle/资源契约：主 App 包含 CEF Framework、CEF 要求的所有 Helper 变体和受管 `app.icns`；主/Helper bundle identifier、可执行名和版本由命名变量生成，不在多个 plist 中散落复制；图标只从受管 macOS 资产复制，不重新生成或手工改图。Bootstrap 阶段保持与 01D 一致的 sandbox 边界，正式强制与细化由 `CEF-02` 完成。
+- 错误、边界与释放：Framework 主进程/Helper 加载失败、产品资源缺失、CEF 初始化失败均返回稳定非零；Browser 创建失败必须退出消息循环；重复/迟到 close 不产生负计数或二次 shutdown；Helper 仅返回 CEF 子进程退出码。生产热路径不记录 URL、标题、Cookie、Authorization 或页面正文。
+- 自动验收：Windows 构建仍通过；非 Apple 平台不得生成 macOS target/Bundle。源码/CMake contract 验证主/Helper 入口分离、所有 Helper 变体被装配、唯一 `about:blank`、无公网 URL/下载 primitive/Cast/Relay/WebRTC/采集/编码/测试实现、`app.icns` 来自受管路径，且 archive/build/Bundle 被忽略。
+- 平台验收：macOS x64 与 arm64 分别使用固定对应 CEF archive 运行 configure/build/ctest；检查主 App、Framework、Helper 变体、Info.plist、可执行架构和 `Resources/app.icns`；用 `iconutil` 验证受管 iconset 可生成 icns，并在真实 macOS 启动/关闭主 App，确认 Dock/标题品牌图标、单窗口与无残留 Helper。任一架构或真实系统遮罩未验证时最多为 `VERIFIED/BLOCKED`，不得转 `DONE`。
+- 测试命令：Windows 先运行 macOS 静态 contract 与 `scripts/check.ps1 brand-assets`；macOS CI 每个架构运行固定下载校验、`cmake --preset <macos-*-cef-debug>`、`cmake --build --preset <macos-*-cef-debug>`、`ctest --preset <macos-*-cef-debug>`、bundle contract、`iconutil` 验证和 `git diff --check`。另运行 `scripts/check.ps1 fast`、`scripts/check.ps1 security` 与适用的 C++/Objective-C++ format 检查。
+- 完成证据：两架构 runner 的 archive hash、configure/build/test、Bundle/架构/iconutil、真实 App 启停/图标、Code Review 和未覆盖项；证据齐全且 P0/P1 为 0 后转 `DONE` 并解锁 `CEF-02`。
+
+阶段验证记录（2026-08-12）：
+
+- 实现：新增 macOS 主 App 与独立 Helper 入口、CEF 官方五种 Helper Bundle 装配、Framework 复制、受管 `app.icns`/iconset 和中英文 `InfoPlist.strings`、主/Helper plist、架构/Bundle/图标包测试，以及 x86_64/arm64 GitHub Actions 矩阵。主 App 只打开 `about:blank`；Helper 只执行 `LoadInHelper`/`CefExecuteProcess`；bootstrap 继续显式 `USE_SANDBOX=OFF`，正式 sandbox 仍属于 `CEF-02`。
+- 固定发行包：在本机下载 macOS arm64 Standard archive，SHA-1 为 `2e77063444e3ca07aea2651b763d3c4248bf2543`，与锁定 manifest 一致；archive/解压根均留在 `.cache/cef` 并被 Git 忽略。该包只用于核对同 revision 官方 App/Helper 装配，没有把 vendor 示例复制进产品模块。
+- 失败基线与修复：新增 Windows 可移植 C++ 编译门禁后首次构建失败，准确发现 `BrowserViewDelegate` 因禁止拷贝宏缺少显式默认构造；补构造后通过。Review 同时发现 GitHub macOS runner 的 BSD `find` 不支持 GNU `-maxdepth/-mindepth`，已改为有界 Bash glob 和唯一目录计数。
+- 自动验证：固定 Windows CEF root 下 `cmake --build --preset windows-cef-debug --config Debug` 成功，并额外编译 macOS `app.cc` 可移植核心；`ctest --preset windows-cef-debug -C Debug --output-on-failure` 为 `8/8` 通过。`cmake -P browser/cef-shell/tests/macos_source_contract.cmake`、`scripts/check.ps1 brand-assets`、`scripts/check.ps1 fast`、`scripts/check.ps1 security` 与 `git diff --check` 通过；品牌验证覆盖 27 个生成文件。当前 Windows 环境没有可调用的 `clang-format`，Objective-C++ 独立 format 未运行，Rust workspace format 已由 `fast` 通过。
+- Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和维护性复核；关闭默认构造/API 编译、BSD runner 脚本两个问题，最终本地审查 P0/P1/P2/P3 均为 `0`。
+- 未覆盖与阻塞：workflow 尚未在远程执行，因此没有 macOS x64/arm64 configure/build/ctest、`lipo`、`plutil`、`iconutil` 和 Bundle 产物证据；真实 macOS App 启停、Helper 残留与系统遮罩图标也未复核。按本 Roadmap 边界维持 `VERIFIED`，不得用 Windows 结果转 `DONE` 或提前领取 `CEF-02`。
 
 ### CEF-01C～CEF-01E 边界
 

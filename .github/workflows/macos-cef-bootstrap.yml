@@ -1,0 +1,92 @@
+name: macOS CEF bootstrap
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/macos-cef-bootstrap.yml"
+      - "assets/brand/generated/macos/**"
+      - "browser/cef-shell/**"
+      - "cmake/cef/**"
+      - "CMakeLists.txt"
+      - "CMakePresets.json"
+  pull_request:
+    paths:
+      - ".github/workflows/macos-cef-bootstrap.yml"
+      - "assets/brand/generated/macos/**"
+      - "browser/cef-shell/**"
+      - "cmake/cef/**"
+      - "CMakeLists.txt"
+      - "CMakePresets.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-cef-bootstrap-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.arch }} CEF bootstrap
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: macos-15-intel
+            cef_platform: macosx64
+            preset: macos-x64-cef-debug
+          - arch: arm64
+            runner: macos-15
+            cef_platform: macosarm64
+            preset: macos-arm64-cef-debug
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache fixed CEF archive
+        uses: actions/cache@v4
+        with:
+          path: .cache/cef/*.tar.bz2
+          key: cef-150.0.10-${{ matrix.cef_platform }}
+
+      - name: Download and verify fixed CEF archive
+        run: >-
+          cmake
+          -DCRAYON_CEF_PLATFORM=${{ matrix.cef_platform }}
+          -DCRAYON_CEF_CACHE_DIR=${{ github.workspace }}/.cache/cef
+          -P cmake/cef/DownloadCef.cmake
+
+      - name: Extract CEF archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          archives=(.cache/cef/*_${{ matrix.cef_platform }}.tar.bz2)
+          test "${#archives[@]}" -eq 1
+          archive="${archives[0]}"
+          extract_root=".cache/cef/${{ matrix.cef_platform }}-root"
+          mkdir -p "$extract_root"
+          cmake -E chdir "$extract_root" cmake -E tar xjf "${{ github.workspace }}/$archive"
+          extracted_roots=("$extract_root"/*)
+          test "${#extracted_roots[@]}" -eq 1
+          cef_root="${extracted_roots[0]}"
+          test -d "$cef_root"
+          echo "CRAYON_CEF_ROOT=${{ github.workspace }}/$cef_root" >> "$GITHUB_ENV"
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }}
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+
+      - name: Test bundle, helpers, architecture and icons
+        run: ctest --preset ${{ matrix.preset }}
+
+      - name: Validate generated files
+        run: git diff --check

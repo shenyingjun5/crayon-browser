@@ -46,7 +46,7 @@ Cast-SDK source lock 的当前事实位于 `config/cast-sdk-source.toml`、`.git
 - CEF 固定基线为 `150.0.10+g8042e43+chromium-150.0.7871.101` Standard。历史四平台 hash 已锁定，Windows x64 archive 已校验；后续产品构建只推进 Windows/macOS。
 - Cast-SDK source revision 已由 `SDK-01` 固定并通过 `RG-008`；facade、Fake、真实 service 生命周期、能力缓存、投送执行、会话监督与 runtime 用例编排已完成；真机接收端闭环（`SDK-13`）尚未完成。
 - `MED-19` 已完成：投屏决策集合为 `Direct/Relay/ExternalClientHandoff/Reject`，旧 `mirror` wire 值保留兼容读取窗口且不再发出；`tab_video`/`system_audio` 仅作为 `crayon-domain` 遗留字段存在，策略与 runtime 代码不再引用，不得继续扩张。
-- `browser/engine-api` 的 C++17 跨 CEF/ArkWeb 契约已由 `CEF-01B` 冻结并通过 GCC/MSVC 双编译器与 contract；`CEF-01C` 已建立 Windows/macOS 共用的离线 CEF 构建图，`CEF-01D` 已交付可启动、可关闭且无残留进程的 Windows x64 最小 CEF 壳和受管标题栏品牌图标。`BUX-01` 已冻结 Chrome-inspired 两层信息架构、共享 token、21 个自有功能 glyph 和 8 份规格 golden；实际 UI 接入仍等待 `CEF-02/BUX-02`。`CEF-01E READY`、`SDK-13 BLOCKED`（需真实接收端 Harness）；`CNT-01..10` 等待浏览器/投屏门禁；`AGT/ACT/WFL/HUB` 分别规划入站访问、语义动作、工作流/挑战和能力生态；`CNT-11..16` 是第二阶段模型能力。
+- `browser/engine-api` 的 C++17 跨 CEF/ArkWeb 契约已由 `CEF-01B` 冻结并通过 GCC/MSVC 双编译器与 contract；`CEF-01C` 已建立 Windows/macOS 共用的离线 CEF 构建图，`CEF-01D` 已交付可启动、可关闭且无残留进程的 Windows x64 最小 CEF 壳和受管标题栏品牌图标。`CEF-01E VERIFIED`：macOS App/Helper Bundle、受管图标/本地化资源、双架构 workflow 和包验证已实现，本地静态契约、Windows 可移植编译及全仓门禁通过，但远程 macOS x64/arm64 runner 与真实系统图标/启停证据未完成，不能转 `DONE` 或解锁 `CEF-02`。`BUX-01` 已冻结 Chrome-inspired 两层信息架构、共享 token、21 个自有功能 glyph 和 8 份规格 golden；实际 UI 接入仍等待 `CEF-02/BUX-02`。`SDK-13 BLOCKED`（需真实接收端 Harness）；`CNT-01..10` 等待浏览器/投屏门禁；`AGT/ACT/WFL/HUB` 分别规划入站访问、语义动作、工作流/挑战和能力生态；`CNT-11..16` 是第二阶段模型能力。
 
 ## 5. 权威与历史
 
