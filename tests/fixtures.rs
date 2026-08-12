@@ -10,9 +10,9 @@ use axum::{
     routing::get,
     Router,
 };
+use crayon_browser_core::extract::{parse_html, Extractor, Format, Protocol, RulePack};
+use crayon_browser_core::relay::{self, RelayConfig};
 use futures_util::StreamExt;
-use get_video::extract::{parse_html, Extractor, Format, Protocol, RulePack};
-use get_video::relay::{self, RelayConfig};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -89,7 +89,7 @@ fn proxy_url(relay_base: &str, target: &str, extra_query: &str) -> String {
     let mut u = format!(
         "{}/proxy/{}",
         relay_base,
-        get_video::encode_url_component(target)
+        crayon_browser_core::encode_url_component(target)
     );
     if !extra_query.is_empty() {
         u.push('?');
@@ -472,8 +472,11 @@ async fn extract_format_for(page: &str) -> Format {
     info.formats.into_iter().next().unwrap()
 }
 
-fn bili_endpoints(upstream: &str, pgc_path: &str) -> get_video::extract::sites::BiliEndpoints {
-    get_video::extract::sites::BiliEndpoints {
+fn bili_endpoints(
+    upstream: &str,
+    pgc_path: &str,
+) -> crayon_browser_core::extract::sites::BiliEndpoints {
+    crayon_browser_core::extract::sites::BiliEndpoints {
         pgc: format!("{upstream}{pgc_path}"),
         ugc: format!("{upstream}/bili/x/player/playurl"),
         view: format!("{upstream}/bili/x/web-interface/view"),

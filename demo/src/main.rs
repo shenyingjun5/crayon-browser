@@ -9,8 +9,8 @@
 //!
 //! CLI 验证模式：`get-video-demo --sniff-cli <url>`，跑完打印 SNIFF_RESULT_JSON 后退出。
 
-use get_video::extract::{guess_quality, origin_of, Candidate, Extractor, Protocol, RulePack};
-use get_video::relay::{self, RelayConfig, RelayHandle};
+use crayon_browser_core::extract::{guess_quality, origin_of, Candidate, Extractor, Protocol, RulePack};
+use crayon_browser_core::relay::{self, RelayConfig, RelayHandle};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -316,7 +316,7 @@ async fn do_sniff(app: &AppHandle, url: &str) -> Result<SniffResponse, String> {
                 hit_page_origin
             },
         );
-        headers.insert("User-Agent".to_string(), get_video::DEFAULT_UA.to_string());
+        headers.insert("User-Agent".to_string(), crayon_browser_core::DEFAULT_UA.to_string());
         let drm = extractor.detect_drm(&cand, &headers).await;
         let relay_url = if drm {
             None

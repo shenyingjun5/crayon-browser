@@ -4,9 +4,9 @@
 //! 脚本化响应、请求录制），断网环境可跑；relay 走 `--allow-private-hosts`
 //! 等价的 `allow_private_hosts: true` 测试钩子（仅指向本机 mock）。
 
+use crayon_browser_core::extract::{Extractor, RulePack};
+use crayon_browser_core::relay::{self, RelayConfig};
 use futures_util::StreamExt;
-use get_video::extract::{Extractor, RulePack};
-use get_video::relay::{self, RelayConfig};
 use reqwest::header;
 use std::time::Duration;
 use test_support::upstream::{MockUpstream, UpstreamScript};
@@ -35,7 +35,7 @@ fn proxy_url(relay_base: &str, target: &str) -> String {
     format!(
         "{}/proxy/{}",
         relay_base,
-        get_video::encode_url_component(target)
+        crayon_browser_core::encode_url_component(target)
     )
 }
 
@@ -264,7 +264,7 @@ async fn r4_local_aes128_key_rewrite_not_drm() {
 
     // D5：AES-128 + 公开 key ≠ DRM
     assert!(
-        !get_video::drm::hls_is_drm(&body),
+        !crayon_browser_core::drm::hls_is_drm(&body),
         "AES-128 公开 key 不应标记 DRM"
     );
     relay.shutdown().await;
@@ -430,5 +430,8 @@ async fn d3_local_dash_multi_drm() {
         text.contains("ContentProtection"),
         "夹具前提：应含 ContentProtection"
     );
-    assert!(get_video::drm::mpd_is_drm(&text), "应标记 drm:true");
+    assert!(
+        crayon_browser_core::drm::mpd_is_drm(&text),
+        "应标记 drm:true"
+    );
 }

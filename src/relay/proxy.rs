@@ -107,7 +107,7 @@ pub async fn proxy_handler(
     upstream_headers.insert(
         header::USER_AGENT,
         HeaderValue::from_str(ua.as_deref().unwrap_or(crate::DEFAULT_UA))
-            .unwrap_or_else(|_| HeaderValue::from_static("get-video")),
+            .unwrap_or_else(|_| HeaderValue::from_static("crayon-legacy-video-tool")),
     );
     let referer_value = referer
         .clone()

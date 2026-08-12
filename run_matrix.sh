@@ -1,6 +1,7 @@
 #!/bin/bash
 # 站点覆盖测试脚本：extract -> (空则) sniff，日志存 logs/
-cd /Users/shenyingjun/Work/get-video
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+cd "$SCRIPT_DIR"
 mkdir -p logs
 
 timeout() {
@@ -15,9 +16,9 @@ timeout() {
 
 run_one() {
   local id="$1" url="$2"
-  pkill -f get-video-app 2>/dev/null; sleep 1
+  pkill -f crayon-legacy-app 2>/dev/null; sleep 1
   echo "=== [$id] extract: $url"
-  timeout 120 ./target/debug/get-video-app --extract-cli "$url" > "logs/${id}_extract.log" 2>&1
+  timeout 120 ./target/debug/crayon-legacy-app --extract-cli "$url" > "logs/${id}_extract.log" 2>&1
   local json
   json=$(grep -o 'EXTRACT_RESULT_JSON: .*' "logs/${id}_extract.log" | head -1 | sed 's/EXTRACT_RESULT_JSON: //')
   local need_sniff=1
@@ -37,9 +38,9 @@ except Exception:
     echo "!!! [$id] 无 EXTRACT_RESULT_JSON 输出"
   fi
   if [ "$need_sniff" = "1" ]; then
-    pkill -f get-video-app 2>/dev/null; sleep 1
+    pkill -f crayon-legacy-app 2>/dev/null; sleep 1
     echo "=== [$id] sniff: $url"
-    timeout 120 ./target/debug/get-video-app --sniff-cli "$url" > "logs/${id}_sniff.log" 2>&1
+    timeout 120 ./target/debug/crayon-legacy-app --sniff-cli "$url" > "logs/${id}_sniff.log" 2>&1
   fi
 }
 

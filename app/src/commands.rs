@@ -8,7 +8,7 @@ use crate::legacy_sniff::do_sniff;
 use crate::login::site_cookie_header;
 use crate::models::{extract_probe_targets, sniff_probe_targets, SniffResponse};
 use crate::runtime::AppState;
-use get_video::extract::{Extractor, RulePack, VideoInfo};
+use crayon_browser_core::extract::{Extractor, RulePack, VideoInfo};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tauri::{AppHandle, Manager};
@@ -80,9 +80,9 @@ pub(crate) async fn extract(app: AppHandle, url: String) -> Result<VideoInfo, St
     r
 }
 
-/// 加载 L3 规则包：环境变量 GET_VIDEO_RULES 指向本地 JSON；未设置/加载失败用空包。
+/// 加载 L3 规则包：环境变量 CRAYON_LEGACY_RULES 指向本地 JSON；未设置/加载失败用空包。
 fn load_rule_pack() -> RulePack {
-    match std::env::var("GET_VIDEO_RULES") {
+    match std::env::var("CRAYON_LEGACY_RULES") {
         Ok(p) if !p.is_empty() => match RulePack::load(std::path::Path::new(&p)) {
             Ok(rp) => {
                 println!("[extract] 规则包已加载: {p}");

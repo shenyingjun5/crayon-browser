@@ -47,15 +47,15 @@ case "$mode" in
         run_step brand-assets-unit node --test tools/brand-assets/tests/managed-paths.test.mjs
         run_step brand-assets node tools/brand-assets/verify.mjs
         run_step formal-workspace cargo test --workspace
-        run_step legacy-unit cargo test -p get-video --no-default-features --features legacy-dev --lib
+        run_step legacy-unit cargo test -p crayon-browser-core --no-default-features --features legacy-dev --lib
         ;;
     core)
         run_step formal-workspace cargo test --workspace
-        run_step legacy-package cargo test -p get-video --no-default-features --features legacy-dev
+        run_step legacy-package cargo test -p crayon-browser-core --no-default-features --features legacy-dev
         ;;
     security)
         run_step guard cargo run --quiet -p repo-guard -- scan --root "$repo_root"
-        run_step relay-unit cargo test -p get-video --no-default-features --features legacy-dev relay::
+        run_step relay-unit cargo test -p crayon-browser-core --no-default-features --features legacy-dev relay::
         run_step relay-security cargo test --no-default-features --features legacy-dev --test fixtures security::
         ;;
     brand-assets)
@@ -68,7 +68,7 @@ case "$mode" in
         run_step brand-assets-unit node --test tools/brand-assets/tests/managed-paths.test.mjs
         run_step brand-assets node tools/brand-assets/verify.mjs
         run_step formal-workspace cargo test --workspace
-        run_step legacy-package cargo test -p get-video --no-default-features --features legacy-dev
+        run_step legacy-package cargo test -p crayon-browser-core --no-default-features --features legacy-dev
         ;;
     *)
         echo "usage: scripts/check.sh [fast|core|security|brand-assets|all]" >&2

@@ -1,5 +1,5 @@
 [package]
-name = "get-video-app"
+name = "crayon-legacy-app"
 version = "0.1.0"
 edition = "2021"
 description = "Legacy-dev Tauri migration shell; not a formal product target"
@@ -9,7 +9,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 crayon-legacy-adapter = { path = "../crates/crayon-legacy-adapter" }
-get-video = { path = "..", default-features = false, features = ["legacy-dev"] }
+crayon-browser-core = { path = "..", default-features = false, features = ["legacy-dev"] }
 tauri = { version = "2.11.5", features = [] }
 axum = "0.8"
 serde = { version = "1", features = ["derive"] }

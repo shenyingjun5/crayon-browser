@@ -23,9 +23,9 @@ pub(crate) async fn probe_one(app: &AppHandle, relay_url: &str) -> Option<&'stat
     let page = format!(
         "{}/probeplayer?src={}&id={}&report={}",
         state.relay_base,
-        get_video::encode_url_component(relay_url),
+        crayon_browser_core::encode_url_component(relay_url),
         id,
-        get_video::encode_url_component("http://127.0.0.1:8377")
+        crayon_browser_core::encode_url_component("http://127.0.0.1:8377")
     );
     // 隐藏窗口须主线程创建（GTK 约束，macOS 同样保险）
     let label = format!("probe-{id}");
@@ -60,18 +60,18 @@ pub(crate) async fn probe_one(app: &AppHandle, relay_url: &str) -> Option<&'stat
     });
 
     let rep = report?;
-    let stats: Vec<get_video::probe::FrameStat> = rep
+    let stats: Vec<crayon_browser_core::probe::FrameStat> = rep
         .frames
         .iter()
-        .map(|&(mean, std)| get_video::probe::FrameStat { mean, std })
+        .map(|&(mean, std)| crayon_browser_core::probe::FrameStat { mean, std })
         .collect();
     // 超时不算加载失败（可能是网络慢），播放器 error 事件才算确定性失败
     let load_error = matches!(rep.err.as_deref(), Some(e) if e != "timeout");
-    match get_video::probe::probe_verdict(&stats, load_error) {
-        get_video::probe::ProbeVerdict::Scrambled => Some(get_video::probe::SCRAMBLED_REASON),
-        get_video::probe::ProbeVerdict::LoadFailed => Some(get_video::probe::LOAD_FAILED_REASON),
-        get_video::probe::ProbeVerdict::Playable => None,
-        get_video::probe::ProbeVerdict::Inconclusive => {
+    match crayon_browser_core::probe::probe_verdict(&stats, load_error) {
+        crayon_browser_core::probe::ProbeVerdict::Scrambled => Some(crayon_browser_core::probe::SCRAMBLED_REASON),
+        crayon_browser_core::probe::ProbeVerdict::LoadFailed => Some(crayon_browser_core::probe::LOAD_FAILED_REASON),
+        crayon_browser_core::probe::ProbeVerdict::Playable => None,
+        crayon_browser_core::probe::ProbeVerdict::Inconclusive => {
             println!("[probe] {relay_url} 无结论（err={:?}）", rep.err);
             None
         }

@@ -330,7 +330,7 @@ fn legacy_adapter_is_available_only_to_the_explicit_legacy_app() {
     let accepted = TestRepo::new("legacy-accepted");
     accepted.write(
         "Cargo.toml",
-        "[package]\nname = \"get-video-app\"\nversion = \"0.1.0\"\n[dependencies]\ncrayon-legacy-adapter = { path = \"crates/legacy\" }\n",
+        "[package]\nname = \"crayon-legacy-app\"\nversion = \"0.1.0\"\n[dependencies]\ncrayon-legacy-adapter = { path = \"crates/legacy\" }\n",
     );
     accepted.write("src/lib.rs", "pub fn value() {}\n");
     assert_eq!(status(&accepted, "RG-005"), CheckStatus::Passed);
@@ -341,7 +341,7 @@ fn formal_root_requires_legacy_runtime_dependencies_to_be_optional() {
     let rejected = TestRepo::new("formal-root-legacy-runtime");
     rejected.write(
         "Cargo.toml",
-        "[package]\nname = \"get-video\"\nversion = \"0.1.0\"\n[dependencies]\nreqwest = \"0.12\"\n",
+        "[package]\nname = \"crayon-browser-core\"\nversion = \"0.1.0\"\n[dependencies]\nreqwest = \"0.12\"\n",
     );
     rejected.write("src/lib.rs", "pub fn value() {}\n");
     assert_eq!(status(&rejected, "RG-005"), CheckStatus::Failed);
@@ -349,7 +349,7 @@ fn formal_root_requires_legacy_runtime_dependencies_to_be_optional() {
     let accepted = TestRepo::new("formal-root-optional-runtime");
     accepted.write(
         "Cargo.toml",
-        "[package]\nname = \"get-video\"\nversion = \"0.1.0\"\n[features]\nlegacy-dev = [\"dep:reqwest\"]\n[dependencies]\nreqwest = { version = \"0.12\", optional = true }\n",
+        "[package]\nname = \"crayon-browser-core\"\nversion = \"0.1.0\"\n[features]\nlegacy-dev = [\"dep:reqwest\"]\n[dependencies]\nreqwest = { version = \"0.12\", optional = true }\n",
     );
     accepted.write("src/lib.rs", "pub fn value() {}\n");
     assert_eq!(status(&accepted, "RG-005"), CheckStatus::Passed);
@@ -357,7 +357,7 @@ fn formal_root_requires_legacy_runtime_dependencies_to_be_optional() {
     let leaked = TestRepo::new("formal-root-feature-leak");
     leaked.write(
         "Cargo.toml",
-        "[package]\nname = \"get-video\"\nversion = \"0.1.0\"\n[features]\nformal-product = [\"dep:reqwest\"]\nlegacy-dev = [\"dep:reqwest\"]\n[dependencies]\nreqwest = { version = \"0.12\", optional = true }\n",
+        "[package]\nname = \"crayon-browser-core\"\nversion = \"0.1.0\"\n[features]\nformal-product = [\"dep:reqwest\"]\nlegacy-dev = [\"dep:reqwest\"]\n[dependencies]\nreqwest = { version = \"0.12\", optional = true }\n",
     );
     leaked.write("src/lib.rs", "pub fn value() {}\n");
     assert_eq!(status(&leaked, "RG-005"), CheckStatus::Failed);

@@ -1,13 +1,13 @@
 //! 在线测试（docs/test-cases.md 的 [在线] 用例）：依赖公网资源，可能随时间失效。
 //!
 //! 运行方式（手工兼容测试，双重显式启用）：
-//! `GET_VIDEO_ONLINE=1 cargo test --test online -- --ignored --test-threads=1`
+//! `CRAYON_LEGACY_ONLINE=1 cargo test --test online -- --ignored --test-threads=1`
 //!
 //! 未设置环境变量时全部跳过且不作为产品失败；输出不得包含 URL 或账号信息。
 
+use crayon_browser_core::extract::{Extractor, RulePack};
+use crayon_browser_core::relay::{self, RelayConfig};
 use futures_util::StreamExt;
-use get_video::extract::{Extractor, RulePack};
-use get_video::relay::{self, RelayConfig};
 use reqwest::header;
 use std::time::Duration;
 
@@ -45,17 +45,17 @@ fn client() -> reqwest::Client {
         .unwrap()
 }
 
-/// 手工在线兼容测试门禁：必须显式设置 GET_VIDEO_ONLINE=1（且 --ignored）。
+/// 手工在线兼容测试门禁：必须显式设置 CRAYON_LEGACY_ONLINE=1（且 --ignored）。
 /// 未启用时跳过，不作为产品单测失败。
 fn online_enabled() -> bool {
-    matches!(std::env::var("GET_VIDEO_ONLINE"), Ok(v) if v == "1")
+    matches!(std::env::var("CRAYON_LEGACY_ONLINE"), Ok(v) if v == "1")
 }
 
 fn proxy_url(relay_base: &str, target: &str) -> String {
     format!(
         "{}/proxy/{}",
         relay_base,
-        get_video::encode_url_component(target)
+        crayon_browser_core::encode_url_component(target)
     )
 }
 
@@ -64,7 +64,7 @@ fn proxy_url(relay_base: &str, target: &str) -> String {
 #[ignore]
 async fn e1_w3schools_page_mp4() {
     if !online_enabled() {
-        eprintln!("skip: GET_VIDEO_ONLINE=1 未设置（手工兼容测试）");
+        eprintln!("skip: CRAYON_LEGACY_ONLINE=1 未设置（手工兼容测试）");
         return;
     }
     let relay = spawn_relay().await;
@@ -91,7 +91,7 @@ async fn e1_w3schools_page_mp4() {
 #[ignore]
 async fn r1_mux_master_multibitrate() {
     if !online_enabled() {
-        eprintln!("skip: GET_VIDEO_ONLINE=1 未设置（手工兼容测试）");
+        eprintln!("skip: CRAYON_LEGACY_ONLINE=1 未设置（手工兼容测试）");
         return;
     }
     let relay = spawn_relay().await;
@@ -135,7 +135,7 @@ async fn r1_mux_master_multibitrate() {
 #[ignore]
 async fn r2_apple_byterange_playlist() {
     if !online_enabled() {
-        eprintln!("skip: GET_VIDEO_ONLINE=1 未设置（手工兼容测试）");
+        eprintln!("skip: CRAYON_LEGACY_ONLINE=1 未设置（手工兼容测试）");
         return;
     }
     let relay = spawn_relay().await;
@@ -172,7 +172,7 @@ async fn r2_apple_byterange_playlist() {
 #[ignore]
 async fn r3_apple_master_ext_x_media() {
     if !online_enabled() {
-        eprintln!("skip: GET_VIDEO_ONLINE=1 未设置（手工兼容测试）");
+        eprintln!("skip: CRAYON_LEGACY_ONLINE=1 未设置（手工兼容测试）");
         return;
     }
     let relay = spawn_relay().await;
@@ -201,7 +201,7 @@ async fn r3_apple_master_ext_x_media() {
 #[ignore]
 async fn r4_aes128_key_rewrite_not_drm() {
     if !online_enabled() {
-        eprintln!("skip: GET_VIDEO_ONLINE=1 未设置（手工兼容测试）");
+        eprintln!("skip: CRAYON_LEGACY_ONLINE=1 未设置（手工兼容测试）");
         return;
     }
     let relay = spawn_relay().await;
@@ -246,7 +246,7 @@ async fn r4_aes128_key_rewrite_not_drm() {
     );
     // D5：AES-128 + 公开 key ≠ DRM
     assert!(
-        !get_video::drm::hls_is_drm(&sub_body),
+        !crayon_browser_core::drm::hls_is_drm(&sub_body),
         "AES-128 公开 key 不应标记 DRM"
     );
     relay.shutdown().await;
@@ -257,7 +257,7 @@ async fn r4_aes128_key_rewrite_not_drm() {
 #[ignore]
 async fn r9_mp4_range_passthrough() {
     if !online_enabled() {
-        eprintln!("skip: GET_VIDEO_ONLINE=1 未设置（手工兼容测试）");
+        eprintln!("skip: CRAYON_LEGACY_ONLINE=1 未设置（手工兼容测试）");
         return;
     }
     let relay = spawn_relay().await;
@@ -281,7 +281,7 @@ async fn r9_mp4_range_passthrough() {
 #[ignore]
 async fn r11_live_hls() {
     if !online_enabled() {
-        eprintln!("skip: GET_VIDEO_ONLINE=1 未设置（手工兼容测试）");
+        eprintln!("skip: CRAYON_LEGACY_ONLINE=1 未设置（手工兼容测试）");
         return;
     }
     let relay = spawn_relay().await;
@@ -344,7 +344,7 @@ async fn r11_live_hls() {
 #[ignore]
 async fn d3_dash_multi_drm() {
     if !online_enabled() {
-        eprintln!("skip: GET_VIDEO_ONLINE=1 未设置（手工兼容测试）");
+        eprintln!("skip: CRAYON_LEGACY_ONLINE=1 未设置（手工兼容测试）");
         return;
     }
     let text = client()
@@ -359,7 +359,10 @@ async fn d3_dash_multi_drm() {
         text.contains("ContentProtection"),
         "夹具前提：应含 ContentProtection"
     );
-    assert!(get_video::drm::mpd_is_drm(&text), "应标记 drm:true");
+    assert!(
+        crayon_browser_core::drm::mpd_is_drm(&text),
+        "应标记 drm:true"
+    );
 }
 
 /// D4 在线对照：DASH VOD 无 DRM。
@@ -367,7 +370,7 @@ async fn d3_dash_multi_drm() {
 #[ignore]
 async fn d4_online_dash_vod_no_drm() {
     if !online_enabled() {
-        eprintln!("skip: GET_VIDEO_ONLINE=1 未设置（手工兼容测试）");
+        eprintln!("skip: CRAYON_LEGACY_ONLINE=1 未设置（手工兼容测试）");
         return;
     }
     let text = client()
@@ -378,7 +381,10 @@ async fn d4_online_dash_vod_no_drm() {
         .text()
         .await
         .unwrap();
-    assert!(!get_video::drm::mpd_is_drm(&text), "应标记 drm:false");
+    assert!(
+        !crayon_browser_core::drm::mpd_is_drm(&text),
+        "应标记 drm:false"
+    );
 }
 
 /// 央视纪录片：HTML 无直链，站点解析器经 guid → getHttpVideoInfo 拿到 hls。
@@ -386,7 +392,7 @@ async fn d4_online_dash_vod_no_drm() {
 #[ignore]
 async fn cctv_documentary_site_extractor() {
     if !online_enabled() {
-        eprintln!("skip: GET_VIDEO_ONLINE=1 未设置（手工兼容测试）");
+        eprintln!("skip: CRAYON_LEGACY_ONLINE=1 未设置（手工兼容测试）");
         return;
     }
     let relay = spawn_relay().await;
@@ -412,7 +418,7 @@ async fn cctv_documentary_site_extractor() {
 #[ignore]
 async fn bilibili_bangumi_site_extractor() {
     if !online_enabled() {
-        eprintln!("skip: GET_VIDEO_ONLINE=1 未设置（手工兼容测试）");
+        eprintln!("skip: CRAYON_LEGACY_ONLINE=1 未设置（手工兼容测试）");
         return;
     }
     let relay = spawn_relay().await;
@@ -445,7 +451,7 @@ async fn bilibili_bangumi_site_extractor() {
 #[ignore]
 async fn bilibili_ugc_video_site_extractor() {
     if !online_enabled() {
-        eprintln!("skip: GET_VIDEO_ONLINE=1 未设置（手工兼容测试）");
+        eprintln!("skip: CRAYON_LEGACY_ONLINE=1 未设置（手工兼容测试）");
         return;
     }
     let relay = spawn_relay().await;
@@ -473,7 +479,7 @@ async fn bilibili_ugc_video_site_extractor() {
 #[ignore]
 async fn bilibili_bangumi_ss_site_extractor() {
     if !online_enabled() {
-        eprintln!("skip: GET_VIDEO_ONLINE=1 未设置（手工兼容测试）");
+        eprintln!("skip: CRAYON_LEGACY_ONLINE=1 未设置（手工兼容测试）");
         return;
     }
     let relay = spawn_relay().await;

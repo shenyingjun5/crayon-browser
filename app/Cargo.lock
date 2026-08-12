@@ -725,6 +725,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "crayon-browser-core"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "base64 0.22.1",
+ "clap",
+ "crayon-app-runtime",
+ "crayon-cast-policy",
+ "crayon-domain",
+ "crayon-ipc-schema",
+ "crayon-media-observer",
+ "crayon-media-probe",
+ "futures-util",
+ "percent-encoding",
+ "regex",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+]
+
+[[package]]
 name = "crayon-cast-adapter"
 version = "0.1.0"
 dependencies = [
@@ -766,6 +791,22 @@ name = "crayon-legacy-adapter"
 version = "0.1.0"
 dependencies = [
  "crayon-domain",
+]
+
+[[package]]
+name = "crayon-legacy-app"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "crayon-browser-core",
+ "crayon-legacy-adapter",
+ "libc",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tokio",
+ "tower",
 ]
 
 [[package]]
@@ -1440,47 +1481,6 @@ checksum = "85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a"
 dependencies = [
  "typenum",
  "version_check",
-]
-
-[[package]]
-name = "get-video"
-version = "0.1.0"
-dependencies = [
- "axum",
- "base64 0.22.1",
- "clap",
- "crayon-app-runtime",
- "crayon-cast-policy",
- "crayon-domain",
- "crayon-ipc-schema",
- "crayon-media-observer",
- "crayon-media-probe",
- "futures-util",
- "percent-encoding",
- "regex",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "url",
-]
-
-[[package]]
-name = "get-video-app"
-version = "0.1.0"
-dependencies = [
- "axum",
- "crayon-legacy-adapter",
- "get-video",
- "libc",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tokio",
- "tower",
 ]
 
 [[package]]

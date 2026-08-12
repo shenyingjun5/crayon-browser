@@ -4,7 +4,7 @@
 //! 本机播放仍走 127.0.0.1。端口、回退行为与日志文案与迁移前完全一致。
 
 use crate::legacy_network::lan_ip;
-use get_video::relay::{self, DashStore, RelayConfig, RelayHandle};
+use crayon_browser_core::relay::{self, DashStore, RelayConfig, RelayHandle};
 
 /// legacy relay 启动结果：句柄 + 本机/局域网基地址 + 共享 DASH MPD 仓库。
 pub(crate) struct LegacyRelay {

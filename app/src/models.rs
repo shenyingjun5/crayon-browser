@@ -63,7 +63,7 @@ pub(crate) fn sniff_probe_targets(resp: &SniffResponse) -> Vec<ProbeTarget> {
             r.restriction.is_none()
                 && !r.drm
                 && (r.protocol == "hls" || r.protocol == "mp4")
-                && get_video::probe::webview_can_judge(r.codec.as_deref())
+                && crayon_browser_core::probe::webview_can_judge(r.codec.as_deref())
         })
         .filter_map(|r| {
             r.relay_url.clone().map(|relay_url| ProbeTarget {
@@ -75,14 +75,14 @@ pub(crate) fn sniff_probe_targets(resp: &SniffResponse) -> Vec<ProbeTarget> {
 }
 
 /// 提取结果中需要跑解码探针的候选（同嗅探链路的筛选口径）。
-pub(crate) fn extract_probe_targets(info: &get_video::extract::VideoInfo) -> Vec<ProbeTarget> {
+pub(crate) fn extract_probe_targets(info: &crayon_browser_core::extract::VideoInfo) -> Vec<ProbeTarget> {
     info.formats
         .iter()
         .filter(|f| {
             f.restriction.is_none()
                 && !f.drm
                 && (f.protocol == "hls" || f.protocol == "mp4")
-                && get_video::probe::webview_can_judge(f.codec.as_deref())
+                && crayon_browser_core::probe::webview_can_judge(f.codec.as_deref())
         })
         .filter_map(|f| {
             f.relay_url.clone().map(|relay_url| ProbeTarget {

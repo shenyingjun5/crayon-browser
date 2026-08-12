@@ -6,7 +6,7 @@
 use crate::legacy_sniffer::SNIFF_JS;
 use crate::models::{SniffHit, SniffResponse, SniffResultItem};
 use crate::runtime::{push_hit, AppState};
-use get_video::extract::{guess_quality, origin_of, Candidate, Extractor, Protocol, RulePack};
+use crayon_browser_core::extract::{guess_quality, origin_of, Candidate, Extractor, Protocol, RulePack};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -62,7 +62,7 @@ pub(crate) async fn do_sniff(app: &AppHandle, url: &str) -> Result<SniffResponse
         // 部分站点（1905 等）按 UA 判定「浏览器不支持」而拒绝初始化播放器，
         // 统一伪装成桌面 Chrome（与 extract/relay 的 DEFAULT_UA 一致，
         // 也保证 UA 绑定的签名 URL 全链路一致）
-        .user_agent(get_video::DEFAULT_UA)
+        .user_agent(crayon_browser_core::DEFAULT_UA)
         // 注入所有框架：苹果CMS 类站点把播放器放在 iframe（甚至多级 iframe
         // 跳转线路站），只注主框架会漏掉 iframe 内的拉流请求（7sefun 实测）
         .initialization_script_for_all_frames(SNIFF_JS)
@@ -173,20 +173,20 @@ new Image().src='http://127.0.0.1:8377/diag?msg='+encodeURIComponent(msg);
                 hit_page_origin
             },
         );
-        headers.insert("User-Agent".to_string(), get_video::DEFAULT_UA.to_string());
+        headers.insert("User-Agent".to_string(), crayon_browser_core::DEFAULT_UA.to_string());
         // 受限站点（全站 DRM 名单）：页面与流地址任一命中即打标，
         // 不再拉流做 DRM 检测，也不产出 relay 地址
         let page_ctx = if hit.page.is_empty() { url } else { &hit.page };
         let mut restriction =
-            get_video::drm::restricted_reason(page_ctx, &hit.url).map(str::to_string);
+            crayon_browser_core::drm::restricted_reason(page_ctx, &hit.url).map(str::to_string);
         let mut drm = false;
         if restriction.is_none() {
             match protocol {
                 // HLS：一次拉取同时判 DRM 与活性（变体 404 即失效）
                 Protocol::Hls => match extractor.inspect_hls(&cand, &headers).await {
-                    get_video::extract::HlsVerdict::Dead(reason) => restriction = Some(reason),
-                    get_video::extract::HlsVerdict::Drm => drm = true,
-                    get_video::extract::HlsVerdict::Unknown => {}
+                    crayon_browser_core::extract::HlsVerdict::Dead(reason) => restriction = Some(reason),
+                    crayon_browser_core::extract::HlsVerdict::Drm => drm = true,
+                    crayon_browser_core::extract::HlsVerdict::Unknown => {}
                 },
                 _ => drm = extractor.detect_drm(&cand, &headers).await,
             }

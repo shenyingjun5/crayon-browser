@@ -504,13 +504,13 @@ fn enforce_product_boundaries(
         });
     }
 
-    if dependency_name == "crayon-legacy-adapter" && package != "get-video-app" {
+    if dependency_name == "crayon-legacy-adapter" && package != "crayon-legacy-app" {
         findings.push(Finding {
             severity: Severity::Error,
             path: display_path(&manifest.path),
             line: Some(dependency.line),
             message:
-                "only the explicitly excluded get-video-app may depend on crayon-legacy-adapter"
+                "only the explicitly excluded crayon-legacy-app may depend on crayon-legacy-adapter"
                     .to_owned(),
         });
     }
@@ -523,7 +523,9 @@ fn enforce_formal_root_boundary(
     findings: &mut Vec<Finding>,
 ) {
     let dependency_name = dependency.name.to_ascii_lowercase();
-    if package != "get-video" || !LEGACY_ROOT_DEPENDENCIES.contains(&dependency_name.as_str()) {
+    if package != "crayon-browser-core"
+        || !LEGACY_ROOT_DEPENDENCIES.contains(&dependency_name.as_str())
+    {
         return;
     }
 

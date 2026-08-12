@@ -56,9 +56,9 @@ try {
             'brand-assets-unit' { Invoke-CheckStep $step { node --test tools/brand-assets/tests/managed-paths.test.mjs } }
             'brand-assets' { Invoke-CheckStep $step { node tools/brand-assets/verify.mjs } }
             'formal-workspace' { Invoke-CheckStep $step { cargo test --workspace } }
-            'legacy-unit' { Invoke-CheckStep $step { cargo test -p get-video --no-default-features --features legacy-dev --lib } }
-            'legacy-package' { Invoke-CheckStep $step { cargo test -p get-video --no-default-features --features legacy-dev } }
-            'relay-unit' { Invoke-CheckStep $step { cargo test -p get-video --no-default-features --features legacy-dev relay:: } }
+            'legacy-unit' { Invoke-CheckStep $step { cargo test -p crayon-browser-core --no-default-features --features legacy-dev --lib } }
+            'legacy-package' { Invoke-CheckStep $step { cargo test -p crayon-browser-core --no-default-features --features legacy-dev } }
+            'relay-unit' { Invoke-CheckStep $step { cargo test -p crayon-browser-core --no-default-features --features legacy-dev relay:: } }
             'relay-security' { Invoke-CheckStep $step { cargo test --no-default-features --features legacy-dev --test fixtures security:: } }
         }
     }

@@ -1,22 +1,25 @@
 //! `legacy-dev` only CLI entry point for the historical relay service.
 
 use clap::Parser;
-use get_video::relay::{self, RelayConfig};
+use crayon_browser_core::relay::{self, RelayConfig};
 
 #[derive(Parser)]
-#[command(name = "get-video", about = "视频地址解析 + 本地 relay 流服务")]
+#[command(
+    name = "crayon-legacy-video-tool",
+    about = "蜡笔浏览器历史视频解析与本地 relay 开发工具"
+)]
 struct Cli {
     /// 监听地址（0.0.0.0 可供局域网设备拉流）
-    #[arg(long, env = "GET_VIDEO_HOST", default_value = "127.0.0.1")]
+    #[arg(long, env = "CRAYON_LEGACY_HOST", default_value = "127.0.0.1")]
     host: String,
     /// 监听端口
-    #[arg(long, env = "GET_VIDEO_PORT", default_value_t = 8321)]
+    #[arg(long, env = "CRAYON_LEGACY_PORT", default_value_t = 8321)]
     port: u16,
     /// L3 站点规则包本地 JSON 路径
-    #[arg(long, env = "GET_VIDEO_RULES")]
+    #[arg(long, env = "CRAYON_LEGACY_RULES")]
     rules: Option<std::path::PathBuf>,
     /// 测试钩子：允许代理内网/本机地址（关闭 SSRF 黑名单，仅本地调试用）
-    #[arg(long, env = "GET_VIDEO_ALLOW_PRIVATE")]
+    #[arg(long, env = "CRAYON_LEGACY_ALLOW_PRIVATE")]
     allow_private_hosts: bool,
 }
 
@@ -25,7 +28,7 @@ async fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "get_video=info".into()),
+                .unwrap_or_else(|_| "crayon_browser_core=info".into()),
         )
         .init();
 

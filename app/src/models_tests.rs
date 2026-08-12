@@ -128,7 +128,7 @@ fn extract_probe_targets_same_criteria() {
                restriction: Option<&str>,
                relay_url: Option<&str>,
                codec: Option<&str>| {
-        get_video::extract::Format {
+        crayon_browser_core::extract::Format {
             url: format!("https://cdn.example.com/v.{protocol}"),
             protocol: protocol.to_string(),
             quality: None,
@@ -139,7 +139,7 @@ fn extract_probe_targets_same_criteria() {
             codec: codec.map(str::to_string),
         }
     };
-    let info = get_video::extract::VideoInfo {
+    let info = crayon_browser_core::extract::VideoInfo {
         title: None,
         webpage: "https://example.com/".to_string(),
         source: "static".to_string(),

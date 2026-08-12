@@ -10,7 +10,7 @@
 //! - `busy`：sniff/extract 命令的防重入标志（同时只跑一个任务）。
 
 use crate::models::{ProbeReport, SniffHit};
-use get_video::relay::RelayHandle;
+use crayon_browser_core::relay::RelayHandle;
 use std::collections::HashMap;
 use std::sync::atomic::AtomicBool;
 use std::sync::Mutex;
@@ -22,7 +22,7 @@ pub(crate) struct AppState {
     /// 局域网可访问的 relay 基地址（投屏给手机/电视用），如 `http://192.168.1.8:8321`。
     pub(crate) lan_base: String,
     /// 与 relay 共享的 DASH MPD 仓库（提取器写入，/dashmpd/{id} 读出）。
-    pub(crate) dash_store: get_video::relay::DashStore,
+    pub(crate) dash_store: crayon_browser_core::relay::DashStore,
     /// 解码探针回传（probeplayer 页 → /probe-report beacon）。
     pub(crate) probe_reports: Mutex<HashMap<String, ProbeReport>>,
     pub(crate) busy: AtomicBool,

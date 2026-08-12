@@ -1,5 +1,5 @@
 [package]
-name = "get-video"
+name = "crayon-browser-core"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -67,11 +67,11 @@ strip = "symbols"
 workspace = true
 
 [lib]
-name = "get_video"
+name = "crayon_browser_core"
 path = "src/lib.rs"
 
 [[bin]]
-name = "get-video"
+name = "crayon-legacy-video-tool"
 path = "src/main.rs"
 required-features = ["legacy-dev"]
 

@@ -11,7 +11,7 @@ async fn e8_cntv_site_extractor() {
     let upstream = spawn_upstream().await;
     let html = r#"<html><head><script>var guid = "4646c21e429d43a08eac19d18704c4e9";</script></head></html>"#;
     let client = reqwest::Client::new();
-    let r = get_video::extract::sites::extract_cntv(
+    let r = crayon_browser_core::extract::sites::extract_cntv(
         &client,
         html,
         &format!("{upstream}/cntv/getHttpVideoInfo.do"),
@@ -23,7 +23,7 @@ async fn e8_cntv_site_extractor() {
     assert_eq!(r.candidates[0].url, format!("{upstream}/m3u8/plain.m3u8"));
     assert_eq!(r.candidates[0].protocol, Protocol::Hls);
     // guid 缺失时不命中
-    assert!(get_video::extract::sites::extract_cntv(
+    assert!(crayon_browser_core::extract::sites::extract_cntv(
         &client,
         "<html>no guid here</html>",
         &format!("{upstream}/cntv/getHttpVideoInfo.do"),
@@ -41,7 +41,7 @@ async fn e8_cntv_site_extractor() {
 async fn e9a_bilibili_durl_preferred() {
     let upstream = spawn_upstream().await;
     let client = reqwest::Client::new();
-    let r = get_video::extract::sites::extract_bilibili(
+    let r = crayon_browser_core::extract::sites::extract_bilibili(
         &client,
         "https://www.bilibili.com/bangumi/play/ep733316?spm_id_from=333.337.0.0",
         "",
@@ -67,7 +67,7 @@ async fn e9a_bilibili_durl_preferred() {
     assert_eq!(r.referer.as_deref(), Some("https://www.bilibili.com"));
     assert!(r.note.is_none());
     // 既非番剧也非视频页的 URL 不命中
-    assert!(get_video::extract::sites::extract_bilibili(
+    assert!(crayon_browser_core::extract::sites::extract_bilibili(
         &client,
         "https://www.bilibili.com/",
         "",
@@ -83,7 +83,7 @@ async fn e9a_bilibili_durl_preferred() {
 async fn e9b_bilibili_dash_fallback() {
     let upstream = spawn_upstream().await;
     let client = reqwest::Client::new();
-    let r = get_video::extract::sites::extract_bilibili(
+    let r = crayon_browser_core::extract::sites::extract_bilibili(
         &client,
         "https://www.bilibili.com/bangumi/play/ep733316",
         "",
@@ -105,7 +105,7 @@ async fn e9b_bilibili_dash_fallback() {
 async fn e9c_bilibili_bv_multi_page() {
     let upstream = spawn_upstream().await;
     let client = reqwest::Client::new();
-    let r = get_video::extract::sites::extract_bilibili(
+    let r = crayon_browser_core::extract::sites::extract_bilibili(
         &client,
         "https://www.bilibili.com/video/BV1xx411c7mD?p=2",
         "",
@@ -130,7 +130,7 @@ async fn e9d_bilibili_ss_season_page() {
     let upstream = spawn_upstream().await;
     let client = reqwest::Client::new();
     let html = r#"<script>window.__INITIAL_STATE__={"epInfo":{"ep_id":733316}};</script>"#;
-    let r = get_video::extract::sites::extract_bilibili(
+    let r = crayon_browser_core::extract::sites::extract_bilibili(
         &client,
         "https://www.bilibili.com/bangumi/play/ss28747",
         html,
@@ -142,7 +142,7 @@ async fn e9d_bilibili_ss_season_page() {
     assert_eq!(r.candidates.len(), 2, "dash 合成候选 + 整段备选");
     assert_eq!(r.candidates[1].url, format!("{upstream}/video.mp4?upsig=z"));
     // ss 页 HTML 无 ep_id 时不命中
-    assert!(get_video::extract::sites::extract_bilibili(
+    assert!(crayon_browser_core::extract::sites::extract_bilibili(
         &client,
         "https://www.bilibili.com/bangumi/play/ss28747",
         "<html>nothing</html>",

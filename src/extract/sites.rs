@@ -283,7 +283,7 @@ struct BiliPage {
 /// `html` 仅 ss 季页用于提取默认集 ep_id 时需要，其余入口可传空串。
 /// 登录 Cookie 解锁更高清晰度（会员内容仍按其权限返回）：
 /// 优先用调用方传入的 `cookie`（应用 webview 登录态），
-/// 否则回退环境变量 `GET_VIDEO_BILI_COOKIE`（无头/CLI 调试用）。
+/// 否则回退环境变量 `CRAYON_LEGACY_BILI_COOKIE`（无头/CLI 调试用）。
 pub async fn extract_bilibili(
     client: &reqwest::Client,
     page_url: &str,
@@ -293,10 +293,10 @@ pub async fn extract_bilibili(
 ) -> Option<SiteResult> {
     let cookie = cookie
         .map(|c| c.to_string())
-        .or_else(|| std::env::var("GET_VIDEO_BILI_COOKIE").ok())
+        .or_else(|| std::env::var("CRAYON_LEGACY_BILI_COOKIE").ok())
         .filter(|c| !c.is_empty());
     // 测试钩子：fnval=16 拿不到高清时，用网页端同款位掩码（如 4048）重试
-    let fnval16: u32 = std::env::var("GET_VIDEO_BILI_FNVAL")
+    let fnval16: u32 = std::env::var("CRAYON_LEGACY_BILI_FNVAL")
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(16);

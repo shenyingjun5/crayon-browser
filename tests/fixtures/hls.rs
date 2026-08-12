@@ -15,7 +15,7 @@ async fn r5_ext_x_map_rewrite() {
         body.contains(&format!(
             "#EXT-X-MAP:URI=\"{}/proxy/{}/init.mp4\"",
             relay.base_url(),
-            get_video::encode_url_component(&format!("{upstream}/m3u8/init.mp4"))
+            crayon_browser_core::encode_url_component(&format!("{upstream}/m3u8/init.mp4"))
         )),
         "MAP URI 未改写: {body}"
     );
