@@ -1,6 +1,6 @@
 # RNM：Crayon Browser 命名迁移 Roadmap
 
-状态：`RNM-01..05 DONE`，`RNM-06 READY`。本 Roadmap 将历史仓库名 `get-video` 迁移为产品级名称 `crayon-browser`，并保持 Windows/macOS CEF、Rust workspace、文档、GitHub 与本地工作区命名一致。命名迁移优先于恢复 `CEF-03`，但不得改写历史执行证据或扩大产品能力。
+状态：`RNM-01..06 DONE`，`RNM-07 READY`。本 Roadmap 将历史仓库名 `get-video` 迁移为产品级名称 `crayon-browser`，并保持 Windows/macOS CEF、Rust workspace、文档、GitHub 与本地工作区命名一致。命名迁移优先于恢复 `CEF-03`，但不得改写历史执行证据或扩大产品能力。
 
 ## 冻结命名
 
@@ -38,8 +38,8 @@
 | RNM-03 | DONE | RNM-02 | 根 README、活动配置/UI 文案、current/活跃 Roadmap、AGENTS | 按 GitHub 规范重写 README，并清除活动产品文案中的旧名/旧进度 | 链接检查、locale/config contract、旧名 allowlist 扫描 |
 | RNM-04 | DONE | RNM-03 | CI、CMake/Cargo 入口、文档命令 | 新名称下完成全仓库与 Windows CEF 回归 | format/lint/unit/integration/fast/security；CEF Debug/Release build+ctest |
 | RNM-05 | DONE | RNM-04 | RNM Roadmap/current 索引 | 独立 Code Review、记录证据并完成本地代码命名迁移 | P0/P1=0；P2 有 owner；工作区干净 |
-| RNM-06 | READY | RNM-05 | GitHub repo settings、local `origin` | GitHub 仓库原地改名为 `crayon-browser`，同步 description/topics 和远程地址 | GitHub API readback、`git ls-remote origin`、默认分支 main |
-| RNM-07 | TODO | RNM-06 | GitHub `main` | 推送最终 README/代码并核对 GitHub 首页渲染源 | local/remote SHA 一致、README 为默认分支根文件 |
+| RNM-06 | DONE | RNM-05 | GitHub repo settings、local `origin` | GitHub 仓库原地改名为 `crayon-browser`，同步 description/topics 和远程地址 | GitHub API readback、`git ls-remote origin`、默认分支 main |
+| RNM-07 | READY | RNM-06 | GitHub `main` | 推送最终 README/代码并核对 GitHub 首页渲染源 | local/remote SHA 一致、README 为默认分支根文件 |
 | RNM-08 | TODO | RNM-07 | 本地工作区父目录 | 将 `D:\get-video` 原子改名为 `D:\crayon-browser` 并重建含绝对路径的 CMake cache | 新路径 git status/remote、旧目录不存在、CEF configure smoke |
 
 ## 禁止项
@@ -86,3 +86,10 @@
 - package/target 回读确认正式根为 `crayon-browser-core`/`crayon_browser_core`，历史入口只有 `crayon-legacy-video-tool`、`crayon-legacy-app` 与 `crayon-legacy-demo`；CEF 产物、Cast-SDK gitlink `44c3a998...` 和 adapter 边界未改变。
 - `git diff --check origin/main...HEAD` 通过；活动源码、UI、配置和根 README 仅在 AGENTS 的“旧历史命令不可作为新证据”规则中命中旧名，属于明确 allowlist。4 个提交作者均为 `shenyingjun5 <shenyingjun5@gmail.com>`。
 - Review 结论：P0/P1/P2/P3 均为 `0`，没有延期发现。macOS、真实设备、GitHub 远程和本地目录仍由既定后续任务负责，不扩大 RNM-05 范围。
+
+## RNM-06 完成记录（2026-08-12）
+
+- GitHub 身份回读为 `shenyingjun5`；写操作前确认 `shenyingjun5/crayon-browser` 返回 404 且目标名可用，然后将 public 仓库 `shenyingjun5/get-video` 原地改名。
+- GitHub API 回读：`shenyingjun5/crayon-browser`、默认分支 `main`、描述为 `Crayon Browser — an AI Agent-native desktop browser with LAN casting`；topics 为 `ai-agent/browser/casting/cef/chromium/cpp/macos/rust/windows`。
+- 本地 `origin` 的 fetch/push URL 均已改为 `https://github.com/shenyingjun5/crayon-browser.git`；`git ls-remote --heads origin main` 成功回读远程旧 HEAD `386fb625...`，证明新地址可用。代码和 README 推送由 RNM-07 单独执行。
+- 未创建 PR、Tag、Release、部署、安装包或许可证；没有修改 Cast-SDK 外部仓库。
