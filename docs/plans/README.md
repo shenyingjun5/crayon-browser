@@ -35,7 +35,7 @@
 | HUB | [capability-hub-roadmap.md](capability-hub-roadmap.md) | Capability Registry/Router、入站发现与出站 Partner connector | `HUB-01` 等待 `AGT-02/PRV-08` |
 | HM | [harmony-browser-roadmap.md](harmony-browser-roadmap.md) | 鸿蒙电脑 PC 形态 ArkUI/ArkWeb 技术预览 | `HM-01`，后续启动 |
 | QAR | [quality-release-roadmap.md](quality-release-roadmap.md) | Windows/macOS 构建、真实设备、性能、长稳和发布门禁 | `QAR-01` |
-| RNM | [naming-migration-roadmap.md](naming-migration-roadmap.md) | `get-video` → `crayon-browser` 仓库、包、README、GitHub 与本地路径迁移 | `RNM-01..04 DONE`，`RNM-05 READY` |
+| RNM | [naming-migration-roadmap.md](naming-migration-roadmap.md) | `get-video` → `crayon-browser` 仓库、包、README、GitHub 与本地路径迁移 | `RNM-01..05 DONE`，`RNM-06 READY` |
 
 当前共 227 个活跃任务，186 个唯一当前测试用例。新增 `RNM-01..08` 命名迁移任务；`CEF-02` 已按 Windows 首发/macOS 后置拆为 `CEF-02W/02M`；Linux、浏览器 WebRTC/采集/编码等已删除范围不计入活跃总数。
 
@@ -44,7 +44,7 @@
 | 顺序 | 任务 | 状态 | 说明 |
 |---:|---|---|---|
 | 1 | `SDK-13` | BLOCKED | 真接收端 Harness（CS-010、E2E-001/002）；当前环境无真机，Harness 就绪后领取 |
-| 2 | `RNM-05` | READY | 全仓库与 Windows CEF Debug/Release 回归通过；执行独立迁移 Review |
+| 2 | `RNM-06` | READY | 本地代码迁移 Review 无 P0-P3；原地改名 GitHub 仓库并同步 metadata/origin |
 | 3 | `CEF-03` | READY | checkpoint 已提交；`RNM-08` 完成后从状态模型单测恢复窗口/标签主线 |
 | 4 | `BUX-02` | READY | `CEF-02W DONE`；命名迁移和 CEF-03 按单任务规则串行推进 |
 | 4 | `CEF-01E`/`CEF-02M` | VERIFIED/TODO | macOS bootstrap 已实现但平台证据后置；不得阻塞 Windows 主线，也不得用 Windows 证据完成 macOS |
