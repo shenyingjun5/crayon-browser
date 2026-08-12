@@ -1,6 +1,6 @@
 # RNM：Crayon Browser 命名迁移 Roadmap
 
-状态：`RNM-01..06 DONE`，`RNM-07 READY`。本 Roadmap 将历史仓库名 `get-video` 迁移为产品级名称 `crayon-browser`，并保持 Windows/macOS CEF、Rust workspace、文档、GitHub 与本地工作区命名一致。命名迁移优先于恢复 `CEF-03`，但不得改写历史执行证据或扩大产品能力。
+状态：`RNM-01..06 DONE`，`RNM-07 IN_PROGRESS`。本 Roadmap 将历史仓库名 `get-video` 迁移为产品级名称 `crayon-browser`，并保持 Windows/macOS CEF、Rust workspace、文档、GitHub 与本地工作区命名一致。命名迁移优先于恢复 `CEF-03`，但不得改写历史执行证据或扩大产品能力。
 
 ## 冻结命名
 
@@ -39,7 +39,7 @@
 | RNM-04 | DONE | RNM-03 | CI、CMake/Cargo 入口、文档命令 | 新名称下完成全仓库与 Windows CEF 回归 | format/lint/unit/integration/fast/security；CEF Debug/Release build+ctest |
 | RNM-05 | DONE | RNM-04 | RNM Roadmap/current 索引 | 独立 Code Review、记录证据并完成本地代码命名迁移 | P0/P1=0；P2 有 owner；工作区干净 |
 | RNM-06 | DONE | RNM-05 | GitHub repo settings、local `origin` | GitHub 仓库原地改名为 `crayon-browser`，同步 description/topics 和远程地址 | GitHub API readback、`git ls-remote origin`、默认分支 main |
-| RNM-07 | READY | RNM-06 | GitHub `main` | 推送最终 README/代码并核对 GitHub 首页渲染源 | local/remote SHA 一致、README 为默认分支根文件 |
+| RNM-07 | IN_PROGRESS | RNM-06 | GitHub `main` | 推送最终 README/代码并核对 GitHub 首页渲染源 | local/remote SHA 一致、README 为默认分支根文件 |
 | RNM-08 | TODO | RNM-07 | 本地工作区父目录 | 将 `D:\get-video` 原子改名为 `D:\crayon-browser` 并重建含绝对路径的 CMake cache | 新路径 git status/remote、旧目录不存在、CEF configure smoke |
 
 ## 禁止项
