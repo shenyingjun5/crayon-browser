@@ -1,6 +1,6 @@
 # CEF：Desktop 浏览器壳 Roadmap
 
-状态：`CEF-01A..01D DONE`，`CEF-01E VERIFIED`，`CEF-02W DONE`；Windows 正式 CEF bootstrap 多进程与 sandbox 已完成并实机验证，下一任务 `CEF-03 READY`。macOS bootstrap 保持冻结且不再阻塞 Windows 主线，后续由 `CEF-02M` 恢复平台对齐。当前目标平台仍为 Windows、macOS；Linux 不在当前范围。每项以目标路径、测试 ID 和证据作为验收，不以单平台截图替代。
+状态：`CEF-01A..01D DONE`，`CEF-01E VERIFIED`，`CEF-02W DONE`，`CEF-03 IN_PROGRESS`；Windows 正式 CEF bootstrap 多进程与 sandbox 已完成并实机验证，当前实现 Windows 窗口/标签生命周期与基础导航。macOS bootstrap 保持冻结且不再阻塞 Windows 主线，后续由 `CEF-02M` 恢复平台对齐。当前目标平台仍为 Windows、macOS；Linux 不在当前范围。每项以目标路径、测试 ID 和证据作为验收，不以单平台截图替代。
 
 ## 原子任务
 
@@ -13,7 +13,7 @@
 | CEF-01E | VERIFIED | CEF-01D | macOS 构建文件、CI/验证记录 | macOS x64/arm64 configure/build；只消费 `assets/brand/generated/macos/AppIcon.iconset`/`app.icns` 并收口 bootstrap Review | 两个 macOS 架构 CI/configure/build；`iconutil`/包内图标资源复核；P0/P1=0；未实机项显式记录 | Windows/static 证据已完成；S2 待运行 |
 | CEF-02W | DONE | CEF-01D | `browser/cef-shell/src/process/windows`、Windows 构建/测试 | 固定 CEF bootstrap DLL/EXE 多进程入口，Debug/Release 强制 sandbox，品牌窗口资源不回退 | Windows Debug/Release build；Browser/render/GPU sandbox smoke；启动/退出无残留；无业务代码在 main | S3 |
 | CEF-02M | TODO | CEF-01E,CEF-02W | `browser/cef-shell/src/process/macos` | 在 02W 冻结的进程/错误契约上补齐 macOS sandbox 与 Helper 平台验收 | macOS x64/arm64 启动/退出；sandbox smoke；Helper 无业务 | V4M |
-| CEF-03 | READY | CEF-02W | `src/browser/window` | Windows 首发的单窗口/标签生命周期、导航、前后退、刷新、停止、缩放；共享接口保持 macOS 可实现 | BR-001、重复关闭、崩溃恢复；Windows 实机资源无泄漏 | S3 |
+| CEF-03 | IN_PROGRESS | CEF-02W | `src/browser/window` | Windows 首发的单窗口/标签生命周期、导航、前后退、刷新、停止、缩放；共享接口保持 macOS 可实现 | BR-001、重复关闭、崩溃恢复；Windows 实机资源无泄漏 | S3 |
 | CEF-04 | TODO | CEF-03 | `src/browser/context` | 临时/持久 `CefRequestContext` factory，Profile ID 不用名称作路径 | BR-002、PV-001、PV-004 基础；context 隔离 | S3 |
 | CEF-05 | TODO | CEF-04 | `src/browser/permission` | 摄像头/麦克风/通知/定位/剪贴板/下载按站点控制 | allow/deny/remember/session tests；默认最小权限 | S3 |
 | CEF-06 | TODO | CEF-02W,FND-08 | `src/ipc`、`crayon-ipc-schema` | length-prefixed IPC、session secret、schema/大小/进程校验 | RG-007；畸形/超大/错误 secret/旧版本 | S2 |
@@ -162,6 +162,19 @@
 - Windows 实机：Debug/Release 均实际启动并显示“蜡笔 AI Agent 投屏浏览器”标题和蓝色品牌图标；每次观察到 6 个同路径进程，包含 `renderer`、`gpu-process`、`utility`，命令行不存在全局 `--no-sandbox`。通过窗口关闭后按完整 EXE 路径复核残留进程均为 0。官方 network service 自带 `--service-sandbox-type=none`，未将其误报为产品关闭全局 sandbox。
 - Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和维护性复核；最终 P0/P1/P2/P3 均为 `0`。入口无业务状态，窗口图标句柄随 client 释放，消息循环退出后恰好一次 `CefShutdown`，无新增公网、采集、WebRTC、Cast 或 Relay 能力。
 - 未覆盖与风险：当前产物目录是构建/测试目录，不是最终 installer 布局；官方 `libcef.dll` 的能力字符串会触发现有 RG-006 文本扫描，后续发布任务需为签名锁定的 vendor runtime 建立可审计规则，不能简单全局放行。Profile/request context、窗口/标签/导航 UI 和 crash recovery 分别由 `CEF-03/04` 与 `BUX-02..06` 接续；macOS 正式 sandbox 仍由 `CEF-02M` 后置验证。
+
+### CEF-03 Windows 窗口、标签生命周期与基础导航（当前任务）
+
+- 状态：`IN_PROGRESS`；依赖 `CEF-02W DONE`。一次只推进本任务，`BUX-02 READY` 暂不领取。
+- 单一目标：在 Browser process UI thread 建立 Windows 首发的唯一窗口/标签 owner，接通新建、激活、关闭、前进、后退、刷新、停止和缩放命令，并把 CEF 回调归一为可供后续 UI/engine adapter 消费的稳定状态；共享状态与命令不暴露 CEF/Win32 类型。
+- 输入：CEF 150 Alloy Views/BrowserView/Window 生命周期 API、`browser/engine-api` 已冻结的 Tab/Navigation/Zoom 语义、02W 的品牌 client DLL 与退出契约、BR-001 和 UX-005 的适用边界。
+- 输出与允许修改：新增 `browser/cef-shell/src/browser/window/` 小型状态 owner 与 CEF adapter、独立 `tests/window_*`，并仅为装配修改 Windows `app.*`、CEF shell CMake/source contract 和本 Roadmap/current 索引。生产文件预计不超过 8 个，单个职责文件不得混入 UI glyph、Profile 存储或媒体/投屏逻辑。
+- 禁止修改：`browser/engine-api` 公共头、macOS/Harmony、Profile/request context、共享 UI 视觉、omnibox/起始页、下载/权限、媒体/Relay/Cast-SDK/Agent；不得暴露 CEF handle 给共享层，不得增加公网测试 URL、远程调试、任意 JS/CDP 或测试开关。
+- 状态/生命周期：窗口、tab 顺序、active tab、CEF browser/view 绑定和 navigation generation 各有唯一 owner；异步创建/关闭、重复 close、最后标签关闭、窗口主动关闭、renderer 崩溃和旧 browser callback 必须稳定处理。关闭最后一个标签退出窗口；窗口销毁只在所有 browser 关闭后退出消息循环；所有命令只在 CEF UI thread 执行。
+- 边界：初始页面仍使用内部 `about:blank`，视觉标签栏/导航栏由 `BUX-02/04/05/06` 接续。本任务可以注册平台惯用的确定性快捷键用于实机命令 smoke，但不得把临时快捷键当成最终 UI。Profile context 统一暂传 `nullptr`，其隔离与持久化由 `CEF-04` 完成。
+- 验收与测试：纯状态测试覆盖新建/激活/顺序、重复/旧 close、容量、最后标签、loading/history/URL、navigation generation、缩放上下界和 crash detach；CEF contract 覆盖 BrowserView/Window 创建、callback/command 映射与无同步伪完成；Debug/Release build+ctest；Windows 实机覆盖新标签、切换、关闭、缩放/刷新、窗口关闭和完整路径零残留。BR-001 的公网无关部分使用本地确定性 fixture；如自动 fixture driver 尚未具备，必须明确记录为后续 E2E 缺口，不能伪造通过。
+- 测试命令：Windows Debug/Release build 与 `ctest`、目标 window model/CEF contract、适用 `clang-format`、`scripts/check.ps1 fast`、`scripts/check.ps1 security`、`git diff --check` 和实际 GUI/进程 smoke。
+- 暂停点（2026-08-12）：已冻结上述任务边界，并新增 `src/browser/window/tab_model.h/.cc` 草稿，覆盖 tab ID/顺序、active、创建/绑定/重复关闭/脱离、loading/history/URL、navigation generation、crash 状态和 zoom 边界的唯一状态 owner。草稿已执行 `clang-format`，并用仓库正式 MSVC x64 工具链以 `/std:c++17 /W4 /WX` 独立编译通过；`scripts/check.ps1 fast` 和 `git diff --check` 通过。LLVM 19 独立编译尝试因本机 MSVC 14.51 STL 要求 Clang 20 失败，改用正式 MSVC 后通过。当前尚未加入 CMake、尚未补独立行为测试、尚未接入 CEF Views/Windows App，也未运行 CEF Debug/Release build、ctest 或实机验证；因此状态严格保持 `IN_PROGRESS`。恢复时先审查该草稿并补状态单测，测试通过后再接 CEF adapter，不得直接跳到 `BUX-02` 或标记 `IMPLEMENTED`。
 
 ### CEF-01C～CEF-01E 边界
 
