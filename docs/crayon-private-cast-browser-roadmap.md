@@ -9,7 +9,7 @@
 ## 1. 当前结论
 
 - 品牌资产 `BRD-01..04`、Foundation 19 项、`MED-01..19`、`CEF-01A..01D`、`BUX-01`、`SDK-01..12` 已完成，共 59 项。
-- 当前 `CEF-01E VERIFIED`（实现与本地门禁完成，等待 macOS 双架构 runner/实机证据），`BUX-02` 等待 `CEF-02`；`SDK-13 BLOCKED`，等待真实接收端 Harness。Windows x64 最小 CEF 壳、真实标题栏品牌图标和完整退出已验证，macOS App/Helper Bundle 构建图与 CI 已实现，桌面信息架构与规范功能 glyph 已冻结；实际完整 UI、macOS 平台验收、真实接收端闭环与页面数据面尚未完成。
+- 当前阶段优先完成并实机跑通 Windows 全部基础浏览器功能：`CEF-02W DONE` 已交付正式多进程/sandbox，`CEF-03` 与 `BUX-02` 均为 `READY`；`CEF-01E VERIFIED` 的 macOS 双架构/实机证据及 `CEF-02M` 后置，不再阻塞 Windows。`SDK-13 BLOCKED`，等待真实接收端 Harness。Windows x64 CEF 壳、真实标题栏品牌图标、Debug/Release sandbox 和完整退出已验证，macOS App/Helper Bundle 构建图与 CI 已实现，桌面信息架构与规范功能 glyph 已冻结；实际完整 UI、macOS 平台验收、真实接收端闭环与页面数据面尚未完成。
 - 产品仍按“浏览器与 LAN 投屏 -> 页面数据/Markdown -> Agent 协议与语义动作 -> Workflow/Challenge -> Capability Hub/合作方 -> 模型”的依赖顺序交付。
 - CAAP、CLI/入站 MCP、高性能读页和授权操作是核心；具体模型/provider 与视频/文档总结属于第二阶段。
 - Windows/macOS 为当前桌面；HarmonyOS 只做鸿蒙电脑 PC 形态技术预览；Linux 无活跃任务。
@@ -104,7 +104,7 @@ flowchart LR
 
 ### V1：Windows 浏览器可用
 
-- `CEF-01D`、`CEF-02..12`、`BUX-01..18`、`PLT-01/02/W04` 与适用 PRV。
+- `CEF-01D`、`CEF-02W`、`CEF-03..12`、`BUX-01..18`、`PLT-01/02/W04` 与适用 PRV。
 - 验收：Chrome-inspired 蜡笔 UI、本地起始页、地址栏、导航、标签/窗口、书签、历史、下载、设置、Profile/无痕、权限、安全反馈、崩溃恢复、快捷键/无障碍和生命周期可用。
 
 ### A0：Agent 协议与权限内核
@@ -211,8 +211,9 @@ flowchart LR
 ## 7. 当前领取顺序
 
 1. `SDK-13`：等待真实接收端 Harness，当前 `BLOCKED`，不得用 Fake 冒充真机证据。
-2. `CEF-01E`：macOS x64/arm64 bootstrap 已 `VERIFIED`，等待 workflow 双架构与真实系统图标/启停证据；不用 Windows 结果转 `DONE`，未完成前不解锁 `CEF-02`。
-3. `BUX-02`：`BUX-01 DONE`，等待 `CEF-02` 后把规范 token/glyph 接入实际 UI shell；不得把空白 bootstrap 当成最终 UI。
+2. `CEF-03`：当前 `READY`，在已完成的 Windows 正式多进程/sandbox 上实现窗口、标签生命周期和基础导航控制。
+3. `BUX-02`：当前 `READY`，把规范 token/glyph 接入实际 Windows UI shell；不得把空白 bootstrap 当成最终 UI。
+4. `CEF-01E/CEF-02M`：macOS bootstrap 为 `VERIFIED`，平台证据和正式 sandbox 后置；不阻塞 Windows，也不用 Windows 结果转 `DONE`。
 4. `AGT-01` 在 `FND-08/PRV-08` 满足后冻结 CAAP v1；不得提前开放 CLI/MCP。
 5. `CNT-01` 等 `CEF-15/BUX-18/SDK-14/MED-19/PRV-08` 完成。
 6. `ACT-01` 等 `CNT-03/AGT-01` 完成；`WFL/HUB` 不得越过语义动作和权限依赖。

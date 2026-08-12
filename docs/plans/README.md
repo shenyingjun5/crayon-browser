@@ -23,8 +23,8 @@
 | BRD | [brand-assets-roadmap.md](brand-assets-roadmap.md) | 品牌图标母版、跨平台确定性资产与接入门禁 | `BRD-01..04 DONE` |
 | FND | [foundation-migration-roadmap.md](foundation-migration-roadmap.md) | Workspace、契约、质量入口与仓库基线 | 19 个原子任务 `DONE` |
 | MED | [media-policy-relay-roadmap.md](media-policy-relay-roadmap.md) | 媒体观察、策略、LAN Relay、外部客户端交接迁移 | `MED-01..19 DONE` |
-| CEF | [desktop-cef-browser-roadmap.md](desktop-cef-browser-roadmap.md) | Windows/macOS CEF 壳、共享 UI、媒体观察和 IPC | `CEF-01A..01D DONE`，`CEF-01E VERIFIED`（待 macOS runner/实机） |
-| BUX | [browser-product-experience-roadmap.md](browser-product-experience-roadmap.md) | Chrome-inspired 蜡笔桌面浏览器 UI 与日用基础功能 | `BUX-01 DONE`，`BUX-02` 等待 `CEF-02` |
+| CEF | [desktop-cef-browser-roadmap.md](desktop-cef-browser-roadmap.md) | Windows/macOS CEF 壳、共享 UI、媒体观察和 IPC | `CEF-02W DONE`，`CEF-03 READY`；`CEF-01E VERIFIED`（待 macOS runner/实机） |
+| BUX | [browser-product-experience-roadmap.md](browser-product-experience-roadmap.md) | Chrome-inspired 蜡笔桌面浏览器 UI 与日用基础功能 | Windows 优先；`BUX-01 DONE`，`BUX-02 READY` |
 | SDK | [cast-sdk-integration-roadmap.md](cast-sdk-integration-roadmap.md) | 固定源码 Cast-SDK facade、发现、连接和控制；后续 Partner Cast facade | `SDK-13 BLOCKED`（需真实接收端 Harness） |
 | PLT | [desktop-platform-adapters-roadmap.md](desktop-platform-adapters-roadmap.md) | Windows/macOS 存储、网络、生命周期、更新和客户端交接 | `PLT-01` |
 | PRV | [privacy-security-roadmap.md](privacy-security-roadmap.md) | Profile、隐私、安全、日志和删除语义 | `PRV-01` |
@@ -36,19 +36,20 @@
 | HM | [harmony-browser-roadmap.md](harmony-browser-roadmap.md) | 鸿蒙电脑 PC 形态 ArkUI/ArkWeb 技术预览 | `HM-01`，后续启动 |
 | QAR | [quality-release-roadmap.md](quality-release-roadmap.md) | Windows/macOS 构建、真实设备、性能、长稳和发布门禁 | `QAR-01` |
 
-当前共 218 个活跃任务，186 个唯一当前测试用例。Linux、浏览器 WebRTC/采集/编码等已删除范围不计入活跃总数。
+当前共 219 个活跃任务，186 个唯一当前测试用例。`CEF-02` 已按 Windows 首发/macOS 后置拆为 `CEF-02W/02M`；Linux、浏览器 WebRTC/采集/编码等已删除范围不计入活跃总数。
 
 ## 4. 当前领取队列
 
 | 顺序 | 任务 | 状态 | 说明 |
 |---:|---|---|---|
 | 1 | `SDK-13` | BLOCKED | 真接收端 Harness（CS-010、E2E-001/002）；当前环境无真机，Harness 就绪后领取 |
-| 2 | `CEF-01E` | VERIFIED | macOS x64/arm64 bootstrap 已实现；等待 workflow 双架构与真实系统图标/启停证据，`DONE` 后才解锁 `CEF-02` |
-| 3 | `BUX-02` | TODO | `BUX-01 DONE`；等待 `CEF-02` 后把规范 icon/token 接入实际 UI shell |
-| 4 | `AGT-01` | TODO | 依赖满足后冻结 CAAP v1；不提前开放 CLI/MCP transport |
-| 5 | `CNT-01` | TODO | 等浏览器/投屏/隐私门禁后开始正式 page-data/Markdown |
-| 6 | `ACT-01` | TODO | 等 `CNT-03/AGT-01`；不提前发明第二页面数据面 |
-| 7 | 后续任务 | TODO | WFL/HUB 严格按语义动作、权限和隐私依赖领取 |
+| 2 | `CEF-03` | READY | `CEF-02W DONE`；下一步实现 Windows 窗口/标签生命周期与基础导航控制 |
+| 3 | `BUX-02` | READY | `CEF-02W DONE`；可把规范 icon/token 接入 Windows 实际 UI shell，按单任务领取规则与 CEF-03 串行推进 |
+| 4 | `CEF-01E`/`CEF-02M` | VERIFIED/TODO | macOS bootstrap 已实现但平台证据后置；不得阻塞 Windows 主线，也不得用 Windows 证据完成 macOS |
+| 5 | `AGT-01` | TODO | 依赖满足后冻结 CAAP v1；不提前开放 CLI/MCP transport |
+| 6 | `CNT-01` | TODO | 等浏览器/投屏/隐私门禁后开始正式 page-data/Markdown |
+| 7 | `ACT-01` | TODO | 等 `CNT-03/AGT-01`；不提前发明第二页面数据面 |
+| 8 | 后续任务 | TODO | WFL/HUB 严格按语义动作、权限和隐私依赖领取 |
 
 `CNT-01` 必须等 `CEF-15`、`BUX-18`、`SDK-14`、`MED-19`、`PRV-08` 完成后才能进入 `READY`。`CNT-11` 必须等 `CNT-10`、`AGT-16`、`PRV-13` 完成且模型/provider ADR 获批；不得提前接真实 provider。
 

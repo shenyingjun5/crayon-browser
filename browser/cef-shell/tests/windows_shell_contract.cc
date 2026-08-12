@@ -9,13 +9,13 @@
 
 namespace {
 
-constexpr int kExpectedArgumentCount = 3;
+constexpr int kExpectedArgumentCount = 4;
 constexpr int kMainIconSize = 32;
 constexpr int kSmallIconSize = 16;
 constexpr std::size_t kProductNameCapacity = 128;
 
-bool RuntimeFilesExist(const std::filesystem::path& executable,
-                       const std::filesystem::path& manifest) {
+bool RuntimeFilesExist(const std::filesystem::path &executable,
+                       const std::filesystem::path &manifest) {
   std::ifstream input(manifest);
   if (!input) {
     std::cerr << "Runtime manifest is missing\n";
@@ -53,16 +53,18 @@ bool HasIcon(HMODULE module, int resource_id, int size) {
   return true;
 }
 
-}  // namespace
+} // namespace
 
-int wmain(int argument_count, wchar_t* arguments[]) {
+int wmain(int argument_count, wchar_t *arguments[]) {
   if (argument_count != kExpectedArgumentCount) {
-    std::cerr << "Expected executable and runtime manifest arguments\n";
+    std::cerr << "Expected executable, resource module and runtime manifest "
+                 "arguments\n";
     return 1;
   }
 
   const std::filesystem::path executable(arguments[1]);
-  const std::filesystem::path manifest(arguments[2]);
+  const std::filesystem::path resource_module(arguments[2]);
+  const std::filesystem::path manifest(arguments[3]);
   DWORD binary_type = 0;
   if (!std::filesystem::is_regular_file(executable) ||
       !GetBinaryTypeW(executable.c_str(), &binary_type) ||
@@ -75,10 +77,10 @@ int wmain(int argument_count, wchar_t* arguments[]) {
   }
 
   HMODULE module =
-      LoadLibraryExW(executable.c_str(), nullptr,
+      LoadLibraryExW(resource_module.c_str(), nullptr,
                      LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE);
   if (!module) {
-    std::cerr << "Browser executable cannot be opened as a data image\n";
+    std::cerr << "Browser resource module cannot be opened as a data image\n";
     return 4;
   }
 
@@ -95,5 +97,16 @@ int wmain(int argument_count, wchar_t* arguments[]) {
     std::cerr << "Product name or app icon resource is missing\n";
     return 5;
   }
+
+  HMODULE executable_module = LoadLibraryExW(resource_module.c_str(), nullptr,
+                                             DONT_RESOLVE_DLL_REFERENCES);
+  if (!executable_module || !GetProcAddress(executable_module, "RunWinMain")) {
+    if (executable_module) {
+      FreeLibrary(executable_module);
+    }
+    std::cerr << "CEF bootstrap export RunWinMain is missing\n";
+    return 6;
+  }
+  FreeLibrary(executable_module);
   return 0;
 }

@@ -1,6 +1,6 @@
 # BUX：桌面浏览器产品体验 Roadmap
 
-状态：`BUX-01 DONE`；Chrome-inspired 信息架构、共享 design token、标题栏/标签栏/导航栏自有 glyph 与平台适配边界已经冻结。`BUX-02 TODO`，等待 `CEF-02` 后接入实际 UI shell。本 Roadmap 把“基本浏览器有的功能”拆成可审查原子任务；视觉、品牌、内置页面与服务均为蜡笔自有实现。
+状态：`BUX-01 DONE`；Chrome-inspired 信息架构、共享 design token、标题栏/标签栏/导航栏自有 glyph 与平台适配边界已经冻结。`CEF-02W DONE` 已解锁 `BUX-02 READY`；当前阶段优先完成 Windows 全部基础浏览器功能，macOS 对齐后置。本 Roadmap 把“基本浏览器有的功能”拆成可审查原子任务；视觉、品牌、内置页面与服务均为蜡笔自有实现。
 
 ## 产品设计结论
 
@@ -15,7 +15,7 @@
 | ID | 状态 | 依赖 | 目标路径 | 单一交付 | 测试/验收 |
 |---|---|---|---|---|---|
 | BUX-01 | DONE | CEF-01D | `docs/current/browser-ux.md`,`browser/shared-ui/design` | 冻结 Chrome-inspired 信息架构、密度、token、组件状态、键盘/无障碍和品牌禁用规则 | UX-001；light/dark、窄/宽窗口、100%/200% 规格 golden |
-| BUX-02 | TODO | BUX-01,CEF-02 | `browser/shared-ui/shell` | UI shell、命令 registry、focus owner 与 engine event adapter 骨架 | UX-001；重复 command、旧 tab event、窗口释放 |
+| BUX-02 | READY | BUX-01,CEF-02W | `browser/shared-ui/shell` | Windows 首发 UI shell、命令 registry、focus owner 与 engine event adapter 骨架；共享层保持跨平台 | UX-001；重复 command、旧 tab event、窗口释放；Windows 实机 |
 | BUX-03 | TODO | BUX-02,CEF-03 | `browser/shared-ui/new-tab` | 本地 `crayon://newtab`、普通/无痕差异、固定快捷入口模型 | UX-002；零默认公网请求、损坏配置、安全 resource handler |
 | BUX-04 | TODO | BUX-02,CEF-03,PRV-06 | `browser/shared-ui/omnibox` | omnibox 编辑/提交、URL/搜索判定、建议 owner 与 provider 配置契约 | UX-003；scheme/长度/取消/旧建议/Profile 隔离 |
 | BUX-05 | TODO | BUX-04 | `browser/shared-ui/navigation` | 后退/前进/刷新/停止、加载状态、站点身份和页面动作绑定 | UX-004；导航竞争、证书/HTTP/HTTPS、页面伪造安全 UI |
@@ -51,7 +51,7 @@
 - 图标边界：Windows/macOS 窗口身份图标只消费 `app-icon-v1` 的平台 `micro` 资产；后退、前进、刷新、停止、主页、标签、书签、下载、投屏、菜单等功能图标使用自有单色 glyph，并通过语义 role/state 着色，不在 SVG 内硬编码业务状态颜色。
 - 错误与边界：未知 token/glyph/state、重复 ID、非 24×24 viewBox、外部引用、脚本/事件属性、内联位图、硬编码品牌文件路径和缺失 light/dark/窄/宽/100%/200% 组合必须由 contract 稳定拒绝；本任务不声明像素级真机一致。
 - 验收与测试：UX-001；检查信息架构、命令/焦点/无障碍契约、功能 icon role 完整性和品牌禁用；使用确定性 contract 生成/比对 light/dark × narrow/wide × 100%/200% 的八份规格 golden；运行 `scripts/check.ps1 brand-assets`、适用 fast/security、格式检查和 `git diff --check`。
-- 明确不做：实际 CEF UI shell、按钮点击、标签状态机、本地新标签页、omnibox、投屏业务绑定和平台截图；分别由 `BUX-02..06`、`CEF-02/03/08/13` 实现和验证。
+- 明确不做：实际 CEF UI shell、按钮点击、标签状态机、本地新标签页、omnibox、投屏业务绑定和平台截图；分别由 `BUX-02..06`、`CEF-02W/03/08/13` 实现和验证。
 
 完成记录（2026-08-11）：
 

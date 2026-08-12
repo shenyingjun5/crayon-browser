@@ -42,7 +42,7 @@
       "cacheVariables": {
         "CRAYON_ENABLE_CEF": "ON",
         "CRAYON_CEF_ROOT": "$env{CRAYON_CEF_ROOT}",
-        "USE_SANDBOX": "OFF"
+        "USE_SANDBOX": "ON"
       }
     },
     {

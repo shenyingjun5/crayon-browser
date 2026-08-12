@@ -6,6 +6,10 @@ set(CRAYON_BROWSER_TARGET crayon_browser)
 SET_CEF_TARGET_OUT_DIR()
 
 if(OS_WINDOWS)
+  if(NOT USE_SANDBOX)
+    message(FATAL_ERROR
+            "Windows product builds require the CEF sandbox bootstrap")
+  endif()
   set(CRAYON_WINDOWS_APP_ICON
       "${PROJECT_SOURCE_DIR}/assets/brand/generated/windows/app.ico")
   set(CRAYON_WINDOWS_APP_MANIFEST
@@ -21,6 +25,8 @@ if(OS_WINDOWS)
     @ONLY)
 
   set(crayon_browser_sources
+      src/process/windows/bootstrap_entry.cc
+      src/process/windows/bootstrap_entry.h
       src/windows/app.cc
       src/windows/app.h
       src/windows/main_win.cc
@@ -28,8 +34,8 @@ if(OS_WINDOWS)
       "${CMAKE_CURRENT_BINARY_DIR}/generated/app.rc")
 
   ADD_LOGICAL_TARGET(crayon_libcef "${CEF_LIB_DEBUG}" "${CEF_LIB_RELEASE}")
-  add_executable(${CRAYON_BROWSER_TARGET} WIN32 ${crayon_browser_sources})
-  SET_EXECUTABLE_TARGET_PROPERTIES(${CRAYON_BROWSER_TARGET})
+  add_library(${CRAYON_BROWSER_TARGET} SHARED ${crayon_browser_sources})
+  SET_LIBRARY_TARGET_PROPERTIES(${CRAYON_BROWSER_TARGET})
   target_compile_features(${CRAYON_BROWSER_TARGET} PRIVATE cxx_std_17)
   target_include_directories(
     ${CRAYON_BROWSER_TARGET}
@@ -43,11 +49,22 @@ if(OS_WINDOWS)
     PRIVATE crayon_libcef libcef_dll_wrapper ${CEF_STANDARD_LIBS})
   set_target_properties(${CRAYON_BROWSER_TARGET}
                         PROPERTIES OUTPUT_NAME "CrayonBrowser")
+  COPY_SINGLE_FILE(
+    ${CRAYON_BROWSER_TARGET}
+    "${CEF_BINARY_DIR}/bootstrap.exe"
+    "${CEF_TARGET_OUT_DIR}/CrayonBrowser.exe")
+  if(CMAKE_GENERATOR MATCHES "Visual Studio")
+    set_target_properties(
+      ${CRAYON_BROWSER_TARGET}
+      PROPERTIES VS_DEBUGGER_COMMAND
+                 "$<TARGET_FILE_DIR:${CRAYON_BROWSER_TARGET}>/CrayonBrowser.exe")
+  endif()
 
   COPY_FILES("${CRAYON_BROWSER_TARGET}" "${CEF_BINARY_FILES}"
              "${CEF_BINARY_DIR}" "${CEF_TARGET_OUT_DIR}")
   COPY_FILES("${CRAYON_BROWSER_TARGET}" "${CEF_RESOURCE_FILES}"
              "${CEF_RESOURCE_DIR}" "${CEF_TARGET_OUT_DIR}")
+  SET_LPAC_ACLS("${CRAYON_BROWSER_TARGET}")
 
   string(REPLACE ";" "\n" crayon_cef_runtime_manifest
                  "${CEF_BINARY_FILES};${CEF_RESOURCE_FILES}")
@@ -78,6 +95,7 @@ if(OS_WINDOWS)
     add_test(
       NAME windows_cef_shell_package_contract
       COMMAND crayon_windows_shell_contract
+              "$<TARGET_FILE_DIR:${CRAYON_BROWSER_TARGET}>/CrayonBrowser.exe"
               "$<TARGET_FILE:${CRAYON_BROWSER_TARGET}>"
               "$<TARGET_FILE_DIR:${CRAYON_BROWSER_TARGET}>/cef-runtime-files.txt")
     add_test(
