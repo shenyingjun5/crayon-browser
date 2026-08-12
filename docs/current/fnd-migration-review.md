@@ -1,5 +1,7 @@
 # FND-12 基础迁移收口 Review
 
+> 本文记录 2026-08-10 的历史验证事实，其中 `get-video`、`get-video-app` 等名称是当时的 package/入口名；现行名称以 RNM Roadmap 和根 README 为准，历史命令不作为改名后的验证证据。
+
 日期：2026-08-10
 状态：`DONE`
 证据级别：S2；Windows legacy app 补充 S3 构建/CLI 证据

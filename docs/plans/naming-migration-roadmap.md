@@ -1,6 +1,6 @@
 # RNM：Crayon Browser 命名迁移 Roadmap
 
-状态：`RNM-01..02 DONE`，`RNM-03 READY`。本 Roadmap 将历史仓库名 `get-video` 迁移为产品级名称 `crayon-browser`，并保持 Windows/macOS CEF、Rust workspace、文档、GitHub 与本地工作区命名一致。命名迁移优先于恢复 `CEF-03`，但不得改写历史执行证据或扩大产品能力。
+状态：`RNM-01..03 DONE`，`RNM-04 READY`。本 Roadmap 将历史仓库名 `get-video` 迁移为产品级名称 `crayon-browser`，并保持 Windows/macOS CEF、Rust workspace、文档、GitHub 与本地工作区命名一致。命名迁移优先于恢复 `CEF-03`，但不得改写历史执行证据或扩大产品能力。
 
 ## 冻结命名
 
@@ -35,9 +35,9 @@
 |---|---|---|---|---|---|
 | RNM-01 | DONE | CEF-02W | 本 Roadmap、Roadmap/current 索引 | 冻结命名矩阵、兼容边界和执行顺序；释放暂停中的 CEF-03 | 文档一致性、`git diff --check`、Review |
 | RNM-02 | DONE | RNM-01 | 根/app/demo Cargo manifests/locks、Rust imports、检查脚本、repo-guard 契约 | `get-video/get_video` 迁移为正式/legacy 新 package、lib、binary 名 | `cargo metadata`、新 package tests、legacy tests、repo-guard tests |
-| RNM-03 | READY | RNM-02 | 根 README、活动配置/UI 文案、current/活跃 Roadmap、AGENTS | 按 GitHub 规范重写 README，并清除活动产品文案中的旧名/旧进度 | 链接检查、locale/config contract、旧名 allowlist 扫描 |
-| RNM-04 | TODO | RNM-03 | CI、CMake/Cargo 入口、文档命令 | 新名称下完成全仓库与 Windows CEF 回归 | format/lint/unit/integration/fast/security；CEF Debug/Release build+ctest |
-| RNM-05 | TODO | RNM-04 | RNM Roadmap/current 索引 | 独立 Code Review、记录证据并完成本地命名迁移 | P0/P1=0；P2 有 owner；工作区干净 |
+| RNM-03 | DONE | RNM-02 | 根 README、活动配置/UI 文案、current/活跃 Roadmap、AGENTS | 按 GitHub 规范重写 README，并清除活动产品文案中的旧名/旧进度 | 链接检查、locale/config contract、旧名 allowlist 扫描 |
+| RNM-04 | READY | RNM-03 | CI、CMake/Cargo 入口、文档命令 | 新名称下完成全仓库与 Windows CEF 回归 | format/lint/unit/integration/fast/security；CEF Debug/Release build+ctest |
+| RNM-05 | TODO | RNM-04 | RNM Roadmap/current 索引 | 独立 Code Review、记录证据并完成本地代码命名迁移 | P0/P1=0；P2 有 owner；工作区干净 |
 | RNM-06 | TODO | RNM-05 | GitHub repo settings、local `origin` | GitHub 仓库原地改名为 `crayon-browser`，同步 description/topics 和远程地址 | GitHub API readback、`git ls-remote origin`、默认分支 main |
 | RNM-07 | TODO | RNM-06 | GitHub `main` | 推送最终 README/代码并核对 GitHub 首页渲染源 | local/remote SHA 一致、README 为默认分支根文件 |
 | RNM-08 | TODO | RNM-07 | 本地工作区父目录 | 将 `D:\get-video` 原子改名为 `D:\crayon-browser` 并重建含绝对路径的 CMake cache | 新路径 git status/remote、旧目录不存在、CEF configure smoke |
@@ -63,3 +63,11 @@
 - 验证：root/app/demo `cargo metadata --offline --no-deps` 均识别新 package 与依赖；`cargo test -p crayon-browser-core --lib` 3/3、legacy lib 58/58、`legacy_contract` 9/9、`cargo test -p repo-guard` 24/24 通过；`cargo check --offline --manifest-path app/Cargo.toml` 通过；`cargo fmt --all -- --check` 通过。
 - 失败/未覆盖：首个组合命令在 120 秒超时，拆分后核心验证全部通过；demo 独立首次编译在 240 秒超时且 Cargo/rustc 仍运行，已只终止本次明确 PID，未取得 demo compile 通过证据。`demo` 为排除的历史工具且 app 同一依赖链已通过，不阻塞 package 命名契约，但 RNM-04 完整回归前应在缓存就绪后重跑。Tauri 生成的未跟踪 schema/demo lock 已清理，没有进入提交。
 - Code Review：package/target 唯一性、feature 门禁、legacy adapter owner、lockfile、脚本路径、环境变量和机械 import 复核；P0/P1/P2/P3 均为 `0`。产品 UI 文案和活动文档中的旧名称明确留给 `RNM-03`，没有混入本任务。
+
+## RNM-03 完成记录（2026-08-12）
+
+- 根 README 已按 GitHub 项目首页结构重写，包含准确的开发状态、产品边界、能力状态、架构、平台、快速开始、目录、贡献、安全和许可证说明；没有虚构安装包、兼容性、完成度或开源授权。
+- 正式 locale、产品默认配置和历史 Tauri app/demo 的活动标题统一为 Crayon 品牌；legacy 工具继续明确标注为历史开发入口。FND Review 中的旧 package/命令保留原始证据，并增加历史名称说明。
+- 验证：README 的 9 个相对链接与品牌图标路径均存在；4 份 JSON 配置通过 `ConvertFrom-Json`；`cargo test -p crayon-app-runtime --test config_locales` 2/2、`cargo test -p crayon-domain --test v1_config` 10/10、`scripts/check.ps1 brand-assets` 通过（8 项资产检查、3 项安全单测）；`git diff --check` 通过。
+- 旧名 allowlist：活动源码、配置、UI 和根 README 已无旧名；剩余命中只存在于本命名迁移说明、`docs/current/fnd-migration-review.md` 的带说明历史证据，以及旧 PRD/Roadmap/测试/设计文档的历史事实，未批量篡改。
+- Code Review：产品事实、链接、配置 schema、locale parity、legacy 隔离、历史证据和许可证陈述复核；P0/P1/P2/P3 均为 `0`。

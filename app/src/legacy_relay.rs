@@ -14,7 +14,7 @@ pub(crate) struct LegacyRelay {
     pub(crate) dash_store: DashStore,
 }
 
-/// 启动 get-video relay（在 Tauri setup 的同步上下文中 block_on）。
+/// 启动 Crayon legacy relay（在 Tauri setup 的同步上下文中 block_on）。
 pub(crate) fn start_legacy_relay() -> LegacyRelay {
     let dash_store: DashStore = Default::default();
     let ds1 = dash_store.clone();

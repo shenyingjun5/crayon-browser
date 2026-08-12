@@ -23,7 +23,7 @@ pub(crate) fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Erro
     app.listen_any("ui-probe", |ev| {
         println!("[probe] {}", ev.payload());
     });
-    // 启动 get-video relay：绑定 0.0.0.0 让局域网设备（手机/电视投屏）可访问；
+    // 启动 Crayon legacy relay：绑定 0.0.0.0 让局域网设备（手机/电视投屏）可访问；
     // 本机播放仍走 127.0.0.1（8321 被占则退回随机端口）
     let relay = start_legacy_relay();
     let state = Arc::new(AppState {

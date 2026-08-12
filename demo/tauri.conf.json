@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "get-video-demo",
+  "productName": "Crayon Legacy Demo",
   "version": "0.1.0",
-  "identifier": "dev.getvideo.demo",
+  "identifier": "com.crayon.legacy.demo",
   "build": {
     "frontendDist": "ui"
   },
@@ -11,7 +11,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "get-video 嗅探 demo",
+        "title": "Crayon Legacy Demo",
         "width": 960,
         "height": 680
       }

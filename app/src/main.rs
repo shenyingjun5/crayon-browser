@@ -1,7 +1,7 @@
 //! `legacy-dev` Tauri 迁移壳（Tauri 2），不是正式产品构建目标。
 //!
-//! 架构：主窗口 UI（输入网址/展示结果/播放），叠加 L1/L3 提取（get-video Extractor）、
-//! 隐藏 WebviewWindow（加载目标页、注入嗅探 JS，L2）、get-video relay
+//! 架构：主窗口 UI（输入网址/展示结果/播放），叠加 L1/L3 提取（Crayon legacy Extractor）、
+//! 隐藏 WebviewWindow（加载目标页、注入嗅探 JS，L2）、Crayon legacy relay
 //! （0.0.0.0:8321，播放地址中转；局域网设备可访问投屏地址）。
 //!
 //! 嗅探结果上报双通道（去重合并）：
@@ -10,8 +10,8 @@
 //! 2. Image beacon → 本应用自建的 127.0.0.1:8377 上报服务（兜底，跨域无预检）。
 //!
 //! CLI 无头验证模式：
-//! - `get-video-app --sniff-cli <url>`：跑 L2 嗅探，打印 SNIFF_RESULT_JSON 后退出；
-//! - `get-video-app --extract-cli <url>`：跑 L1/L3 提取，打印 EXTRACT_RESULT_JSON 后退出。
+//! - `crayon-legacy-app --sniff-cli <url>`：跑 L2 嗅探，打印 SNIFF_RESULT_JSON 后退出；
+//! - `crayon-legacy-app --extract-cli <url>`：跑 L1/L3 提取，打印 EXTRACT_RESULT_JSON 后退出。
 //!
 //! 模块划分（FND-07）：本文件只保留命令注册与装配入口；装配见 `app`，
 //! CLI/UI-test 编排见 `cli`，relay 启动见 `legacy_relay`，数据模型见 `models`，

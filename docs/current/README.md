@@ -14,7 +14,7 @@
 | [Code Review 标准](code-review-standard.md) | 审查顺序、门禁和交付格式 |
 | [品牌图标契约](brand-assets.md) | `app-icon-v1` 参考源、母版、平台组合与禁用规则 |
 | [桌面浏览器体验契约](browser-ux.md) | `browser-design-v1` 顶部信息架构、共享 token、标题栏/功能 icon、键盘与无障碍规则 |
-| [总 Roadmap](../crayon-private-cast-browser-roadmap.md) | 218 项活跃任务、阶段和当前领取顺序 |
+| [总 Roadmap](../crayon-private-cast-browser-roadmap.md) | 227 项活跃任务、阶段和当前领取顺序 |
 | [模块 Roadmap 索引](../plans/README.md) | 每个模块的原子任务、依赖与状态 |
 
 ## 2. 专项当前契约

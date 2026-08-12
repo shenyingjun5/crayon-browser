@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "get-video",
+  "productName": "Crayon Legacy App",
   "version": "0.1.0",
-  "identifier": "dev.getvideo.app",
+  "identifier": "com.crayon.legacy.app",
   "build": {
     "frontendDist": "ui"
   },
@@ -11,7 +11,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "get-video",
+        "title": "Crayon Legacy App",
         "width": 960,
         "height": 680
       }

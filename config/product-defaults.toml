@@ -1,4 +1,4 @@
-# 蜡笔隐私投屏浏览器产品默认值（非秘密配置）。
+# 蜡笔 AI Agent 投屏浏览器产品默认值（非秘密配置）。
 #
 # 规则：本文件只允许非秘密默认值；任何 password/secret/token/cookie/
 # authorization/api_key/private_key 字样的键会在加载时被拒绝（稳定错误

@@ -233,7 +233,7 @@ async fn player_page(Query(params): Query<HashMap<String, String>>) -> Html<Stri
     let url_js = serde_json::to_string(&url).unwrap_or_else(|_| "\"\"".into());
     Html(format!(
         r#"<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>get-video 联调播放页</title>
+<html><head><meta charset="utf-8"><title>Crayon Legacy Tool 联调播放页</title>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script></head>
 <body>
 <video id="v" controls autoplay style="width:100%;max-width:960px"></video>

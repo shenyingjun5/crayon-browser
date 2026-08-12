@@ -1,13 +1,13 @@
 //! `legacy-dev` L2 webview 嗅探 demo（Tauri 2），不是正式产品构建目标。
 //!
 //! 架构：主窗口 UI（输入网址/展示结果/播放） + 隐藏 WebviewWindow（加载目标页、
-//! 注入嗅探 JS） + get-video relay（127.0.0.1:8321，播放地址中转）。
+//! 注入嗅探 JS） + Crayon legacy relay（127.0.0.1:8321，播放地址中转）。
 //!
 //! 嗅探结果上报双通道（去重合并）：
 //! 1. `window.__TAURI__.event.emit('sniff-found', ...)`（IPC，需 capabilities 放行 remote）；
 //! 2. Image beacon → 本 demo 自建的 127.0.0.1:8377 上报服务（兜底，跨域无预检）。
 //!
-//! CLI 验证模式：`get-video-demo --sniff-cli <url>`，跑完打印 SNIFF_RESULT_JSON 后退出。
+//! CLI 验证模式：`crayon-legacy-demo --sniff-cli <url>`，跑完打印 SNIFF_RESULT_JSON 后退出。
 
 use crayon_browser_core::extract::{guess_quality, origin_of, Candidate, Extractor, Protocol, RulePack};
 use crayon_browser_core::relay::{self, RelayConfig, RelayHandle};
@@ -299,7 +299,7 @@ async fn do_sniff(app: &AppHandle, url: &str) -> Result<SniffResponse, String> {
     let found: Vec<SniffHit> = hits_arc.lock().unwrap().clone();
     println!("[sniff] 收集结束，共 {} 条命中", found.len());
 
-    // 归一化：协议/清晰度/DRM/relay_url（复用 get-video crate 逻辑）
+    // 归一化：协议/清晰度/DRM/relay_url（复用 Crayon legacy crate 逻辑）
     let extractor = Extractor::new(&relay_base, RulePack::empty());
     let fallback_page_origin = origin_of(url);
     let mut results = Vec::new();
@@ -426,7 +426,7 @@ fn main() {
             app.listen_any("ui-probe", |ev| {
                 println!("[probe] {}", ev.payload());
             });
-            // 启动 get-video relay（8321 被占则退回随机端口）
+            // 启动 Crayon legacy relay（8321 被占则退回随机端口）
             let handle = tauri::async_runtime::block_on(async {
                 match relay::start(RelayConfig {
                     host: "127.0.0.1".into(),

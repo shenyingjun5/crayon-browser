@@ -152,7 +152,7 @@ new Image().src='http://127.0.0.1:8377/diag?msg='+encodeURIComponent(msg);
     let found: Vec<SniffHit> = hits_arc.lock().unwrap().clone();
     println!("[sniff] 收集结束，共 {} 条命中", found.len());
 
-    // 归一化：协议/清晰度/DRM/relay_url（复用 get-video crate 逻辑）
+    // 归一化：协议/清晰度/DRM/relay_url（复用 Crayon legacy crate 逻辑）
     let extractor = Extractor::new(&relay_base, RulePack::empty());
     let fallback_page_origin = origin_of(url);
     let mut results = Vec::new();

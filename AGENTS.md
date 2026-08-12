@@ -137,7 +137,7 @@
 - 每个任务执行适用的 Format、Lint、Unit、Integration、Build；平台、设备、性能、安全任务追加对应 Harness/真机验证。
 - 测试覆盖正常、失败、空输入、边界、重复调用、取消、超时、旧结果、恢复和资源释放。
 - 不使用固定长 `sleep`、公共网络或第三方影视站作为自动化成功条件；使用确定性时钟、本地 fixture 和 mock upstream。
-- 现有核心基线：`cargo test -p get-video --lib` 为 53 项通过；全 workspace 命令曾在 120 秒超时，不能视为失败或通过。首批工程任务会建立分层入口。
+- 当前命名迁移后基线：`cargo test -p crayon-browser-core --lib` 为 3 项通过；`cargo test -p crayon-browser-core --no-default-features --features legacy-dev --lib` 为 58 项通过。全 workspace、CEF 与平台任务仍按各 Roadmap 记录实际证据，不得用旧 `get-video` 历史命令冒充新名称验证。
 - 没有实际运行的命令必须标记“未运行”；环境阻塞必须保留原始错误和影响判断。
 
 ## 11. Code Review 与完成门禁
