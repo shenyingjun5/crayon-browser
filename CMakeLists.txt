@@ -32,11 +32,13 @@ endif()
 add_subdirectory(browser/engine-api)
 
 if(CRAYON_ENABLE_CEF)
-  include(cmake/cef/IntegrateCef.cmake)
-  crayon_integrate_cef()
   if(APPLE)
+    # The CEF wrapper adds .mm sources on macOS, so OBJCXX must be enabled
+    # before crayon_integrate_cef() calls add_subdirectory(libcef_dll).
     enable_language(OBJCXX)
   endif()
+  include(cmake/cef/IntegrateCef.cmake)
+  crayon_integrate_cef()
   if((WIN32 OR APPLE) AND CRAYON_BUILD_CEF_SHELL)
     add_subdirectory(browser/cef-shell)
   endif()

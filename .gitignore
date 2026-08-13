@@ -3,3 +3,5 @@ demo/gen/
 *.log
 .cache/cef/
 .cache/build/
+.cache/toolchains/
+.DS_Store

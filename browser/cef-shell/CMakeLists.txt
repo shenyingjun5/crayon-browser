@@ -144,6 +144,8 @@ if(OS_MAC)
       resources/macos/en.lproj/InfoPlist.strings
       resources/macos/zh-Hans.lproj/InfoPlist.strings)
   set(crayon_macos_sources
+      src/browser/window/tab_controller.cc
+      src/browser/window/tab_model.cc
       src/macos/app.cc
       src/macos/app.h
       src/macos/main_mac.mm)
@@ -155,6 +157,11 @@ if(OS_MAC)
                  ${crayon_macos_sources} ${crayon_macos_resources})
   SET_EXECUTABLE_TARGET_PROPERTIES(${CRAYON_BROWSER_TARGET})
   target_compile_features(${CRAYON_BROWSER_TARGET} PRIVATE cxx_std_17)
+  # CEF's compile flags only target COMPILE_LANGUAGE:CXX, so Objective-C++
+  # sources would fall back to C++17 while CEF 145+ headers require C++20.
+  set_target_properties(${CRAYON_BROWSER_TARGET}
+                        PROPERTIES OBJCXX_STANDARD 20
+                                   OBJCXX_STANDARD_REQUIRED ON)
   set_source_files_properties(src/macos/main_mac.mm
                               PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
   target_include_directories(${CRAYON_BROWSER_TARGET}
@@ -245,4 +252,24 @@ if(OS_MAC)
       macos_cef_shell_source_contract macos_cef_shell_package_contract
       PROPERTIES LABELS "cef;shell;macos")
   endif()
+endif()
+
+if(CRAYON_BUILD_TESTS)
+  add_executable(crayon_window_state_model_test
+                 tests/window_state_model_test.cc
+                 src/browser/window/tab_model.cc)
+  target_compile_features(crayon_window_state_model_test PRIVATE cxx_std_17)
+  target_include_directories(crayon_window_state_model_test
+                             PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  add_test(NAME window_state_model_test
+           COMMAND crayon_window_state_model_test)
+  add_test(
+    NAME window_adapter_contract
+    COMMAND "${CMAKE_COMMAND}"
+            "-DCRAYON_CEF_SHELL_SOURCE=${CMAKE_CURRENT_SOURCE_DIR}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/window_adapter_contract.cmake")
+  set_tests_properties(window_state_model_test
+                       PROPERTIES LABELS "cef;shell;window")
+  set_tests_properties(window_adapter_contract
+                       PROPERTIES LABELS "cef;shell;window;contract")
 endif()

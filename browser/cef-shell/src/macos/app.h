@@ -2,32 +2,11 @@
 #define CRAYON_BROWSER_CEF_SHELL_SRC_MACOS_APP_H_
 
 #include <string>
-#include <vector>
 
+#include "browser/window/tab_controller.h"
 #include "include/cef_app.h"
-#include "include/cef_client.h"
 
 namespace crayon::browser::cef_shell {
-
-class BrowserClient final : public CefClient, public CefLifeSpanHandler {
- public:
-  BrowserClient() = default;
-
-  CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
-  void OnAfterCreated(CefRefPtr<CefBrowser> browser) override;
-  bool DoClose(CefRefPtr<CefBrowser> browser) override;
-  void OnBeforeClose(CefRefPtr<CefBrowser> browser) override;
-
-  void CloseAllBrowsers(bool force_close);
-  void ShowMainWindow();
-
- private:
-  std::vector<CefRefPtr<CefBrowser>> browsers_;
-  bool is_closing_ = false;
-
-  IMPLEMENT_REFCOUNTING(BrowserClient);
-  DISALLOW_COPY_AND_ASSIGN(BrowserClient);
-};
 
 class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
  public:
@@ -37,11 +16,16 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
     return this;
   }
   void OnContextInitialized() override;
-  CefRefPtr<BrowserClient> browser_client() const { return browser_client_; }
+  // Chrome-style windows created by the Chrome UI (new tab/window, popups)
+  // must run through our client so callbacks stay normalized.
+  CefRefPtr<CefClient> GetDefaultClient() override;
+  CefRefPtr<window::TabController> tab_controller() const {
+    return tab_controller_;
+  }
 
  private:
   const std::string product_name_;
-  CefRefPtr<BrowserClient> browser_client_;
+  CefRefPtr<window::TabController> tab_controller_;
 
   IMPLEMENT_REFCOUNTING(BrowserApp);
   DISALLOW_COPY_AND_ASSIGN(BrowserApp);

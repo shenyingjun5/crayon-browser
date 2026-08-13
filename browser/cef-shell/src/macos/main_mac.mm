@@ -42,11 +42,12 @@ std::string LoadProductName() {
 
 @interface CrayonAppDelegate : NSObject <NSApplicationDelegate> {
  @private
-  CefRefPtr<crayon::browser::cef_shell::BrowserClient> browser_client_;
+  CefRefPtr<crayon::browser::cef_shell::window::TabController> tab_controller_;
 }
 
-- (instancetype)initWithBrowserClient:
-    (CefRefPtr<crayon::browser::cef_shell::BrowserClient>)browserClient;
+- (instancetype)initWithTabController:
+    (CefRefPtr<crayon::browser::cef_shell::window::TabController>)
+        tabController;
 - (void)tryToTerminateApplication;
 @end
 
@@ -73,18 +74,19 @@ std::string LoadProductName() {
 @end
 
 @implementation CrayonAppDelegate
-- (instancetype)initWithBrowserClient:
-    (CefRefPtr<crayon::browser::cef_shell::BrowserClient>)browserClient {
+- (instancetype)initWithTabController:
+    (CefRefPtr<crayon::browser::cef_shell::window::TabController>)
+        tabController {
   self = [super init];
   if (self) {
-    browser_client_ = browserClient;
+    tab_controller_ = tabController;
   }
   return self;
 }
 
 - (void)tryToTerminateApplication {
-  if (browser_client_) {
-    browser_client_->CloseAllBrowsers(false);
+  if (tab_controller_) {
+    tab_controller_->CloseAllBrowsers(false);
   }
 }
 
@@ -98,8 +100,8 @@ std::string LoadProductName() {
                     hasVisibleWindows:(BOOL)hasVisibleWindows {
   static_cast<void>(application);
   static_cast<void>(hasVisibleWindows);
-  if (browser_client_) {
-    browser_client_->ShowMainWindow();
+  if (tab_controller_) {
+    tab_controller_->ShowMainWindow();
   }
   return NO;
 }
@@ -141,7 +143,7 @@ int main(int argc, char* argv[]) {
     }
 
     CrayonAppDelegate* delegate = [[CrayonAppDelegate alloc]
-        initWithBrowserClient:app->browser_client()];
+      initWithTabController:app->tab_controller()];
     NSApp.delegate = delegate;
     [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
     [NSApp finishLaunching];

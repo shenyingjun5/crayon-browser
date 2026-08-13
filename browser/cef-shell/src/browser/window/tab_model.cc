@@ -54,11 +54,29 @@ bool TabModel::RequestClose(TabId tab_id) {
   if (tab->lifecycle == TabLifecycle::kClosing) {
     return true;
   }
+  if (tab->lifecycle == TabLifecycle::kCreating) {
+    // A creating tab has no bound browser, so no asynchronous close callback
+    // will ever arrive; remove it immediately instead of leaking it.
+    const std::size_t removed_index = static_cast<std::size_t>(
+        std::distance(tabs_.begin(), std::find_if(tabs_.begin(), tabs_.end(),
+                                                  [tab_id](const auto &entry) {
+                                                    return entry.id == tab_id;
+                                                  })));
+    const bool removed_active = active_tab_ == tab_id;
+    tabs_.erase(tabs_.begin() + static_cast<std::ptrdiff_t>(removed_index));
+    if (removed_active) {
+      SelectReplacementFor(removed_index);
+    }
+    return true;
+  }
   tab->lifecycle = TabLifecycle::kClosing;
   return true;
 }
 
 bool TabModel::DetachBrowser(int browser_id) {
+  if (browser_id <= 0) {
+    return false;
+  }
   const auto found =
       std::find_if(tabs_.begin(), tabs_.end(), [browser_id](const auto &tab) {
         return tab.browser_id == browser_id;
@@ -139,6 +157,11 @@ const TabSnapshot *TabModel::Find(TabId tab_id) const noexcept {
 }
 
 const TabSnapshot *TabModel::FindByBrowser(int browser_id) const noexcept {
+  if (browser_id <= 0) {
+    // Zero means "no browser bound" on TabSnapshot and is never a valid CEF
+    // browser id, so it must not match creating tabs.
+    return nullptr;
+  }
   const auto found =
       std::find_if(tabs_.begin(), tabs_.end(), [browser_id](const auto &tab) {
         return tab.browser_id == browser_id;

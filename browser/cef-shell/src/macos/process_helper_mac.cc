@@ -7,7 +7,9 @@
 
 namespace {
 
+#if defined(CEF_USE_SANDBOX)
 constexpr int kSandboxInitializeFailed = 10;
+#endif
 constexpr int kFrameworkLoadFailed = 11;
 
 }  // namespace

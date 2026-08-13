@@ -144,6 +144,19 @@
 - Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和维护性复核；关闭默认构造/API 编译、BSD runner 脚本两个问题，最终本地审查 P0/P1/P2/P3 均为 `0`。
 - 未覆盖与阻塞：workflow 尚未在远程执行，因此没有 macOS x64/arm64 configure/build/ctest、`lipo`、`plutil`、`iconutil` 和 Bundle 产物证据；真实 macOS App 启停、Helper 残留与系统遮罩图标也未复核。按本 Roadmap 边界维持 `VERIFIED`，不得用 Windows 结果转 `DONE` 或提前领取 `CEF-02M`；Windows 主线独立由 `CEF-02W` 推进。
 
+阶段验证记录（2026-08-13，macOS 12.7.6 x86_64 开发机）：
+
+- 背景：开发机最高只能装 Xcode 14.2（clang 14），无法编译 CEF 150 的 `libcef_dll_wrapper`（`include/base/internal/cef_bind_internal.h` 的嵌套模板别名语法 clang ≤15 解析失败，已用最小用例实测确认；CEF 150 官方要求 Xcode 16+/macOS 14.5+）。决定 **CEF 版本保持 150 不变**，开发机使用 sidecar 工具链，不降级、不影响发布机构建。
+- 工具链：cmake 3.31.6 + ninja 1.12.1 官方二进制、MacPorts `clang-19`/`llvm-19` 19.1.7 的 darwin_21（macOS 12）x86_64 预编译包及其依赖（libffi/ncurses/libedit/libxml2 2.15.3/zstd/xz/zlib/libiconv/icu），全部重定位到 `.cache/toolchains/`（用 `install_name_tool` 把 `/opt/local` 绝对引用改写为项目内绝对路径），不写系统目录、不需要 sudo。编译器经 `-DCMAKE_C_COMPILER/-DCMAKE_CXX_COMPILER` 指向 `.cache/toolchains/macports/opt/local/libexec/llvm-19/bin/clang(++)`。
+- 失败基线与修复（两个仓库级 macOS 构建 bug，任何工具链都会触发）：
+  1. 根 `CMakeLists.txt` 中 `enable_language(OBJCXX)` 原在 `crayon_integrate_cef()` 之后，wrapper 含 `.mm` 源导致 generate 报 `CMAKE_OBJCXX_COMPILE_OBJECT` 缺失；已把 OBJCXX 启用移到 integrate 之前。
+  2. `browser/cef-shell/CMakeLists.txt` 中 CEF 官方宏只对 `COMPILE_LANGUAGE:CXX` 施加 `-std=c++20`，`main_mac.mm` 回退到 gnu++17 无法编译 CEF 145+ 头文件；已为 macOS 目标显式设置 `OBJCXX_STANDARD 20`。
+  另修复 `process_helper_mac.cc` 在 `USE_SANDBOX=OFF`（macOS bootstrap 约定）下 `kSandboxInitializeFailed` 未使用触发 `-Werror`。
+- 实机验证命令与结果：`cmake --preset macos-x64-cef-debug`（带上述编译器注入与 `CRAYON_CEF_ROOT`）configure 成功；`cmake --build --preset macos-x64-cef-debug` 全部 240 个步骤成功，产出 `CrayonBrowser.app`（含 Framework 与 5 个 Helper 变体）；`TEMP=/tmp ctest --preset macos-x64-cef-debug` **7/7 通过**；`open` 真实启动主 App 成功（macOS 12.7.6 上运行，验证 CEF 150 二进制 minos 12.0），osascript 退出后进程残留为 0。
+- 已知问题（未修，待独立任务）：`tests/contracts/cef_distribution_contract.cmake` 使用 `$ENV{TEMP}`，macOS/Linux 未设置时失败；设 `TEMP=/tmp` 即通过。
+- arm64 交叉构建证据（同日补充）：经仓库固定 downloader 下载并校验 macosarm64 Standard archive（SHA-1 `2e77063444e3ca07aea2651b763d3c4248bf2543`，与锁定 manifest 一致；首次下载因网络瞬时失败，重跑幂等通过）。`cmake --preset macos-arm64-cef-debug`（同 sidecar clang-19 注入）configure/build 240 步全部成功，`file` 确认主 App 与 Helper 均为 `Mach-O 64-bit executable arm64`。`TEMP=/tmp ctest --preset macos-arm64-cef-debug` 为 5/7：全部 host 可运行 contract 通过（含 `macos_cef_shell_package_contract` 的 arm64 架构/Bundle/图标检查）；`browser_engine_contract` 与 `browser_engine_headers_compile` 为 arm64 可执行文件在 Intel 主机无法运行（`BAD_COMMAND`），属跨架构预期行为，同一测试在 x64 preset 原生运行 7/7 通过。
+- 未覆盖与风险：arm64 **真机启动/退出**仍无证据（本机为 x86_64，无法执行 arm64 GUI App）；sidecar clang-19 是开发机专用非标工具链，发布/正式签名构建仍在满足 CEF 150 官方要求（Xcode 16+）的机器上进行；系统遮罩图标复核未在真机进行（contract 内 iconutil 检查两架构均已通过）；状态维持 `VERIFIED`，待 arm64 真机运行证据后转 `DONE`。
+
 ### CEF-02W Windows 正式多进程与 sandbox
 
 - 状态：`DONE`；依赖 `CEF-01D DONE`。Windows 平台门禁已全部满足，已解锁 `CEF-03`、`CEF-06` 与 `BUX-02`。
@@ -165,7 +178,7 @@
 
 ### CEF-03 Windows 窗口、标签生命周期与基础导航（命名迁移后恢复）
 
-- 状态：`READY`；依赖 `CEF-02W DONE`。checkpoint 已提交，当前让位于 `RNM` 命名迁移；`RNM-08` 完成并验证新路径后，从状态模型单测恢复领取。
+- 状态：`IN_PROGRESS`；依赖 `CEF-02W DONE`。checkpoint 已提交；`RNM-08` 是 Windows 机本地目录改名，与本任务无技术依赖，经任务所有者确认后于 2026-08-13 在 macOS 开发机恢复领取。
 - 单一目标：在 Browser process UI thread 建立 Windows 首发的唯一窗口/标签 owner，接通新建、激活、关闭、前进、后退、刷新、停止和缩放命令，并把 CEF 回调归一为可供后续 UI/engine adapter 消费的稳定状态；共享状态与命令不暴露 CEF/Win32 类型。
 - 输入：CEF 150 Alloy Views/BrowserView/Window 生命周期 API、`browser/engine-api` 已冻结的 Tab/Navigation/Zoom 语义、02W 的品牌 client DLL 与退出契约、BR-001 和 UX-005 的适用边界。
 - 输出与允许修改：新增 `browser/cef-shell/src/browser/window/` 小型状态 owner 与 CEF adapter、独立 `tests/window_*`，并仅为装配修改 Windows `app.*`、CEF shell CMake/source contract 和本 Roadmap/current 索引。生产文件预计不超过 8 个，单个职责文件不得混入 UI glyph、Profile 存储或媒体/投屏逻辑。
@@ -175,6 +188,29 @@
 - 验收与测试：纯状态测试覆盖新建/激活/顺序、重复/旧 close、容量、最后标签、loading/history/URL、navigation generation、缩放上下界和 crash detach；CEF contract 覆盖 BrowserView/Window 创建、callback/command 映射与无同步伪完成；Debug/Release build+ctest；Windows 实机覆盖新标签、切换、关闭、缩放/刷新、窗口关闭和完整路径零残留。BR-001 的公网无关部分使用本地确定性 fixture；如自动 fixture driver 尚未具备，必须明确记录为后续 E2E 缺口，不能伪造通过。
 - 测试命令：Windows Debug/Release build 与 `ctest`、目标 window model/CEF contract、适用 `clang-format`、`scripts/check.ps1 fast`、`scripts/check.ps1 security`、`git diff --check` 和实际 GUI/进程 smoke。
 - 暂停点（2026-08-12）：已冻结上述任务边界，并新增 `src/browser/window/tab_model.h/.cc` 草稿，覆盖 tab ID/顺序、active、创建/绑定/重复关闭/脱离、loading/history/URL、navigation generation、crash 状态和 zoom 边界的唯一状态 owner。草稿已执行 `clang-format`，并用仓库正式 MSVC x64 工具链以 `/std:c++17 /W4 /WX` 独立编译通过；`scripts/check.ps1 fast` 和 `git diff --check` 通过。LLVM 19 独立编译尝试因本机 MSVC 14.51 STL 要求 Clang 20 失败，改用正式 MSVC 后通过。当前尚未加入 CMake、尚未补独立行为测试、尚未接入 CEF Views/Windows App，也未运行 CEF Debug/Release build、ctest 或实机验证；因此状态严格保持 `IN_PROGRESS`。恢复时先审查该草稿并补状态单测，测试通过后再接 CEF adapter，不得直接跳到 `BUX-02` 或标记 `IMPLEMENTED`。
+
+阶段进展记录（2026-08-13，macOS 12.7.6 x86_64 开发机）：
+
+- 恢复方式：按 2026-08-12 checkpoint 先审查草稿、补独立状态单测。`RNM-08` 仅剩 Windows 机本地目录改名，与本任务无技术依赖，经任务所有者确认恢复领取，不影响 Windows 侧收尾。
+- 新增 `browser/cef-shell/tests/window_state_model_test.cc`（12 组用例）：新建/激活/顺序、容量上限 32、重复/旧 close、最后标签清空、active 替换（先邻后前）、loading/history/URL、navigation generation 递增与旧 browser 拒绝、缩放上下界/NaN/Inf、crash detach 与 reload 恢复、BindBrowser 契约（零/负/重复/未知拒绝）。
+- 失败测试先行发现的两个草稿缺陷（已最小修复）：其一，`browser_id=0`（未绑定哨兵）会被 `FindByBrowser`/`DetachBrowser` 匹配到 creating 标签，导致旧回调可篡改未绑定标签——已在 `FindByBrowser` 与 `DetachBrowser` 对 `<=0` 拒绝；其二，creating 标签 `RequestClose` 后无 browser 回调会永久残留——现在 creating 标签关闭立即移除并正确替换 active，迟到的异步 bind 回调稳定拒绝。
+- 接入构建：`browser/cef-shell/CMakeLists.txt` 新增 `crayon_window_state_model_test`（C++17、不链 CEF），ctest 名 `window_state_model_test`，标签 `cef;shell;window`；Windows/macOS preset 共用。
+- 验证：`clang++ -std=c++17 -Wall -Wextra -Werror` 独立编译并运行通过（先复现两处失败再修复）；`TEMP=/tmp ctest --preset macos-x64-cef-debug` **8/8 通过**（含新测试）；arm64 交叉构建通过，ctest 5/8，3 个失败均为 arm64 可执行文件在 Intel 主机不可运行（`BAD_COMMAND`，含新测试），host 可运行 contract 全过；`git diff --check`、`cargo fmt --all -- --check` 通过。
+- 未运行：`scripts/check.sh fast/security` 依赖 node（本机未安装，brand-assets 步骤环境阻塞）；clang-format 未运行（仓库无锁定 `.clang-format`，沿用草稿风格手工对齐）；Windows Debug/Release build 与实机 smoke 按任务边界后置。
+- 下一步：在本机继续 CEF adapter（BrowserView/Window 创建、callback/command 映射）并补 CEF contract；Windows 实机验收仍在 Windows 机完成，未完成前不得标记 `IMPLEMENTED`。
+
+阶段进展记录（2026-08-13 续，CEF adapter 与 macOS 接线）：
+
+- 范围偏离说明：任务原边界禁止改 macOS 源码（Windows 首发）；经任务所有者明确指示"在本机把 mac 端浏览器能力接通"，将共享 adapter 接入 macOS 壳（`src/macos/app.*`、`main_mac.mm` 装配），Windows 侧接线与实机验收仍在 Windows 机完成。
+- 方向变更（所有者批准）：主窗口从"Alloy style + CEF Views 自绘窗口"改为 **Chrome runtime style**（CEF 原生 Chrome UI 窗口）。依据：Alloy Views 窗口在 macOS 12 + CEF 150 上创建成功但不上屏（`onscreen=false`，双向样式均复现），而 Chrome 风格窗口显示/交互正常（截图证据）；Chrome 风格自带标签栏/地址栏；Alloy bootstrap 已在 M128 删除，属废弃路线。原 Views 版 TabController 重构为 Chrome 风格窗口/标签管理；TabModel 状态语义保留。
+- Chrome 风格可定制性结论（头文件实证 + CEF 论坛/issue 调研，2026-08-13）：`CefCommandHandler` 五个回调（`OnChromeCommand` 拦截全部 472 个 IDC 命令、`IsChromeAppMenuItemVisible/Enabled` 裁剪 ⋮ 菜单、page action 与内建工具栏按钮显隐）是最成熟的定制面；`CefBrowserHost::ExecuteChromeCommand` 可程序化触发命令；`SetChromeColorScheme`/`SetThemeColor` 支持品牌配色。**已确认的硬边界**：工具栏不能加自定义按钮（`GetChromeToolbar` 返回的 CefView 不支持添加子视图，官方答复内建按钮"不可配置"），自定义功能入口（投屏按钮等）的官方路径是 `CEF_CTT_LOCATION`（只留地址栏）+ 自建 Views 工具栏；窗口内品牌字符串（⋮ 菜单文案、chrome://settings、错误页的 Chromium 字样）CEF 层无法替换（`CefSettings.product_name` 不存在，pak 只能改路径且 M128 起该路径有 bug #3749）；设置页不能替换，只能"隐藏入口 + 拦截 `chrome://settings` 导航 + 自建设置页"；无 tabstrip 精确控制 API（按索引激活、切换通知均缺），标签只能经 `OnAfterCreated/OnBeforeClose` 自行跟踪 + 相对命令操作。
+- 实现要点（Chrome 风格版）：`TabController` 不再继承 Views delegate，改为经 `CefBrowserHost::CreateBrowser`（`CEF_RUNTIME_STYLE_CHROME`）创建浏览器窗口，标签栏/地址栏由 CEF 原生提供；`BrowserApp::GetDefaultClient()` 返回我们的 `WindowClient`，确保 Chrome UI 自建的新标签/新窗口也走归一回调；`WindowClient` 增加 `CefFocusHandler`（`OnGotFocus` 追踪 active tab）；browser 生命周期直接由 `OnAfterCreated`/`OnBeforeClose` 驱动（无异步 bind 窗口期）；Dock reopen 在无窗口时新建窗口；relaunch 恢复默认行为（新建 Chrome 窗口，符合浏览器惯例）。
+- 验证（2026-08-13 本机）：构建通过；`TEMP=/tmp ctest --preset macos-x64-cef-debug` **9/9 通过**（`window_adapter_contract` 已更新为 Chrome 风格契约：必须 `CEF_RUNTIME_STYLE_CHROME` + `CreateBrowser`，禁止同步伪创建等）；真机启动显示完整 Chrome 风格窗口（标签条、omnibox、前进/后退/刷新、菜单栏为"蜡笔 AI Agent 投屏浏览器"，截图确认 1200×781 onscreen）；AppleScript quit 约 2 秒干净退出、进程归零；`git diff --check` 通过。
+- 未覆盖与缺口：macOS 应用菜单（Cmd+T/Cmd+W 等快捷键）未做——菜单文案须进本地化资源，属独立任务；投屏等自定义功能入口需走 `CEF_CTT_LOCATION` + 自建 Views 工具栏（Chrome 原生工具栏不可加按钮，见上方定制性结论）；设置页替换、头像/同步隐藏等 Chrome 定制点在后续任务逐项落地；Windows 侧接线与实机验收仍在 Windows 机；arm64 真机未验；CEF-03 保持 `IN_PROGRESS`（Windows 验收前不得 IMPLEMENTED）。
+- 新增 `src/browser/window/tab_controller.h/.cc`：`TabController`（窗口/标签唯一 owner，命令：新建/激活/关闭/前进/后退/刷新/停止/缩放，全部 `CEF_REQUIRE_UI_THREAD`）与 `WindowClient`（Display/Load/Request/LifeSpan 回调归一到 TabModel）；纯 CEF Views API，不含平台类型，Windows/macOS 共用。macOS `app.cc` 收窄为只装配 controller，初始 URL 保持唯一 `about:blank`。
+- 失败基线与修复：首版编译触发 `-Woverloaded-virtual`（自写回调遮蔽 `CefBrowserViewDelegate::OnBrowserCreated`），改用官方 delegate 回调绑定 browser；随后真机冒烟发现退出死锁——browser 关闭会征询宿主窗口 `CanClose`，初版恒返回 false 直接中止关闭链，且 `OnBrowserDestroyed` 不会兜底（必须走 `OnBeforeClose`）。修复：`CanClose` 只在首次发起时调用 `CloseAllBrowsers` 并此后恒允许；`CloseAllBrowsers` 先置 `close_initiated_` 防重入；关闭当前展示标签时先把窗口内容切到邻标签再 `TryCloseBrowser`。全程用 stderr 临时探针定位，验证后已移除。
+- 验证：`cmake --build --preset macos-x64-cef-debug` 通过；`TEMP=/tmp ctest --preset macos-x64-cef-debug` **9/9 通过**（含新增 `window_adapter_contract`：model 禁 CEF 类型、adapter 必备回调/UI thread/无同步伪创建）；真机 `open` 启动（7 进程：main+GPU+network+storage+renderer×2 等）→ AppleScript quit → **2 秒内干净退出、进程归零**（重复两轮一致）；`git diff --check` 通过。注：本机 Debug 冷启动约 18–26 秒（老 Intel + 1.1GB Debug framework），非缺陷。
+- 未覆盖与缺口：多标签命令（新建/切换/关闭/缩放）无 UI 触发入口——菜单/快捷键属用户文案与视觉，按规则需本地化资源与 BUX 任务，未加临时入口；命令链路真机 smoke 记入后续 E2E 缺口（CEF-14 harness）；Windows 侧 `app.*` 接线未做（Windows 机执行）；arm64 真机未验；popup/多窗口策略未实现（默认行为）。状态保持 `IN_PROGRESS`。
 
 ### CEF-01C～CEF-01E 边界
 
