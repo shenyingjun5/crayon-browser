@@ -1,56 +1,52 @@
 #ifndef CRAYON_BROWSER_CEF_SHELL_SRC_WINDOWS_APP_H_
 #define CRAYON_BROWSER_CEF_SHELL_SRC_WINDOWS_APP_H_
 
-#include <string>
-#include <vector>
-
 #include <windows.h>
 
+#include <memory>
+#include <string>
+
+#include "browser/window/tab_controller.h"
 #include "include/cef_app.h"
-#include "include/cef_client.h"
 
 namespace crayon::browser::cef_shell {
 
-class BrowserClient final : public CefClient, public CefLifeSpanHandler {
-public:
-  explicit BrowserClient(HINSTANCE resource_module);
-  ~BrowserClient() override;
+class WindowsWindowIcons final {
+ public:
+  explicit WindowsWindowIcons(HINSTANCE resource_module);
+  ~WindowsWindowIcons();
 
-  CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
-  void OnAfterCreated(CefRefPtr<CefBrowser> browser) override;
-  bool DoClose(CefRefPtr<CefBrowser> browser) override;
-  void OnBeforeClose(CefRefPtr<CefBrowser> browser) override;
-  bool brand_icons_valid() const {
-    return main_icon_ != nullptr && small_icon_ != nullptr;
-  }
+  bool valid() const { return main_icon_ != nullptr && small_icon_ != nullptr; }
+  void Apply(CefRefPtr<CefBrowser> browser) const;
 
-private:
-  std::vector<CefRefPtr<CefBrowser>> browsers_;
+ private:
   HICON main_icon_ = nullptr;
   HICON small_icon_ = nullptr;
 
-  IMPLEMENT_REFCOUNTING(BrowserClient);
-  DISALLOW_COPY_AND_ASSIGN(BrowserClient);
+  WindowsWindowIcons(const WindowsWindowIcons&) = delete;
+  WindowsWindowIcons& operator=(const WindowsWindowIcons&) = delete;
 };
 
 class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
-public:
+ public:
   BrowserApp(HINSTANCE resource_module, std::wstring product_name);
 
   CefRefPtr<CefBrowserProcessHandler> GetBrowserProcessHandler() override {
     return this;
   }
   void OnContextInitialized() override;
-  bool brand_icons_valid() const { return client_->brand_icons_valid(); }
+  CefRefPtr<CefClient> GetDefaultClient() override;
+  bool brand_icons_valid() const { return window_icons_->valid(); }
 
-private:
+ private:
   const std::wstring product_name_;
-  CefRefPtr<BrowserClient> client_;
+  const std::shared_ptr<WindowsWindowIcons> window_icons_;
+  CefRefPtr<window::TabController> tab_controller_;
 
   IMPLEMENT_REFCOUNTING(BrowserApp);
   DISALLOW_COPY_AND_ASSIGN(BrowserApp);
 };
 
-} // namespace crayon::browser::cef_shell
+}  // namespace crayon::browser::cef_shell
 
-#endif // CRAYON_BROWSER_CEF_SHELL_SRC_WINDOWS_APP_H_
+#endif  // CRAYON_BROWSER_CEF_SHELL_SRC_WINDOWS_APP_H_

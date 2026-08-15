@@ -1,6 +1,6 @@
 #include "windows/app.h"
 
-#include <algorithm>
+#include <memory>
 #include <utility>
 
 #include "include/cef_browser.h"
@@ -14,9 +14,9 @@ constexpr char kInitialUrl[] = "about:blank";
 constexpr int kMainIconSize = 32;
 constexpr int kSmallIconSize = 16;
 
-} // namespace
+}  // namespace
 
-BrowserClient::BrowserClient(HINSTANCE resource_module)
+WindowsWindowIcons::WindowsWindowIcons(HINSTANCE resource_module)
     : main_icon_(static_cast<HICON>(LoadImageW(
           resource_module, MAKEINTRESOURCEW(IDI_CRAYON_APP), IMAGE_ICON,
           kMainIconSize, kMainIconSize, LR_DEFAULTCOLOR))),
@@ -24,7 +24,7 @@ BrowserClient::BrowserClient(HINSTANCE resource_module)
           resource_module, MAKEINTRESOURCEW(IDI_CRAYON_APP_SMALL), IMAGE_ICON,
           kSmallIconSize, kSmallIconSize, LR_DEFAULTCOLOR))) {}
 
-BrowserClient::~BrowserClient() {
+WindowsWindowIcons::~WindowsWindowIcons() {
   if (main_icon_) {
     DestroyIcon(main_icon_);
   }
@@ -33,13 +33,10 @@ BrowserClient::~BrowserClient() {
   }
 }
 
-void BrowserClient::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
+void WindowsWindowIcons::Apply(CefRefPtr<CefBrowser> browser) const {
   CEF_REQUIRE_UI_THREAD();
-  const auto existing = std::find_if(
-      browsers_.begin(), browsers_.end(),
-      [&browser](const auto &candidate) { return candidate->IsSame(browser); });
-  if (existing == browsers_.end()) {
-    browsers_.push_back(browser);
+  if (!browser) {
+    return;
   }
   HWND window = browser->GetHost()->GetWindowHandle();
   if (window) {
@@ -50,42 +47,24 @@ void BrowserClient::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
   }
 }
 
-bool BrowserClient::DoClose(CefRefPtr<CefBrowser> browser) {
-  CEF_REQUIRE_UI_THREAD();
-  static_cast<void>(browser);
-  return false;
-}
-
-void BrowserClient::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
-  CEF_REQUIRE_UI_THREAD();
-  const auto existing = std::find_if(
-      browsers_.begin(), browsers_.end(),
-      [&browser](const auto &candidate) { return candidate->IsSame(browser); });
-  if (existing == browsers_.end()) {
-    return;
-  }
-  browsers_.erase(existing);
-  if (browsers_.empty()) {
-    CefQuitMessageLoop();
-  }
-}
-
 BrowserApp::BrowserApp(HINSTANCE resource_module, std::wstring product_name)
     : product_name_(std::move(product_name)),
-      client_(new BrowserClient(resource_module)) {}
+      window_icons_(std::make_shared<WindowsWindowIcons>(resource_module)),
+      tab_controller_(new window::TabController(
+          kInitialUrl,
+          [window_icons = window_icons_](CefRefPtr<CefBrowser> browser) {
+            window_icons->Apply(browser);
+          })) {}
 
 void BrowserApp::OnContextInitialized() {
   CEF_REQUIRE_UI_THREAD();
-
-  CefWindowInfo window_info;
-  window_info.SetAsPopup(nullptr, product_name_);
-  window_info.runtime_style = CEF_RUNTIME_STYLE_ALLOY;
-
-  CefBrowserSettings browser_settings;
-  if (!CefBrowserHost::CreateBrowser(window_info, client_, kInitialUrl,
-                                     browser_settings, nullptr, nullptr)) {
+  if (!tab_controller_->CreateMainWindow()) {
     CefQuitMessageLoop();
   }
 }
 
-} // namespace crayon::browser::cef_shell
+CefRefPtr<CefClient> BrowserApp::GetDefaultClient() {
+  return tab_controller_->client();
+}
+
+}  // namespace crayon::browser::cef_shell

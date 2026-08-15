@@ -1,6 +1,7 @@
 #ifndef CRAYON_BROWSER_CEF_SHELL_SRC_BROWSER_WINDOW_TAB_CONTROLLER_H_
 #define CRAYON_BROWSER_CEF_SHELL_SRC_BROWSER_WINDOW_TAB_CONTROLLER_H_
 
+#include <functional>
 #include <map>
 #include <optional>
 #include <string>
@@ -61,7 +62,11 @@ class WindowClient final : public CefClient,
 // All methods run on the CEF UI thread.
 class TabController final : public CefBaseRefCounted {
  public:
-  explicit TabController(std::string initial_url);
+  using BrowserCreatedCallback =
+      std::function<void(CefRefPtr<CefBrowser> browser)>;
+
+  explicit TabController(std::string initial_url,
+                         BrowserCreatedCallback browser_created_callback = {});
 
   // Creates the first Chrome-style browser window. Returns false when CEF
   // rejected the browser creation.
@@ -103,6 +108,7 @@ class TabController final : public CefBaseRefCounted {
   void ApplyZoom(TabId tab_id);
 
   const std::string initial_url_;
+  const BrowserCreatedCallback browser_created_callback_;
   TabModel model_;
   CefRefPtr<WindowClient> client_;
   std::map<int, CefRefPtr<CefBrowser>> browsers_;

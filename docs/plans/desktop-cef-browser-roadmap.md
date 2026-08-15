@@ -1,6 +1,6 @@
 # CEF：Desktop 浏览器壳 Roadmap
 
-状态：`CEF-01A..01D DONE`，`CEF-01E VERIFIED`，`CEF-02W DONE`，`CEF-03 IN_PROGRESS`；Windows 正式 CEF bootstrap 多进程与 sandbox 已完成并实机验证。`RNM-01..08 DONE` 已完成命名和本地路径迁移，`CEF-03` 已在 macOS 开发机恢复并接入状态单测与 CEF adapter，Windows 接线与实机验收待完成。macOS bootstrap 保持冻结且不再阻塞 Windows 主线，后续由 `CEF-02M` 恢复平台对齐。当前目标平台仍为 Windows、macOS；Linux 不在当前范围。每项以目标路径、测试 ID 和证据作为验收，不以单平台截图替代。
+状态：`CEF-01A..01D DONE`，`CEF-01E VERIFIED`，`CEF-02W DONE`，`CEF-03 DONE`；Windows 正式 CEF bootstrap 多进程、sandbox、共享窗口/标签控制器与基础导航命令链均已完成并实机验证。`RNM-01..08 DONE` 已完成命名和本地路径迁移。macOS bootstrap 保持冻结且不再阻塞 Windows 主线，后续由 `CEF-02M` 恢复平台对齐。当前目标平台仍为 Windows、macOS；Linux 不在当前范围。每项以目标路径、测试 ID 和证据作为验收，不以单平台截图替代。
 
 ## 原子任务
 
@@ -13,7 +13,7 @@
 | CEF-01E | VERIFIED | CEF-01D | macOS 构建文件、CI/验证记录 | macOS x64/arm64 configure/build；只消费 `assets/brand/generated/macos/AppIcon.iconset`/`app.icns` 并收口 bootstrap Review | 两个 macOS 架构 CI/configure/build；`iconutil`/包内图标资源复核；P0/P1=0；未实机项显式记录 | Windows/static 证据已完成；S2 待运行 |
 | CEF-02W | DONE | CEF-01D | `browser/cef-shell/src/process/windows`、Windows 构建/测试 | 固定 CEF bootstrap DLL/EXE 多进程入口，Debug/Release 强制 sandbox，品牌窗口资源不回退 | Windows Debug/Release build；Browser/render/GPU sandbox smoke；启动/退出无残留；无业务代码在 main | S3 |
 | CEF-02M | TODO | CEF-01E,CEF-02W | `browser/cef-shell/src/process/macos` | 在 02W 冻结的进程/错误契约上补齐 macOS sandbox 与 Helper 平台验收 | macOS x64/arm64 启动/退出；sandbox smoke；Helper 无业务 | V4M |
-| CEF-03 | READY | CEF-02W | `src/browser/window` | Windows 首发的单窗口/标签生命周期、导航、前后退、刷新、停止、缩放；共享接口保持 macOS 可实现 | BR-001、重复关闭、崩溃恢复；Windows 实机资源无泄漏 | S3 |
+| CEF-03 | DONE | CEF-02W | `src/browser/window` | Windows 首发的单窗口/标签生命周期、导航、前后退、刷新、停止、缩放；共享接口保持 macOS 可实现 | BR-001、重复关闭、崩溃恢复；Windows 实机资源无泄漏 | S3 |
 | CEF-04 | TODO | CEF-03 | `src/browser/context` | 临时/持久 `CefRequestContext` factory，Profile ID 不用名称作路径 | BR-002、PV-001、PV-004 基础；context 隔离 | S3 |
 | CEF-05 | TODO | CEF-04 | `src/browser/permission` | 摄像头/麦克风/通知/定位/剪贴板/下载按站点控制 | allow/deny/remember/session tests；默认最小权限 | S3 |
 | CEF-06 | TODO | CEF-02W,FND-08 | `src/ipc`、`crayon-ipc-schema` | length-prefixed IPC、session secret、schema/大小/进程校验 | RG-007；畸形/超大/错误 secret/旧版本 | S2 |
@@ -211,6 +211,16 @@
 - 失败基线与修复：首版编译触发 `-Woverloaded-virtual`（自写回调遮蔽 `CefBrowserViewDelegate::OnBrowserCreated`），改用官方 delegate 回调绑定 browser；随后真机冒烟发现退出死锁——browser 关闭会征询宿主窗口 `CanClose`，初版恒返回 false 直接中止关闭链，且 `OnBrowserDestroyed` 不会兜底（必须走 `OnBeforeClose`）。修复：`CanClose` 只在首次发起时调用 `CloseAllBrowsers` 并此后恒允许；`CloseAllBrowsers` 先置 `close_initiated_` 防重入；关闭当前展示标签时先把窗口内容切到邻标签再 `TryCloseBrowser`。全程用 stderr 临时探针定位，验证后已移除。
 - 验证：`cmake --build --preset macos-x64-cef-debug` 通过；`TEMP=/tmp ctest --preset macos-x64-cef-debug` **9/9 通过**（含新增 `window_adapter_contract`：model 禁 CEF 类型、adapter 必备回调/UI thread/无同步伪创建）；真机 `open` 启动（7 进程：main+GPU+network+storage+renderer×2 等）→ AppleScript quit → **2 秒内干净退出、进程归零**（重复两轮一致）；`git diff --check` 通过。注：本机 Debug 冷启动约 18–26 秒（老 Intel + 1.1GB Debug framework），非缺陷。
 - 未覆盖与缺口：多标签命令（新建/切换/关闭/缩放）无 UI 触发入口——菜单/快捷键属用户文案与视觉，按规则需本地化资源与 BUX 任务，未加临时入口；命令链路真机 smoke 记入后续 E2E 缺口（CEF-14 harness）；Windows 侧 `app.*` 接线未做（Windows 机执行）；arm64 真机未验；popup/多窗口策略未实现（默认行为）。状态保持 `IN_PROGRESS`。
+
+完成记录（2026-08-16，Windows 11 x64）：
+
+- 失败基线：先扩展 `window_adapter_contract.cmake`，要求 Windows `app.*` 使用共享 `window::TabController`、`GetDefaultClient`、`CreateMainWindow` 和品牌图标 owner，CMake 编译共享 controller/model，并禁止遗留 `CEF_RUNTIME_STYLE_ALLOY`/独立 `BrowserClient`；首次运行按预期失败于 `Windows app is missing shared controller token window::TabController`。
+- 实现：Windows 壳改为装配共享 Chrome-style `TabController`，`GetDefaultClient()` 统一承接 Chrome UI 创建的新标签/窗口；共享 controller 增加仅在成功绑定 browser 后触发的窄 `BrowserCreatedCallback`，Windows adapter 通过该回调设置大/小品牌图标。窗口、标签、browser 集合和退出仍由 `TabController` 唯一持有，Windows 层不复制生命周期状态。
+- Windows 构建/自动验证：固定 CEF root 下 `cmake --build --preset windows-cef-debug --config Debug` 与 `--config Release` 均成功；`ctest --preset windows-cef-debug -C Debug --output-on-failure` 和 Release 均为 **10/10 通过**。`scripts/check.ps1 fast` 与 `scripts/check.ps1 security` 均通过（迁移后独立 `CARGO_TARGET_DIR=<repo>/target/rnm08-verify`）；`git diff --check` 通过。MSBuild 仍报告既有共享 intermediate 目录 `MSB8028` 与官方 CEF delay-load `LNK4199` 警告，无编译/链接失败。
+- Windows 实机：Debug 可见 Chrome-style 窗口启动；以本地 `data:` fixture 验证新建标签、切换、关闭、刷新与缩放到 110%，最后整窗关闭后同路径进程数为 **0**。Release 可见窗口启动并正常关闭，同路径进程数为 **0**。全程未依赖公网。
+- 格式：Visual Studio LLVM 19 `clang-format --style=Google` 已格式化 Windows adapter 全文件和共享 controller 本次改动行；全文件 dry-run 仍会命中 CEF-03 既有共享文件未统一格式的行，本任务未扩大为无行为价值的整文件重排。
+- Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性独立复核；P0/P1/P2 均为 `0`。品牌回调在 CEF UI thread 执行，失败绑定不会触发平台回调；图标句柄由共享所有权覆盖 controller 生命周期，退出无残留。
+- 未覆盖与风险：Chrome runtime 的 Chromium 内建文案/头像/设置入口、产品自有导航 UI 和多窗口策略继续由 `BUX-02..06`；自动 fixture driver、renderer 真崩溃 E2E 与长稳资源观测由 `CEF-14`，本任务的纯状态测试已覆盖 crash detach/reload、旧 generation、重复关闭与缩放边界；macOS arm64 真机和正式 sandbox 仍由 `CEF-01E/CEF-02M`，不以 Windows 证据代替。`CEF-03` 转为 `DONE`。
 
 ### CEF-01C～CEF-01E 边界
 

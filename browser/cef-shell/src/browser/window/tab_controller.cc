@@ -68,8 +68,11 @@ void WindowClient::OnGotFocus(CefRefPtr<CefBrowser> browser) {
   controller_->OnBrowserFocused(browser);
 }
 
-TabController::TabController(std::string initial_url)
-    : initial_url_(std::move(initial_url)), client_(new WindowClient(this)) {}
+TabController::TabController(std::string initial_url,
+                             BrowserCreatedCallback browser_created_callback)
+    : initial_url_(std::move(initial_url)),
+      browser_created_callback_(std::move(browser_created_callback)),
+      client_(new WindowClient(this)) {}
 
 bool TabController::CreateMainWindow() {
   CEF_REQUIRE_UI_THREAD();
@@ -220,6 +223,10 @@ void TabController::OnBrowserCreated(CefRefPtr<CefBrowser> browser) {
     // must not survive without an owner.
     browsers_.erase(browser_id);
     browser->GetHost()->CloseBrowser(true);
+    return;
+  }
+  if (browser_created_callback_) {
+    browser_created_callback_(browser);
   }
 }
 

@@ -1,6 +1,6 @@
 # RNM：Crayon Browser 命名迁移 Roadmap
 
-状态：`RNM-01..08 DONE`。本 Roadmap 已将历史仓库名 `get-video` 迁移为产品级名称 `crayon-browser`，并保持 Windows/macOS CEF、Rust workspace、文档、GitHub 与本地工作区命名一致。命名迁移已收口，`CEF-03` 已恢复为 `IN_PROGRESS`；历史执行证据仍保持原文。
+状态：`RNM-01..08 DONE`。本 Roadmap 已将历史仓库名 `get-video` 迁移为产品级名称 `crayon-browser`，并保持 Windows/macOS CEF、Rust workspace、文档、GitHub 与本地工作区命名一致。命名迁移已收口，后续恢复的 `CEF-03` 也已在 Windows 完成并转为 `DONE`；历史执行证据仍保持原文。
 
 ## 冻结命名
 

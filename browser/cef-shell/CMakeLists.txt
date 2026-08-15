@@ -25,6 +25,8 @@ if(OS_WINDOWS)
     @ONLY)
 
   set(crayon_browser_sources
+      src/browser/window/tab_controller.cc
+      src/browser/window/tab_model.cc
       src/process/windows/bootstrap_entry.cc
       src/process/windows/bootstrap_entry.h
       src/windows/app.cc
