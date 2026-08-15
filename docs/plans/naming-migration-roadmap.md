@@ -1,6 +1,6 @@
 # RNM：Crayon Browser 命名迁移 Roadmap
 
-状态：`RNM-01..07 DONE`，`RNM-08 IN_PROGRESS`。本 Roadmap 将历史仓库名 `get-video` 迁移为产品级名称 `crayon-browser`，并保持 Windows/macOS CEF、Rust workspace、文档、GitHub 与本地工作区命名一致。命名迁移优先于恢复 `CEF-03`，但不得改写历史执行证据或扩大产品能力。
+状态：`RNM-01..08 DONE`。本 Roadmap 已将历史仓库名 `get-video` 迁移为产品级名称 `crayon-browser`，并保持 Windows/macOS CEF、Rust workspace、文档、GitHub 与本地工作区命名一致。命名迁移已收口，`CEF-03` 已恢复为 `IN_PROGRESS`；历史执行证据仍保持原文。
 
 ## 冻结命名
 
@@ -40,7 +40,7 @@
 | RNM-05 | DONE | RNM-04 | RNM Roadmap/current 索引 | 独立 Code Review、记录证据并完成本地代码命名迁移 | P0/P1=0；P2 有 owner；工作区干净 |
 | RNM-06 | DONE | RNM-05 | GitHub repo settings、local `origin` | GitHub 仓库原地改名为 `crayon-browser`，同步 description/topics 和远程地址 | GitHub API readback、`git ls-remote origin`、默认分支 main |
 | RNM-07 | DONE | RNM-06 | GitHub `main` | 推送最终 README/代码并核对 GitHub 首页渲染源 | local/remote SHA 一致、README 为默认分支根文件 |
-| RNM-08 | IN_PROGRESS | RNM-07 | 本地工作区父目录 | 将 `D:\get-video` 原子改名为 `D:\crayon-browser` 并重建含绝对路径的 CMake cache | 新路径 git status/remote、旧目录不存在、CEF configure smoke |
+| RNM-08 | DONE | RNM-07 | 本地工作区父目录 | 将 `D:\get-video` 原子改名为 `D:\crayon-browser` 并重建含绝对路径的 CMake cache | 新路径 git status/remote、旧目录不存在、CEF configure smoke |
 
 ## 禁止项
 
@@ -99,3 +99,10 @@
 - `git push origin main` 已将远程 `main` 从 `386fb625...` 前进到 `6b3b3ca8...`；推送后 `git rev-parse HEAD` 与 `git ls-remote --heads origin main` 完全一致。
 - GitHub README API 回读根文件为默认分支 `README.md`，页面源为 `https://github.com/shenyingjun5/crayon-browser/blob/main/README.md`；Base64 内容回读确认包含 `Crayon Browser` 主标题和“尚未包含开源许可证”的准确声明。
 - GitHub 首页代码源、README 和本地提交已同步；没有创建发布类对象。RNM-08 只处理本地同卷目录改名和绝对路径 CMake cache smoke。
+
+## RNM-08 完成记录（2026-08-13）
+
+- 本地工作区已在 `D:\crayon-browser`，旧路径 `D:\get-video` 不存在；`git status --short --branch` 回读为 `## main...origin/main`，迁移前工作区干净。
+- `origin` fetch/push 均为 `https://github.com/shenyingjun5/crayon-browser.git`，新目录、GitHub 仓库和默认分支命名一致。
+- 旧 Windows CEF cache 回读到 `CMAKE_HOME_DIRECTORY=D:/get-video` 和旧 CEF 绝对路径后，在新工作区执行 `cmake --fresh --preset windows-cef-debug`：配置与生成成功，构建文件写入 `D:/crayon-browser/.cache/build/windows-cef-debug`；重建后 `CMAKE_HOME_DIRECTORY` 与 `CRAYON_CEF_ROOT` 均回读为新目录。仅保留既有非阻塞 warning：`ATL is not supported by your VC installation.`
+- Code Review：复核了新旧目录、Git remote、CEF 固定包路径、configure 输出与命名边界；P0/P1/P2/P3 均为 `0`。未修改 CEF、Cast-SDK、协议或产品行为，未运行 build/ctest（本任务门禁为 configure smoke）。
