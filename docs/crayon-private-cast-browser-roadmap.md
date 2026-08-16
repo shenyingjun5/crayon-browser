@@ -8,8 +8,8 @@
 
 ## 1. 当前结论
 
-- 品牌资产 `BRD-01..04`、Foundation 19 项、`MED-01..19`、`CEF-01A..01D`、`CEF-02W`、`CEF-03`、`BUX-01/02`、`SDK-01..12` 与 `RNM-01..08` 已完成，共 70 项。
-- `RNM-01..08 DONE` 已将历史 `get-video` 仓库/package/README/GitHub/本地目录统一迁移为 `crayon-browser`，并完成新路径 Windows CEF configure smoke；`CEF-02W/CEF-03 DONE` 已交付正式多进程/sandbox 和 Windows 窗口/标签/基础导航命令链。`BUX-02 DONE` 已交付 Windows UI shell/command/focus/event adapter 骨架并通过 Debug/Release 与 Windows 实机门禁，`BUX-03 VERIFIED` 已完成本地新标签页通用实现，等待 Windows CEF/实机门禁；`CEF-01E VERIFIED` 的 macOS 双架构/实机证据及 `CEF-02M` 后置，不再阻塞 Windows。`SDK-13 BLOCKED`，等待真实接收端 Harness。Windows x64 CEF 壳、真实标题栏品牌图标、Debug/Release sandbox 和完整退出已验证，macOS App/Helper Bundle 构建图与 CI 已实现，桌面信息架构与规范功能 glyph 已冻结；实际完整 UI、macOS 平台验收、真实接收端闭环与页面数据面尚未完成。
+- 品牌资产 `BRD-01..04`、Foundation 19 项、`MED-01..19`、`CEF-01A..01D`、`CEF-02W`、`CEF-03`、`BUX-01..03`、`SDK-01..12` 与 `RNM-01..08` 已完成，共 71 项。
+- `RNM-01..08 DONE` 已将历史 `get-video` 仓库/package/README/GitHub/本地目录统一迁移为 `crayon-browser`，并完成新路径 Windows CEF configure smoke；`CEF-02W/CEF-03 DONE` 已交付正式多进程/sandbox 和 Windows 窗口/标签/基础导航命令链。`BUX-02 DONE` 已交付 Windows UI shell/command/focus/event adapter 骨架并通过 Debug/Release 与 Windows 实机门禁，`BUX-03 DONE` 已交付 Windows 本地新标签页并通过启动、`Ctrl+T`、`Ctrl+L` 与零残留 Debug/Release 实机门禁；`CEF-01E VERIFIED` 的 macOS 双架构/实机证据及 `CEF-02M` 后置，不再阻塞 Windows。`SDK-13 BLOCKED`，等待真实接收端 Harness。Windows x64 CEF 壳、真实标题栏品牌图标、Debug/Release sandbox 和完整退出已验证，macOS App/Helper Bundle 构建图与 CI 已实现，桌面信息架构、规范功能 glyph 与本地新标签页已冻结；实际完整 UI、macOS 平台验收、真实接收端闭环与页面数据面尚未完成。
 - 产品仍按“浏览器与 LAN 投屏 -> 页面数据/Markdown -> Agent 协议与语义动作 -> Workflow/Challenge -> Capability Hub/合作方 -> 模型”的依赖顺序交付。
 - CAAP、CLI/入站 MCP、高性能读页和授权操作是核心；具体模型/provider 与视频/文档总结属于第二阶段。
 - Windows/macOS 为当前桌面；HarmonyOS 只做鸿蒙电脑 PC 形态技术预览；Linux 无活跃任务。
@@ -211,7 +211,7 @@ flowchart LR
 ## 7. 当前领取顺序
 
 1. `SDK-13`：等待真实接收端 Harness，当前 `BLOCKED`，不得用 Fake 冒充真机证据。
-2. `BUX-03`：当前 `VERIFIED`，本地 `crayon://newtab/`、普通/Private 模型与安全 handler 已通过通用自动化，等待 Windows CEF Debug/Release 和实机门禁后转 `DONE`；不得提前混入 omnibox、完整标签或公网内容。
+2. `BUX-03`：已 `DONE`；Windows 本地 `crayon://newtab`、普通/无痕差异与固定快捷入口模型已交付，`BUX-04` 仍等待 `PRV-06`，下一项 Windows 原子任务按依赖重新领取。
 3. `CEF-01E/CEF-02M`：macOS bootstrap 为 `VERIFIED`，平台证据和正式 sandbox 后置；不阻塞 Windows，也不用 Windows 结果转 `DONE`。
 4. `AGT-01` 在 `FND-08/PRV-08` 满足后冻结 CAAP v1；不得提前开放 CLI/MCP。
 5. `CNT-01` 等 `CEF-15/BUX-18/SDK-14/MED-19/PRV-08` 完成。

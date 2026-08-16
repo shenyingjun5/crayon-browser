@@ -45,6 +45,9 @@ class WindowClient final : public CefClient,
   void OnRenderProcessTerminated(CefRefPtr<CefBrowser> browser,
                                  TerminationStatus status, int error_code,
                                  const CefString& error_string) override;
+  bool OnBeforeBrowse(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
+                      CefRefPtr<CefRequest> request, bool user_gesture,
+                      bool is_redirect) override;
   void OnGotFocus(CefRefPtr<CefBrowser> browser) override;
   bool OnChromeCommand(CefRefPtr<CefBrowser> browser, int command_id,
                        cef_window_open_disposition_t disposition) override;
@@ -69,7 +72,8 @@ class TabController final : public CefBaseRefCounted {
   using BrowsersClosedCallback = std::function<void()>;
 
   explicit TabController(std::string initial_url,
-                         BrowserCreatedCallback browser_created_callback = {});
+                         BrowserCreatedCallback browser_created_callback = {},
+                         std::optional<std::string> new_tab_url = std::nullopt);
 
   // Creates the first Chrome-style browser window. Returns false when CEF
   // rejected the browser creation.
@@ -105,6 +109,8 @@ class TabController final : public CefBaseRefCounted {
                         bool can_go_back, bool can_go_forward);
   void OnRenderProcessGone(CefRefPtr<CefBrowser> browser);
   void OnChromeCommand(int command_id);
+  bool RedirectBuiltInNewTab(CefRefPtr<CefFrame> frame,
+                             const std::string& target_url);
 
  private:
   bool CreateBrowserWindow();
@@ -113,11 +119,13 @@ class TabController final : public CefBaseRefCounted {
 
   const std::string initial_url_;
   const BrowserCreatedCallback browser_created_callback_;
+  const std::optional<std::string> new_tab_url_;
   ChromeCommandCallback chrome_command_callback_;
   BrowsersClosedCallback browsers_closed_callback_;
   TabModel model_;
   CefRefPtr<WindowClient> client_;
   std::map<int, CefRefPtr<CefBrowser>> browsers_;
+  std::size_t pending_new_tab_commands_ = 0;
   bool close_initiated_ = false;
 
   IMPLEMENT_REFCOUNTING(TabController);

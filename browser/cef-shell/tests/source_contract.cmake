@@ -11,11 +11,16 @@ if(NOT production_files)
 endif()
 
 set(initial_url_count 0)
+set(managed_new_tab_count 0)
 foreach(production_file IN LISTS production_files)
   file(READ "${production_file}" contents)
   string(REGEX MATCHALL "about:blank" initial_urls "${contents}")
   list(LENGTH initial_urls file_initial_url_count)
   math(EXPR initial_url_count "${initial_url_count} + ${file_initial_url_count}")
+  string(REGEX MATCHALL "kNewTabUrl" managed_new_tabs "${contents}")
+  list(LENGTH managed_new_tabs file_managed_new_tab_count)
+  math(EXPR managed_new_tab_count
+       "${managed_new_tab_count} + ${file_managed_new_tab_count}")
   foreach(forbidden_token
           "http://"
           "https://"
@@ -39,7 +44,10 @@ foreach(production_file IN LISTS production_files)
 endforeach()
 
 if(NOT initial_url_count EQUAL 0)
-  message(FATAL_ERROR "Windows production shell must not retain about:blank")
+  message(FATAL_ERROR "Windows production shell must not use about:blank as its start page")
+endif()
+if(managed_new_tab_count LESS 1)
+  message(FATAL_ERROR "Windows production shell must use the managed new-tab URL")
 endif()
 
 file(READ "${CRAYON_CEF_SHELL_SOURCE}/src/windows/main_win.cc" windows_main)
@@ -65,8 +73,6 @@ foreach(forbidden_main_token "wWinMain" "CefInitialize" "CefRunMessageLoop")
 endforeach()
 foreach(required_bootstrap_token
         "CefExecuteProcess"
-        "ChildProcessApp"
-        "RegisterCrayonScheme"
         "CefInitialize"
         "sandbox_info"
         "GetClientModule"
@@ -75,68 +81,6 @@ foreach(required_bootstrap_token
   if(token_index EQUAL -1)
     message(FATAL_ERROR
             "Windows process bootstrap is missing ${required_bootstrap_token}")
-  endif()
-endforeach()
-
-file(READ "${CRAYON_CEF_SHELL_SOURCE}/src/windows/app.cc" windows_app)
-file(READ
-     "${CRAYON_CEF_SHELL_SOURCE}/src/windows/new_tab_scheme_handler.cc"
-     new_tab_scheme_handler)
-get_filename_component(crayon_browser_source_root
-                       "${CRAYON_CEF_SHELL_SOURCE}" DIRECTORY)
-file(READ
-     "${crayon_browser_source_root}/shared-ui/new-tab/src/new_tab.cc"
-     new_tab_resource_source)
-foreach(required_new_tab_token
-        "kNewTabUrl"
-        "RegisterNewTabSchemeHandler"
-        "OnRegisterCustomSchemes")
-  string(FIND "${windows_app}" "${required_new_tab_token}" token_index)
-  if(token_index EQUAL -1)
-    message(FATAL_ERROR "Windows app is missing new-tab token ${required_new_tab_token}")
-  endif()
-endforeach()
-foreach(required_handler_token
-        "CEF_SCHEME_OPTION_STANDARD"
-        "CEF_SCHEME_OPTION_LOCAL"
-        "CEF_SCHEME_OPTION_SECURE"
-        "ValidateNewTabRequest"
-        "SetCharset"
-        "Cache-Control"
-        "Content-Security-Policy"
-        "X-Content-Type-Options")
-  string(FIND "${new_tab_scheme_handler}" "${required_handler_token}"
-         token_index)
-  if(token_index EQUAL -1)
-    message(FATAL_ERROR
-            "Windows new-tab handler is missing ${required_handler_token}")
-  endif()
-endforeach()
-foreach(required_resource_token
-        "no-store"
-        "default-src 'none'"
-        "form-action 'none'"
-        "frame-ancestors 'none'")
-  string(FIND "${new_tab_resource_source}" "${required_resource_token}"
-         token_index)
-  if(token_index EQUAL -1)
-    message(FATAL_ERROR
-            "Shared new-tab resource is missing ${required_resource_token}")
-  endif()
-endforeach()
-foreach(forbidden_handler_token
-        "file://"
-        "http://"
-        "https://"
-        "CefURLRequest"
-        "CefDownload"
-        "std::ifstream"
-        "CreateForFile")
-  string(FIND "${new_tab_scheme_handler}" "${forbidden_handler_token}"
-         forbidden_index)
-  if(NOT forbidden_index EQUAL -1)
-    message(FATAL_ERROR
-            "Windows new-tab handler contains forbidden token ${forbidden_handler_token}")
   endif()
 endforeach()
 string(FIND "${windows_bootstrap}" "no_sandbox" no_sandbox_index)

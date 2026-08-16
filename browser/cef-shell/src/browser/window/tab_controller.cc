@@ -4,6 +4,7 @@
 #include <utility>
 
 #include "include/cef_app.h"
+#include "include/cef_id_mappers.h"
 #include "include/wrapper/cef_helpers.h"
 
 namespace crayon::browser::cef_shell::window {
@@ -41,12 +42,15 @@ void WindowClient::OnAddressChange(CefRefPtr<CefBrowser> browser,
   if (!frame->IsMain()) {
     return;
   }
-  controller_->OnAddressUpdated(browser, url.ToString());
+  const std::string target_url = url.ToString();
+  if (controller_->RedirectBuiltInNewTab(frame, target_url)) {
+    return;
+  }
+  controller_->OnAddressUpdated(browser, target_url);
 }
 
 void WindowClient::OnLoadingStateChange(CefRefPtr<CefBrowser> browser,
-                                        bool isLoading,
-                                        bool canGoBack,
+                                        bool isLoading, bool canGoBack,
                                         bool canGoForward) {
   CEF_REQUIRE_UI_THREAD();
   controller_->OnLoadingUpdated(browser, isLoading, canGoBack, canGoForward);
@@ -61,6 +65,18 @@ void WindowClient::OnRenderProcessTerminated(CefRefPtr<CefBrowser> browser,
   static_cast<void>(error_code);
   static_cast<void>(error_string);
   controller_->OnRenderProcessGone(browser);
+}
+
+bool WindowClient::OnBeforeBrowse(CefRefPtr<CefBrowser> browser,
+                                  CefRefPtr<CefFrame> frame,
+                                  CefRefPtr<CefRequest> request,
+                                  bool user_gesture, bool is_redirect) {
+  CEF_REQUIRE_UI_THREAD();
+  static_cast<void>(browser);
+  static_cast<void>(user_gesture);
+  static_cast<void>(is_redirect);
+  return request && controller_->RedirectBuiltInNewTab(
+                        frame, request->GetURL().ToString());
 }
 
 void WindowClient::OnGotFocus(CefRefPtr<CefBrowser> browser) {
@@ -79,9 +95,11 @@ bool WindowClient::OnChromeCommand(CefRefPtr<CefBrowser> browser,
 }
 
 TabController::TabController(std::string initial_url,
-                             BrowserCreatedCallback browser_created_callback)
+                             BrowserCreatedCallback browser_created_callback,
+                             std::optional<std::string> new_tab_url)
     : initial_url_(std::move(initial_url)),
       browser_created_callback_(std::move(browser_created_callback)),
+      new_tab_url_(std::move(new_tab_url)),
       client_(new WindowClient(this)) {}
 
 bool TabController::CreateMainWindow() {
@@ -113,8 +131,7 @@ void TabController::CloseActiveTab() {
   if (!browser) {
     return;
   }
-  const TabSnapshot* tab =
-      model_.FindByBrowser(browser->GetIdentifier());
+  const TabSnapshot* tab = model_.FindByBrowser(browser->GetIdentifier());
   if (tab) {
     model_.RequestClose(tab->id);
   }
@@ -221,8 +238,12 @@ void TabController::ShowMainWindow() {
 
 void TabController::OnBrowserCreated(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
-  const int browser_id = browser->GetIdentifier();
-  browsers_[browser_id] = browser;
+  CefRefPtr<CefFrame> main_frame = browser->GetMainFrame();
+  bool already_redirected = false;
+  if (main_frame) {
+    already_redirected =
+        RedirectBuiltInNewTab(main_frame, main_frame->GetURL().ToString());
+  }
 
   // Bind the oldest creating tab if one belongs to our own CreateBrowser
   // request; otherwise adopt a tab created through the Chrome UI.
@@ -234,6 +255,17 @@ void TabController::OnBrowserCreated(CefRefPtr<CefBrowser> browser) {
       break;
     }
   }
+  const bool created_from_new_tab_command =
+      !creating_tab.has_value() && pending_new_tab_commands_ > 0;
+  if (created_from_new_tab_command) {
+    --pending_new_tab_commands_;
+    if (main_frame && !already_redirected) {
+      main_frame->LoadURL(*new_tab_url_);
+    }
+  }
+
+  const int browser_id = browser->GetIdentifier();
+  browsers_[browser_id] = browser;
   if (!creating_tab.has_value()) {
     creating_tab = model_.CreateTab();
   }
@@ -295,9 +327,25 @@ void TabController::OnRenderProcessGone(CefRefPtr<CefBrowser> browser) {
 
 void TabController::OnChromeCommand(int command_id) {
   CEF_REQUIRE_UI_THREAD();
+  static const int kNewTabCommandId = cef_id_for_command_id_name("IDC_NEW_TAB");
+  if (command_id == kNewTabCommandId && new_tab_url_.has_value() &&
+      pending_new_tab_commands_ < kMaximumTabsPerWindow) {
+    ++pending_new_tab_commands_;
+  }
   if (chrome_command_callback_) {
     chrome_command_callback_(command_id);
   }
+}
+
+bool TabController::RedirectBuiltInNewTab(CefRefPtr<CefFrame> frame,
+                                          const std::string& target_url) {
+  CEF_REQUIRE_UI_THREAD();
+  if (!frame || !frame->IsMain() || !new_tab_url_.has_value() ||
+      target_url != "chrome://newtab/") {
+    return false;
+  }
+  frame->LoadURL(*new_tab_url_);
+  return true;
 }
 
 bool TabController::CreateBrowserWindow() {

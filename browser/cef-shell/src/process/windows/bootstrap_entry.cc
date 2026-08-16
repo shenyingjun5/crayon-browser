@@ -4,28 +4,16 @@
 #include <string>
 #include <utility>
 
+#include "browser/new_tab/cef_new_tab_handler.h"
 #include "include/cef_app.h"
 #include "include/cef_version_info.h"
 #include "resource_ids.h"
 #include "windows/app.h"
-#include "windows/new_tab_scheme_handler.h"
 
 namespace crayon::browser::cef_shell::process {
 namespace {
 
 constexpr std::size_t kProductNameCapacity = 128;
-
-class ChildProcessApp final : public CefApp {
- public:
-  void OnRegisterCustomSchemes(
-      CefRawPtr<CefSchemeRegistrar> registrar) override {
-    RegisterCrayonScheme(registrar);
-  }
-
- private:
-  IMPLEMENT_REFCOUNTING(ChildProcessApp);
-  DISALLOW_COPY_AND_ASSIGN(ChildProcessApp);
-};
 
 enum class ExitCode : int {
   kSuccess = 0,
@@ -34,6 +22,7 @@ enum class ExitCode : int {
   kClientModuleMissing = 12,
   kProductNameMissing = 13,
   kBrandIconMissing = 14,
+  kNewTabStringsMissing = 15,
   kCefInitializeFailed = 20,
 };
 
@@ -61,7 +50,7 @@ std::wstring LoadProductName(HINSTANCE client_module) {
 
 }  // namespace
 
-int RunBrowserProcess(HINSTANCE bootstrap_instance, void* sandbox_info) {
+int RunBrowserProcess(HINSTANCE bootstrap_instance, void *sandbox_info) {
   if (!bootstrap_instance) {
     return static_cast<int>(ExitCode::kBootstrapInstanceMissing);
   }
@@ -70,8 +59,9 @@ int RunBrowserProcess(HINSTANCE bootstrap_instance, void* sandbox_info) {
   }
 
   CefMainArgs main_args(bootstrap_instance);
-  const int child_exit_code = CefExecuteProcess(
-      main_args, CefRefPtr<CefApp>(new ChildProcessApp()), sandbox_info);
+  CefRefPtr<CefApp> child_app = new_tab::CreateNewTabProcessApp();
+  const int child_exit_code =
+      CefExecuteProcess(main_args, child_app, sandbox_info);
   if (child_exit_code >= 0) {
     return child_exit_code;
   }
@@ -91,6 +81,9 @@ int RunBrowserProcess(HINSTANCE bootstrap_instance, void* sandbox_info) {
       new BrowserApp(client_module, std::move(product_name)));
   if (!app->brand_icons_valid()) {
     return static_cast<int>(ExitCode::kBrandIconMissing);
+  }
+  if (!app->new_tab_strings_valid()) {
+    return static_cast<int>(ExitCode::kNewTabStringsMissing);
   }
   if (!CefInitialize(main_args, settings, app, sandbox_info)) {
     const int cef_exit_code = CefGetExitCode();
