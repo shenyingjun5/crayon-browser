@@ -32,6 +32,8 @@ if(OS_WINDOWS)
       src/windows/app.cc
       src/windows/app.h
       src/windows/main_win.cc
+      src/windows/new_tab_scheme_handler.cc
+      src/windows/new_tab_scheme_handler.h
       src/windows/shell_command_adapter.cc
       src/windows/shell_command_adapter.h
       resources/windows/resource_ids.h
@@ -50,7 +52,7 @@ if(OS_WINDOWS)
   add_dependencies(${CRAYON_BROWSER_TARGET} libcef_dll_wrapper)
   target_link_libraries(
     ${CRAYON_BROWSER_TARGET}
-    PRIVATE crayon::browser-shared-shell crayon_libcef libcef_dll_wrapper
+    PRIVATE crayon::browser-new-tab crayon::browser-shared-shell crayon_libcef libcef_dll_wrapper
             ${CEF_STANDARD_LIBS})
   set_target_properties(${CRAYON_BROWSER_TARGET}
                         PROPERTIES OUTPUT_NAME "CrayonBrowser")

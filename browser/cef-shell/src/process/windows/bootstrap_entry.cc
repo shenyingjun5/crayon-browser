@@ -8,11 +8,24 @@
 #include "include/cef_version_info.h"
 #include "resource_ids.h"
 #include "windows/app.h"
+#include "windows/new_tab_scheme_handler.h"
 
 namespace crayon::browser::cef_shell::process {
 namespace {
 
 constexpr std::size_t kProductNameCapacity = 128;
+
+class ChildProcessApp final : public CefApp {
+ public:
+  void OnRegisterCustomSchemes(
+      CefRawPtr<CefSchemeRegistrar> registrar) override {
+    RegisterCrayonScheme(registrar);
+  }
+
+ private:
+  IMPLEMENT_REFCOUNTING(ChildProcessApp);
+  DISALLOW_COPY_AND_ASSIGN(ChildProcessApp);
+};
 
 enum class ExitCode : int {
   kSuccess = 0,
@@ -46,9 +59,9 @@ std::wstring LoadProductName(HINSTANCE client_module) {
   return std::wstring(buffer.data(), static_cast<std::size_t>(length));
 }
 
-} // namespace
+}  // namespace
 
-int RunBrowserProcess(HINSTANCE bootstrap_instance, void *sandbox_info) {
+int RunBrowserProcess(HINSTANCE bootstrap_instance, void* sandbox_info) {
   if (!bootstrap_instance) {
     return static_cast<int>(ExitCode::kBootstrapInstanceMissing);
   }
@@ -57,8 +70,8 @@ int RunBrowserProcess(HINSTANCE bootstrap_instance, void *sandbox_info) {
   }
 
   CefMainArgs main_args(bootstrap_instance);
-  const int child_exit_code =
-      CefExecuteProcess(main_args, nullptr, sandbox_info);
+  const int child_exit_code = CefExecuteProcess(
+      main_args, CefRefPtr<CefApp>(new ChildProcessApp()), sandbox_info);
   if (child_exit_code >= 0) {
     return child_exit_code;
   }
@@ -90,4 +103,4 @@ int RunBrowserProcess(HINSTANCE bootstrap_instance, void *sandbox_info) {
   return static_cast<int>(ExitCode::kSuccess);
 }
 
-} // namespace crayon::browser::cef_shell::process
+}  // namespace crayon::browser::cef_shell::process

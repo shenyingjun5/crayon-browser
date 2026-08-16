@@ -39,6 +39,7 @@ if(CRAYON_BUILD_TESTS)
 endif()
 add_subdirectory(browser/engine-api)
 add_subdirectory(browser/shared-ui/shell)
+add_subdirectory(browser/shared-ui/new-tab)
 
 if(CRAYON_ENABLE_CEF)
   if(APPLE)

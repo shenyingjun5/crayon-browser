@@ -1,6 +1,6 @@
 # BUX：桌面浏览器产品体验 Roadmap
 
-状态：`BUX-01/02 DONE`，`BUX-03 READY`；Chrome-inspired 信息架构、共享 design token、标题栏/标签栏/导航栏自有 glyph 与平台适配边界已经冻结，Windows UI shell、typed command、focus owner 与 engine event adapter 骨架已完成实机门禁。当前阶段优先完成 Windows 全部基础浏览器功能，macOS 对齐后置。本 Roadmap 把“基本浏览器有的功能”拆成可审查原子任务；视觉、品牌、内置页面与服务均为蜡笔自有实现。
+状态：`BUX-01/02 DONE`，`BUX-03 VERIFIED`；Chrome-inspired 信息架构、共享 design token、标题栏/标签栏/导航栏自有 glyph 与平台适配边界已经冻结，Windows UI shell、typed command、focus owner 与 engine event adapter 骨架已完成实机门禁。当前阶段优先完成 Windows 全部基础浏览器功能，macOS 对齐后置。本 Roadmap 把“基本浏览器有的功能”拆成可审查原子任务；视觉、品牌、内置页面与服务均为蜡笔自有实现。
 
 ## 产品设计结论
 
@@ -16,7 +16,7 @@
 |---|---|---|---|---|---|
 | BUX-01 | DONE | CEF-01D | `docs/current/browser-ux.md`,`browser/shared-ui/design` | 冻结 Chrome-inspired 信息架构、密度、token、组件状态、键盘/无障碍和品牌禁用规则 | UX-001；light/dark、窄/宽窗口、100%/200% 规格 golden |
 | BUX-02 | DONE | BUX-01,CEF-02W | `browser/shared-ui/shell` | Windows 首发 UI shell、命令 registry、focus owner 与 engine event adapter 骨架；共享层保持跨平台 | UX-001；重复 command、旧 tab event、窗口释放；Windows 实机 |
-| BUX-03 | READY | BUX-02,CEF-03 | `browser/shared-ui/new-tab` | 本地 `crayon://newtab`、普通/无痕差异、固定快捷入口模型 | UX-002；零默认公网请求、损坏配置、安全 resource handler |
+| BUX-03 | VERIFIED | BUX-02,CEF-03 | `browser/shared-ui/new-tab` | 本地 `crayon://newtab`、普通/无痕差异、固定快捷入口模型 | UX-002；零默认公网请求、损坏配置、安全 resource handler；待 Windows CEF 构建/实机门禁后转 `DONE` |
 | BUX-04 | TODO | BUX-02,CEF-03,PRV-06 | `browser/shared-ui/omnibox` | omnibox 编辑/提交、URL/搜索判定、建议 owner 与 provider 配置契约 | UX-003；scheme/长度/取消/旧建议/Profile 隔离 |
 | BUX-05 | TODO | BUX-04 | `browser/shared-ui/navigation` | 后退/前进/刷新/停止、加载状态、站点身份和页面动作绑定 | UX-004；导航竞争、证书/HTTP/HTTPS、页面伪造安全 UI |
 | BUX-06 | TODO | BUX-02,CEF-03 | `browser/shared-ui/tabs/basic` | 新建/切换/关闭/拖动/恢复关闭标签与 active/focus 状态机 | UX-005；重复关闭、旧事件、崩溃恢复、释放 |
@@ -83,3 +83,28 @@
 - Windows 实机：Debug 启动为唯一 `CrayonBrowser.exe` 窗口；`Ctrl+L` 聚焦并选中地址栏，`Ctrl+T` 从 1 个标签增加到 2 个，`Ctrl+W` 恢复为 1 个，`Ctrl+R` 后窗口/文档仍正常；Debug 与 Release 均由 `Ctrl+Shift+W` 关闭，轮询结果为窗口 `0`、运行 app/process `0`。
 - Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；Windows 真机门禁发现并关闭 1 个 P1（CEF UI 线程前安装 callback），最终 P0/P1/P2/P3 均为 `0`。共享目录未出现 CEF/Win32/AppKit/ArkWeb 类型，新增生产文件均低于规模提醒线。
 - 未覆盖与风险：当前仍是供后续自有控件消费的 shell 骨架；Windows 可见界面继续使用 CEF Chrome-style 原生 UI，`NewTab/FocusOmnibox` 的 product-origin target 在自有控件完成前保持 unavailable，原生 shortcut 只做 typed observation/pass-through。未做 macOS 实机、像素 UI、IME/读屏/多屏 DPI、起始页/omnibox/完整标签功能；分别由 `CEF-02M`、`BUX-03..06`、`BUX-18/UX-016` 完成。
+
+## BUX-03 原子范围（本地新标签页）
+
+- 状态：`VERIFIED`；依赖 `BUX-02 DONE`、`CEF-03 DONE`。平台中立实现和自动化契约已验证，等待 Windows CEF Debug/Release 与实机门禁后转 `DONE`。
+- 单一目标：交付编译期内置、无默认公网请求的 `crayon://newtab/` 页面与平台中立模型；普通模式可显示用户已固定的快捷入口，Private 模式隐藏快捷入口和任何历史/最近关闭数据，并为后续 omnibox、书签和投屏 UI 保留显式但不具备业务副作用的入口语义。投屏作为一级入口在两种模式中均保留，但在 `CEF-13` 前保持禁用。
+- 输入：`browser-design-v1` 起始页信息架构、`ShellState` 的 Profile/Tab 事实、调用方提供的本地化字符串，以及用户配置层未来可提供的固定快捷入口快照。本任务不建立持久化 store。
+- 输出与允许修改：新增 `browser/shared-ui/new-tab/` 的模型、HTML/resource builder、独立 CMake 与测试；在根 CMake 接入独立 target；仅为在 Browser/Renderer/GPU 等进程一致注册 `crayon` 标准自定义 scheme、提供只读 resource handler 和把初始页切换为 `crayon://newtab/`，允许窄修改 `browser/cef-shell` 的 Windows app/process adapter、CMake 与 source contract；新增起始页可见文案只进入 `browser/shared-ui/locales/`；同步 current/总 Roadmap/索引。
+- 禁止修改：`browser/engine-api`、既有 shell command/schema、Profile 持久化、书签/历史/最近关闭 store、omnibox URL/搜索判定、Cast-SDK/Relay/投屏状态机、Agent/模型、macOS 平台行为和 BUX-01 生成资产；不引入 JS、远程字体、外部图片、第三方 UI/JSON 依赖或页面到 Browser 的命令桥。
+- 模型与边界：固定入口最多 12 项；只接受 `http`/`https` 且具备非空 host 的 URL、非空且有长度上限的标题，非法/重复项在构建快照时稳定丢弃且保持输入顺序。Private 模式即使收到入口或最近关闭输入也输出空集合。模型不保存 Profile 路径、浏览历史、凭证、query 内容或网页正文。
+- Resource 安全：只服务精确 `GET`/`HEAD crayon://newtab/`；拒绝 userinfo、非空端口、query、fragment、子路径、未知 host/method 和路径穿越；响应固定 UTF-8 HTML、`Cache-Control: no-store`、`X-Content-Type-Options: nosniff` 与不允许网络、脚本、frame、表单提交的 CSP。HTML/CSS 和本地化/用户标题均有大小上限，动态文本必须转义；HEAD 不返回 body。handler 不启动线程、网络、文件 IO 或计时器，重复请求互不共享可变状态，释放后无回调。
+- 验收与测试：UX-002；独立 configure/build/ctest 覆盖普通/Private、零/上限/超量入口、非法/重复 URL、危险标题转义、损坏配置降级、精确 request allowlist、GET/HEAD、header/CSP、超大字符串与确定性输出；CEF source contract 检查 scheme 注册为 standard/local/secure 且 handler 只消费编译期资源。执行适用 format、`scripts/check.sh fast/security`、CEF 可用平台 build/ctest 和 `git diff --check`。
+- 明确不做：真实快捷入口持久化与编辑、最近关闭恢复、omnibox 提交、书签、投屏动作、像素级 Windows/macOS 验收和 Private Profile 创建/清理；分别由 `BUX-04/06/09/10/13/15`、`CEF-13`、`BUX-18` 与 `PRV` 任务完成。本任务中的对应控件只能是静态、无副作用或隐藏状态。
+
+### BUX-03 验证与 Review 记录（2026-08-16）
+
+- 实现：新增平台中立 `new-tab` 模型、编译期本地化 HTML/resource builder 和独立测试 target；Windows Browser/child process 一致注册 `crayon` standard/local/secure scheme，Browser process 只为精确 `GET/HEAD crayon://newtab/` 返回内存资源，并将初始页从 `about:blank` 切换为本地新标签页。Private 模型丢弃全部快捷入口；两种模式均保留禁用的投屏一级入口，不建立持久化、命令桥或公网资源。
+- 失败基线：在仅接入新 target、尚未加入实现文件时执行 `cmake -S . -B /tmp/crayon-bux03-failing -DCRAYON_ENABLE_CEF=OFF -DCRAYON_BUILD_TESTS=ON`，configure 按预期因缺少 `browser/shared-ui/new-tab/src/new_tab.cc` 失败，证明测试/build graph 先于实现建立。
+- `cmake -S . -B /tmp/crayon-bux03 -DCRAYON_ENABLE_CEF=OFF -DCRAYON_BUILD_TESTS=ON` 与 `cmake --build /tmp/crayon-bux03 -j2`：PASS；平台中立 C++17 target 在 AppleClang `-Wall -Wextra -Wpedantic -Werror` 下构建通过。
+- `ctest --test-dir /tmp/crayon-bux03 --output-on-failure -R 'browser_(engine|shared_shell|new_tab)_contract'`：PASS，3/3；覆盖普通/Private、入口过滤/去重/上限、host/URL 边界、危险标题转义、损坏 locale、精确 GET/HEAD allowlist、确定性、64 KiB 页面上限、CSP/no-store 与空 HEAD body。
+- `cmake -DCRAYON_CEF_SHELL_SOURCE=browser/cef-shell -P browser/cef-shell/tests/source_contract.cmake` 与 `window_adapter_contract.cmake`：PASS；确认 scheme 在 Browser/child process 一致注册、handler/CMake 接线和本地资源安全 header。CEF API 对照固定 revision `8042e43` 和官方接口复核。
+- `bash scripts/check.sh fast`：PASS；沙箱内首次因 loopback fixture `Operation not permitted` 失败，允许本地端口的同命令复跑后 guard/format/formal workspace/legacy unit 全部通过。
+- `bash scripts/check.sh security`：PASS；沙箱内首次因 security fixture 无法绑定 loopback 失败，允许本地端口的同命令复跑后 guard/relay unit/relay security 全部通过。
+- `xcrun clang-format --style=Google --dry-run --Werror <BUX-03 C++ files>` 与 `git diff --check`：PASS。
+- Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；发现并关闭 1 个 P1（CEF response 的 MIME type 与 charset 原混合传入 `SetMimeType`，已拆为 `SetMimeType("text/html")`/`SetCharset("utf-8")` 并补契约）。最终未关闭 P0/P1/P2/P3 均为 `0`，结论 `APPROVE`。
+- 未覆盖与风险：当前 macOS 环境未安装固定版 Windows CEF distribution，Windows Debug/Release configure/build/ctest、真实 `CrayonBrowser.exe` 页面加载、零公网请求观察、普通/Private Profile 实际接线与退出残留进程门禁均 `NOT_RUN`；因此任务保持 `VERIFIED`，不得转 `DONE`。Private Profile 的创建/清理属于 `PRV`，像素/键盘/读屏/高 DPI 跨平台验收属于 `BUX-18`。

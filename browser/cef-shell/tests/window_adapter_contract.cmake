@@ -139,11 +139,22 @@ endif()
 
 foreach(required_windows_source
         "src/browser/window/tab_controller.cc"
-        "src/browser/window/tab_model.cc")
+        "src/browser/window/tab_model.cc"
+        "src/windows/new_tab_scheme_handler.cc")
   string(FIND "${shell_cmake}" "${required_windows_source}" source_index)
   if(source_index EQUAL -1)
     message(FATAL_ERROR
             "Windows CMake graph is missing ${required_windows_source}")
+  endif()
+endforeach()
+
+foreach(required_new_tab_cmake_token
+        "crayon::browser-new-tab"
+        "src/windows/new_tab_scheme_handler.cc")
+  string(FIND "${shell_cmake}" "${required_new_tab_cmake_token}" token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Windows CMake graph is missing ${required_new_tab_cmake_token}")
   endif()
 endforeach()
 

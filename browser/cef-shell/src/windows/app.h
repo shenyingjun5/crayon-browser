@@ -35,6 +35,8 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   CefRefPtr<CefBrowserProcessHandler> GetBrowserProcessHandler() override {
     return this;
   }
+  void OnRegisterCustomSchemes(
+      CefRawPtr<CefSchemeRegistrar> registrar) override;
   void OnContextInitialized() override;
   CefRefPtr<CefClient> GetDefaultClient() override;
   bool brand_icons_valid() const { return window_icons_->valid(); }
