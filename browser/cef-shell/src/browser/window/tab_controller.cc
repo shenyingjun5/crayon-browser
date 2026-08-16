@@ -68,6 +68,16 @@ void WindowClient::OnGotFocus(CefRefPtr<CefBrowser> browser) {
   controller_->OnBrowserFocused(browser);
 }
 
+bool WindowClient::OnChromeCommand(CefRefPtr<CefBrowser> browser,
+                                   int command_id,
+                                   cef_window_open_disposition_t disposition) {
+  CEF_REQUIRE_UI_THREAD();
+  static_cast<void>(browser);
+  static_cast<void>(disposition);
+  controller_->OnChromeCommand(command_id);
+  return false;
+}
+
 TabController::TabController(std::string initial_url,
                              BrowserCreatedCallback browser_created_callback)
     : initial_url_(std::move(initial_url)),
@@ -80,6 +90,16 @@ bool TabController::CreateMainWindow() {
     return false;
   }
   return CreateBrowserWindow();
+}
+
+void TabController::SetChromeCommandCallback(ChromeCommandCallback callback) {
+  CEF_REQUIRE_UI_THREAD();
+  chrome_command_callback_ = std::move(callback);
+}
+
+void TabController::SetBrowsersClosedCallback(BrowsersClosedCallback callback) {
+  CEF_REQUIRE_UI_THREAD();
+  browsers_closed_callback_ = std::move(callback);
 }
 
 void TabController::NewWindow() {
@@ -236,6 +256,9 @@ void TabController::OnBrowserClosing(CefRefPtr<CefBrowser> browser) {
   model_.DetachBrowser(browser_id);
   browsers_.erase(browser_id);
   if (model_.empty()) {
+    if (browsers_closed_callback_) {
+      browsers_closed_callback_();
+    }
     CefQuitMessageLoop();
   }
 }
@@ -255,8 +278,7 @@ void TabController::OnAddressUpdated(CefRefPtr<CefBrowser> browser,
 }
 
 void TabController::OnLoadingUpdated(CefRefPtr<CefBrowser> browser,
-                                     bool is_loading,
-                                     bool can_go_back,
+                                     bool is_loading, bool can_go_back,
                                      bool can_go_forward) {
   CEF_REQUIRE_UI_THREAD();
   const int browser_id = browser->GetIdentifier();
@@ -269,6 +291,13 @@ void TabController::OnLoadingUpdated(CefRefPtr<CefBrowser> browser,
 void TabController::OnRenderProcessGone(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
   model_.MarkCrashed(browser->GetIdentifier());
+}
+
+void TabController::OnChromeCommand(int command_id) {
+  CEF_REQUIRE_UI_THREAD();
+  if (chrome_command_callback_) {
+    chrome_command_callback_(command_id);
+  }
 }
 
 bool TabController::CreateBrowserWindow() {

@@ -1,6 +1,6 @@
 # BUX：桌面浏览器产品体验 Roadmap
 
-状态：`BUX-01 DONE`；Chrome-inspired 信息架构、共享 design token、标题栏/标签栏/导航栏自有 glyph 与平台适配边界已经冻结。`CEF-02W DONE` 已解锁 `BUX-02 READY`；当前阶段优先完成 Windows 全部基础浏览器功能，macOS 对齐后置。本 Roadmap 把“基本浏览器有的功能”拆成可审查原子任务；视觉、品牌、内置页面与服务均为蜡笔自有实现。
+状态：`BUX-01/02 DONE`，`BUX-03 READY`；Chrome-inspired 信息架构、共享 design token、标题栏/标签栏/导航栏自有 glyph 与平台适配边界已经冻结，Windows UI shell、typed command、focus owner 与 engine event adapter 骨架已完成实机门禁。当前阶段优先完成 Windows 全部基础浏览器功能，macOS 对齐后置。本 Roadmap 把“基本浏览器有的功能”拆成可审查原子任务；视觉、品牌、内置页面与服务均为蜡笔自有实现。
 
 ## 产品设计结论
 
@@ -15,8 +15,8 @@
 | ID | 状态 | 依赖 | 目标路径 | 单一交付 | 测试/验收 |
 |---|---|---|---|---|---|
 | BUX-01 | DONE | CEF-01D | `docs/current/browser-ux.md`,`browser/shared-ui/design` | 冻结 Chrome-inspired 信息架构、密度、token、组件状态、键盘/无障碍和品牌禁用规则 | UX-001；light/dark、窄/宽窗口、100%/200% 规格 golden |
-| BUX-02 | READY | BUX-01,CEF-02W | `browser/shared-ui/shell` | Windows 首发 UI shell、命令 registry、focus owner 与 engine event adapter 骨架；共享层保持跨平台 | UX-001；重复 command、旧 tab event、窗口释放；Windows 实机 |
-| BUX-03 | TODO | BUX-02,CEF-03 | `browser/shared-ui/new-tab` | 本地 `crayon://newtab`、普通/无痕差异、固定快捷入口模型 | UX-002；零默认公网请求、损坏配置、安全 resource handler |
+| BUX-02 | DONE | BUX-01,CEF-02W | `browser/shared-ui/shell` | Windows 首发 UI shell、命令 registry、focus owner 与 engine event adapter 骨架；共享层保持跨平台 | UX-001；重复 command、旧 tab event、窗口释放；Windows 实机 |
+| BUX-03 | READY | BUX-02,CEF-03 | `browser/shared-ui/new-tab` | 本地 `crayon://newtab`、普通/无痕差异、固定快捷入口模型 | UX-002；零默认公网请求、损坏配置、安全 resource handler |
 | BUX-04 | TODO | BUX-02,CEF-03,PRV-06 | `browser/shared-ui/omnibox` | omnibox 编辑/提交、URL/搜索判定、建议 owner 与 provider 配置契约 | UX-003；scheme/长度/取消/旧建议/Profile 隔离 |
 | BUX-05 | TODO | BUX-04 | `browser/shared-ui/navigation` | 后退/前进/刷新/停止、加载状态、站点身份和页面动作绑定 | UX-004；导航竞争、证书/HTTP/HTTPS、页面伪造安全 UI |
 | BUX-06 | TODO | BUX-02,CEF-03 | `browser/shared-ui/tabs/basic` | 新建/切换/关闭/拖动/恢复关闭标签与 active/focus 状态机 | UX-005；重复关闭、旧事件、崩溃恢复、释放 |
@@ -61,3 +61,25 @@
 - 自动验证：独立 configure 成功，`ctest --test-dir .cache/build/browser-design --output-on-failure` 为 `2/2` 通过；正向 contract 检查闭合 token/role/surface/state、App-icon 禁用、SVG 主动内容/外链/状态色和 golden，拒绝 contract 证明缺投屏 role、外链 SVG、stale golden、缺主题、未审状态和未注册图标均 fail closed。Node 三个脚本 `--check`、`scripts/check.ps1 brand-assets`、`fast`、`security` 和 `git diff --check` 通过。
 - Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；发现并关闭 1 个 P1（SVG 主动内容与 token/surface/state 未完全闭合），最终 P0/P1/P2/P3 均为 `0`。
 - 未覆盖与风险：这些是平台中立规范、SVG 和数据 golden，不是 Windows/macOS 像素截图或交互 UI。实际 shell 接入、tooltip 本地化、平台高对比度/IME/读屏/多屏 DPI 和投屏状态绑定分别由 `BUX-02`、`UX-016`、`CEF-13`、`BUX-18` 验证；不得把 BUX-01 描述为完整浏览器 UI 已完成。
+
+## BUX-02 原子范围（Windows 首发 UI shell 骨架）
+
+- 状态：`DONE`；依赖 `BUX-01 DONE`、`CEF-02W DONE`，并消费已完成的 `CEF-03` Windows 窗口/标签生命周期，不修改其完成证据。
+- 单一目标：建立平台中立、可独立测试的 shell 状态 owner，把 UI 输入归一为 typed command，把 engine 事件归一为有 generation 的 shell view state，并在 Windows CEF Chrome-style 壳接入命令观察、focus 释放和窗口退出；本任务只交付后续自有控件可依赖的骨架，不实现 BUX-03..17 的具体产品功能。
+- 输入：`browser-design-v1` 的两层信息架构、command/focus/无障碍契约，冻结的 `browser/engine-api` 事件类型，以及 `CEF-03` 的 TabController 回调与 Windows 实机基线。
+- 输出与允许修改：新增 `browser/shared-ui/shell/` 生产状态、typed command registry、focus owner、engine event adapter 和独立单测/CMake；为装配只允许修改根/CEF shell CMake、`browser/cef-shell/src/browser/window` 的窄 callback/command hook、Windows `app.*`、CEF/source contract，以及本 Roadmap/current/总 Roadmap 索引。生产实现不超过 6 个新文件，Windows adapter 不得进入共享目录。
+- 禁止修改：`browser/engine-api` 公共头与语义、BUX-01 token/glyph/golden、macOS/Harmony 源码、Profile/持久化、起始页、omnibox 判定、最终标签交互、下载/权限/投屏业务、Cast-SDK、Relay、Agent/模型；不得引入 JSON/UI framework/第三方图标依赖，不得暴露 CEF/Win32 handle 给共享 shell。
+- 状态与错误边界：command 必须使用闭合 enum 与单调 sequence；未知 enum、重复/旧 sequence、无 active tab、窗口 closing 状态稳定拒绝且不产生第二次副作用。Focus token 绑定 owner generation 与可选 tab；tab/window 销毁后旧 token 不得恢复焦点。Engine event adapter 只接受已创建 tab，按 navigation ID 拒绝旧导航事件；重复 close 幂等；shutdown 后忽略全部迟到事件并释放 target/sink 引用。
+- Windows adapter：CEF command ID 只在 CEF 层以 `cef_id_for_command_id_name()` 做版本安全映射；原生 Chrome shortcut 可在自有控件完成前保持 pass-through，但必须先归一为 typed command/focus observation，不能把 IDC 数值泄漏到共享层或同步伪造 engine 完成。窗口关闭必须先使 shell inactive，再走 CEF-03 已验证的 browser 关闭链。
+- 验收与测试：UX-001 的骨架部分覆盖 command/focus 顺序与两层 surface role；单测覆盖正常 dispatch、未知/重复 command、旧 tab/navigation event、重复 close、focus token 失效、shutdown/迟到事件和释放。执行独立 shell configure/build/ctest、Windows Debug/Release build+ctest、适用 clang-format、`scripts/check.ps1 fast/security`、`git diff --check`；Windows 实机覆盖 Ctrl+L/T/W/R、焦点切换、整窗退出和完整路径零残留。
+- 明确不做：本任务不宣称自有像素 UI、起始页、omnibox、标签拖动/恢复、书签/下载/Profile/菜单或投屏按钮已完成；具体可见控件与行为分别由 `BUX-03..17`，自有 Views/location toolbar 接入由 `BUX-04..06`，跨平台 DPI/IME/读屏总验收由 `BUX-18/UX-016` 完成。
+
+完成记录（2026-08-16）：
+
+- 失败基线：先加入独立 shared shell target/test；首次 configure 因 `src/command_registry.cc` 不存在按预期失败。Windows 真机首次启动又触发 `tab_controller.cc` 的 `CefCurrentlyOn(TID_UI)` 断言；随后先扩展 `window_adapter_contract`，修复前该契约按预期失败，再把 callback 安装移动到 `OnContextInitialized` 的 CEF UI 线程并在首个 `CreateMainWindow` 前完成。
+- 实现：新增平台中立的闭合 `ShellCommand`/`CommandOrigin`、单调 sequence registry、两层 surface/focus 顺序、可失效 focus token、Profile/Tab/Navigation view state 和 `EngineEventAdapter`；重复 close 幂等，未知/退休 tab、旧导航 generation、shutdown 后迟到事件稳定拒绝。Windows CEF adapter 以 `cef_id_for_command_id_name()` 映射原生 Chrome command，先归一观察再 pass-through，不泄漏或硬编码 IDC 数值；最后浏览器关闭时先 shutdown shell。
+- 构建修正：Windows 首次链接暴露官方 CEF 静态 CRT 与新 target 默认动态 CRT 不一致，根 CMake 仅在 `MSVC && CRAYON_ENABLE_CEF` 统一为静态 CRT；未使用 `NODEFAULTLIB` 或跨平台全局特例。
+- 自动验证：独立 shared shell configure/build 成功，`ctest --test-dir .cache/build/shared-shell --output-on-failure` 为 `6/6`；Windows Debug/Release build 均成功，修复后 `ctest --preset windows-cef-debug -C Debug/Release --output-on-failure` 均为 `11/11`；`scripts/check.ps1 fast`、`security`、Google-style clang-format dry-run 与 `git diff --check` 通过。MSBuild 保留既有共享中间目录与 CEF delay-load warning，无编译/链接错误。
+- Windows 实机：Debug 启动为唯一 `CrayonBrowser.exe` 窗口；`Ctrl+L` 聚焦并选中地址栏，`Ctrl+T` 从 1 个标签增加到 2 个，`Ctrl+W` 恢复为 1 个，`Ctrl+R` 后窗口/文档仍正常；Debug 与 Release 均由 `Ctrl+Shift+W` 关闭，轮询结果为窗口 `0`、运行 app/process `0`。
+- Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；Windows 真机门禁发现并关闭 1 个 P1（CEF UI 线程前安装 callback），最终 P0/P1/P2/P3 均为 `0`。共享目录未出现 CEF/Win32/AppKit/ArkWeb 类型，新增生产文件均低于规模提醒线。
+- 未覆盖与风险：当前仍是供后续自有控件消费的 shell 骨架；Windows 可见界面继续使用 CEF Chrome-style 原生 UI，`NewTab/FocusOmnibox` 的 product-origin target 在自有控件完成前保持 unavailable，原生 shortcut 只做 typed observation/pass-through。未做 macOS 实机、像素 UI、IME/读屏/多屏 DPI、起始页/omnibox/完整标签功能；分别由 `CEF-02M`、`BUX-03..06`、`BUX-18/UX-016` 完成。

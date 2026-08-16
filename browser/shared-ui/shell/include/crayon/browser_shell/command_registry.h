@@ -1,0 +1,137 @@
+#pragma once
+
+#include <array>
+#include <cstdint>
+#include <optional>
+#include <string>
+
+namespace crayon::browser_shell {
+
+enum class ShellCommand {
+  kNewTab = 0,
+  kCloseTab,
+  kFocusOmnibox,
+  kBack,
+  kForward,
+  kReload,
+  kStop,
+  kZoomIn,
+  kZoomOut,
+  kResetZoom,
+};
+
+enum class CommandOrigin { kProductUi = 0, kNativeChrome };
+
+enum class CommandDispatchResult {
+  kExecuted = 0,
+  kPassThrough,
+  kUnavailable,
+  kInvalidCommand,
+  kStaleSequence,
+  kInactive,
+};
+
+enum class FocusArea {
+  kNone = 0,
+  kTabStrip,
+  kNavigation,
+  kOmnibox,
+  kPage,
+  kTemporaryLayer,
+};
+
+enum class ShellSurface { kTabStrip = 0, kNavigationBar };
+
+inline constexpr std::array<ShellSurface, 2> kShellSurfaceOrder = {
+    ShellSurface::kTabStrip,
+    ShellSurface::kNavigationBar,
+};
+
+inline constexpr std::array<FocusArea, 4> kPrimaryFocusOrder = {
+    FocusArea::kTabStrip,
+    FocusArea::kNavigation,
+    FocusArea::kOmnibox,
+    FocusArea::kPage,
+};
+
+constexpr bool IsValid(ShellCommand command) noexcept {
+  switch (command) {
+    case ShellCommand::kNewTab:
+    case ShellCommand::kCloseTab:
+    case ShellCommand::kFocusOmnibox:
+    case ShellCommand::kBack:
+    case ShellCommand::kForward:
+    case ShellCommand::kReload:
+    case ShellCommand::kStop:
+    case ShellCommand::kZoomIn:
+    case ShellCommand::kZoomOut:
+    case ShellCommand::kResetZoom:
+      return true;
+  }
+  return false;
+}
+
+constexpr bool IsValid(CommandOrigin origin) noexcept {
+  switch (origin) {
+    case CommandOrigin::kProductUi:
+    case CommandOrigin::kNativeChrome:
+      return true;
+  }
+  return false;
+}
+
+constexpr bool IsValid(FocusArea area) noexcept {
+  switch (area) {
+    case FocusArea::kNone:
+    case FocusArea::kTabStrip:
+    case FocusArea::kNavigation:
+    case FocusArea::kOmnibox:
+    case FocusArea::kPage:
+    case FocusArea::kTemporaryLayer:
+      return true;
+  }
+  return false;
+}
+
+struct FocusToken final {
+  std::uint64_t generation;
+  FocusArea area;
+  std::optional<std::string> tab_id;
+};
+
+class ShellCommandTarget {
+ public:
+  virtual ~ShellCommandTarget() = default;
+
+  virtual bool CanExecute(ShellCommand command) const noexcept = 0;
+  virtual bool Execute(ShellCommand command) = 0;
+};
+
+class ShellCommandObserver {
+ public:
+  virtual ~ShellCommandObserver() = default;
+
+  virtual void OnCommandAccepted(ShellCommand command,
+                                 CommandOrigin origin) = 0;
+};
+
+class CommandRegistry final {
+ public:
+  CommandRegistry(ShellCommandTarget& target, ShellCommandObserver& observer)
+      : target_(&target), observer_(&observer) {}
+
+  CommandDispatchResult Dispatch(ShellCommand command, std::uint64_t sequence,
+                                 CommandOrigin origin);
+  void Shutdown() noexcept;
+
+  bool active() const noexcept { return active_; }
+  std::uint64_t last_sequence() const noexcept { return last_sequence_; }
+
+ private:
+  ShellCommandTarget* target_;
+  ShellCommandObserver* observer_;
+  std::uint64_t last_sequence_ = 0;
+  bool active_ = true;
+};
+
+}  // namespace crayon::browser_shell

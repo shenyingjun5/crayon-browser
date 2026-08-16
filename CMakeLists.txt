@@ -14,6 +14,14 @@ if(CMAKE_CONFIGURATION_TYPES)
       "Supported multi-config build types" FORCE)
 endif()
 
+# The official Windows CEF bootstrap and wrapper use the static MSVC runtime.
+# Apply the same runtime before adding product libraries so shared UI/engine
+# objects can be linked into the CEF client DLL without mixed-CRT ownership.
+if(MSVC AND CRAYON_ENABLE_CEF)
+  set(CMAKE_MSVC_RUNTIME_LIBRARY
+      "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+
 set(CRAYON_ENGINE_API_BUILD_TESTS "${CRAYON_BUILD_TESTS}" CACHE BOOL
     "Build browser engine API contract tests" FORCE)
 if(CRAYON_BUILD_TESTS)
@@ -30,6 +38,7 @@ if(CRAYON_BUILD_TESTS)
                        PROPERTIES LABELS "cef;contract")
 endif()
 add_subdirectory(browser/engine-api)
+add_subdirectory(browser/shared-ui/shell)
 
 if(CRAYON_ENABLE_CEF)
   if(APPLE)

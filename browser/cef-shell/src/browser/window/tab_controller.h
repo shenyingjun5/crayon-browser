@@ -8,6 +8,7 @@
 
 #include "browser/window/tab_model.h"
 #include "include/cef_client.h"
+#include "include/cef_command_handler.h"
 
 namespace crayon::browser::cef_shell::window {
 
@@ -21,7 +22,8 @@ class WindowClient final : public CefClient,
                            public CefDisplayHandler,
                            public CefLoadHandler,
                            public CefRequestHandler,
-                           public CefFocusHandler {
+                           public CefFocusHandler,
+                           public CefCommandHandler {
  public:
   explicit WindowClient(TabController* controller) : controller_(controller) {}
 
@@ -30,23 +32,22 @@ class WindowClient final : public CefClient,
   CefRefPtr<CefLoadHandler> GetLoadHandler() override { return this; }
   CefRefPtr<CefRequestHandler> GetRequestHandler() override { return this; }
   CefRefPtr<CefFocusHandler> GetFocusHandler() override { return this; }
+  CefRefPtr<CefCommandHandler> GetCommandHandler() override { return this; }
 
   void OnAfterCreated(CefRefPtr<CefBrowser> browser) override;
   bool DoClose(CefRefPtr<CefBrowser> browser) override;
   void OnBeforeClose(CefRefPtr<CefBrowser> browser) override;
 
-  void OnAddressChange(CefRefPtr<CefBrowser> browser,
-                       CefRefPtr<CefFrame> frame,
+  void OnAddressChange(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
                        const CefString& url) override;
-  void OnLoadingStateChange(CefRefPtr<CefBrowser> browser,
-                            bool isLoading,
-                            bool canGoBack,
-                            bool canGoForward) override;
+  void OnLoadingStateChange(CefRefPtr<CefBrowser> browser, bool isLoading,
+                            bool canGoBack, bool canGoForward) override;
   void OnRenderProcessTerminated(CefRefPtr<CefBrowser> browser,
-                                 TerminationStatus status,
-                                 int error_code,
+                                 TerminationStatus status, int error_code,
                                  const CefString& error_string) override;
   void OnGotFocus(CefRefPtr<CefBrowser> browser) override;
+  bool OnChromeCommand(CefRefPtr<CefBrowser> browser, int command_id,
+                       cef_window_open_disposition_t disposition) override;
 
  private:
   TabController* controller_;
@@ -64,6 +65,8 @@ class TabController final : public CefBaseRefCounted {
  public:
   using BrowserCreatedCallback =
       std::function<void(CefRefPtr<CefBrowser> browser)>;
+  using ChromeCommandCallback = std::function<void(int command_id)>;
+  using BrowsersClosedCallback = std::function<void()>;
 
   explicit TabController(std::string initial_url,
                          BrowserCreatedCallback browser_created_callback = {});
@@ -90,17 +93,18 @@ class TabController final : public CefBaseRefCounted {
 
   const TabModel& model() const noexcept { return model_; }
   CefRefPtr<WindowClient> client() const { return client_; }
+  void SetChromeCommandCallback(ChromeCommandCallback callback);
+  void SetBrowsersClosedCallback(BrowsersClosedCallback callback);
 
   // Normalized callbacks from WindowClient.
   void OnBrowserCreated(CefRefPtr<CefBrowser> browser);
   void OnBrowserClosing(CefRefPtr<CefBrowser> browser);
   void OnBrowserFocused(CefRefPtr<CefBrowser> browser);
   void OnAddressUpdated(CefRefPtr<CefBrowser> browser, const std::string& url);
-  void OnLoadingUpdated(CefRefPtr<CefBrowser> browser,
-                        bool is_loading,
-                        bool can_go_back,
-                        bool can_go_forward);
+  void OnLoadingUpdated(CefRefPtr<CefBrowser> browser, bool is_loading,
+                        bool can_go_back, bool can_go_forward);
   void OnRenderProcessGone(CefRefPtr<CefBrowser> browser);
+  void OnChromeCommand(int command_id);
 
  private:
   bool CreateBrowserWindow();
@@ -109,6 +113,8 @@ class TabController final : public CefBaseRefCounted {
 
   const std::string initial_url_;
   const BrowserCreatedCallback browser_created_callback_;
+  ChromeCommandCallback chrome_command_callback_;
+  BrowsersClosedCallback browsers_closed_callback_;
   TabModel model_;
   CefRefPtr<WindowClient> client_;
   std::map<int, CefRefPtr<CefBrowser>> browsers_;

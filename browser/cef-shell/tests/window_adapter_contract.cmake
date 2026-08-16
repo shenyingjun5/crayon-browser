@@ -20,6 +20,8 @@ file(READ "${window_root}/tab_controller.h" controller_header)
 file(READ "${window_root}/tab_controller.cc" controller_source)
 file(READ "${CRAYON_CEF_SHELL_SOURCE}/src/windows/app.h" windows_app_header)
 file(READ "${CRAYON_CEF_SHELL_SOURCE}/src/windows/app.cc" windows_app_source)
+file(READ "${CRAYON_CEF_SHELL_SOURCE}/src/windows/shell_command_adapter.cc"
+     windows_shell_command_source)
 file(READ "${CRAYON_CEF_SHELL_SOURCE}/CMakeLists.txt" shell_cmake)
 
 # The state model must stay free of CEF and platform types so it can be tested
@@ -94,6 +96,46 @@ foreach(required_windows_token
             "Windows app is missing shared controller token ${required_windows_token}")
   endif()
 endforeach()
+
+foreach(required_shell_token
+        "cef_id_for_command_id_name"
+        "CommandOrigin::kNativeChrome"
+        "ObserveChromeCommand"
+        "SetBrowsersClosedCallback")
+  string(FIND
+         "${windows_app_header};${windows_app_source};${windows_shell_command_source};${controller_header};${controller_source}"
+         "${required_shell_token}" shell_token_index)
+  if(shell_token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Windows shell command adapter is missing ${required_shell_token}")
+  endif()
+endforeach()
+
+# Runtime callbacks touch state that is owned by the CEF UI thread. Install
+# them from OnContextInitialized, after CEF establishes that thread and before
+# the first browser can emit an event.
+string(FIND "${windows_app_source}" "void BrowserApp::OnContextInitialized()"
+       context_initialized_index)
+string(FIND "${windows_app_source}" "SetChromeCommandCallback"
+       chrome_callback_index)
+string(FIND "${windows_app_source}" "SetBrowsersClosedCallback"
+       closed_callback_index)
+string(FIND "${windows_app_source}" "CreateMainWindow" create_window_index)
+if(context_initialized_index EQUAL -1 OR chrome_callback_index EQUAL -1 OR
+   closed_callback_index EQUAL -1 OR create_window_index EQUAL -1 OR
+   chrome_callback_index LESS context_initialized_index OR
+   closed_callback_index LESS context_initialized_index OR
+   chrome_callback_index GREATER create_window_index OR
+   closed_callback_index GREATER create_window_index)
+  message(FATAL_ERROR
+          "Windows shell callbacks must be installed on the CEF UI thread before CreateMainWindow")
+endif()
+
+string(REGEX MATCH "command_id[ \t\r\n]*==[ \t\r\n]*[0-9]+"
+             hardcoded_command_id "${windows_shell_command_source}")
+if(hardcoded_command_id)
+  message(FATAL_ERROR "Windows shell adapter hard-codes a Chrome command ID")
+endif()
 
 foreach(required_windows_source
         "src/browser/window/tab_controller.cc"

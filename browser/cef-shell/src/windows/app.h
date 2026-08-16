@@ -8,6 +8,7 @@
 
 #include "browser/window/tab_controller.h"
 #include "include/cef_app.h"
+#include "windows/shell_command_adapter.h"
 
 namespace crayon::browser::cef_shell {
 
@@ -42,6 +43,7 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   const std::wstring product_name_;
   const std::shared_ptr<WindowsWindowIcons> window_icons_;
   CefRefPtr<window::TabController> tab_controller_;
+  const std::shared_ptr<WindowsShellRuntime> shell_runtime_;
 
   IMPLEMENT_REFCOUNTING(BrowserApp);
   DISALLOW_COPY_AND_ASSIGN(BrowserApp);

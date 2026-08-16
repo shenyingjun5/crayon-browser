@@ -42,11 +42,11 @@ Cast-SDK source lock 的当前事实位于 `config/cast-sdk-source.toml`、`.git
 
 ## 4. 真实现状
 
-- 品牌资产 `BRD-01..04`、Foundation 19 个原子任务、`MED-01..19`、`CEF-01A..01D`、`CEF-02W`、`CEF-03`、`BUX-01`、`SDK-01..12` 与 `RNM-01..08` 已完成，共 69 项。
+- 品牌资产 `BRD-01..04`、Foundation 19 个原子任务、`MED-01..19`、`CEF-01A..01D`、`CEF-02W`、`CEF-03`、`BUX-01/02`、`SDK-01..12` 与 `RNM-01..08` 已完成，共 70 项。
 - CEF 固定基线为 `150.0.10+g8042e43+chromium-150.0.7871.101` Standard。历史四平台 hash 已锁定，Windows x64 archive 已校验；后续产品构建只推进 Windows/macOS。
 - Cast-SDK source revision 已由 `SDK-01` 固定并通过 `RG-008`；facade、Fake、真实 service 生命周期、能力缓存、投送执行、会话监督与 runtime 用例编排已完成；真机接收端闭环（`SDK-13`）尚未完成。
 - `MED-19` 已完成：投屏决策集合为 `Direct/Relay/ExternalClientHandoff/Reject`，旧 `mirror` wire 值保留兼容读取窗口且不再发出；`tab_video`/`system_audio` 仅作为 `crayon-domain` 遗留字段存在，策略与 runtime 代码不再引用，不得继续扩张。
-- `browser/engine-api` 的 C++17 跨 CEF/ArkWeb 契约已由 `CEF-01B` 冻结并通过 GCC/MSVC 双编译器与 contract；`CEF-01C` 已建立 Windows/macOS 共用的离线 CEF 构建图，`CEF-01D` 已交付可启动、可关闭且无残留进程的 Windows x64 最小 CEF 壳和受管标题栏品牌图标。当前阶段按用户决策优先把 Windows 浏览器全部基础功能开发并实机跑通：`CEF-02W/CEF-03 DONE` 已交付官方 bootstrap EXE/client DLL 多进程结构、Debug/Release sandbox、共享窗口/标签 owner、Chrome-style 基础导航命令链、品牌图标和无残留进程实机证据；`RNM-01..08 DONE` 已将历史 `get-video` 仓库/package/README/GitHub/本地目录统一迁移为 `crayon-browser` 并完成新路径 CEF configure smoke。`CEF-06` 与 `BUX-02` 保持 `READY`，领取队列先进入 `BUX-02`。`CEF-01E VERIFIED` 的 macOS App/Helper Bundle 与 CI 保持冻结，远程双架构/实机证据和正式 sandbox 由 `CEF-02M` 后置，不再阻塞 Windows，也不得用 Windows 证据完成 macOS。`BUX-01` 已冻结 Chrome-inspired 两层信息架构、共享 token、21 个自有功能 glyph 和 8 份规格 golden。`SDK-13 BLOCKED`（需真实接收端 Harness）；`CNT-01..10` 等待浏览器/投屏门禁；`AGT/ACT/WFL/HUB` 分别规划入站访问、语义动作、工作流/挑战和能力生态；`CNT-11..16` 是第二阶段模型能力。
+- `browser/engine-api` 的 C++17 跨 CEF/ArkWeb 契约已由 `CEF-01B` 冻结并通过 GCC/MSVC 双编译器与 contract；`CEF-01C` 已建立 Windows/macOS 共用的离线 CEF 构建图，`CEF-01D` 已交付可启动、可关闭且无残留进程的 Windows x64 最小 CEF 壳和受管标题栏品牌图标。当前阶段按用户决策优先把 Windows 浏览器全部基础功能开发并实机跑通：`CEF-02W/CEF-03 DONE` 已交付官方 bootstrap EXE/client DLL 多进程结构、Debug/Release sandbox、共享窗口/标签 owner、Chrome-style 基础导航命令链、品牌图标和无残留进程实机证据；`RNM-01..08 DONE` 已将历史 `get-video` 仓库/package/README/GitHub/本地目录统一迁移为 `crayon-browser` 并完成新路径 CEF configure smoke。`BUX-02 DONE` 已交付平台中立的 Windows UI shell、typed command、focus owner 与 engine event adapter 骨架，并通过 Debug/Release 与 Windows 快捷键/完整退出实机门禁；`BUX-03 READY` 是下一项 Windows 本地起始页任务，`CEF-06` 保持 `READY`。`CEF-01E VERIFIED` 的 macOS App/Helper Bundle 与 CI 保持冻结，远程双架构/实机证据和正式 sandbox 由 `CEF-02M` 后置，不再阻塞 Windows，也不得用 Windows 证据完成 macOS。`BUX-01` 已冻结 Chrome-inspired 两层信息架构、共享 token、21 个自有功能 glyph 和 8 份规格 golden。`SDK-13 BLOCKED`（需真实接收端 Harness）；`CNT-01..10` 等待浏览器/投屏门禁；`AGT/ACT/WFL/HUB` 分别规划入站访问、语义动作、工作流/挑战和能力生态；`CNT-11..16` 是第二阶段模型能力。
 
 ## 5. 权威与历史
 
