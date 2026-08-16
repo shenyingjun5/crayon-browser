@@ -1,6 +1,6 @@
 # BUX：桌面浏览器产品体验 Roadmap
 
-状态：`BUX-01/02 DONE`，`BUX-03 READY`；Chrome-inspired 信息架构、共享 design token、标题栏/标签栏/导航栏自有 glyph 与平台适配边界已经冻结，Windows UI shell、typed command、focus owner 与 engine event adapter 骨架已完成实机门禁。当前阶段优先完成 Windows 全部基础浏览器功能，macOS 对齐后置。本 Roadmap 把“基本浏览器有的功能”拆成可审查原子任务；视觉、品牌、内置页面与服务均为蜡笔自有实现。
+状态：`BUX-01..03 DONE`；Chrome-inspired 信息架构、共享 design token、标题栏/标签栏/导航栏自有 glyph 与平台适配边界已经冻结，Windows UI shell、typed command、focus owner、engine event adapter 与本地新标签页已完成实机门禁。当前阶段优先完成 Windows 全部基础浏览器功能，macOS 对齐后置。本 Roadmap 把“基本浏览器有的功能”拆成可审查原子任务；视觉、品牌、内置页面与服务均为蜡笔自有实现。
 
 ## 产品设计结论
 
@@ -16,7 +16,7 @@
 |---|---|---|---|---|---|
 | BUX-01 | DONE | CEF-01D | `docs/current/browser-ux.md`,`browser/shared-ui/design` | 冻结 Chrome-inspired 信息架构、密度、token、组件状态、键盘/无障碍和品牌禁用规则 | UX-001；light/dark、窄/宽窗口、100%/200% 规格 golden |
 | BUX-02 | DONE | BUX-01,CEF-02W | `browser/shared-ui/shell` | Windows 首发 UI shell、命令 registry、focus owner 与 engine event adapter 骨架；共享层保持跨平台 | UX-001；重复 command、旧 tab event、窗口释放；Windows 实机 |
-| BUX-03 | READY | BUX-02,CEF-03 | `browser/shared-ui/new-tab` | 本地 `crayon://newtab`、普通/无痕差异、固定快捷入口模型 | UX-002；零默认公网请求、损坏配置、安全 resource handler |
+| BUX-03 | DONE | BUX-02,CEF-03 | `browser/shared-ui/new-tab` | 本地 `crayon://newtab`、普通/无痕差异、固定快捷入口模型 | UX-002；零默认公网请求、损坏配置、安全 resource handler |
 | BUX-04 | TODO | BUX-02,CEF-03,PRV-06 | `browser/shared-ui/omnibox` | omnibox 编辑/提交、URL/搜索判定、建议 owner 与 provider 配置契约 | UX-003；scheme/长度/取消/旧建议/Profile 隔离 |
 | BUX-05 | TODO | BUX-04 | `browser/shared-ui/navigation` | 后退/前进/刷新/停止、加载状态、站点身份和页面动作绑定 | UX-004；导航竞争、证书/HTTP/HTTPS、页面伪造安全 UI |
 | BUX-06 | TODO | BUX-02,CEF-03 | `browser/shared-ui/tabs/basic` | 新建/切换/关闭/拖动/恢复关闭标签与 active/focus 状态机 | UX-005；重复关闭、旧事件、崩溃恢复、释放 |
@@ -83,3 +83,22 @@
 - Windows 实机：Debug 启动为唯一 `CrayonBrowser.exe` 窗口；`Ctrl+L` 聚焦并选中地址栏，`Ctrl+T` 从 1 个标签增加到 2 个，`Ctrl+W` 恢复为 1 个，`Ctrl+R` 后窗口/文档仍正常；Debug 与 Release 均由 `Ctrl+Shift+W` 关闭，轮询结果为窗口 `0`、运行 app/process `0`。
 - Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；Windows 真机门禁发现并关闭 1 个 P1（CEF UI 线程前安装 callback），最终 P0/P1/P2/P3 均为 `0`。共享目录未出现 CEF/Win32/AppKit/ArkWeb 类型，新增生产文件均低于规模提醒线。
 - 未覆盖与风险：当前仍是供后续自有控件消费的 shell 骨架；Windows 可见界面继续使用 CEF Chrome-style 原生 UI，`NewTab/FocusOmnibox` 的 product-origin target 在自有控件完成前保持 unavailable，原生 shortcut 只做 typed observation/pass-through。未做 macOS 实机、像素 UI、IME/读屏/多屏 DPI、起始页/omnibox/完整标签功能；分别由 `CEF-02M`、`BUX-03..06`、`BUX-18/UX-016` 完成。
+
+## BUX-03 完成证据（Windows 本地新标签页）
+
+- 状态：`DONE`；依赖 `BUX-02 DONE`、`CEF-03 DONE`。
+- 单一目标：交付平台中立、可独立测试的 `crayon://newtab/` 页面模型与确定性 HTML/CSS renderer，并在 Windows CEF Browser/child process 以安全 custom scheme handler 接入，使启动页和 Chrome UI 新建标签进入蜡笔本地页；本任务不实现地址/搜索判定、真实无痕窗口或持久化。
+- 输入：当前 PRD 的本地起始页/零默认公网要求、`browser-design-v1` 语义色与键盘心智、BUX-02 shell/CEF-03 tab lifecycle、共享 `zh-CN/en-US` locale 资源和 CEF 150 custom scheme/resource handler API。
+- 输出与允许修改：新增 `browser/shared-ui/new-tab/` 的纯 C++17 model/router/renderer 与独立 contract test/CMake；新增 `browser/cef-shell/src/browser/new_tab/` 的窄 CEF adapter；允许修改根与 CEF CMake、Windows `app.*`/bootstrap、`TabController` 的精确内置新标签重定向 hook、Windows string resource、共享 locale、CEF source contract 和本 Roadmap/current/总 Roadmap索引。新增生产文件不超过 4 个；共享模块不得出现 CEF/Win32/AppKit/ArkWeb 类型。
+- 模型与配置边界：固定入口配置是调用方提供的内存快照，不在本任务定义磁盘/云同步 schema。`schema_version=1`、条目数、ID、UTF-8 标题和 `http/https` URL 均有硬上限；重复 ID、控制字符、credential URL、危险 scheme 或任一损坏条目使整份配置 fail closed 为零入口，不部分猜测恢复。默认配置为空，不内置任何公网、广告、推荐或第三方服务。
+- 普通/无痕边界：普通模型只显示验证通过的用户固定入口；无痕模型强制丢弃固定入口、历史/常用/最近关闭与跨会话提示，只呈现本地隐私说明。真实 private Profile/window/context 与清理语义仍由 `BUX-15/PRV-01..04` 拥有；Windows 当前 handler 只绑定普通模型，不允许 query/path/页面内容选择无痕模式，避免伪造隐私状态。
+- Resource handler 安全边界：`crayon` scheme 必须在 Browser/child process 以相同 `STANDARD|SECURE|DISPLAY_ISOLATED` 选项注册；factory 只接受精确 `crayon://newtab/`、`/index.html`、`/styles.css` 与 `GET/HEAD`，拒绝 credential、port、query、fragment、未知 host/path/method。响应只来自编译期/内存资源，无文件/网络 IO；HTML 转义所有配置/locale 字段，不包含 script、form、iframe、object、img、远程字体或公网 URL；CSP 仅允许同 origin stylesheet，并设置 `no-store`、`nosniff`、`no-referrer`、`frame-ancestors 'none'` 等头。
+- Windows 接入：首窗口直接加载 `crayon://newtab/`；仅对 CEF 精确内置 `chrome://newtab/` 主 frame 导航重定向至受管本地页，不改写 popup/about:blank/用户 URL。页面搜索/导航继续使用原生 omnibox 与 `Ctrl+L`；页面内搜索控件、provider/URL 判定归 `BUX-04`，不得偷跑 Google/第三方搜索服务。
+- 验收与测试：UX-002；shared contract 覆盖普通/无痕、空/合法/损坏/超量/重复配置、HTML 注入转义、route method/host/path/URL component 矩阵、HEAD 与 shutdown-safe immutable response；输出扫描证明默认 document/CSS 除 `crayon://newtab/styles.css` 外无网络引用/主动内容。执行独立 new-tab configure/build/ctest、Windows Debug/Release build+ctest、适用 Google-style clang-format、`scripts/check.ps1 fast/security`、`git diff --check`；Windows 实机验证启动页、`Ctrl+T` 新页、原生 omnibox 搜索/导航入口和完整退出零残留。
+- 明确不做：不实现真实无痕窗口/Profile、最近关闭恢复、历史/常用站点推断、shortcut 持久化/编辑 UI、页面内搜索框、搜索 provider、omnibox 判定、书签/投屏按钮、JavaScript bridge、远程内容、Service Worker、任意文件读取或 macOS 实机；分别由 `BUX-04/06/09/10/13/15`、`CEF-13`、`CEF-02M` 与后续平台总验收完成。
+- 实现：新增 4 个生产文件，平台中立层提供有界 `schema_version=1` shortcut model、严格 HTTP(S) URL/UTF-8 校验、确定性 HTML/CSS renderer 与精确 route classifier；CEF adapter 注册 `STANDARD|SECURE|DISPLAY_ISOLATED` custom scheme，响应只来自不可变内存并设置 CSP、`no-store`、`nosniff`、`no-referrer`、same-origin/deny framing 头。Windows Browser/child process 使用同一 scheme 注册，启动页直接进入 `crayon://newtab/`；CEF Chrome UI 的 `IDC_NEW_TAB` 通过有界待处理命令令牌关联下一个内部创建标签，并保留精确 `chrome://newtab/` 主 frame 防御性重定向。
+- 失败基线：独立 CMake configure 在缺少 `src/new_tab_page.cc` 时失败；CEF adapter contract 在缺少 handler header/source 时失败，证明新测试先于实现生效。
+- 自动验证：Google `clang-format 19.1.5 --dry-run --Werror --style=Google` 通过；独立 `cmake -S . -B .cache/build/new-tab -G Ninja -DCRAYON_BUILD_TESTS=ON -DCRAYON_ENABLE_CEF=OFF`、`cmake --build .cache/build/new-tab` 与 `ctest --test-dir .cache/build/new-tab --output-on-failure` 通过（1/1）；`cmake --build .cache/build/windows-cef-debug --config Debug` 与 `ctest --preset windows-cef-debug --output-on-failure` 通过（13/13）；`cmake --build .cache/build/windows-cef-debug --config Release` 与 `ctest --test-dir .cache/build/windows-cef-debug -C Release --output-on-failure` 通过（13/13）；`scripts/check.ps1 fast` 和 `scripts/check.ps1 security` 最终通过，locale JSON/key parity 为 25，`git diff --check` 通过。`fast` 首轮暴露目录迁移后 Cargo test 二进制仍嵌入旧 `D:\get-video` 路径；仅触发相关测试目标重新编译，未清理 1.8 GiB workspace cache，最终门禁通过且源码无旧路径改动。
+- Windows 实机：Debug、Release 均验证启动首屏为本地 `crayon://newtab` 中文页；`Ctrl+T` 从 1 个标签增加到 2 个且新标签仍为本地页，不再进入 Google/Chromium 默认 NTP；`Ctrl+L` 聚焦并选中地址栏；`Alt+F4` 后应用/进程残留均为 0。
+- Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核。实机门禁发现并关闭 1 个 P1（CEF Chrome 内置 NTP 绕过普通 navigation callback）；静态审查关闭 UTF-8 首字符截断、shortcut host/port 边界和 C++17 编译标准漂移问题。最终 P0/P1/P2/P3 均为 `0`；新增生产文件 92/402/18/209 行，均低于规模提醒线，共享模块无 CEF/Win32/AppKit/ArkWeb 类型。
+- 未覆盖与风险：真实 private Profile/window 与清理语义、shortcut 持久化/编辑、omnibox/provider、完整标签功能和 macOS 实机仍归后续任务。CEF Chrome 新标签关联依赖固定 CEF 150 的 `OnChromeCommand -> OnAfterCreated` 顺序，当前有界并经 Debug/Release 实机覆盖；升级 CEF 时必须重新验证。

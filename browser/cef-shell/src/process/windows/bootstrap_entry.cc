@@ -4,6 +4,7 @@
 #include <string>
 #include <utility>
 
+#include "browser/new_tab/cef_new_tab_handler.h"
 #include "include/cef_app.h"
 #include "include/cef_version_info.h"
 #include "resource_ids.h"
@@ -21,6 +22,7 @@ enum class ExitCode : int {
   kClientModuleMissing = 12,
   kProductNameMissing = 13,
   kBrandIconMissing = 14,
+  kNewTabStringsMissing = 15,
   kCefInitializeFailed = 20,
 };
 
@@ -46,7 +48,7 @@ std::wstring LoadProductName(HINSTANCE client_module) {
   return std::wstring(buffer.data(), static_cast<std::size_t>(length));
 }
 
-} // namespace
+}  // namespace
 
 int RunBrowserProcess(HINSTANCE bootstrap_instance, void *sandbox_info) {
   if (!bootstrap_instance) {
@@ -57,8 +59,9 @@ int RunBrowserProcess(HINSTANCE bootstrap_instance, void *sandbox_info) {
   }
 
   CefMainArgs main_args(bootstrap_instance);
+  CefRefPtr<CefApp> child_app = new_tab::CreateNewTabProcessApp();
   const int child_exit_code =
-      CefExecuteProcess(main_args, nullptr, sandbox_info);
+      CefExecuteProcess(main_args, child_app, sandbox_info);
   if (child_exit_code >= 0) {
     return child_exit_code;
   }
@@ -79,6 +82,9 @@ int RunBrowserProcess(HINSTANCE bootstrap_instance, void *sandbox_info) {
   if (!app->brand_icons_valid()) {
     return static_cast<int>(ExitCode::kBrandIconMissing);
   }
+  if (!app->new_tab_strings_valid()) {
+    return static_cast<int>(ExitCode::kNewTabStringsMissing);
+  }
   if (!CefInitialize(main_args, settings, app, sandbox_info)) {
     const int cef_exit_code = CefGetExitCode();
     return cef_exit_code == 0 ? static_cast<int>(ExitCode::kCefInitializeFailed)
@@ -90,4 +96,4 @@ int RunBrowserProcess(HINSTANCE bootstrap_instance, void *sandbox_info) {
   return static_cast<int>(ExitCode::kSuccess);
 }
 
-} // namespace crayon::browser::cef_shell::process
+}  // namespace crayon::browser::cef_shell::process

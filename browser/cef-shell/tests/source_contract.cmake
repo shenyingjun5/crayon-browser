@@ -11,11 +11,16 @@ if(NOT production_files)
 endif()
 
 set(initial_url_count 0)
+set(managed_new_tab_count 0)
 foreach(production_file IN LISTS production_files)
   file(READ "${production_file}" contents)
   string(REGEX MATCHALL "about:blank" initial_urls "${contents}")
   list(LENGTH initial_urls file_initial_url_count)
   math(EXPR initial_url_count "${initial_url_count} + ${file_initial_url_count}")
+  string(REGEX MATCHALL "kNewTabUrl" managed_new_tabs "${contents}")
+  list(LENGTH managed_new_tabs file_managed_new_tab_count)
+  math(EXPR managed_new_tab_count
+       "${managed_new_tab_count} + ${file_managed_new_tab_count}")
   foreach(forbidden_token
           "http://"
           "https://"
@@ -38,8 +43,11 @@ foreach(production_file IN LISTS production_files)
   endforeach()
 endforeach()
 
-if(NOT initial_url_count EQUAL 1)
-  message(FATAL_ERROR "Production shell must contain exactly one about:blank URL")
+if(NOT initial_url_count EQUAL 0)
+  message(FATAL_ERROR "Windows production shell must not use about:blank as its start page")
+endif()
+if(managed_new_tab_count LESS 1)
+  message(FATAL_ERROR "Windows production shell must use the managed new-tab URL")
 endif()
 
 file(READ "${CRAYON_CEF_SHELL_SOURCE}/src/windows/main_win.cc" windows_main)
