@@ -211,7 +211,7 @@ flowchart LR
 ## 7. 当前领取顺序
 
 1. `SDK-13`：等待真实接收端 Harness，当前 `BLOCKED`，不得用 Fake 冒充真机证据。
-2. `BUX-03`：已 `DONE`；Windows 本地 `crayon://newtab`、普通/无痕差异与固定快捷入口模型已交付，`BUX-04` 仍等待 `PRV-06`，下一项 Windows 原子任务按依赖重新领取。
+2. `BUX-03`：已 `DONE`；Windows 本地 `crayon://newtab`、普通/无痕差异与固定快捷入口模型已交付。`BUX-04` 已拆分为 `BUX-04A`（核心 URL/搜索判定引擎，依赖 `BUX-02/CEF-03/FND-11`，状态 `READY`）与 `BUX-04B`（provider 配置/隐私集成，依赖 `PRV-06`，仍阻塞）。`BUX-04A` 可作为下一项 Windows 原子任务领取，`BUX-04B` 仍按原依赖顺序等待。
 3. `CEF-01E/CEF-02M`：macOS bootstrap 为 `VERIFIED`，平台证据和正式 sandbox 后置；不阻塞 Windows，也不用 Windows 结果转 `DONE`。
 4. `AGT-01` 在 `FND-08/PRV-08` 满足后冻结 CAAP v1；不得提前开放 CLI/MCP。
 5. `CNT-01` 等 `CEF-15/BUX-18/SDK-14/MED-19/PRV-08` 完成。

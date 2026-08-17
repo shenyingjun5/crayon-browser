@@ -1,6 +1,6 @@
 # BUX：桌面浏览器产品体验 Roadmap
 
-状态：`BUX-01..03 DONE`；Chrome-inspired 信息架构、共享 design token、标题栏/标签栏/导航栏自有 glyph 与平台适配边界已经冻结，Windows UI shell、typed command、focus owner、engine event adapter 与本地新标签页已完成实机门禁。当前阶段优先完成 Windows 全部基础浏览器功能，macOS 对齐后置。本 Roadmap 把“基本浏览器有的功能”拆成可审查原子任务；视觉、品牌、内置页面与服务均为蜡笔自有实现。
+状态：`BUX-01..03 DONE`，`BUX-04A READY`；Chrome-inspired 信息架构、共享 design token、标题栏/标签栏/导航栏自有 glyph 与平台适配边界已经冻结，Windows UI shell、typed command、focus owner、engine event adapter 与本地新标签页已完成实机门禁。当前阶段优先完成 Windows 全部基础浏览器功能，macOS 对齐后置。本 Roadmap 把"基本浏览器有的功能"拆成可审查原子任务；视觉、品牌、内置页面与服务均为蜡笔自有实现。
 
 ## 产品设计结论
 
@@ -17,8 +17,9 @@
 | BUX-01 | DONE | CEF-01D | `docs/current/browser-ux.md`,`browser/shared-ui/design` | 冻结 Chrome-inspired 信息架构、密度、token、组件状态、键盘/无障碍和品牌禁用规则 | UX-001；light/dark、窄/宽窗口、100%/200% 规格 golden |
 | BUX-02 | DONE | BUX-01,CEF-02W | `browser/shared-ui/shell` | Windows 首发 UI shell、命令 registry、focus owner 与 engine event adapter 骨架；共享层保持跨平台 | UX-001；重复 command、旧 tab event、窗口释放；Windows 实机 |
 | BUX-03 | DONE | BUX-02,CEF-03 | `browser/shared-ui/new-tab` | 本地 `crayon://newtab`、普通/无痕差异、固定快捷入口模型 | UX-002；零默认公网请求、损坏配置、安全 resource handler |
-| BUX-04 | TODO | BUX-02,CEF-03,PRV-06 | `browser/shared-ui/omnibox` | omnibox 编辑/提交、URL/搜索判定、建议 owner 与 provider 配置契约 | UX-003；scheme/长度/取消/旧建议/Profile 隔离 |
-| BUX-05 | TODO | BUX-04 | `browser/shared-ui/navigation` | 后退/前进/刷新/停止、加载状态、站点身份和页面动作绑定 | UX-004；导航竞争、证书/HTTP/HTTPS、页面伪造安全 UI |
+| BUX-04A | READY | BUX-02,CEF-03,FND-11 | `browser/shared-ui/omnibox/core` | URL/搜索判定引擎、本地建议索引结构、建议状态机与闭合编辑命令 | UX-003A；scheme/长度/取消/旧建议/本地索引边界 |
+| BUX-04B | TODO | BUX-04A,PRV-06 | `browser/shared-ui/omnibox/provider` | 搜索 provider 配置契约、HTTPS 默认升级与隐私默认集成 | UX-003B；provider 校验/隐私参数注入/配置降级 |
+| BUX-05 | TODO | BUX-04A | `browser/shared-ui/navigation` | 后退/前进/刷新/停止、加载状态、站点身份和页面动作绑定 | UX-004；导航竞争、证书/HTTP/HTTPS、页面伪造安全 UI |
 | BUX-06 | TODO | BUX-02,CEF-03 | `browser/shared-ui/tabs/basic` | 新建/切换/关闭/拖动/恢复关闭标签与 active/focus 状态机 | UX-005；重复关闭、旧事件、崩溃恢复、释放 |
 | BUX-07 | TODO | BUX-06 | `browser/shared-ui/tabs/advanced` | 固定、复制、静音、搜索、分组和跨窗口移动 | UX-006；容量/顺序/音频/多窗口与键盘操作 |
 | BUX-08 | TODO | BUX-06,CEF-05 | `browser/shared-ui/windows` | 多窗口、受控 popup、全屏与画中画 UI/策略绑定 | UX-007；来源、取消、焦点、关闭与恢复 |
@@ -93,12 +94,62 @@
 - 模型与配置边界：固定入口配置是调用方提供的内存快照，不在本任务定义磁盘/云同步 schema。`schema_version=1`、条目数、ID、UTF-8 标题和 `http/https` URL 均有硬上限；重复 ID、控制字符、credential URL、危险 scheme 或任一损坏条目使整份配置 fail closed 为零入口，不部分猜测恢复。默认配置为空，不内置任何公网、广告、推荐或第三方服务。
 - 普通/无痕边界：普通模型只显示验证通过的用户固定入口；无痕模型强制丢弃固定入口、历史/常用/最近关闭与跨会话提示，只呈现本地隐私说明。真实 private Profile/window/context 与清理语义仍由 `BUX-15/PRV-01..04` 拥有；Windows 当前 handler 只绑定普通模型，不允许 query/path/页面内容选择无痕模式，避免伪造隐私状态。
 - Resource handler 安全边界：`crayon` scheme 必须在 Browser/child process 以相同 `STANDARD|SECURE|DISPLAY_ISOLATED` 选项注册；factory 只接受精确 `crayon://newtab/`、`/index.html`、`/styles.css` 与 `GET/HEAD`，拒绝 credential、port、query、fragment、未知 host/path/method。响应只来自编译期/内存资源，无文件/网络 IO；HTML 转义所有配置/locale 字段，不包含 script、form、iframe、object、img、远程字体或公网 URL；CSP 仅允许同 origin stylesheet，并设置 `no-store`、`nosniff`、`no-referrer`、`frame-ancestors 'none'` 等头。
-- Windows 接入：首窗口直接加载 `crayon://newtab/`；仅对 CEF 精确内置 `chrome://newtab/` 主 frame 导航重定向至受管本地页，不改写 popup/about:blank/用户 URL。页面搜索/导航继续使用原生 omnibox 与 `Ctrl+L`；页面内搜索控件、provider/URL 判定归 `BUX-04`，不得偷跑 Google/第三方搜索服务。
+- Windows 接入：首窗口直接加载 `crayon://newtab/`；仅对 CEF 精确内置 `chrome://newtab/` 主 frame 导航重定向至受管本地页，不改写 popup/about:blank/用户 URL。页面搜索/导航继续使用原生 omnibox 与 `Ctrl+L`；页面内搜索控件、provider/URL 判定归 `BUX-04A`，不得偷跑 Google/第三方搜索服务。
 - 验收与测试：UX-002；shared contract 覆盖普通/无痕、空/合法/损坏/超量/重复配置、HTML 注入转义、route method/host/path/URL component 矩阵、HEAD 与 shutdown-safe immutable response；输出扫描证明默认 document/CSS 除 `crayon://newtab/styles.css` 外无网络引用/主动内容。执行独立 new-tab configure/build/ctest、Windows Debug/Release build+ctest、适用 Google-style clang-format、`scripts/check.ps1 fast/security`、`git diff --check`；Windows 实机验证启动页、`Ctrl+T` 新页、原生 omnibox 搜索/导航入口和完整退出零残留。
-- 明确不做：不实现真实无痕窗口/Profile、最近关闭恢复、历史/常用站点推断、shortcut 持久化/编辑 UI、页面内搜索框、搜索 provider、omnibox 判定、书签/投屏按钮、JavaScript bridge、远程内容、Service Worker、任意文件读取或 macOS 实机；分别由 `BUX-04/06/09/10/13/15`、`CEF-13`、`CEF-02M` 与后续平台总验收完成。
+- 明确不做：不实现真实无痕窗口/Profile、最近关闭恢复、历史/常用站点推断、shortcut 持久化/编辑 UI、页面内搜索框、搜索 provider、omnibox 判定、书签/投屏按钮、JavaScript bridge、远程内容、Service Worker、任意文件读取或 macOS 实机；分别由 `BUX-04A/04B/06/09/10/13/15`、`CEF-13`、`CEF-02M` 与后续平台总验收完成。
 - 实现：新增 4 个生产文件，平台中立层提供有界 `schema_version=1` shortcut model、严格 HTTP(S) URL/UTF-8 校验、确定性 HTML/CSS renderer 与精确 route classifier；CEF adapter 注册 `STANDARD|SECURE|DISPLAY_ISOLATED` custom scheme，响应只来自不可变内存并设置 CSP、`no-store`、`nosniff`、`no-referrer`、same-origin/deny framing 头。Windows Browser/child process 使用同一 scheme 注册，启动页直接进入 `crayon://newtab/`；CEF Chrome UI 的 `IDC_NEW_TAB` 通过有界待处理命令令牌关联下一个内部创建标签，并保留精确 `chrome://newtab/` 主 frame 防御性重定向。
 - 失败基线：独立 CMake configure 在缺少 `src/new_tab_page.cc` 时失败；CEF adapter contract 在缺少 handler header/source 时失败，证明新测试先于实现生效。
 - 自动验证：Google `clang-format 19.1.5 --dry-run --Werror --style=Google` 通过；独立 `cmake -S . -B .cache/build/new-tab -G Ninja -DCRAYON_BUILD_TESTS=ON -DCRAYON_ENABLE_CEF=OFF`、`cmake --build .cache/build/new-tab` 与 `ctest --test-dir .cache/build/new-tab --output-on-failure` 通过（1/1）；`cmake --build .cache/build/windows-cef-debug --config Debug` 与 `ctest --preset windows-cef-debug --output-on-failure` 通过（13/13）；`cmake --build .cache/build/windows-cef-debug --config Release` 与 `ctest --test-dir .cache/build/windows-cef-debug -C Release --output-on-failure` 通过（13/13）；`scripts/check.ps1 fast` 和 `scripts/check.ps1 security` 最终通过，locale JSON/key parity 为 25，`git diff --check` 通过。`fast` 首轮暴露目录迁移后 Cargo test 二进制仍嵌入旧 `D:\get-video` 路径；仅触发相关测试目标重新编译，未清理 1.8 GiB workspace cache，最终门禁通过且源码无旧路径改动。
 - Windows 实机：Debug、Release 均验证启动首屏为本地 `crayon://newtab` 中文页；`Ctrl+T` 从 1 个标签增加到 2 个且新标签仍为本地页，不再进入 Google/Chromium 默认 NTP；`Ctrl+L` 聚焦并选中地址栏；`Alt+F4` 后应用/进程残留均为 0。
 - Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核。实机门禁发现并关闭 1 个 P1（CEF Chrome 内置 NTP 绕过普通 navigation callback）；静态审查关闭 UTF-8 首字符截断、shortcut host/port 边界和 C++17 编译标准漂移问题。最终 P0/P1/P2/P3 均为 `0`；新增生产文件 92/402/18/209 行，均低于规模提醒线，共享模块无 CEF/Win32/AppKit/ArkWeb 类型。
 - 未覆盖与风险：真实 private Profile/window 与清理语义、shortcut 持久化/编辑、omnibox/provider、完整标签功能和 macOS 实机仍归后续任务。CEF Chrome 新标签关联依赖固定 CEF 150 的 `OnChromeCommand -> OnAfterCreated` 顺序，当前有界并经 Debug/Release 实机覆盖；升级 CEF 时必须重新验证。
+
+## BUX-04A 原子范围（omnibox 核心 URL/搜索判定引擎）
+
+- 状态：`TODO`；依赖 `BUX-02 DONE`、`CEF-03 DONE`、`FND-11 DONE`。
+- 单一目标：交付平台中立、可独立测试的 omnibox 核心引擎，包括 URL/搜索词判定、本地建议索引结构、建议列表状态机和闭合编辑命令；本任务不实现搜索 provider 配置、HTTPS 默认升级或隐私默认集成。
+- 输入：`browser-design-v1` 的两层信息架构与键盘心智、BUX-02 的 `ShellCommand`/`FocusArea` 骨架（含 `kFocusOmnibox`、`kOmnibox` focus token）、CEF-03 的导航生命周期、`crayon-domain::config` 配置加载框架（FND-11）与共享 `zh-CN/en-US` locale 资源。
+- 输出与允许修改：新增 `browser/shared-ui/omnibox/core/` 的生产判定引擎、建议状态机、闭合命令与独立 contract test/CMake；允许修改根 CMake（条件装配 omnibox test target）、`browser/shared-ui/shell/command_registry.h`（窄扩展 `ShellCommand` 枚举，新增 `OmniboxEdit`/`OmniboxSubmit`/`OmniboxCancel`/`OmniboxNavigate`）、共享 locale JSON（新增 omnibox 文案键）和本 Roadmap/current/总 Roadmap 索引。新增生产文件不超过 5 个；共享模块不得出现 CEF/Win32/AppKit/ArkWeb 类型。
+- 禁止修改：`browser/engine-api` 公共头、BUX-01 token/glyph/golden、macOS/Harmony 源码、Profile/持久化、搜索 provider URL 模板、HTTPS 升级策略、权限/隐私默认、下载/投屏业务、Cast-SDK、Relay、Agent/模型；不得引入 JSON/UI framework/第三方依赖，不得暴露 CEF/Win32 handle 给共享层。
+- 判定引擎边界：
+  - URL 判定：含 scheme 前缀（`http`/`https`/`file`/`crayon` 等白名单）、含已知 TLD（使用 Public Suffix List 子集，不随 DNS 查询）、IPv4/IPv6 字面量、含路径分隔符或 `@`/`:`/`?`/`#` 的输入，均判定为 URL；所有其他输入判定为搜索词。
+  - Scheme 白名单为闭合枚举，未知 scheme fail closed 为搜索词，不得静默添加 `http://` 前缀。
+  - 输入长度有硬上限（如 2048 字节），超限 fail closed 为搜索词。
+  - 危险 scheme（`javascript:`/`data:`/`vbscript:`）稳定拒绝为搜索词，不进入 URL 解析。
+  - IDN/Punycode 输入保留为搜索词判定（不展开 Punycode），由后续导航层处理；本任务不做 IDN 转码。
+- 本地建议索引边界：
+  - 建议来源为可插拔索引接口，当前由空 fixture/静态条目驱动；历史/书签数据由 `BUX-09/10` 填充，本任务只定义索引契约和内存结构。
+  - 建议条目有硬上限（如 8 条），按相关性和来源优先级排序；重复条目去重。
+  - 建议响应只含标题、URL/搜索词和来源标记（history/bookmark/shortcut），不含 Cookie、正文或页面敏感数据。
+  - 索引查询在本地内存完成，不涉及网络请求；查询超时/容量溢出降级为空列表。
+- 状态机与命令边界：
+  - 状态：Idle（无焦点）、Editing（用户输入中）、Suggesting（显示建议列表）、Loading（已提交等待导航）、Committed（导航已确认）。
+  - 命令：`FocusOmnibox`（BUX-02 已有）、`OmniboxEdit`（输入内容变化）、`OmniboxSubmit`（用户确认提交）、`OmniboxCancel`（Escape/失焦取消）、`OmniboxNavigate`（内部导航结果）。
+  - 旧 generation/tab 关闭/导航完成后的提交结果稳定丢弃；shutdown 后所有 pending 查询和命令拒绝。
+  - 建议列表的异步加载与取消：提交后、导航前或取消时立即丢弃未完成的查询结果。
+- 与 BUX-04B 的分工：本任务输出"判定结果"（URL 或搜索词），搜索词的 provider 转换和 HTTPS 升级由 BUX-04B 消费；BUX-04A 的判定引擎预留隐私配置注入接口（`PrivacyDefaults` 占位结构），BUX-04B 负责填充具体值。
+- 验收与测试：UX-003A；判定 contract 覆盖 URL/搜索词边界矩阵（scheme/TLD/IP/特殊字符/长度/危险 scheme/中文/空输入）、建议索引空/静态/超量/去重/排序、状态机正常/取消/旧结果丢弃/shutdown 拒绝、命令 sequence 单调性与未知命令拒绝。执行独立 omnibox configure/build/ctest、Windows Debug/Release build+ctest、适用 Google-style clang-format、`scripts/check.ps1 fast/security`、`git diff --check`；Windows 实机覆盖 `Ctrl+L` 聚焦后输入 URL/搜索词的判定与导航行为。
+- 明确不做：不实现搜索 provider URL 模板、HTTPS 默认升级、远程搜索建议 API、隐私默认设置、真实历史/书签索引、omnibox 视觉渲染、地址栏安全标识（锁图标/证书信息）、自动填充、语音输入或 macOS 实机；分别由 `BUX-04B/09/10/13/14/17`、`CEF-05/13`、`CEF-02M` 与后续平台总验收完成。
+
+## BUX-04B 原子范围（omnibox provider 配置与隐私集成）
+
+- 状态：`TODO`；依赖 `BUX-04A DONE`、`PRV-06 DONE`。
+- 单一目标：在 BUX-04A 判定引擎基础上，交付搜索 provider 配置契约、HTTPS 默认升级决策和隐私默认集成；本任务不重新实现 URL/搜索判定核心逻辑。
+- 输入：BUX-04A 的判定结果（URL 或搜索词）、`crayon-domain::config` 配置框架（FND-11）、PRV-06 的隐私默认设置（HTTPS 默认、Referer 策略、第三方 Cookie 策略）。
+- 输出与允许修改：新增 `browser/shared-ui/omnibox/provider/` 的 provider 配置模型、HTTPS 升级决策器、隐私参数注入器和独立 contract test/CMake；允许修改根 CMake、`browser/shared-ui/omnibox/core/` 的隐私配置注入接口（由占位结构改为具体实现）、共享 locale JSON（新增 provider/隐私文案键）和本 Roadmap/current/总 Roadmap 索引。新增生产文件不超过 3 个。
+- 禁止修改：BUX-04A 的判定引擎核心逻辑、`browser/engine-api`、macOS/Harmony 源码、Profile/持久化、下载/权限/投屏业务、Cast-SDK、Relay、Agent/模型；不得引入远程搜索 API 调用、第三方搜索 SDK 或通用网络请求。
+- Provider 配置契约边界：
+  - 搜索 provider 为编译期/本地配置的内存结构，schema_version=1，含名称、搜索 URL 模板（含占位符如 `{searchTerms}`）、参数映射和编码方式。
+  - 默认 provider 为空（用户未配置时不发送搜索请求），不内置 Google/Bing/百度等第三方搜索 URL。
+  - Provider 配置校验：URL 模板必须是合法 `http`/`https` URL，含且仅含一个搜索词占位符；危险 scheme、credential、控制字符或超长老式 URL 稳定拒绝。
+  - 多 provider 支持：允许配置多个 provider 并按优先级排序；搜索词提交时使用第一个合法 provider。
+- HTTPS 默认升级边界：
+  - 对 BUX-04A 判定为 URL 但无 scheme 的输入（如 `example.com`），根据 PRV-06 的隐私默认决定是否自动添加 `https://` 前缀。
+  - 升级决策为配置注入：BUX-04A 的判定引擎接收 `PrivacyDefaults` 结构，其中 `https_default` 字段控制是否升级；该字段由 BUX-04B 从 PRV-06 配置填充。
+  - 升级失败（如目标不支持 HTTPS）不自动降级到 `http://`，由导航层报告连接失败；不实现 HSTS 或证书固定。
+- 隐私默认集成边界：
+  - 搜索请求的 Referer 策略：根据 PRV-06 配置，搜索词提交时可设置为 `no-referrer` 或 `strict-origin`。
+  - 搜索请求的 Cookie 策略：根据 PRV-06 配置，决定是否携带第三方 Cookie（默认不携带）。
+  - 隐私配置与 provider 配置冲突时，以隐私配置为优先；冲突场景记录为 P2 跟踪项。
+- 验收与测试：UX-003B；provider 配置覆盖合法/损坏/空/多 provider/危险 scheme、HTTPS 升级开关矩阵（开/关/无 scheme 输入/有 scheme 输入）、隐私参数注入（Referer/Cookie 策略）、配置冲突降级。执行独立 provider configure/build/ctest、Windows Debug/Release build+ctest、适用 Google-style clang-format、`scripts/check.ps1 fast/security`、`git diff --check`。
+- 明确不做：不实现远程搜索建议 API、搜索引擎自动发现、搜索词补全、趋势搜索、语音搜索、地址栏安全标识渲染、自动填充或 macOS 实机；分别由后续任务和平台总验收完成。
