@@ -18,6 +18,10 @@ enum class ShellCommand {
   kZoomIn,
   kZoomOut,
   kResetZoom,
+  kOmniboxEdit,
+  kOmniboxSubmit,
+  kOmniboxCancel,
+  kOmniboxNavigate,
 };
 
 enum class CommandOrigin { kProductUi = 0, kNativeChrome };
@@ -66,6 +70,10 @@ constexpr bool IsValid(ShellCommand command) noexcept {
     case ShellCommand::kZoomIn:
     case ShellCommand::kZoomOut:
     case ShellCommand::kResetZoom:
+    case ShellCommand::kOmniboxEdit:
+    case ShellCommand::kOmniboxSubmit:
+    case ShellCommand::kOmniboxCancel:
+    case ShellCommand::kOmniboxNavigate:
       return true;
   }
   return false;

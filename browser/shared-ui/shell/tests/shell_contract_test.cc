@@ -94,15 +94,38 @@ bool CommandRegistryRejectsDuplicatesAndSeparatesNativePassThrough() {
   CHECK(target.execution_count() == 1);
   CHECK(state.focus_area() == FocusArea::kOmnibox);
 
+  CHECK(registry.Dispatch(ShellCommand::kOmniboxEdit, 3,
+                          CommandOrigin::kProductUi) ==
+        CommandDispatchResult::kExecuted);
+  CHECK(target.execution_count() == 2);
+  CHECK(target.last_command() == ShellCommand::kOmniboxEdit);
+
+  CHECK(registry.Dispatch(ShellCommand::kOmniboxSubmit, 4,
+                          CommandOrigin::kProductUi) ==
+        CommandDispatchResult::kExecuted);
+  CHECK(target.execution_count() == 3);
+  CHECK(target.last_command() == ShellCommand::kOmniboxSubmit);
+
+  CHECK(registry.Dispatch(ShellCommand::kOmniboxCancel, 5,
+                          CommandOrigin::kNativeChrome) ==
+        CommandDispatchResult::kPassThrough);
+  CHECK(target.execution_count() == 3);
+
+  CHECK(registry.Dispatch(ShellCommand::kOmniboxNavigate, 6,
+                          CommandOrigin::kProductUi) ==
+        CommandDispatchResult::kExecuted);
+  CHECK(target.execution_count() == 4);
+  CHECK(target.last_command() == ShellCommand::kOmniboxNavigate);
+
   target.set_available(false);
   CHECK(
-      registry.Dispatch(ShellCommand::kReload, 3, CommandOrigin::kProductUi) ==
+      registry.Dispatch(ShellCommand::kReload, 7, CommandOrigin::kProductUi) ==
       CommandDispatchResult::kUnavailable);
-  CHECK(target.execution_count() == 1);
+  CHECK(target.execution_count() == 4);
 
   registry.Shutdown();
   CHECK(
-      registry.Dispatch(ShellCommand::kReload, 4, CommandOrigin::kProductUi) ==
+      registry.Dispatch(ShellCommand::kReload, 8, CommandOrigin::kProductUi) ==
       CommandDispatchResult::kInactive);
   return true;
 }
