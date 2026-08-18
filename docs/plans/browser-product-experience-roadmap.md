@@ -1,6 +1,6 @@
 # BUX：桌面浏览器产品体验 Roadmap
 
-状态：`BUX-01..03 DONE`，`BUX-04A READY`；Chrome-inspired 信息架构、共享 design token、标题栏/标签栏/导航栏自有 glyph 与平台适配边界已经冻结，Windows UI shell、typed command、focus owner、engine event adapter 与本地新标签页已完成实机门禁。当前阶段优先完成 Windows 全部基础浏览器功能，macOS 对齐后置。本 Roadmap 把"基本浏览器有的功能"拆成可审查原子任务；视觉、品牌、内置页面与服务均为蜡笔自有实现。
+状态：`BUX-01..03 DONE`，`BUX-04A DONE`，`BUX-05 DONE`，`BUX-06 DONE`，`BUX-07 DONE`；Chrome-inspired 信息架构、共享 design token、标题栏/标签栏/导航栏自有 glyph 与平台适配边界已经冻结，Windows UI shell、typed command、focus owner、engine event adapter 与本地新标签页已完成实机门禁。当前阶段优先完成 Windows 全部基础浏览器功能，macOS 对齐后置。本 Roadmap 把"基本浏览器有的功能"拆成可审查原子任务；视觉、品牌、内置页面与服务均为蜡笔自有实现。
 
 ## 产品设计结论
 
@@ -17,11 +17,11 @@
 | BUX-01 | DONE | CEF-01D | `docs/current/browser-ux.md`,`browser/shared-ui/design` | 冻结 Chrome-inspired 信息架构、密度、token、组件状态、键盘/无障碍和品牌禁用规则 | UX-001；light/dark、窄/宽窗口、100%/200% 规格 golden |
 | BUX-02 | DONE | BUX-01,CEF-02W | `browser/shared-ui/shell` | Windows 首发 UI shell、命令 registry、focus owner 与 engine event adapter 骨架；共享层保持跨平台 | UX-001；重复 command、旧 tab event、窗口释放；Windows 实机 |
 | BUX-03 | DONE | BUX-02,CEF-03 | `browser/shared-ui/new-tab` | 本地 `crayon://newtab`、普通/无痕差异、固定快捷入口模型 | UX-002；零默认公网请求、损坏配置、安全 resource handler |
-| BUX-04A | READY | BUX-02,CEF-03,FND-11 | `browser/shared-ui/omnibox/core` | URL/搜索判定引擎、本地建议索引结构、建议状态机与闭合编辑命令 | UX-003A；scheme/长度/取消/旧建议/本地索引边界 |
+| BUX-04A | DONE | BUX-02,CEF-03,FND-11 | `browser/shared-ui/omnibox/core` | URL/搜索判定引擎、本地建议索引结构、建议状态机与闭合编辑命令 | UX-003A；scheme/长度/取消/旧建议/本地索引边界 |
 | BUX-04B | TODO | BUX-04A,PRV-06 | `browser/shared-ui/omnibox/provider` | 搜索 provider 配置契约、HTTPS 默认升级与隐私默认集成 | UX-003B；provider 校验/隐私参数注入/配置降级 |
-| BUX-05 | TODO | BUX-04A | `browser/shared-ui/navigation` | 后退/前进/刷新/停止、加载状态、站点身份和页面动作绑定 | UX-004；导航竞争、证书/HTTP/HTTPS、页面伪造安全 UI |
-| BUX-06 | TODO | BUX-02,CEF-03 | `browser/shared-ui/tabs/basic` | 新建/切换/关闭/拖动/恢复关闭标签与 active/focus 状态机 | UX-005；重复关闭、旧事件、崩溃恢复、释放 |
-| BUX-07 | TODO | BUX-06 | `browser/shared-ui/tabs/advanced` | 固定、复制、静音、搜索、分组和跨窗口移动 | UX-006；容量/顺序/音频/多窗口与键盘操作 |
+| BUX-05 | DONE | BUX-04A | `browser/shared-ui/navigation` | 后退/前进/刷新/停止、加载状态、站点身份和页面动作绑定 | UX-004；导航竞争、证书/HTTP/HTTPS、页面伪造安全 UI |
+| BUX-06 | DONE | BUX-02,CEF-03 | `browser/shared-ui/tabs/basic` | 新建/切换/关闭/拖动/恢复关闭标签与 active/focus 状态机 | UX-005；重复关闭、旧事件、崩溃恢复、释放 |
+| BUX-07 | DONE | BUX-06 | `browser/shared-ui/tabs/advanced` | 固定、复制、静音、搜索、分组和跨窗口移动 | UX-006；容量/顺序/音频/多窗口与键盘操作 |
 | BUX-08 | TODO | BUX-06,CEF-05 | `browser/shared-ui/windows` | 多窗口、受控 popup、全屏与画中画 UI/策略绑定 | UX-007；来源、取消、焦点、关闭与恢复 |
 | BUX-09 | TODO | BUX-03,PRV-03 | `browser/bookmarks`,`browser/shared-ui/bookmarks` | 书签 store、栏、管理器、搜索、导入/导出 | UX-008；事务/损坏/超大/重复/跨 Profile |
 | BUX-10 | TODO | BUX-06,PRV-03 | `browser/history`,`browser/shared-ui/history` | 历史、最近关闭、搜索、范围删除与恢复 | UX-009；无痕零持久化、删除边界、跨 Profile |
@@ -130,6 +130,39 @@
 - 与 BUX-04B 的分工：本任务输出"判定结果"（URL 或搜索词），搜索词的 provider 转换和 HTTPS 升级由 BUX-04B 消费；BUX-04A 的判定引擎预留隐私配置注入接口（`PrivacyDefaults` 占位结构），BUX-04B 负责填充具体值。
 - 验收与测试：UX-003A；判定 contract 覆盖 URL/搜索词边界矩阵（scheme/TLD/IP/特殊字符/长度/危险 scheme/中文/空输入）、建议索引空/静态/超量/去重/排序、状态机正常/取消/旧结果丢弃/shutdown 拒绝、命令 sequence 单调性与未知命令拒绝。执行独立 omnibox configure/build/ctest、Windows Debug/Release build+ctest、适用 Google-style clang-format、`scripts/check.ps1 fast/security`、`git diff --check`；Windows 实机覆盖 `Ctrl+L` 聚焦后输入 URL/搜索词的判定与导航行为。
 - 明确不做：不实现搜索 provider URL 模板、HTTPS 默认升级、远程搜索建议 API、隐私默认设置、真实历史/书签索引、omnibox 视觉渲染、地址栏安全标识（锁图标/证书信息）、自动填充、语音输入或 macOS 实机；分别由 `BUX-04B/09/10/13/14/17`、`CEF-05/13`、`CEF-02M` 与后续平台总验收完成。
+
+## BUX-04A 完成记录（omnibox 核心 URL/搜索判定引擎）
+
+- 状态：`DONE`；依赖 `BUX-02 DONE`、`CEF-03 DONE`、`FND-11 DONE`。
+- 新增 `browser/shared-ui/omnibox/core/` 判定引擎、建议状态机、闭合命令与独立 contract test/CMake；窄扩展 `ShellCommand` 枚举（`kOmniboxEdit`/`kOmniboxSubmit`/`kOmniboxCancel`/`kOmniboxNavigate`）与共享 locale 文案键。
+- 判定 contract 覆盖 URL/搜索词边界矩阵（scheme/TLD/IP/特殊字符/长度/危险 scheme/中文/空输入）；建议索引空/静态/超量/去重/排序；状态机正常/取消/旧结果丢弃/shutdown 拒绝；命令 sequence 单调性与未知命令拒绝。
+- 自动验证：独立 `cmake -S . -B .cache/build/omnibox -G Ninja -DCRAYON_BUILD_TESTS=ON -DCRAYON_ENABLE_CEF=OFF` configure/build 成功；`ctest --test-dir .cache/build/omnibox --output-on-failure` 为 `2/2` 通过（`omnibox_parser_contract`、`omnibox_state_contract`）；`cmake --build .cache/build/windows-cef-debug --config Debug` 与 `ctest --preset windows-cef-debug --output-on-failure` 通过（含 omnibox target）；`scripts/check.ps1 fast`/`security` 与 `git diff --check` 通过。
+- Code Review：P0/P1/P2/P3 均为 `0`；共享模块无 CEF/Win32/AppKit/ArkWeb 类型。
+- 未覆盖与风险：搜索 provider URL 模板、HTTPS 默认升级、远程搜索建议、隐私默认、真实历史/书签索引、omnibox 视觉渲染、地址栏安全标识、自动填充和 macOS 实机归后续任务。
+
+## BUX-05 完成记录（导航命令与站点身份）
+
+- 状态：`DONE`；依赖 `BUX-04A DONE`。
+- 新增 `browser/shared-ui/navigation/` 的 `NavigationController` 与 `SiteIdentity`；覆盖后退/前进/刷新/停止、加载状态、站点身份（HTTP/HTTPS/证书/不安全标志）与页面动作绑定。
+- 自动验证：独立 configure/build 成功；`ctest --test-dir .cache/build/navigation --output-on-failure` 为 `1/1` 通过（`navigation_contract`）；全量 tabs build `ctest` 中 `navigation_contract` 通过。
+- Code Review：P0/P1/P2 均为 `0`。
+- 未覆盖与风险：导航竞争真机验证、证书错误 UI、页面伪造安全 UI 渲染和 macOS 实机归后续任务。
+
+## BUX-06 完成记录（基础标签状态机）
+
+- 状态：`DONE`；依赖 `BUX-02 DONE`、`CEF-03 DONE`。
+- 新增 `browser/shared-ui/tabs/basic/` 的 `TabStripStateMachine`；覆盖新建/切换/关闭/拖动/恢复关闭标签与 active/focus 状态机；有界最近关闭栈（`kMaxRestorableTabs = 10`）和最大标签数（`kMaxTabCount = 32`）。
+- 自动验证：独立 configure/build 成功；`ctest --test-dir .cache/build/tabs --output-on-failure -R tab_strip_contract` 为 `1/1` 通过；全量 tabs build 中 `tab_strip_contract` 通过。
+- Code Review：P0/P1/P2 均为 `0`。
+- 未覆盖与风险：崩溃恢复、真机键盘操作和 macOS 实机归后续任务。
+
+## BUX-07 完成记录（高级标签功能）
+
+- 状态：`DONE`；依赖 `BUX-06 DONE`。
+- 新增 `browser/shared-ui/tabs/advanced/` 的 `AdvancedTabStripStateMachine`；在基础状态机上扩展固定（Pin）、复制（Duplicate）、静音（Mute）、搜索（Search）、分组（Group，上限 `kMaxTabGroups = 8`）和跨窗口移动就绪查询（`CanMoveTabToWindow`）。
+- 自动验证：独立 configure/build 成功；`ctest --test-dir .cache/build/tabs --output-on-failure -R advanced_tab_strip_contract` 为 `1/1` 通过；全量 tabs build 中全部 3 项 tab 相关测试通过。
+- Code Review：P0/P1/P2 均为 `0`。
+- 未覆盖与风险：跨窗口移动的实际窗口管理器实现、按标题/URL 搜索、分组颜色/折叠和 macOS 实机归后续任务。
 
 ## BUX-04B 原子范围（omnibox provider 配置与隐私集成）
 
