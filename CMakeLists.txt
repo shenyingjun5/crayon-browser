@@ -43,6 +43,7 @@ add_subdirectory(browser/shared-ui/omnibox/core)
 add_subdirectory(browser/shared-ui/navigation)
 add_subdirectory(browser/shared-ui/tabs/basic)
 add_subdirectory(browser/shared-ui/tabs/advanced)
+add_subdirectory(browser/shared-ui/windows)
 add_subdirectory(browser/shared-ui/new-tab)
 
 if(CRAYON_ENABLE_CEF)

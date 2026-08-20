@@ -1,6 +1,6 @@
 # BUX：桌面浏览器产品体验 Roadmap
 
-状态：`BUX-01..03 DONE`，`BUX-04A DONE`，`BUX-05 DONE`，`BUX-06 DONE`，`BUX-07 DONE`；Chrome-inspired 信息架构、共享 design token、标题栏/标签栏/导航栏自有 glyph 与平台适配边界已经冻结，Windows UI shell、typed command、focus owner、engine event adapter 与本地新标签页已完成实机门禁。当前阶段优先完成 Windows 全部基础浏览器功能，macOS 对齐后置。本 Roadmap 把"基本浏览器有的功能"拆成可审查原子任务；视觉、品牌、内置页面与服务均为蜡笔自有实现。
+状态：`BUX-01..03 DONE`，`BUX-04A DONE`，`BUX-05 DONE`，`BUX-06 DONE`，`BUX-07 DONE`，`BUX-08 DONE`；Chrome-inspired 信息架构、共享 design token、标题栏/标签栏/导航栏自有 glyph 与平台适配边界已经冻结，Windows UI shell、typed command、focus owner、engine event adapter 与本地新标签页已完成实机门禁。当前阶段优先完成 Windows 全部基础浏览器功能，macOS 对齐后置。本 Roadmap 把"基本浏览器有的功能"拆成可审查原子任务；视觉、品牌、内置页面与服务均为蜡笔自有实现。
 
 ## 产品设计结论
 
@@ -22,7 +22,7 @@
 | BUX-05 | DONE | BUX-04A | `browser/shared-ui/navigation` | 后退/前进/刷新/停止、加载状态、站点身份和页面动作绑定 | UX-004；导航竞争、证书/HTTP/HTTPS、页面伪造安全 UI |
 | BUX-06 | DONE | BUX-02,CEF-03 | `browser/shared-ui/tabs/basic` | 新建/切换/关闭/拖动/恢复关闭标签与 active/focus 状态机 | UX-005；重复关闭、旧事件、崩溃恢复、释放 |
 | BUX-07 | DONE | BUX-06 | `browser/shared-ui/tabs/advanced` | 固定、复制、静音、搜索、分组和跨窗口移动 | UX-006；容量/顺序/音频/多窗口与键盘操作 |
-| BUX-08 | TODO | BUX-06,CEF-05 | `browser/shared-ui/windows` | 多窗口、受控 popup、全屏与画中画 UI/策略绑定 | UX-007；来源、取消、焦点、关闭与恢复 |
+| BUX-08 | DONE | BUX-06,CEF-05 | `browser/shared-ui/windows` | 多窗口、受控 popup、全屏与画中画 UI/策略绑定 | UX-007；来源、取消、焦点、关闭与恢复 |
 | BUX-09 | TODO | BUX-03,PRV-03 | `browser/bookmarks`,`browser/shared-ui/bookmarks` | 书签 store、栏、管理器、搜索、导入/导出 | UX-008；事务/损坏/超大/重复/跨 Profile |
 | BUX-10 | TODO | BUX-06,PRV-03 | `browser/history`,`browser/shared-ui/history` | 历史、最近关闭、搜索、范围删除与恢复 | UX-009；无痕零持久化、删除边界、跨 Profile |
 | BUX-11 | TODO | CEF-05,BUX-02 | `browser/downloads`,`browser/shared-ui/downloads` | 下载 shelf/页、暂停/恢复/取消/重命名/打开位置和危险状态 | UX-010；路径、重复、断点、外部打开、失败释放 |
@@ -163,6 +163,31 @@
 - 自动验证：独立 configure/build 成功；`ctest --test-dir .cache/build/tabs --output-on-failure -R advanced_tab_strip_contract` 为 `1/1` 通过；全量 tabs build 中全部 3 项 tab 相关测试通过。
 - Code Review：P0/P1/P2 均为 `0`。
 - 未覆盖与风险：跨窗口移动的实际窗口管理器实现、按标题/URL 搜索、分组颜色/折叠和 macOS 实机归后续任务。
+
+## BUX-08 原子范围（多窗口、受控 popup、全屏与画中画策略）
+
+- 状态：`DONE`；依赖 `BUX-06 DONE`、`CEF-05 DONE`。
+- 单一目标：交付平台中立、可独立测试的多窗口状态机与受控 popup/全屏/画中画策略模型，统一窗口创建/焦点/关闭、popup 来源判定与容量、全屏和画中画模式互斥与恢复；本任务不做 CEF/Win32/AppKit 接线、不实现窗口像素 UI 或会话恢复。
+- 输入：`browser-design-v1` 的两层信息架构与窗口控制心智、BUX-06/07 的标签状态机窗口归属语义、CEF-05 的默认最小权限原则（程序化 popup 默认拒绝）。
+- 输出与允许修改：新增 `browser/shared-ui/windows/` 的 `WindowStateMachine`（窗口注册/焦点/关闭/模式）、`PopupPolicy`（来源判定与容量决策）、独立 contract test/CMake；允许修改根 CMake（条件装配 windows target）和本 Roadmap/current/总 Roadmap 索引。新增生产文件不超过 4 个；共享模块不得出现 CEF/Win32/AppKit/ArkWeb 类型。
+- 禁止修改：`browser/engine-api`、BUX-01 token/glyph/golden、tab strip 状态机语义、macOS/Harmony 源码、Profile/持久化、权限 store、下载/投屏业务、Cast-SDK、Relay、Agent/模型；不得引入 UI framework/第三方依赖；不存储 popup 目标 URL 或页面数据。
+- 状态与错误边界：
+  - 窗口 ID 非空且 ≤ 64 字符；重复创建、未知/旧窗口事件、关闭后迟到事件稳定拒绝；容量上限 `kMaxWindows = 8` 满时 fail closed。
+  - popup 必须关联存在的 opener 窗口；来源为 `kProgrammatic`（无用户手势脚本请求）默认拒绝；`kUserGesture` 允许但受 opener 每窗口 `kMaxPopupsPerWindow = 4` 与全局窗口容量约束；决策结果闭合枚举，不产生第二次副作用。
+  - 全屏/画中画互斥：同一窗口同时只能处于一种模式；进入新模式前必须先退出当前模式，混合请求稳定拒绝；popup 窗口不得进入全屏或画中画。
+  - 关闭聚焦窗口后焦点回退到最近使用的普通窗口；关闭 opener 不级联关闭 popup；关闭最后一个窗口后 `has_windows()` 为 false；`Shutdown()` 清空全部状态并拒绝后续命令。
+  - 退出全屏/画中画恢复到 `kNormal` 模式；窗口关闭自动清除其模式状态，不残留。
+- 与 CEF-05 的分工：popup/全屏/PiP 的平台触发入口由后续 CEF adapter 消费本状态机决策；本任务只交付确定性策略与状态。
+- 验收与测试：UX-007；contract 覆盖创建/焦点/关闭/重复与旧事件、容量、popup 来源/取消/容量矩阵、全屏/PiP 互斥与恢复、popup 窗口模式拒绝、焦点回退、shutdown 拒绝。执行独立 windows configure/build/ctest、适用 Google-style clang-format、`git diff --check`。
+- 明确不做：不实现 CEF/Win32/AppKit 窗口接线、窗口像素 UI、多显示器/DPI、窗口会话持久化恢复（归 `BUX-15`）、跨窗口标签移动的窗口管理器实现（`BUX-07` 只提供就绪查询）、macOS 实机；分别由 `CEF-08/13/14`、`BUX-15/18` 完成。
+
+## BUX-08 完成记录（多窗口、受控 popup、全屏与画中画策略）
+
+- 状态：`DONE`；依赖 `BUX-06 DONE`、`CEF-05 DONE`。
+- 实现：新增 `browser/shared-ui/windows/` 4 个生产文件——纯函数 `PopupPolicy`（来源判定：程序化 popup 默认拒绝、opener 存在性、每 opener 上限 `kMaxPopupsPerWindow = 4`、全局窗口上限 `kMaxWindows = 8`）与 `WindowStateMachine`（窗口注册/焦点 recency/幂等关闭、全屏与画中画互斥及恢复、popup 窗口模式拒绝、聚焦窗口关闭后回退到最近普通窗口、shutdown 后全拒绝）。共享模块无 CEF/Win32/AppKit/ArkWeb 类型。
+- 自动验证：独立 `cmake -S . -B .cache/build/windows -DCRAYON_BUILD_TESTS=ON -DCRAYON_ENABLE_CEF=OFF` configure/build 成功（`-Wall -Wextra -Wpedantic -Werror` 零告警）；`ctest --test-dir .cache/build/windows -R windows_contract --output-on-failure` 为 `1/1` 通过（23 组用例覆盖创建/焦点/关闭/重复与旧事件、容量、popup 来源/取消/容量矩阵、全屏/PiP 互斥与恢复、shutdown 拒绝、纯策略决策矩阵）；共享层全量回归（除 `cef_build_graph_contract` 因本机缺 Ninja 环境阻塞外）全部通过；`git diff --check`、`cargo fmt --all -- --check` 通过。
+- Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；Review 发现并关闭 1 个 P2（焦点回退循环初版为死代码，已改为真实 recency 重排），最终 P0/P1/P2 均为 `0`。生产文件 40～218 行、函数均低于规模提醒线；策略与状态机分离为两个组件。
+- 未覆盖与风险：本机无 Ninja，`cef_build_graph_contract` 未运行（环境阻塞，与本次改动无关）；CEF/Win32/AppKit 窗口接线、窗口像素 UI、多显示器/DPI、窗口会话恢复（`BUX-15`）、跨窗口标签移动的窗口管理器实现与 macOS 实机归后续任务。`BUX-08` 转为 `DONE`，解锁依赖它的后续窗口集成任务。
 
 ## BUX-04B 原子范围（omnibox provider 配置与隐私集成）
 
