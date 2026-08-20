@@ -25,7 +25,7 @@
 | BUX-08 | DONE | BUX-06,CEF-05 | `browser/shared-ui/windows` | 多窗口、受控 popup、全屏与画中画 UI/策略绑定 | UX-007；来源、取消、焦点、关闭与恢复 |
 | BUX-09 | TODO | BUX-03,PRV-03 | `browser/bookmarks`,`browser/shared-ui/bookmarks` | 书签 store、栏、管理器、搜索、导入/导出 | UX-008；事务/损坏/超大/重复/跨 Profile |
 | BUX-10 | TODO | BUX-06,PRV-03 | `browser/history`,`browser/shared-ui/history` | 历史、最近关闭、搜索、范围删除与恢复 | UX-009；无痕零持久化、删除边界、跨 Profile |
-| BUX-11 | TODO | CEF-05,BUX-02 | `browser/downloads`,`browser/shared-ui/downloads` | 下载 shelf/页、暂停/恢复/取消/重命名/打开位置和危险状态 | UX-010；路径、重复、断点、外部打开、失败释放 |
+| BUX-11 | DONE | CEF-05,BUX-02 | `browser/downloads`,`browser/shared-ui/downloads` | 下载 shelf/页、暂停/恢复/取消/重命名/打开位置和危险状态 | UX-010；路径、重复、断点、外部打开、失败释放 |
 | BUX-12 | TODO | BUX-05,PLT-02 | `browser/shared-ui/page-tools` | 查找、缩放、全屏、打印/PDF 与保存页面命令 | UX-011；取消/失败/输出路径/跨 Profile |
 | BUX-13 | TODO | BUX-01,PRV-03 | `browser/preferences`,`browser/shared-ui/settings` | 版本化 preference store 与启动/搜索/外观/下载/内容设置 UI | UX-012；migration/corrupt/reset/restart readback |
 | BUX-14 | TODO | CEF-05,BUX-05,BUX-13 | `browser/shared-ui/site-controls` | 站点权限、安全信息、证书错误、popup 与外部协议确认 UI | UX-013；origin/Profile/TTL/取消/伪造/危险 scheme |
@@ -180,6 +180,30 @@
 - 与 CEF-05 的分工：popup/全屏/PiP 的平台触发入口由后续 CEF adapter 消费本状态机决策；本任务只交付确定性策略与状态。
 - 验收与测试：UX-007；contract 覆盖创建/焦点/关闭/重复与旧事件、容量、popup 来源/取消/容量矩阵、全屏/PiP 互斥与恢复、popup 窗口模式拒绝、焦点回退、shutdown 拒绝。执行独立 windows configure/build/ctest、适用 Google-style clang-format、`git diff --check`。
 - 明确不做：不实现 CEF/Win32/AppKit 窗口接线、窗口像素 UI、多显示器/DPI、窗口会话持久化恢复（归 `BUX-15`）、跨窗口标签移动的窗口管理器实现（`BUX-07` 只提供就绪查询）、macOS 实机；分别由 `CEF-08/13/14`、`BUX-15/18` 完成。
+
+## BUX-11 原子范围（下载领域模型与下载栏视图）
+
+- 状态：`DONE`；依赖 `CEF-05 DONE`、`BUX-02 DONE`。
+- 单一目标：交付平台中立、可独立测试的下载领域模型（条目状态机、危险文件分类、文件名清理与唯一路径解析）和下载栏/页视图状态机；本任务不做 CEF 下载 handler 接线、真实文件 IO、下载 UI 像素或断点续传的真实网络恢复。
+- 输入：`browser-design-v1` 下载入口心智、CEF-05 的 `CefDownloadHandlerAdapter`（后续消费方）、`BUX-02` shell typed command 契约。
+- 输出与允许修改：新增 `browser/downloads/`（`DownloadItem` 领域状态机 + `DownloadPath` 文件名/路径工具 + 独立测试/CMake）与 `browser/shared-ui/downloads/`（`DownloadShelfStateMachine` 视图模型 + 独立测试/CMake）；允许修改根 CMake 和本 Roadmap/current/总 Roadmap 索引。新增生产文件不超过 8 个；两个模块均不得出现 CEF/Win32/AppKit/ArkWeb 类型。
+- 禁止修改：`browser/engine-api`、CEF-05 permission/download handler 行为、Profile/持久化 schema、BUX-01 token/glyph、macOS/Harmony 源码、投屏/Cast-SDK/Relay/Agent；不读写真实文件系统（路径存在性由调用方谓词注入）；不记录下载 URL/文件名到日志。
+- 领域边界：
+  - 条目状态闭合：`kPendingDangerConfirm`（危险文件待用户确认）、`kInProgress`、`kPaused`、`kCompleted`、`kFailed`、`kCancelled`；`kCancelled` 为终态；命令越状态迁移稳定拒绝。
+  - 进度有界：`received_bytes <= total_bytes`；`Complete` 仅允许 `kInProgress` 且字节数到齐；`Pause` 仅 `kInProgress`；`Resume` 仅 `kPaused`；`Retry` 仅 `kFailed`；`OpenItem`/`OpenLocation` 仅 `kCompleted`。
+  - 危险分类为闭合扩展名集合（可执行/脚本类），命中进入 `kPendingDangerConfirm`，须显式 `ConfirmDangerous`/`DiscardDangerous`；未命中直接可开始。
+  - 文件名为不可信输入：清理路径分隔符、控制字符、结尾点/空格，长度 ≤ 128 字节，清理后为空稳定失败；唯一路径解析用 " (n)" 后缀去重（n ≤ 999），注入谓词判断存在性，溢出 fail closed。
+- 视图边界：`DownloadShelfStateMachine` 持有有界（≤ 64）条目投影（ID、显示名、状态、百分比），提供 shelf 开合、`ClearCompleted`、活跃计数；只接受领域层转发的事件投影，不直接持有路径或引擎句柄；shutdown 后拒绝全部事件。
+- 验收与测试：UX-010；contract 覆盖状态迁移矩阵（含非法迁移）、危险确认/丢弃、进度边界、文件名清理（分隔符/控制符/结尾点空格/超长/空）、唯一名去重与溢出、视图容量/清理/打开位置门禁/失败释放。执行独立 downloads configure/build/ctest、适用 Google-style clang-format、`git diff --check`。
+- 明确不做：不实现 CEF 下载 handler 接线和真实断点续传（归后续 CEF adapter 任务）、下载 shelf 像素 UI、持久化下载历史（归 `BUX-13` preferences 边界外另行评估）、病毒扫描、macOS 实机。
+
+## BUX-11 完成记录（下载领域模型与下载栏视图）
+
+- 状态：`DONE`；依赖 `CEF-05 DONE`、`BUX-02 DONE`。
+- 实现：新增 8 个生产/测试文件。`browser/downloads/` 提供 `DownloadItem`（闭合六态状态机：危险文件进入 `kPendingDangerConfirm`，须显式确认/丢弃；进度字节有界；Pause/Resume/Cancel/Retry/Complete 越状态迁移稳定拒绝；`OpenItem`/`OpenLocation` 仅 `kCompleted`）、`ClassifyDownloadDanger`（闭合可执行/脚本扩展名集合、大小写不敏感、只取 basename 最终扩展名）与 `DownloadPath`（文件名清理：剥离分隔符/控制符/结尾点空格/纯点名，长度 ≤ 128；唯一路径 " (n)" 去重 n ≤ 999，存在性由调用方谓词注入，本模块零文件系统访问）。`browser/shared-ui/downloads/` 提供 `DownloadShelfStateMachine`（≤ 64 条有界投影、重复 ID/非法投影拒绝、新增自动展开 shelf、`ClearCompleted`、失败/取消后的 UI 侧释放、shutdown 全拒绝）。
+- 自动验证：独立 `cmake -S . -B .cache/build/downloads -DCRAYON_BUILD_TESTS=ON -DCRAYON_ENABLE_CEF=OFF` configure/build 成功（`-Wall -Wextra -Wpedantic -Werror` 零告警）；`ctest -R download` 为 `2/2` 通过（19 + 9 组用例覆盖状态迁移矩阵、危险确认/丢弃、进度越界、清理与去重边界、容量、shutdown）；共享层全量回归（除 `cef_build_graph_contract` 因本机缺 Ninja 环境阻塞外）全部通过；`git diff --check`、`cargo fmt --all -- --check` 通过；边界扫描确认两个模块均无 CEF/Win32/AppKit/ArkWeb 引用。
+- Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；关闭 1 个 P3（`Create` 补充“须先经 `SanitizeDownloadFileName`”契约注释），最终 P0/P1/P2 均为 `0`。生产文件 44～143 行、函数均低于规模提醒线；领域与视图分离为两个独立 target。
+- 未覆盖与风险：本机无 Ninja，`cef_build_graph_contract` 未运行（环境阻塞，与本次改动无关）；CEF 下载 handler 接线、真实断点续传、shelf 像素 UI、下载历史持久化与 macOS 实机归后续任务（CEF-08/14、BUX-13/18）。`BUX-11` 转为 `DONE`。
 
 ## BUX-08 完成记录（多窗口、受控 popup、全屏与画中画策略）
 
