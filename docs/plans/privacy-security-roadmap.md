@@ -1,6 +1,6 @@
 # PRV：隐私与产品安全 Roadmap
 
-状态：`FND-08 DONE`，等待 `CEF-05`。Relay 网络安全实现归 MED，本 Roadmap 负责 Profile、追踪防护、安全存储，以及页面数据、Agent、Workflow/Challenge、Capability Hub/Partner connector 的隐私数据流和系统级安全门禁。
+状态：`FND-08 DONE`，`CEF-04/CEF-05 DONE`，`PRV-01 DONE`。Relay 网络安全实现归 MED，本 Roadmap 负责 Profile、追踪防护、安全存储，以及页面数据、Agent、Workflow/Challenge、Capability Hub/Partner connector 的隐私数据流和系统级安全门禁。
 
 ## 原子任务
 
@@ -30,3 +30,22 @@
 - 不允许 trace/checkpoint/Site Skill 保存密码、支付、文件值、Cookie、Authorization、正文副本或记录时的 action_id；技能运行必须重新授权。
 - 不允许入站 MCP session/secret 被出站 Partner connector 使用，也不允许 OAuth token 出现在 CAAP、页面、receipt、route_reason 或诊断中。
 - 不允许自动解验证码/风控，或在高风险、跨源、低置信度变化下静默 self-heal。
+
+## PRV-01 原子范围（Profile 模型与生命周期状态机）
+
+- 状态：`IN_PROGRESS`；依赖 `FND-08 DONE`、`CEF-04 DONE`。
+- 单一目标：交付平台中立的 `crayon-profile` Rust crate 的 `model` 模块：Profile ID/type 强类型、随机目录 ID、Profile 注册表与生命周期状态机；本任务不实现磁盘创建/清理、无痕存储清单或安全存储。
+- 输入：`crayon-domain` 的强类型 ID 与 `CoreError` 约定、CEF-04 的 Profile ID 校验语义（非空、≤ 256 字节、UTF-8）、PV-001/PV-004 的 Profile 边界与路径不得使用名称的要求。
+- 输出与允许修改：新增 `crates/crayon-profile/`（`model.rs`、`model_tests.rs`、`lib.rs` 只做 re-export）、根 `Cargo.toml` workspace 成员、本 Roadmap 状态与证据。
+- 禁止修改：其他 crate、CEF shell、UI、诊断/遥测、Cast-SDK；不得把 Profile 名/ID 拼入文件路径（路径分量只来自随机目录 ID 的十六进制编码）；不得写真实磁盘。
+- 边界：Profile ID 非空且 ≤ 256 字节；目录 ID 为 128 位加密随机（`getrandom`，已在 workspace lock 中的成熟 MIT/Apache 依赖）编码为 32 字符小写十六进制，测试经注入字节确定性构造；注册表容量上限 64，重复 ID、未知 ID、非法状态迁移（含重复关闭）稳定拒绝；`Closing` 状态下禁止业务操作，`Closed` 后才允许移除记录；无痕 Profile 标记 ephemeral，持久化与清理由 PRV-02/03 拥有。
+- 验收与测试：PV-001、PV-004；单测覆盖 ID 校验矩阵、目录 ID 格式/唯一性、创建/查询/关闭生命周期、非法状态/重复关闭/容量、路径派生只含目录 ID。命令：`cargo test -p crayon-profile`、`cargo fmt --all -- --check`、`cargo clippy -p crayon-profile --all-targets -- -D warnings`、workspace 回归 `cargo test -p crayon-browser-core --lib`（3 项）与 legacy-dev（58 项）、`git diff --check`。
+- 明确不做：磁盘目录创建/删除、无痕清理清单、Profile 持久化 schema、平台安全存储、UI picker；分别由 PRV-02/03/05、BUX-15 完成。
+
+## PRV-01 完成记录（Profile 模型与生命周期状态机）
+
+- 状态：`DONE`；依赖 `FND-08 DONE`、`CEF-04 DONE`。
+- 实现：新增 `crates/crayon-profile`（workspace 成员）。`model` 模块提供 `ProfileId`（非空、≤256 字节、UTF-8，与 CEF-04 validator 语义对齐）、`ProfileType`（Regular/Incognito 闭合枚举，ephemeral 判定）、`DirectoryId`（128 位加密随机经 `getrandom 0.3` 生成——该依赖已在 workspace lock 中，许可证 MIT/Apache-2.0/ISC、rust-random 维护；测试与持久化重载经 `from_bytes` 确定性注入）与 `ProfileRegistry`（绝对根校验、容量 64、重复 ID/目录 ID 复用拒绝、Active→Closing→Closed 闭合迁移、重复关闭/非法迁移稳定拒绝、仅 Closed 可移除）。路径派生为 `root.join(directory_id.to_hex())`，Profile ID/名称永不进入路径；模块零文件系统访问、零日志。
+- 自动验证：`cargo test -p crayon-profile` 13/13 通过；`cargo clippy -p crayon-profile --all-targets -- -D warnings` 零告警；`cargo fmt --all -- --check` 通过；workspace 基线回归 `cargo test -p crayon-browser-core --lib` 3/3 与 `--no-default-features --features legacy-dev --lib` 58/58 通过；`git diff --check` 通过。
+- Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；Review 发现并关闭 1 个 P1（目录 ID 可被两个 Profile 复用破坏隔离，新增 `DirectoryIdInUse` 拒绝）和 1 个 P2（测试文件初版按 `#[cfg(test)] mod` 内嵌，不符合 crate `tests/` 公共行为测试约定，已迁移），最终 P0/P1/P2 均为 `0`。`lib.rs` 只做 re-export；`model.rs` 约 370 行、函数均低于规模提醒线。
+- 未覆盖与风险：磁盘目录创建/删除、无痕清理清单、持久化 schema、symlink/reparse 防护与平台安全存储分别归 `PRV-02/03/04/05`；`PRV-01` 转为 `DONE`，解锁 `PRV-02`、`PRV-03` 与 `BUX-15` 的 Profile 依赖。

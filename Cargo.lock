@@ -500,6 +500,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "crayon-profile"
+version = "0.1.0"
+dependencies = [
+ "crayon-domain",
+ "getrandom 0.3.4",
+ "serde",
+]
+
+[[package]]
 name = "crayon-relay"
 version = "0.1.0"
 dependencies = [

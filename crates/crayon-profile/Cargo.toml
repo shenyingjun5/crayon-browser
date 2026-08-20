@@ -1,0 +1,15 @@
+[package]
+name = "crayon-profile"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Platform-neutral profile identity, directory mapping and lifecycle"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+crayon-domain = { path = "../crayon-domain" }
+getrandom = "0.3"
+serde = { version = "1", features = ["derive"] }
