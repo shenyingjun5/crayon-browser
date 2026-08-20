@@ -23,7 +23,7 @@
 | BUX-06 | DONE | BUX-02,CEF-03 | `browser/shared-ui/tabs/basic` | 新建/切换/关闭/拖动/恢复关闭标签与 active/focus 状态机 | UX-005；重复关闭、旧事件、崩溃恢复、释放 |
 | BUX-07 | DONE | BUX-06 | `browser/shared-ui/tabs/advanced` | 固定、复制、静音、搜索、分组和跨窗口移动 | UX-006；容量/顺序/音频/多窗口与键盘操作 |
 | BUX-08 | DONE | BUX-06,CEF-05 | `browser/shared-ui/windows` | 多窗口、受控 popup、全屏与画中画 UI/策略绑定 | UX-007；来源、取消、焦点、关闭与恢复 |
-| BUX-09 | TODO | BUX-03,PRV-03 | `browser/bookmarks`,`browser/shared-ui/bookmarks` | 书签 store、栏、管理器、搜索、导入/导出 | UX-008；事务/损坏/超大/重复/跨 Profile |
+| BUX-09 | DONE | BUX-03,PRV-03 | `browser/bookmarks`,`browser/shared-ui/bookmarks` | 书签 store、栏、管理器、搜索、导入/导出 | UX-008；事务/损坏/超大/重复/跨 Profile |
 | BUX-10 | TODO | BUX-06,PRV-03 | `browser/history`,`browser/shared-ui/history` | 历史、最近关闭、搜索、范围删除与恢复 | UX-009；无痕零持久化、删除边界、跨 Profile |
 | BUX-11 | DONE | CEF-05,BUX-02 | `browser/downloads`,`browser/shared-ui/downloads` | 下载 shelf/页、暂停/恢复/取消/重命名/打开位置和危险状态 | UX-010；路径、重复、断点、外部打开、失败释放 |
 | BUX-12 | TODO | BUX-05,PLT-02 | `browser/shared-ui/page-tools` | 查找、缩放、全屏、打印/PDF 与保存页面命令 | UX-011；取消/失败/输出路径/跨 Profile |
@@ -180,6 +180,27 @@
 - 与 CEF-05 的分工：popup/全屏/PiP 的平台触发入口由后续 CEF adapter 消费本状态机决策；本任务只交付确定性策略与状态。
 - 验收与测试：UX-007；contract 覆盖创建/焦点/关闭/重复与旧事件、容量、popup 来源/取消/容量矩阵、全屏/PiP 互斥与恢复、popup 窗口模式拒绝、焦点回退、shutdown 拒绝。执行独立 windows configure/build/ctest、适用 Google-style clang-format、`git diff --check`。
 - 明确不做：不实现 CEF/Win32/AppKit 窗口接线、窗口像素 UI、多显示器/DPI、窗口会话持久化恢复（归 `BUX-15`）、跨窗口标签移动的窗口管理器实现（`BUX-07` 只提供就绪查询）、macOS 实机；分别由 `CEF-08/13/14`、`BUX-15/18` 完成。
+
+## BUX-09 原子范围（书签领域模型、版本化编解码与书签栏视图）
+
+- 状态：`DONE`；依赖 `BUX-03 DONE`、`PRV-03 DONE`。
+- 单一目标：交付平台中立、可独立测试的书签树模型（文件夹/书签 CRUD、移动、搜索、重复检测）、版本化编解码与原子持久化（临时文件改名，损坏 fail closed）和书签栏视图状态机；本任务不做 Chrome JSON 导入、像素 UI 或跨设备同步。
+- 输入：`browser-design-v1` 书签栏/管理器心智、BUX-02 typed command 契约、PRV-03 的按 Profile 目录隔离。
+- 输出与允许修改：新增 `browser/bookmarks/`（`BookmarkStore` 树模型 + `BookmarkCodec` 序列化/原子存取 + 独立测试/CMake）与 `browser/shared-ui/bookmarks/`（`BookmarkBarStateMachine` + 独立测试/CMake）；允许修改根 CMake 和本 Roadmap/current/总 Roadmap 索引。新增生产文件不超过 6 个；不得出现 CEF/Win32/AppKit/ArkWeb 类型；不引入 JSON 框架等第三方依赖。
+- 禁止修改：`browser/engine-api`、BUX-01 token/glyph、omnibox 判定、PRV-01/02/03 语义、下载/投屏业务、Cast-SDK、Relay、Agent/模型。
+- 领域边界：节点为闭合两类（folder/bookmark）；ID 单调分配不重用；URL 仅接受 http/https、≤2048 字节、无控制字符；标题 ≤512 字节 UTF-8；树容量 ≤4096 节点、深度 ≤32、单文件夹子级 ≤256；移动拒绝环（不得移入自身后代）；删除文件夹级联删除后代；搜索大小写不敏感子串、结果 ≤64；每个 Store 实例绑定单一 Profile 根，跨 Profile 不共享状态。
+- 编解码边界：格式 `CRAYON-BOOKMARKS v1` 头 + 长度前缀记录；头部错误、截断、长度越界、未知记录类型均 fail closed（返回错误不部分恢复）；保存经 `<path>.tmp` 写入后 rename 原子替换；round-trip 确定性。
+- 视图边界：书签栏只持有（节点 ID、标题）有界投影（≤128），显示/隐藏、当前页 starred 状态查询；不持 URL 之外的页面数据，不直接读写文件。
+- 验收与测试：UX-008；contract 覆盖 CRUD/移动环拒绝/级联删除/容量/深度、URL/标题校验、重复 URL 检测、搜索边界、编解码 round-trip/损坏矩阵（坏头/截断/超长/未知类型）、原子保存的临时文件不残留、跨 Profile 隔离、栏容量与 starred 状态。执行独立 configure/build/ctest、`-Wall -Wextra -Wpedantic -Werror` 零告警、共享层回归、`git diff --check`。
+- 明确不做：Chrome/Edge/Firefox JSON 或 HTML 导入解析、书签管理器像素 UI、同步/云、favicon 抓取、macOS 实机；导入解析如需支持另立任务评估解析器安全边界。
+
+## BUX-09 完成记录（书签领域模型、版本化编解码与书签栏视图）
+
+- 状态：`DONE`；依赖 `BUX-03 DONE`、`PRV-03 DONE`。
+- 实现：新增 6 个生产文件。`browser/bookmarks/`：`BookmarkStore`（folder/bookmark 闭合两类、ID 单调不重用、URL 仅 http/https ≤2048 无控制字符、标题 ≤512、容量 4096/深度 32/单文件夹 256 子级、移动拒绝环与容量溢出、文件夹级联删除、大小写不敏感搜索 ≤64 结果、重复 URL 检测；每实例绑定单一 Profile 根）与 `BookmarkCodec`（`CRAYON-BOOKMARKS v1` 头 + DFS 深度/长度前缀记录；坏头/截断/长度越界/未知记录/深度跳变/内容越界全部 fail closed 不部分恢复；保存经 `<path>.tmp` 原子 rename，失败删除临时文件；文件 ≤4MiB）。`browser/shared-ui/bookmarks/`：`BookmarkBarStateMachine`（≤128 条 (id,title,kind) 投影、非法条目整批拒绝、当前页 starred 状态、shutdown 全拒绝）。
+- 自动验证：独立 `cmake -S . -B .cache/build/bookmarks -DCRAYON_BUILD_TESTS=ON -DCRAYON_ENABLE_CEF=OFF` configure/build 成功且 `-Wall -Wextra -Wpedantic -Werror` 零告警；`ctest -R bookmark` 2/2 通过（store+codec 14 组、bar 5 组：校验矩阵、环/级联/ID 不重用/深度容量、round-trip 含中文与查询串、损坏矩阵、原子保存无临时文件残留、跨文件缺失/损坏拒绝）；共享层全量回归 18/18 通过（除本机缺 Ninja 的 `cef_build_graph_contract` 环境阻塞）；`git diff --check` 与平台边界扫描通过。
+- Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；Review 发现并关闭 1 个 P1（编解码深度栈越界：`depth == stack.size()` 时 parent 会错绑到 root，已改为 `depth >= stack.size()` 拒绝）、1 个 P2（`ReadPayload` 在空剩余输入时 size_t 下溢，已改为显式 remaining 计算）和 1 个 P2（节点存储由带墓碑的 vector 改为只存活跃节点的 `unordered_map`，避免删除累积无界内存），最终 P0/P1/P2 均为 `0`。
+- 未覆盖与风险：Chrome/Edge/Firefox JSON/HTML 导入解析未做（如需支持另立任务评估解析器安全边界）；书签管理器像素 UI、favicon、同步与 macOS 实机归后续任务。`BUX-09` 转为 `DONE`。
 
 ## BUX-11 原子范围（下载领域模型与下载栏视图）
 
