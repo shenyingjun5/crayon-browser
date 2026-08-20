@@ -49,3 +49,22 @@
 - 自动验证：`cargo test -p crayon-profile` 13/13 通过；`cargo clippy -p crayon-profile --all-targets -- -D warnings` 零告警；`cargo fmt --all -- --check` 通过；workspace 基线回归 `cargo test -p crayon-browser-core --lib` 3/3 与 `--no-default-features --features legacy-dev --lib` 58/58 通过；`git diff --check` 通过。
 - Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；Review 发现并关闭 1 个 P1（目录 ID 可被两个 Profile 复用破坏隔离，新增 `DirectoryIdInUse` 拒绝）和 1 个 P2（测试文件初版按 `#[cfg(test)] mod` 内嵌，不符合 crate `tests/` 公共行为测试约定，已迁移），最终 P0/P1/P2 均为 `0`。`lib.rs` 只做 re-export；`model.rs` 约 370 行、函数均低于规模提醒线。
 - 未覆盖与风险：磁盘目录创建/删除、无痕清理清单、持久化 schema、symlink/reparse 防护与平台安全存储分别归 `PRV-02/03/04/05`；`PRV-01` 转为 `DONE`，解锁 `PRV-02`、`PRV-03` 与 `BUX-15` 的 Profile 依赖。
+
+## PRV-06 原子范围（标准隐私默认值模型）
+
+- 状态：`DONE`；依赖 `CEF-05 DONE`、`FND-11 DONE`。
+- 单一目标：交付平台中立、可独立测试的标准隐私默认值模型：第三方 Cookie 策略、存储分区、Referer 策略、HTTPS 默认升级和权限默认；本任务不实现 CEF settings 接线、网络拦截或 UI。
+- 输入：CEF-05 的默认最小权限（`PermissionStore` 默认 deny）、FND-11 的配置语义、PV-008/PV-009 的数据分类与追踪防护要求、BUX-04B 的 `PrivacyDefaults` 注入接口需求。
+- 输出与允许修改：新增 `browser/privacy/standard/` 的 `PrivacyDefaults` 模型与一致性校验、独立 contract test/CMake；允许修改根 CMake 和本 Roadmap 状态与证据。新增生产文件不超过 3 个；不得出现 CEF/Win32/AppKit/ArkWeb 类型。
+- 禁止修改：CEF-05 permission handler 行为、crayon-domain 配置 schema、UI、Cast-SDK/Relay/Agent；不发起网络请求，不读取磁盘，不记录站点或用户数据。
+- 边界：所有策略为闭合枚举；默认值取最保守档（第三方 Cookie 默认阻止、存储分区默认开启、Referer 默认 `strict-origin-when-cross-origin`、HTTPS 默认升级开启、权限默认全部 deny）；组合冲突时以隐私更高者优先（如 `kBlockAll` 覆盖第三方允许）；未知/越界值 fail closed 回退默认；提供确定性描述快照用于 golden 兼容 fixture。
+- 验收与测试：PV-008、PV-009；contract 覆盖默认值矩阵、每策略合法切换、枚举越界 fail closed、冲突消解优先级、描述快照 golden。命令：独立 configure/build/ctest、`-Wall -Wextra -Wpedantic -Werror` 零告警、共享层回归、`git diff --check`。
+- 明确不做：CEF settings/request 拦截接线（后续 CEF adapter 任务）、高熵 API 降精度（`PRV-07`）、偏好持久化（`BUX-13`）、UI 呈现（`BUX-13/14`）。
+
+## PRV-06 完成记录（标准隐私默认值模型）
+
+- 状态：`DONE`；依赖 `CEF-05 DONE`、`FND-11 DONE`。
+- 实现：新增 `browser/privacy/standard/`（2 个生产文件）。`PrivacyDefaults` 为纯数据模型：第三方 Cookie 闭合三档（默认 `kBlockThirdParty`）、Referer 闭合三档（默认 `strict-origin-when-cross-origin`）、权限默认（默认 `kDeny`，与 CEF-05 默认最小权限一致）、存储分区默认开启、HTTPS 默认升级开启；`Validate` 对越界枚举 fail closed，`Normalize` 对非法候选整体回退默认（部分应用被禁止），`Describe` 输出确定性快照且只含枚举名/布尔值。
+- 自动验证：独立 `cmake -S . -B .cache/build/privacy -DCRAYON_BUILD_TESTS=ON -DCRAYON_ENABLE_CEF=OFF` configure/build 成功且 `-Wall -Wextra -Wpedantic -Werror` 零告警；`ctest -R privacy_defaults_contract` 1/1 通过（默认值矩阵、54 组合法组合、枚举越界 fail closed、非法候选回退、golden 快照）；共享层全量回归（除本机缺 Ninja 的 `cef_build_graph_contract` 环境阻塞外）全部通过；`git diff --check` 通过。
+- Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；当前各字段独立、无跨字段冲突需要折叠，`Normalize` 仅承担 fail-closed 回退并已如实注释，最终 P0/P1/P2/P3 均为 `0`。模块无 CEF/Win32/AppKit/ArkWeb 类型、无 IO、无日志。
+- 未覆盖与风险：CEF settings/request 拦截接线归后续 CEF adapter 任务；高熵 API 降精度归 `PRV-07`；偏好持久化归 `BUX-13`；BUX-04B 的 provider/隐私注入接口消费由 BUX 侧接续。`PRV-06` 转为 `DONE`，解锁 `PRV-07` 与 `BUX-04B`。
