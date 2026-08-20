@@ -1,7 +1,11 @@
 #ifndef CRAYON_BROWSER_CEF_SHELL_SRC_MACOS_APP_H_
 #define CRAYON_BROWSER_CEF_SHELL_SRC_MACOS_APP_H_
 
+#include <memory>
 #include <string>
+
+#include "browser/permission/permission_store.h"
+#include "browser/window/tab_controller.h"
 
 #include "browser/window/tab_controller.h"
 #include "include/cef_app.h"
@@ -24,6 +28,9 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   }
 
  private:
+  const std::string product_name_;
+  std::unique_ptr<permission::PermissionStore> permission_store_;
+  CefRefPtr<window::TabController> tab_controller_;
   const std::string product_name_;
   CefRefPtr<window::TabController> tab_controller_;
 

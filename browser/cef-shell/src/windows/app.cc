@@ -103,6 +103,17 @@ BrowserApp::BrowserApp(HINSTANCE resource_module, std::wstring product_name)
     : product_name_(std::move(product_name)),
       window_icons_(std::make_shared<WindowsWindowIcons>(resource_module)),
       new_tab_strings_(LoadNewTabStrings(resource_module)),
+      permission_store_(std::make_unique<permission::PermissionStore>()),
+      tab_controller_(new window::TabController(
+          browser_new_tab::kNewTabUrl,
+          [window_icons = window_icons_](CefRefPtr<CefBrowser> browser) {
+            window_icons->Apply(browser);
+          },
+          browser_new_tab::kNewTabUrl, permission_store_.get())),
+      shell_runtime_(std::make_shared<WindowsShellRuntime>(tab_controller_)) {}
+    : product_name_(std::move(product_name)),
+      window_icons_(std::make_shared<WindowsWindowIcons>(resource_module)),
+      new_tab_strings_(LoadNewTabStrings(resource_module)),
       tab_controller_(new window::TabController(
           browser_new_tab::kNewTabUrl,
           [window_icons = window_icons_](CefRefPtr<CefBrowser> browser) {

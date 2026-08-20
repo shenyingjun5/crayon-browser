@@ -3,6 +3,44 @@
 
 #include <functional>
 #include <map>
+#include <memory>
+#include <optional>
+#include <string>
+
+#include "browser/permission/cef_download_handler.h"
+#include "browser/permission/cef_permission_handler.h"
+#include "browser/permission/permission_store.h"
+#include "browser/window/tab_model.h"
+#include "include/cef_client.h"
+#include "include/cef_command_handler.h"
+
+namespace crayon::browser::cef_shell::window {
+
+class TabController;
+
+// Normalizes CEF browser callbacks into TabModel state transitions. The
+// controller is owned by the application and outlives every browser.
+// All methods run on the CEF UI thread.
+class WindowClient final : public CefClient,
+                           public CefLifeSpanHandler,
+                           public CefDisplayHandler,
+                           public CefLoadHandler,
+                           public CefRequestHandler,
+                           public CefFocusHandler,
+                           public CefCommandHandler {
+ public:
+  WindowClient(TabController* controller,
+               permission::PermissionStore* permission_store);
+
+  CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
+  CefRefPtr<CefDisplayHandler> GetDisplayHandler() override { return this; }
+  CefRefPtr<CefLoadHandler> GetLoadHandler() override { return this; }
+  CefRefPtr<CefRequestHandler> GetRequestHandler() override { return this; }
+  CefRefPtr<CefFocusHandler> GetFocusHandler() override { return this; }
+  CefRefPtr<CefCommandHandler> GetCommandHandler() override { return this; }
+
+  void OnAfterCreated(CefRefPtr<CefBrowser> browser) override;
+#include <map>
 #include <optional>
 #include <string>
 
@@ -52,6 +90,25 @@ class WindowClient final : public CefClient,
   bool OnChromeCommand(CefRefPtr<CefBrowser> browser, int command_id,
                        cef_window_open_disposition_t disposition) override;
 
+  // Permission handlers: default-deny unless explicitly allowed by the store.
+  CefRefPtr<CefPermissionHandler> GetPermissionHandler() override {
+    return permission_handler_;
+  }
+  CefRefPtr<CefDownloadHandler> GetDownloadHandler() override {
+    return download_handler_;
+  }
+
+ private:
+  TabController* controller_;
+  CefRefPtr<permission::CefPermissionHandlerAdapter> permission_handler_;
+  CefRefPtr<permission::CefDownloadHandlerAdapter> download_handler_;
+
+  IMPLEMENT_REFCOUNTING(WindowClient);
+  DISALLOW_COPY_AND_ASSIGN(WindowClient);
+};
+  bool OnChromeCommand(CefRefPtr<CefBrowser> browser, int command_id,
+                       cef_window_open_disposition_t disposition) override;
+
  private:
   TabController* controller_;
 
@@ -71,7 +128,11 @@ class TabController final : public CefBaseRefCounted {
   using ChromeCommandCallback = std::function<void(int command_id)>;
   using BrowsersClosedCallback = std::function<void()>;
 
-  explicit TabController(std::string initial_url,
+  explicit TabController(
+      std::string initial_url,
+      BrowserCreatedCallback browser_created_callback = {},
+      std::optional<std::string> new_tab_url = std::nullopt,
+      permission::PermissionStore* permission_store = nullptr);
                          BrowserCreatedCallback browser_created_callback = {},
                          std::optional<std::string> new_tab_url = std::nullopt);
 
@@ -97,6 +158,9 @@ class TabController final : public CefBaseRefCounted {
 
   const TabModel& model() const noexcept { return model_; }
   CefRefPtr<WindowClient> client() const { return client_; }
+  permission::PermissionStore* permission_store() const {
+    return permission_store_;
+  }
   void SetChromeCommandCallback(ChromeCommandCallback callback);
   void SetBrowsersClosedCallback(BrowsersClosedCallback callback);
 
@@ -121,6 +185,11 @@ class TabController final : public CefBaseRefCounted {
   const BrowserCreatedCallback browser_created_callback_;
   const std::optional<std::string> new_tab_url_;
   ChromeCommandCallback chrome_command_callback_;
+  BrowsersClosedCallback browsers_closed_callback_;
+  TabModel model_;
+  permission::PermissionStore* permission_store_;
+  CefRefPtr<WindowClient> client_;
+  std::map<int, CefRefPtr<CefBrowser>> browsers_;
   BrowsersClosedCallback browsers_closed_callback_;
   TabModel model_;
   CefRefPtr<WindowClient> client_;

@@ -31,6 +31,31 @@ if(OS_WINDOWS)
       src/browser/context/profile_id_validator.h
       src/browser/new_tab/cef_new_tab_handler.cc
       src/browser/new_tab/cef_new_tab_handler.h
+      src/browser/permission/cef_download_handler.cc
+      src/browser/permission/cef_download_handler.h
+      src/browser/permission/cef_permission_handler.cc
+      src/browser/permission/cef_permission_handler.h
+      src/browser/permission/permission_store.cc
+      src/browser/permission/permission_store.h
+      src/browser/permission/site_origin.cc
+      src/browser/permission/site_origin.h
+      src/browser/window/tab_controller.cc
+      src/browser/window/tab_model.cc
+      src/process/windows/bootstrap_entry.cc
+      src/process/windows/bootstrap_entry.h
+      src/windows/app.cc
+      src/windows/app.h
+      src/windows/main_win.cc
+      src/windows/shell_command_adapter.cc
+      src/windows/shell_command_adapter.h
+      resources/windows/resource_ids.h
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/app.rc")
+      src/browser/context/profile_context_factory.cc
+      src/browser/context/profile_context_factory.h
+      src/browser/context/profile_id_validator.cc
+      src/browser/context/profile_id_validator.h
+      src/browser/new_tab/cef_new_tab_handler.cc
+      src/browser/new_tab/cef_new_tab_handler.h
       src/browser/window/tab_controller.cc
       src/browser/window/tab_model.cc
       src/process/windows/bootstrap_entry.cc
@@ -155,6 +180,23 @@ if(OS_MAC)
       resources/macos/en.lproj/InfoPlist.strings
       resources/macos/zh-Hans.lproj/InfoPlist.strings)
   set(crayon_macos_sources
+      src/browser/context/profile_context_factory.cc
+      src/browser/context/profile_context_factory.h
+      src/browser/context/profile_id_validator.cc
+      src/browser/context/profile_id_validator.h
+      src/browser/permission/cef_download_handler.cc
+      src/browser/permission/cef_download_handler.h
+      src/browser/permission/cef_permission_handler.cc
+      src/browser/permission/cef_permission_handler.h
+      src/browser/permission/permission_store.cc
+      src/browser/permission/permission_store.h
+      src/browser/permission/site_origin.cc
+      src/browser/permission/site_origin.h
+      src/browser/window/tab_controller.cc
+      src/browser/window/tab_model.cc
+      src/macos/app.cc
+      src/macos/app.h
+      src/macos/main_mac.mm)
       src/browser/context/profile_context_factory.cc
       src/browser/context/profile_context_factory.h
       src/browser/context/profile_id_validator.cc
@@ -296,6 +338,51 @@ if(CRAYON_BUILD_TESTS)
                        PROPERTIES LABELS "cef;shell;new-tab;contract")
 
   add_executable(crayon_profile_id_validator_test
+                 tests/profile_id_validator_test.cc
+                 src/browser/context/profile_id_validator.cc)
+  target_compile_features(crayon_profile_id_validator_test PRIVATE cxx_std_17)
+  target_include_directories(crayon_profile_id_validator_test
+                             PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  add_test(NAME profile_id_validator_test
+           COMMAND crayon_profile_id_validator_test)
+  add_test(
+    NAME profile_context_contract
+    COMMAND "${CMAKE_COMMAND}"
+            "-DCRAYON_CEF_SHELL_SOURCE=${CMAKE_CURRENT_SOURCE_DIR}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/profile_context_contract.cmake")
+  set_tests_properties(profile_id_validator_test
+                       PROPERTIES LABELS "cef;shell;context")
+  set_tests_properties(profile_context_contract
+                       PROPERTIES LABELS "cef;shell;context;contract")
+
+  add_executable(crayon_site_origin_test
+                 tests/site_origin_test.cc
+                 src/browser/permission/site_origin.cc)
+  target_compile_features(crayon_site_origin_test PRIVATE cxx_std_17)
+  target_include_directories(crayon_site_origin_test
+                             PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  add_test(NAME site_origin_test COMMAND crayon_site_origin_test)
+
+  add_executable(crayon_permission_store_test
+                 tests/permission_store_test.cc
+                 src/browser/permission/permission_store.cc)
+  target_compile_features(crayon_permission_store_test PRIVATE cxx_std_17)
+  target_include_directories(crayon_permission_store_test
+                             PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  add_test(NAME permission_store_test COMMAND crayon_permission_store_test)
+
+  add_test(
+    NAME permission_contract
+    COMMAND "${CMAKE_COMMAND}"
+            "-DCRAYON_CEF_SHELL_SOURCE=${CMAKE_CURRENT_SOURCE_DIR}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/permission_contract.cmake")
+  set_tests_properties(site_origin_test
+                       PROPERTIES LABELS "cef;shell;permission")
+  set_tests_properties(permission_store_test
+                       PROPERTIES LABELS "cef;shell;permission")
+  set_tests_properties(permission_contract
+                       PROPERTIES LABELS "cef;shell;permission;contract")
+endif()
                  tests/profile_id_validator_test.cc
                  src/browser/context/profile_id_validator.cc)
   target_compile_features(crayon_profile_id_validator_test PRIVATE cxx_std_17)

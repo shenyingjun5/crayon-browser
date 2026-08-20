@@ -15,7 +15,7 @@
 | CEF-02M | TODO | CEF-01E,CEF-02W | `browser/cef-shell/src/process/macos` | 在 02W 冻结的进程/错误契约上补齐 macOS sandbox 与 Helper 平台验收 | macOS x64/arm64 启动/退出；sandbox smoke；Helper 无业务 | V4M |
 | CEF-03 | DONE | CEF-02W | `src/browser/window` | Windows 首发的单窗口/标签生命周期、导航、前后退、刷新、停止、缩放；共享接口保持 macOS 可实现 | BR-001、重复关闭、崩溃恢复；Windows 实机资源无泄漏 | S3 |
 | CEF-04 | DONE | CEF-03 | `src/browser/context` | 临时/持久 `CefRequestContext` factory，Profile ID 不用名称作路径 | BR-002、PV-001、PV-004 基础；context 隔离 | S3 |
-| CEF-05 | TODO | CEF-04 | `src/browser/permission` | 摄像头/麦克风/通知/定位/剪贴板/下载按站点控制 | allow/deny/remember/session tests；默认最小权限 | S3 |
+| CEF-05 | DONE | CEF-04 | `src/browser/permission` | 摄像头/麦克风/通知/定位/剪贴板/下载按站点控制 | allow/deny/remember/session tests；默认最小权限 | S3 |
 | CEF-06 | TODO | CEF-02W,FND-08 | `src/ipc`、`crayon-ipc-schema` | length-prefixed IPC、session secret、schema/大小/进程校验 | RG-007；畸形/超大/错误 secret/旧版本 | S2 |
 | CEF-07 | TODO | CEF-06 | `src/browser/core_client` | Core 子进程启动、健康、崩溃、有界关闭与重连 | 启动失败/崩溃/超时/退出；无 orphan | S3 |
 | CEF-08 | TODO | FND-11,CEF-03 | `browser/shared-ui` | 地址栏、标签、投屏按钮、错误/权限壳和本地化，不接真实设备 | UI unit；locale parity；键盘/缩放/无障碍 smoke | S3 |
@@ -243,6 +243,30 @@
 - Contract 验证：`profile_context_contract.cmake` 通过——确认 `profile_id_validator.h` 不含 CEF 头、`profile_context_factory.h` 文档包含 `CEF_REQUIRE_UI_THREAD`、源码中无 `"$ENV{...}"` 或硬编码 Profile ID 路径拼接。`profile_id_validator_test` 通过；`git diff --check` 通过。
 - Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；P0/P1/P2 均为 `0`。Profile ID 不直接嵌入路径，避免特殊字符路径穿越；factory 只读不创建目录，降低意外副作用；SHA-256 实现无动态分配、无可移植性假设。
 - 未覆盖与风险：`profile_context_factory.cc` 使用 CEF 类型，未在真实 CEF-on 配置下编译验证（当前环境无 CEF root），但代码结构和 contract 均正确；持久 context 的磁盘根目录由调用方提供，本任务未绑定具体产品数据路径（留给 `CEF-05/CEF-08` 装配）；多 Profile 并发获取和引用计数释放的线程安全依赖 CEF 内部实现，本任务只保证调用方 UI thread 约束。`CEF-04` 转为 `DONE`，解锁 `CEF-05`。
+
+### CEF-05 权限控制：摄像头/麦克风/通知/定位/剪贴板/下载按站点控制
+
+- 状态：`DONE`；依赖 `CEF-04 DONE`。
+- 单一目标：建立按站点（origin）控制的权限决策存储，为摄像头、麦克风、通知、定位、剪贴板（读/写）和下载提供默认 deny、session allow 和 persistent allow 三种决策；通过 CEF handler adapter 拦截浏览器权限请求和下载事件，实现默认最小权限。本任务不实现权限 UI、用户确认流程或 event sink 向上报告（留给 `CEF-08` 和 `CEF-12`）。
+- 输入：`CEF-03` 的 `WindowClient`/`TabController` 生命周期、`browser/engine-api` 的 `PermissionKind`/`PermissionDecision` 语义、`CEF-04` 的 `ProfileContextFactory` 预留的持久化路径、BR-002 的最小权限原则和 PV-001/PV-004 的隐私清理需求。
+- 输出与允许修改：`browser/cef-shell/src/browser/permission/` 下的纯 C++17 核心（`PermissionStore`、`SiteOrigin`、`PermissionKind`、`PermissionDecision`）和 CEF adapter（`CefPermissionHandlerAdapter`、`CefDownloadHandlerAdapter`）；`browser/cef-shell/src/browser/window/tab_controller.h/.cc` 中 `WindowClient` 集成 handler；`browser/cef-shell/src/windows/app.h/.cc` 与 `src/macos/app.h/.cc` 中 `PermissionStore` 的创建与传递；`browser/cef-shell/tests/site_origin_test.cc`、`permission_store_test.cc`、`permission_contract.cmake`；`browser/cef-shell/CMakeLists.txt` 的源列表和测试目标注册；本 Roadmap/current 状态更新。
+- 禁止修改：`browser/engine-api` 接口、Rust Core、品牌资源、Cast-SDK、媒体/Relay/Agent 逻辑；不得自动 allow 任何权限；不得把权限决策、URL、Cookie 或站点信息写入日志或暴露给共享层；不得引入 UI 确认对话框或临时快捷键。
+- 权限存储契约：`PermissionStore` 纯 C++17，不依赖 CEF，使用 `shared_mutex` 支持并发 Query；默认 `kDeny`；支持 `kAllowSession`（浏览器关闭即清除）和 `kAllowPersistent`（显式覆盖/清除前保持）。按 (origin, kind) 键值存储，origin 由 `ExtractSiteOrigin` 从 HTTP(S) URL 提取，格式为 `scheme://host:port`（默认端口省略，host 小写化）。
+- CEF adapter 契约：`CefPermissionHandlerAdapter` 处理 `OnRequestMediaAccessPermission`（摄像头/麦克风）、`OnShowNotification`（通知）、`OnRequestGeolocationPermission`（定位）和 `OnRequestClipboardPermission`（剪贴板读/写）；`CefDownloadHandlerAdapter` 处理 `OnBeforeDownload`（下载）。所有回调查询 `PermissionStore`，无明确 allow 时调用 CEF cancel/不继续回调。adapters 在 `WindowClient` 构造函数中创建，生命周期随 client。
+- 错误/边界：`ExtractSiteOrigin` 拒绝非 HTTP(S)、userinfo、空 host、非法字符；CEF handler 对未知/无效 origin 稳定 deny；`PermissionStore` 的 Record/Clear 操作要求外部串行化（由 CEF UI thread 保证）；`TabController` 构造函数接受 `PermissionStore*` 指针，nullptr 时跳过 handler 创建（向后兼容）。
+- 验收：独立 C++17 测试覆盖 origin 提取（18 项检查：基本 HTTP/HTTPS、非默认端口、默认端口省略、scheme 大小写、子域名、非 HTTP(S) 拒绝、userinfo 拒绝、空 host 拒绝、非法字符拒绝、IPv4、hyphen/underscore）；权限存储测试覆盖默认 deny、session/persistent allow、显式 deny、overwrite、ClearSessionDecisions、ClearForOrigin、ClearAll、Snapshot。CMake contract 验证文件存在、纯 C++17 文件不含 CEF 头、PermissionStore 使用 shared_mutex、TabController 引用 PermissionStore。
+- 测试命令：`c++ -std=c++17 -Wall -Wextra -Wpedantic -Werror` 独立编译运行 `site_origin_test` 和 `permission_store_test`；`cmake -P browser/cef-shell/tests/permission_contract.cmake`；`window_adapter_contract`、`new_tab_adapter_contract`、`profile_context_contract` 回归；`cargo test`、`cargo fmt`、`git diff --check`。
+
+完成记录（2026-08-20）：
+
+- 实现：新增 `PermissionStore`（纯 C++17，`shared_mutex` 保护，默认 deny，支持 session/persistent/显式 deny）、`ExtractSiteOrigin`（轻量 HTTP(S) origin 提取，拒绝非安全输入）、`CefPermissionHandlerAdapter`（拦截 media/notification/geolocation/clipboard 权限请求）和 `CefDownloadHandlerAdapter`（拦截下载前事件）。`WindowClient` 通过 `GetPermissionHandler`/`GetDownloadHandler` 暴露 adapters；Windows/macOS `BrowserApp` 均在构造函数中创建 `PermissionStore` 并传递给 `TabController`。
+- 独立测试：`site_origin_test` 18 项检查全部通过；`permission_store_test` 覆盖 8 种场景全部通过。两测试均用 `c++ -std=c++17 -Wall -Wextra -Wpedantic -Werror` 独立编译运行。
+- Contract 验证：`permission_contract.cmake` 通过——确认全部 10 个 permission 文件存在、纯 C++17 文件不含 CEF 头、PermissionStore 使用 `shared_mutex`、TabController 引用 PermissionStore。`window_adapter_contract`、`new_tab_adapter_contract`、`profile_context_contract` 回归通过。`git diff --check` 通过。
+- Rust 测试回归：`cargo test -p crayon-browser-core --lib` 3/3 通过；`cargo test -p crayon-browser-core --no-default-features --features legacy-dev --lib` 58/58 通过；`cargo fmt --all -- --check` 通过。
+- Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；P0/P1/P2 均为 `0`。默认 deny 符合最小权限原则；site origin 提取对特殊字符和路径穿越 fail closed；shared_mutex 保证 Query 可并发；handler adapter 不持有 CEF 类型之外的业务状态。
+- 未覆盖与风险：`cef_permission_handler.cc` 和 `cef_download_handler.cc` 使用 CEF 类型，未在真实 CEF-on 配置下编译验证（当前环境无 CEF root），代码基于 CEF 150 通用 API 编写，具体回调签名可能需要根据实际头文件微调。权限 UI 确认流程、event sink 向上层报告和持久化到磁盘由 `CEF-08/CEF-12` 接续。`CEF-05` 转为 `DONE`，解锁 `CEF-06`（IPC）。
+
+### CEF-01C～CEF-01E 边界
 
 ### CEF-01C～CEF-01E 边界
 

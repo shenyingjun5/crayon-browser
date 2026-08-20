@@ -19,6 +19,17 @@ double ZoomLevelForFactor(double factor) {
 
 }  // namespace
 
+WindowClient::WindowClient(TabController* controller,
+                           permission::PermissionStore* permission_store)
+    : controller_(controller) {
+  if (permission_store) {
+    permission_handler_ =
+        new permission::CefPermissionHandlerAdapter(permission_store);
+    download_handler_ =
+        new permission::CefDownloadHandlerAdapter(permission_store);
+  }
+}
+
 void WindowClient::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
   controller_->OnBrowserCreated(browser);
@@ -94,13 +105,16 @@ bool WindowClient::OnChromeCommand(CefRefPtr<CefBrowser> browser,
   return false;
 }
 
-TabController::TabController(std::string initial_url,
-                             BrowserCreatedCallback browser_created_callback,
-                             std::optional<std::string> new_tab_url)
+TabController::TabController(
+    std::string initial_url,
+    BrowserCreatedCallback browser_created_callback,
+    std::optional<std::string> new_tab_url,
+    permission::PermissionStore* permission_store)
     : initial_url_(std::move(initial_url)),
       browser_created_callback_(std::move(browser_created_callback)),
       new_tab_url_(std::move(new_tab_url)),
-      client_(new WindowClient(this)) {}
+      permission_store_(permission_store),
+      client_(new WindowClient(this, permission_store)) {}
 
 bool TabController::CreateMainWindow() {
   CEF_REQUIRE_UI_THREAD();
@@ -115,7 +129,8 @@ void TabController::SetChromeCommandCallback(ChromeCommandCallback callback) {
   chrome_command_callback_ = std::move(callback);
 }
 
-void TabController::SetBrowsersClosedCallback(BrowsersClosedCallback callback) {
+void TabController::SetBrowsersClosedCallback(
+    BrowsersClosedCallback callback) {
   CEF_REQUIRE_UI_THREAD();
   browsers_closed_callback_ = std::move(callback);
 }
