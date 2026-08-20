@@ -27,7 +27,7 @@
 | BUX-10 | DONE | BUX-06,PRV-03 | `browser/history`,`browser/shared-ui/history` | 历史、最近关闭、搜索、范围删除与恢复 | UX-009；无痕零持久化、删除边界、跨 Profile |
 | BUX-11 | DONE | CEF-05,BUX-02 | `browser/downloads`,`browser/shared-ui/downloads` | 下载 shelf/页、暂停/恢复/取消/重命名/打开位置和危险状态 | UX-010；路径、重复、断点、外部打开、失败释放 |
 | BUX-12 | TODO | BUX-05,PLT-02 | `browser/shared-ui/page-tools` | 查找、缩放、全屏、打印/PDF 与保存页面命令 | UX-011；取消/失败/输出路径/跨 Profile |
-| BUX-13 | TODO | BUX-01,PRV-03 | `browser/preferences`,`browser/shared-ui/settings` | 版本化 preference store 与启动/搜索/外观/下载/内容设置 UI | UX-012；migration/corrupt/reset/restart readback |
+| BUX-13 | DONE | BUX-01,PRV-03 | `browser/preferences`,`browser/shared-ui/settings` | 版本化 preference store 与启动/搜索/外观/下载/内容设置 UI | UX-012；migration/corrupt/reset/restart readback |
 | BUX-14 | TODO | CEF-05,BUX-05,BUX-13 | `browser/shared-ui/site-controls` | 站点权限、安全信息、证书错误、popup 与外部协议确认 UI | UX-013；origin/Profile/TTL/取消/伪造/危险 scheme |
 | BUX-15 | TODO | CEF-04,PRV-01..04,BUX-06 | `browser/shared-ui/profiles`,`browser/session` | Profile picker、普通/无痕窗口、启动会话与崩溃恢复编排 | UX-014；清理失败、无痕不恢复、旧 session、跨 Profile |
 | BUX-16 | TODO | BUX-05,BUX-11,PLT-02 | `browser/shared-ui/context-menu` | 上下文菜单、拖放、剪贴板与受控本地文件入口 | UX-015；上下文最小化、路径/scheme、取消/外部动作 |
@@ -206,6 +206,28 @@
 - 视图边界：`HistoryPageStateMachine` 持有 ≤256 条投影、搜索查询状态与清空事件；不持完整 URL 之外的页面数据，不直接读写文件。
 - 验收与测试：UX-009；contract 覆盖记录/逐出、ephemeral 拒绝、范围删除边界（空/逆序/精确端点）、URL 删除、清空、最近关闭栈容量与顺序、搜索边界、编解码 round-trip/损坏矩阵、跨实例（Profile）隔离。执行独立 configure/build/ctest、零告警、共享层回归、`git diff --check`。
 - 明确不做：历史页像素 UI、按站点 favicon、与 BUX-04A 建议索引的接线（后续接线任务）、同步、macOS 实机。
+
+## BUX-13 原子范围（版本化偏好 store 与设置页视图）
+
+- 状态：`DONE`；依赖 `BUX-01 DONE`、`PRV-03 DONE`。
+- 单一目标：交付平台中立、可独立测试的版本化偏好 store（闭合键注册表、强类型值、schema 迁移、损坏 fail-closed、重置默认值）与设置页视图状态机；本任务不做像素 UI、平台设置页集成或与 PRV-06 隐私默认值的合并装配。
+- 输入：BUX-01 的设计 token 与设置页信息架构、PRV-03 的按 Profile 目录隔离、UX-012 的 migration/corrupt/reset/restart readback 要求。
+- 输出与允许修改：新增 `browser/preferences/`（`PreferenceStore` + `PreferenceCodec` + 独立测试/CMake）与 `browser/shared-ui/settings/`（`SettingsPageStateMachine` + 独立测试/CMake）；允许修改根 CMake 和本 Roadmap 索引。新增生产文件不超过 6 个；无 CEF/Win32/AppKit/ArkWeb 类型；无第三方依赖。
+- 禁止修改：`browser/engine-api`、BUX-01..11 模块、PRV crate、Cast-SDK/Relay/Agent；偏好值不得含凭证、Cookie 或任意文件内容。
+- 领域边界：键为闭合注册表（startup_policy/theme/show_bookmark_bar/download_directory/search_provider），每键固定类型与默认值；`Set` 类型不符或未知键稳定拒绝；`Reset`/`ResetAll` 恢复默认；值边界：枚举闭合、字符串 ≤1024 字节无控制字符、路径键仅做长度/字符校验不做存在性检查。
+- 编解码边界：`CRAYON-PREFERENCES v<schema>` 头；当前 schema=1；加载 schema=0 文档执行注册迁移（丢弃未知键、应用默认值），更高 schema 或损坏 fail closed；保存经 `.tmp` 原子 rename；重启回读 = 保存后重新加载必须逐键一致。
+- 视图边界：`SettingsPageStateMachine` 持有闭合 section 列表与当前 section、dirty 标记与重置事件；不直接读写文件，不持有真实偏好值之外的页面数据。
+- 验收与测试：UX-012；contract 覆盖每键 Set/Get/类型拒绝/未知键、Reset/ResetAll、迁移（v0→v1 丢未知键补默认值）、损坏矩阵、原子保存无残留、保存-重载逐键一致、视图 section/dirty/重置。执行独立 configure/build/ctest、零告警、共享层回归、`git diff --check`。
+- 明确不做：设置页像素 UI、chrome://settings 拦截替换（CEF 层后续任务）、偏好与 PrivacyDefaults 的运行时合并装配（后续 adapter）、同步、macOS 实机。
+
+## BUX-13 完成记录（版本化偏好 store 与设置页视图）
+
+- 状态：`DONE`；依赖 `BUX-01 DONE`、`PRV-03 DONE`。
+- 实现：新增 6 个生产文件。`browser/preferences/`：`PreferenceStore`（闭合五键注册表 startup_policy/theme/show_bookmark_bar/download_directory/search_provider，每键固定类型与默认值；未知键/类型不符/越界枚举/超长或含控制字符字符串全部稳定拒绝；设为默认值即清除 override；Reset/ResetAll）与 `PreferenceCodec`（`CRAYON-PREFERENCES v1`，只序列化非默认 override；v0 文档宽容迁移——未知键与非法值丢弃、其余补默认；更高版本与结构损坏 fail closed；`.tmp` 原子 rename，文件 ≤256KiB，u64 溢出防护）。`browser/shared-ui/settings/`：`SettingsPageStateMachine`（闭合五个 section、dirty 跟踪、两步重置确认、shutdown 全拒绝）。
+- 自动验证：独立 configure/build 成功且 `-Wall -Wextra -Wpedantic -Werror` 零告警；`ctest -R "preferences_contract|settings_page_contract"` 2/2 通过（store+codec 9 组、view 4 组：默认值/类型/越界矩阵、Reset 语义、round-trip 只含 override 且逐键一致、v0 迁移、严格 v1 拒绝未知键、损坏矩阵、重启回读逐键一致、临时文件不残留）；共享层全量回归 22/22 通过（除本机缺 Ninja 的 `cef_build_graph_contract` 环境阻塞）；`git diff --check` 通过。
+- 失败基线：首轮 `preferences_contract` 失败——S 记录写出方漏发长度行导致解析失败，先复现后修复，证明测试在错误实现下确实失败。
+- Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；关闭 1 个 P1（S 记录写读格式不一致）和 1 个 P2（迁移模式下 bool 越界未走丢弃路径，已统一 `semantically_invalid` 语义），最终 P0/P1/P2 均为 `0`。
+- 未覆盖与风险：设置页像素 UI、chrome://settings 拦截替换、偏好与 PRV-06 隐私默认值的运行时合并装配和 macOS 实机归后续任务。`BUX-13` 转为 `DONE`，解锁 `BUX-14`。
 
 ## BUX-10 完成记录（历史领域模型、版本化编解码与历史页视图）
 
