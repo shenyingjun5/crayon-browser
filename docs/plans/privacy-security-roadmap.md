@@ -87,3 +87,22 @@
 - 自动验证：`cargo test -p crayon-profile` 22/22 通过（13 model + 9 persistent：创建/幂等/外来目录拒绝/无痕与未知拒绝、销毁生命周期门禁/篡改标记 fail closed/重复销毁、部分失败遗留恢复与 20 项有界恢复）；`cargo clippy -p crayon-profile --all-targets -- -D warnings` 零告警；`cargo fmt --all -- --check` 通过；测试使用 `temp_dir()` 下唯一真实根并在 Drop 中清理。
 - Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；P0/P1/P2 均为 `0`。销毁前所有权双重校验满足“不得删除未验证根目录”红线；`remove_dir_all` 不跟随符号链接（只删链接本身）。
 - 未覆盖与风险：`create_space` 对已存在符号链接目标的校验、junction/reparse 防护与启动补偿清理由 `PRV-04` 拥有；无痕清理清单归 `PRV-02`；跨平台长路径/权限细节未覆盖。`PRV-03` 转为 `DONE`，解锁 `BUX-09/10/13` 与 `PRV-04` 的持久空间依赖。
+
+## PRV-02 原子范围（无痕 Profile 生命周期与清理清单）
+
+- 状态：`DONE`；依赖 `PRV-01 DONE`。
+- 单一目标：在 `crayon-profile` crate 新增 `ephemeral` 模块，交付无痕 Profile 的窗口计数生命周期（最后窗口关闭触发清理）、闭合存储类别的清理清单和逐类清理结果报告；本任务不实现 CEF 临时 context 的真实存储删除接线或 UI。
+- 输入：PRV-01 的 `ProfileType::Incognito`/生命周期语义、PV-001/PV-002/PV-003 的无痕零持久化与清理要求、红线“无痕清理失败必须显式报告”。
+- 输出与允许修改：`crates/crayon-profile/src/ephemeral.rs`、`crates/crayon-profile/tests/ephemeral_session.rs`、`src/lib.rs` re-export、本 Roadmap 状态与证据。
+- 禁止修改：PRV-01 model/persistent 语义、其他 crate、CEF shell、UI；清理失败不得宣称为已清除；错误与报告不得携带 URL、Cookie 或页面数据。
+- 边界：会话状态闭合 `Active/Closing/CleaningUp/Disposed`；窗口计数拒绝下溢；进入 Closing 后拒绝再开窗口；清理清单为闭合类别（HttpCache/DomStorage/CookiesAndSiteData/FileSystemAccess/MediaState）；每类删除由调用方注入的执行器完成并回报 `Cleared/NotPresent/Failed`，任何 `Failed` 使整体报告 `fully_cleared() == false` 且允许 `retry_cleanup`；全部 Cleared/NotPresent 才允许 `Disposed`；Disposed 后所有操作稳定拒绝。
+- 验收与测试：PV-001、PV-002、PV-003；测试覆盖窗口开闭/下溢/Closing 后拒绝开窗、每类存储的 Cleared/NotPresent/Failed fixture、部分失败报告与重试、重复清理幂等、Disposed 门禁。命令：`cargo test -p crayon-profile`、clippy `-D warnings`、`cargo fmt --all -- --check`、workspace 基线回归、`git diff --check`。
+- 明确不做：CEF 缓存/Cookie 存储真实删除接线（后续 CEF adapter 任务）、持久 Profile 清理（PRV-03 已有销毁事务）、崩溃后的残留补偿清理（PRV-04）、UI 呈现（BUX-15）。
+
+## PRV-02 完成记录（无痕 Profile 生命周期与清理清单）
+
+- 状态：`DONE`；依赖 `PRV-01 DONE`。
+- 实现：`crayon-profile` 新增 `ephemeral` 模块（1 个生产文件，约 290 行）。`EphemeralSession`：闭合四态 `Active/Closing/CleaningUp/Disposed`，窗口计数拒绝下溢，最后窗口关闭进入 `Closing`，此后拒绝再开窗口；`CleanupCategory::ALL` 五类闭合清单（HttpCache/DomStorage/CookiesAndSiteData/FileSystemAccess/MediaState）；实际删除由调用方注入的 `CleanupExecutor` trait 完成，本模块零存储访问；`CleanupReport` 逐类记录 `Cleared/NotPresent/Failed`，`fully_cleared()` 是“无痕已清除”的唯一判据，任何 `Failed` 使 `run_cleanup` 返回 `CleanupIncomplete`、会话停留 `CleaningUp` 且报告显式列出失败类别，重试幂等；`Disposed` 为终态并拒绝全部后续操作。
+- 自动验证：`cargo test -p crayon-profile` 31/31 通过（13 model + 9 persistent + 9 ephemeral：窗口生命周期/下溢/Closing 门禁、每类存储 Cleared/NotPresent/Failed fixture、部分失败显式报告与重试恢复、Disposed 门禁）；`cargo clippy -p crayon-profile --all-targets -- -D warnings` 零告警；`cargo fmt --all -- --check` 通过；workspace 基线 3/3 与 58/58 回归通过；`git diff --check` 通过。
+- Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；P0/P1/P2 均为 `0`。红线“清理失败必须显式报告”由 `fully_cleared` 判据和 `CleanupIncomplete` 错误双重保证；报告与错误不含 URL/Cookie/页面数据。
+- 未覆盖与风险：CEF 临时 context 真实缓存/Cookie 删除接线归后续 CEF adapter 任务；崩溃残留补偿清理归 `PRV-04`；UI 归 `BUX-15`。`PRV-02` 转为 `DONE`，与 `PRV-03` 共同解锁 `PRV-04`，并满足 `BUX-15` 的 PRV-01..04 依赖中的两项。
