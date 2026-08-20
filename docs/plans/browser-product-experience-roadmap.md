@@ -18,7 +18,7 @@
 | BUX-02 | DONE | BUX-01,CEF-02W | `browser/shared-ui/shell` | Windows 首发 UI shell、命令 registry、focus owner 与 engine event adapter 骨架；共享层保持跨平台 | UX-001；重复 command、旧 tab event、窗口释放；Windows 实机 |
 | BUX-03 | DONE | BUX-02,CEF-03 | `browser/shared-ui/new-tab` | 本地 `crayon://newtab`、普通/无痕差异、固定快捷入口模型 | UX-002；零默认公网请求、损坏配置、安全 resource handler |
 | BUX-04A | DONE | BUX-02,CEF-03,FND-11 | `browser/shared-ui/omnibox/core` | URL/搜索判定引擎、本地建议索引结构、建议状态机与闭合编辑命令 | UX-003A；scheme/长度/取消/旧建议/本地索引边界 |
-| BUX-04B | TODO | BUX-04A,PRV-06 | `browser/shared-ui/omnibox/provider` | 搜索 provider 配置契约、HTTPS 默认升级与隐私默认集成 | UX-003B；provider 校验/隐私参数注入/配置降级 |
+| BUX-04B | DONE | BUX-04A,PRV-06 | `browser/shared-ui/omnibox/provider` | 搜索 provider 配置契约、HTTPS 默认升级与隐私默认集成 | UX-003B；provider 校验/隐私参数注入/配置降级 |
 | BUX-05 | DONE | BUX-04A | `browser/shared-ui/navigation` | 后退/前进/刷新/停止、加载状态、站点身份和页面动作绑定 | UX-004；导航竞争、证书/HTTP/HTTPS、页面伪造安全 UI |
 | BUX-06 | DONE | BUX-02,CEF-03 | `browser/shared-ui/tabs/basic` | 新建/切换/关闭/拖动/恢复关闭标签与 active/focus 状态机 | UX-005；重复关闭、旧事件、崩溃恢复、释放 |
 | BUX-07 | DONE | BUX-06 | `browser/shared-ui/tabs/advanced` | 固定、复制、静音、搜索、分组和跨窗口移动 | UX-006；容量/顺序/音频/多窗口与键盘操作 |
@@ -205,6 +205,14 @@
 - Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；关闭 1 个 P3（`Create` 补充“须先经 `SanitizeDownloadFileName`”契约注释），最终 P0/P1/P2 均为 `0`。生产文件 44～143 行、函数均低于规模提醒线；领域与视图分离为两个独立 target。
 - 未覆盖与风险：本机无 Ninja，`cef_build_graph_contract` 未运行（环境阻塞，与本次改动无关）；CEF 下载 handler 接线、真实断点续传、shelf 像素 UI、下载历史持久化与 macOS 实机归后续任务（CEF-08/14、BUX-13/18）。`BUX-11` 转为 `DONE`。
 
+## BUX-04B 完成记录（omnibox provider 配置与隐私集成）
+
+- 状态：`DONE`；依赖 `BUX-04A DONE`、`PRV-06 DONE`。
+- 实现：新增 `browser/shared-ui/omnibox/provider/`（2 个生产文件）。`SearchProvider`/`SearchProviderSet`：schema v1 内存结构，默认空集（不内置任何第三方搜索引擎 URL），模板校验覆盖空名称、超长（≤2048）、非 http/https scheme、credentials（`user:pass@`）、控制字符、`{searchTerms}` 占位符缺失/重复，容量上限 8 且按优先级取首个合法 provider；`BuildSearchUrl` 对搜索词做 RFC 3986 unreserved 保留的 UTF-8 百分号编码，超长 fail closed。`ResolveSchemelessUrl` 按 `PrivacyDefaults::https_default` 为无 scheme URL 补 `https://`/`http://`，不做失败降级。`DeriveSearchRequestPolicy` 从 PRV-06 默认值派生 Referer 策略与第三方 Cookie 开关（仅 `kAllow` 才携带，隐私优先）。实际检查发现 BUX-04A core 并未留下 `PrivacyDefaults` 占位结构，provider 模块通过链接 `crayon::browser-privacy-standard` 直接消费，无需修改 core。
+- 自动验证：独立 `cmake -S . -B .cache/build/provider -DCRAYON_BUILD_TESTS=ON -DCRAYON_ENABLE_CEF=OFF` configure/build 成功且 `-Wall -Wextra -Wpedantic -Werror` 零告警；`ctest -R omnibox_provider_contract` 1/1 通过（校验矩阵、空集无 URL、容量/优先级、中文与 `&` 编码、HTTPS 升级开关、隐私注入矩阵）；全量回归 16/16 通过（除本机缺 Ninja 的 `cef_build_graph_contract` 环境阻塞）；`git diff --check` 通过。
+- Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；Review 发现并关闭 1 个 P2（`ValidateProvider` 初版用越界哨兵枚举表示“无错误”，已改为 `std::optional<ProviderError>`），最终 P0/P1/P2 均为 `0`。
+- 未覆盖与风险：远程搜索建议 API、搜索引擎发现、偏好持久化（`BUX-13`）与设置 UI 未做；`BUX-04B` 转为 `DONE`。
+
 ## BUX-08 完成记录（多窗口、受控 popup、全屏与画中画策略）
 
 - 状态：`DONE`；依赖 `BUX-06 DONE`、`CEF-05 DONE`。
@@ -215,7 +223,7 @@
 
 ## BUX-04B 原子范围（omnibox provider 配置与隐私集成）
 
-- 状态：`TODO`；依赖 `BUX-04A DONE`、`PRV-06 DONE`。
+- 状态：`DONE`；依赖 `BUX-04A DONE`、`PRV-06 DONE`。
 - 单一目标：在 BUX-04A 判定引擎基础上，交付搜索 provider 配置契约、HTTPS 默认升级决策和隐私默认集成；本任务不重新实现 URL/搜索判定核心逻辑。
 - 输入：BUX-04A 的判定结果（URL 或搜索词）、`crayon-domain::config` 配置框架（FND-11）、PRV-06 的隐私默认设置（HTTPS 默认、Referer 策略、第三方 Cookie 策略）。
 - 输出与允许修改：新增 `browser/shared-ui/omnibox/provider/` 的 provider 配置模型、HTTPS 升级决策器、隐私参数注入器和独立 contract test/CMake；允许修改根 CMake、`browser/shared-ui/omnibox/core/` 的隐私配置注入接口（由占位结构改为具体实现）、共享 locale JSON（新增 provider/隐私文案键）和本 Roadmap/current/总 Roadmap 索引。新增生产文件不超过 3 个。
