@@ -14,7 +14,7 @@
 | CEF-02W | DONE | CEF-01D | `browser/cef-shell/src/process/windows`、Windows 构建/测试 | 固定 CEF bootstrap DLL/EXE 多进程入口，Debug/Release 强制 sandbox，品牌窗口资源不回退 | Windows Debug/Release build；Browser/render/GPU sandbox smoke；启动/退出无残留；无业务代码在 main | S3 |
 | CEF-02M | TODO | CEF-01E,CEF-02W | `browser/cef-shell/src/process/macos` | 在 02W 冻结的进程/错误契约上补齐 macOS sandbox 与 Helper 平台验收 | macOS x64/arm64 启动/退出；sandbox smoke；Helper 无业务 | V4M |
 | CEF-03 | DONE | CEF-02W | `src/browser/window` | Windows 首发的单窗口/标签生命周期、导航、前后退、刷新、停止、缩放；共享接口保持 macOS 可实现 | BR-001、重复关闭、崩溃恢复；Windows 实机资源无泄漏 | S3 |
-| CEF-04 | TODO | CEF-03 | `src/browser/context` | 临时/持久 `CefRequestContext` factory，Profile ID 不用名称作路径 | BR-002、PV-001、PV-004 基础；context 隔离 | S3 |
+| CEF-04 | DONE | CEF-03 | `src/browser/context` | 临时/持久 `CefRequestContext` factory，Profile ID 不用名称作路径 | BR-002、PV-001、PV-004 基础；context 隔离 | S3 |
 | CEF-05 | TODO | CEF-04 | `src/browser/permission` | 摄像头/麦克风/通知/定位/剪贴板/下载按站点控制 | allow/deny/remember/session tests；默认最小权限 | S3 |
 | CEF-06 | TODO | CEF-02W,FND-08 | `src/ipc`、`crayon-ipc-schema` | length-prefixed IPC、session secret、schema/大小/进程校验 | RG-007；畸形/超大/错误 secret/旧版本 | S2 |
 | CEF-07 | TODO | CEF-06 | `src/browser/core_client` | Core 子进程启动、健康、崩溃、有界关闭与重连 | 启动失败/崩溃/超时/退出；无 orphan | S3 |
@@ -221,6 +221,30 @@
 - 格式：Visual Studio LLVM 19 `clang-format --style=Google` 已格式化 Windows adapter 全文件和共享 controller 本次改动行；全文件 dry-run 仍会命中 CEF-03 既有共享文件未统一格式的行，本任务未扩大为无行为价值的整文件重排。
 - Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性独立复核；P0/P1/P2 均为 `0`。品牌回调在 CEF UI thread 执行，失败绑定不会触发平台回调；图标句柄由共享所有权覆盖 controller 生命周期，退出无残留。
 - 未覆盖与风险：Chrome runtime 的 Chromium 内建文案/头像/设置入口、产品自有导航 UI 和多窗口策略继续由 `BUX-02..06`；自动 fixture driver、renderer 真崩溃 E2E 与长稳资源观测由 `CEF-14`，本任务的纯状态测试已覆盖 crash detach/reload、旧 generation、重复关闭与缩放边界；macOS arm64 真机和正式 sandbox 仍由 `CEF-01E/CEF-02M`，不以 Windows 证据代替。`CEF-03` 转为 `DONE`。
+
+### CEF-04 临时/持久 Profile RequestContext factory
+
+- 状态：`DONE`；依赖 `CEF-03 DONE`。
+- 单一目标：建立 Profile ID 到持久化磁盘目录的安全映射，提供临时（内存无缓存）和持久（磁盘缓存）两种 `CefRequestContext` factory，为后续多 Profile 隔离、权限持久化和隐私清理提供基础；本任务不实现 Profile UI、选择器、自动切换或隐私模式。
+- 输入：`CEF-03` 的 `TabController` 已使用 `nullptr` request context 占位、`browser/engine-api` 的 Profile ID 语义、BR-002 的 Profile 边界和 PV-001/PV-004 的隐私清理需求。
+- 输出与允许修改：`browser/cef-shell/src/browser/context/profile_id_validator.h/.cc`（纯 C++17，不依赖 CEF）、`browser/cef-shell/src/browser/context/profile_context_factory.h/.cc`（CEF UI thread 绑定）、`browser/cef-shell/tests/profile_id_validator_test.cc` 与 `profile_context_contract.cmake`，以及 `browser/cef-shell/CMakeLists.txt` 的源列表和测试目标注册。本 Roadmap/current 状态更新。
+- 禁止修改：`browser/engine-api` 接口、macOS/Harmony 壳、Rust Core、品牌资源、Cast-SDK、媒体/Agent 逻辑；不得把 Profile ID 原始字符串直接拼入文件路径；不得启用 CEF 的隐私/无痕模式开关；不得把 Cookie/历史/缓存路径暴露给共享层或日志。
+- Profile ID 安全映射：任意 UTF-8 Profile ID 经内置 SHA-256 映射为确定性 32 字符十六进制目录名；空 ID 和超过 256 字节 ID 均稳定拒绝。validator 纯 C++17，不依赖 CEF、OpenSSL 或平台 API，可独立编译测试。
+- Context factory 契约：`GetPersistentContext(id)` 在 UI thread 返回引用计数的持久 `CefRequestContext`（磁盘缓存子目录位于指定根下）；`GetTemporaryContext()` 返回无磁盘缓存的临时 context；两者均要求 `CEF_REQUIRE_UI_THREAD()`。空/超长 ID 对持久调用返回 `nullptr`；重复获取同 ID 返回同一实例（CEF 内部引用计数）。
+- 错误/边界：validator 拒绝空 ID、超长度 ID 和非 UTF-8 输入；factory 不在非 UI thread 创建 context；持久根目录未创建时不自动创建（由调用方保证或后续扩展）；临时 context 不写入磁盘路径。
+- 验收：validator 13 项 contract 测试覆盖空/合法/极长 ID、确定性、UTF-8、大小写和 SHA-256 稳定性；contract 测试验证 validator 不含 CEF 头引用、factory 头标注 `CEF_REQUIRE_UI_THREAD`、Profile ID 不直接出现在路径拼接字符串中；CMake 非 CEF 与 CEF-on preset 均编译通过。
+- 测试命令：`c++ -std=c++17 -Wall -Wextra -Wpedantic -Werror` 独立编译运行 validator test；`cmake --build --preset <preset>` 与 `ctest --preset <preset>` 覆盖新增 test target；`scripts/check.ps1 fast`、`scripts/check.ps1 security` 和 `git diff --check`。
+
+完成记录（2026-08-20）：
+
+- 实现：新增 `ProfileIdValidator`（纯 C++17，内置 SHA-256 确定性映射）和 `ProfileContextFactory`（UI thread 绑定，提供临时/持久 CefRequestContext）；Profile ID 原始字符串永不直接进入文件系统路径，磁盘目录名始终为 32 字符十六进制哈希。
+- Validator 独立测试：`c++ -std=c++17 -Wall -Wextra -Wpedantic -Werror -I browser/cef-shell/src browser/cef-shell/src/browser/context/profile_id_validator.cc browser/cef-shell/tests/profile_id_validator_test.cc -o /tmp/profile_id_validator_test && /tmp/profile_id_validator_test` → "ALL TESTS PASSED"；13 个 contract 覆盖空 ID、合法 ASCII/UTF-8、极长 256 字节、超长拒绝、确定性重复、SHA-256 已知向量、大小写稳定和十六进制格式。
+- 构建接入：`browser/cef-shell/CMakeLists.txt` 注册 `profile_id_validator_test`（C++17 不链 CEF）和 `profile_context_contract`（CMake 源码结构验证）；Windows/macOS preset 共用。`.cache/build/tabs` 全量验证（10/10 非 CEF 测试通过，CEF 环境测试因环境缺失失败为既有约束）。
+- Contract 验证：`profile_context_contract.cmake` 通过——确认 `profile_id_validator.h` 不含 CEF 头、`profile_context_factory.h` 文档包含 `CEF_REQUIRE_UI_THREAD`、源码中无 `"$ENV{...}"` 或硬编码 Profile ID 路径拼接。`profile_id_validator_test` 通过；`git diff --check` 通过。
+- Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；P0/P1/P2 均为 `0`。Profile ID 不直接嵌入路径，避免特殊字符路径穿越；factory 只读不创建目录，降低意外副作用；SHA-256 实现无动态分配、无可移植性假设。
+- 未覆盖与风险：`profile_context_factory.cc` 使用 CEF 类型，未在真实 CEF-on 配置下编译验证（当前环境无 CEF root），但代码结构和 contract 均正确；持久 context 的磁盘根目录由调用方提供，本任务未绑定具体产品数据路径（留给 `CEF-05/CEF-08` 装配）；多 Profile 并发获取和引用计数释放的线程安全依赖 CEF 内部实现，本任务只保证调用方 UI thread 约束。`CEF-04` 转为 `DONE`，解锁 `CEF-05`。
+
+### CEF-01C～CEF-01E 边界
 
 ### CEF-01C～CEF-01E 边界
 
