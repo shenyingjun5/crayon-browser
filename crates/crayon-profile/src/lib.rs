@@ -1,12 +1,15 @@
-//! Profile identity, random directory mapping and lifecycle state machine.
+//! Profile identity, random directory mapping, lifecycle state machine and
+//! persistent storage transactions.
 //!
-//! The model is platform-neutral and performs no file-system access.  Disk
-//! creation/cleanup transactions belong to the `ephemeral`/`persistent`
-//! modules (PRV-02/PRV-03); secure storage belongs to PRV-05.
+//! The crate performs file-system access only inside `persistent`
+//! transactions; `model` is pure.  Deeper path protection (symlink/reparse)
+//! belongs to PRV-04 and secure storage to PRV-05.
 
 mod model;
+mod persistent;
 
 pub use model::{
     DirectoryId, EntropyError, Profile, ProfileError, ProfileId, ProfileIdError, ProfileLifecycle,
     ProfileRegistry, ProfileType, MAX_PROFILES,
 };
+pub use persistent::{DestroyOutcome, PersistentStore, PersistentStoreError};

@@ -68,3 +68,22 @@
 - 自动验证：独立 `cmake -S . -B .cache/build/privacy -DCRAYON_BUILD_TESTS=ON -DCRAYON_ENABLE_CEF=OFF` configure/build 成功且 `-Wall -Wextra -Wpedantic -Werror` 零告警；`ctest -R privacy_defaults_contract` 1/1 通过（默认值矩阵、54 组合法组合、枚举越界 fail closed、非法候选回退、golden 快照）；共享层全量回归（除本机缺 Ninja 的 `cef_build_graph_contract` 环境阻塞外）全部通过；`git diff --check` 通过。
 - Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；当前各字段独立、无跨字段冲突需要折叠，`Normalize` 仅承担 fail-closed 回退并已如实注释，最终 P0/P1/P2/P3 均为 `0`。模块无 CEF/Win32/AppKit/ArkWeb 类型、无 IO、无日志。
 - 未覆盖与风险：CEF settings/request 拦截接线归后续 CEF adapter 任务；高熵 API 降精度归 `PRV-07`；偏好持久化归 `BUX-13`；BUX-04B 的 provider/隐私注入接口消费由 BUX 侧接续。`PRV-06` 转为 `DONE`，解锁 `PRV-07` 与 `BUX-04B`。
+
+## PRV-03 原子范围（持久 Profile 空间事务）
+
+- 状态：`DONE`；依赖 `PRV-01 DONE`。
+- 单一目标：在 `crayon-profile` crate 新增 `persistent` 模块，交付常用 Profile 磁盘空间的创建/隔离校验/销毁事务，含部分失败可重试语义；本任务不实现无痕清理（PRV-02）、symlink/reparse 防护（PRV-04）或 Profile UI。
+- 输入：PRV-01 的 `ProfileRegistry`（随机目录 ID、生命周期状态机）与 PV-004/PV-005 的隔离/事务要求。
+- 输出与允许修改：`crates/crayon-profile/src/persistent.rs`、`crates/crayon-profile/tests/persistent_store.rs`、`src/lib.rs` re-export、本 Roadmap 状态与证据。
+- 禁止修改：PRV-01 model 语义、其他 crate、CEF shell、UI；不得删除未验证所有权的目录（红线）；不得跟随 symlink/reparse（完整防护归 PRV-04，本任务仅通过标记文件校验所有权）；错误 Display 不得携带路径或用户数据。
+- 事务边界：创建 = 建目录 + 原子写入标记文件（schema 版本 + 目录 ID hex），失败时尽力回滚且重试幂等（目录已存在且标记有效视为成功）；销毁前必须验证标记与注册表目录 ID 一致且 Profile 已 `Closed`，销毁经 `<hex>.deleting-<n>` 改名后递归删除，部分失败遗留的 `*.deleting-*` 由 `retry_pending_destroys` 有界（≤16）恢复并报告；所有操作只作用于注册表 root 直接子级。
+- 验收与测试：PV-004、PV-005；测试使用 `std::env::temp_dir()` 下唯一临时根的真实文件系统，覆盖正常创建/重试幂等、标记损坏/篡改拒绝销毁、非 Closed 拒绝销毁、部分失败恢复、重复销毁、容量与未知 Profile。命令：`cargo test -p crayon-profile`、`cargo clippy -p crayon-profile --all-targets -- -D warnings`、`cargo fmt --all -- --check`、workspace 基线回归、`git diff --check`。
+- 明确不做：无痕 Profile 清理清单、symlink/junction/reparse 防护与启动补偿清理、跨平台长路径/权限细节、Profile 持久化元数据 schema；分别归 PRV-02、PRV-04、后续任务。
+
+## PRV-03 完成记录（持久 Profile 空间事务）
+
+- 状态：`DONE`；依赖 `PRV-01 DONE`。
+- 实现：`crayon-profile` 新增 `persistent` 模块（1 个生产文件，约 230 行）。`PersistentStore` 提供：`create_space`（建目录 + 临时文件原子改名写入 `schema=1` + 目录 ID hex 的 `.crayon-profile` 标记；已存在且标记有效视为幂等成功；已存在但标记不符 fail closed 为 `OwnershipMismatch` 且不改动目录；标记写入失败尽力回滚目录）；`destroy_space`（要求 Profile `Closed` 且标记与注册表目录 ID 一致，先改名为 `<hex>.deleting-0` 再递归删除，递归失败返回 `StagedForResume`）；`retry_pending_destroys`（每调用最多恢复 16 个 `*.deleting-0` 遗留并返回剩余数）。所有操作只作用于注册表 root 直接子级；错误枚举不含路径或用户数据。
+- 自动验证：`cargo test -p crayon-profile` 22/22 通过（13 model + 9 persistent：创建/幂等/外来目录拒绝/无痕与未知拒绝、销毁生命周期门禁/篡改标记 fail closed/重复销毁、部分失败遗留恢复与 20 项有界恢复）；`cargo clippy -p crayon-profile --all-targets -- -D warnings` 零告警；`cargo fmt --all -- --check` 通过；测试使用 `temp_dir()` 下唯一真实根并在 Drop 中清理。
+- Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；P0/P1/P2 均为 `0`。销毁前所有权双重校验满足“不得删除未验证根目录”红线；`remove_dir_all` 不跟随符号链接（只删链接本身）。
+- 未覆盖与风险：`create_space` 对已存在符号链接目标的校验、junction/reparse 防护与启动补偿清理由 `PRV-04` 拥有；无痕清理清单归 `PRV-02`；跨平台长路径/权限细节未覆盖。`PRV-03` 转为 `DONE`，解锁 `BUX-09/10/13` 与 `PRV-04` 的持久空间依赖。
