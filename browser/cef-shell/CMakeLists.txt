@@ -25,6 +25,10 @@ if(OS_WINDOWS)
     @ONLY)
 
   set(crayon_browser_sources
+      src/browser/context/profile_context_factory.cc
+      src/browser/context/profile_context_factory.h
+      src/browser/context/profile_id_validator.cc
+      src/browser/context/profile_id_validator.h
       src/browser/new_tab/cef_new_tab_handler.cc
       src/browser/new_tab/cef_new_tab_handler.h
       src/browser/window/tab_controller.cc
@@ -151,6 +155,10 @@ if(OS_MAC)
       resources/macos/en.lproj/InfoPlist.strings
       resources/macos/zh-Hans.lproj/InfoPlist.strings)
   set(crayon_macos_sources
+      src/browser/context/profile_context_factory.cc
+      src/browser/context/profile_context_factory.h
+      src/browser/context/profile_id_validator.cc
+      src/browser/context/profile_id_validator.h
       src/browser/window/tab_controller.cc
       src/browser/window/tab_model.cc
       src/macos/app.cc
@@ -286,4 +294,22 @@ if(CRAYON_BUILD_TESTS)
                        PROPERTIES LABELS "cef;shell;window;contract")
   set_tests_properties(new_tab_adapter_contract
                        PROPERTIES LABELS "cef;shell;new-tab;contract")
+
+  add_executable(crayon_profile_id_validator_test
+                 tests/profile_id_validator_test.cc
+                 src/browser/context/profile_id_validator.cc)
+  target_compile_features(crayon_profile_id_validator_test PRIVATE cxx_std_17)
+  target_include_directories(crayon_profile_id_validator_test
+                             PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  add_test(NAME profile_id_validator_test
+           COMMAND crayon_profile_id_validator_test)
+  add_test(
+    NAME profile_context_contract
+    COMMAND "${CMAKE_COMMAND}"
+            "-DCRAYON_CEF_SHELL_SOURCE=${CMAKE_CURRENT_SOURCE_DIR}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/profile_context_contract.cmake")
+  set_tests_properties(profile_id_validator_test
+                       PROPERTIES LABELS "cef;shell;context")
+  set_tests_properties(profile_context_contract
+                       PROPERTIES LABELS "cef;shell;context;contract")
 endif()
