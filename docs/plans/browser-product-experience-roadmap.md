@@ -24,7 +24,7 @@
 | BUX-07 | DONE | BUX-06 | `browser/shared-ui/tabs/advanced` | 固定、复制、静音、搜索、分组和跨窗口移动 | UX-006；容量/顺序/音频/多窗口与键盘操作 |
 | BUX-08 | DONE | BUX-06,CEF-05 | `browser/shared-ui/windows` | 多窗口、受控 popup、全屏与画中画 UI/策略绑定 | UX-007；来源、取消、焦点、关闭与恢复 |
 | BUX-09 | DONE | BUX-03,PRV-03 | `browser/bookmarks`,`browser/shared-ui/bookmarks` | 书签 store、栏、管理器、搜索、导入/导出 | UX-008；事务/损坏/超大/重复/跨 Profile |
-| BUX-10 | TODO | BUX-06,PRV-03 | `browser/history`,`browser/shared-ui/history` | 历史、最近关闭、搜索、范围删除与恢复 | UX-009；无痕零持久化、删除边界、跨 Profile |
+| BUX-10 | DONE | BUX-06,PRV-03 | `browser/history`,`browser/shared-ui/history` | 历史、最近关闭、搜索、范围删除与恢复 | UX-009；无痕零持久化、删除边界、跨 Profile |
 | BUX-11 | DONE | CEF-05,BUX-02 | `browser/downloads`,`browser/shared-ui/downloads` | 下载 shelf/页、暂停/恢复/取消/重命名/打开位置和危险状态 | UX-010；路径、重复、断点、外部打开、失败释放 |
 | BUX-12 | TODO | BUX-05,PLT-02 | `browser/shared-ui/page-tools` | 查找、缩放、全屏、打印/PDF 与保存页面命令 | UX-011；取消/失败/输出路径/跨 Profile |
 | BUX-13 | TODO | BUX-01,PRV-03 | `browser/preferences`,`browser/shared-ui/settings` | 版本化 preference store 与启动/搜索/外观/下载/内容设置 UI | UX-012；migration/corrupt/reset/restart readback |
@@ -193,6 +193,27 @@
 - 视图边界：书签栏只持有（节点 ID、标题）有界投影（≤128），显示/隐藏、当前页 starred 状态查询；不持 URL 之外的页面数据，不直接读写文件。
 - 验收与测试：UX-008；contract 覆盖 CRUD/移动环拒绝/级联删除/容量/深度、URL/标题校验、重复 URL 检测、搜索边界、编解码 round-trip/损坏矩阵（坏头/截断/超长/未知类型）、原子保存的临时文件不残留、跨 Profile 隔离、栏容量与 starred 状态。执行独立 configure/build/ctest、`-Wall -Wextra -Wpedantic -Werror` 零告警、共享层回归、`git diff --check`。
 - 明确不做：Chrome/Edge/Firefox JSON 或 HTML 导入解析、书签管理器像素 UI、同步/云、favicon 抓取、macOS 实机；导入解析如需支持另立任务评估解析器安全边界。
+
+## BUX-10 原子范围（历史领域模型、版本化编解码与历史页视图）
+
+- 状态：`DONE`；依赖 `BUX-06 DONE`、`PRV-03 DONE`。
+- 单一目标：交付平台中立、可独立测试的历史记录 store（访问记录、搜索、范围删除、最近关闭栈）、版本化编解码与原子持久化和历史页视图状态机；本任务不做像素 UI、 synced 历史或与 omnibox 建议索引的接线。
+- 输入：BUX-06 的最近关闭语义、PRV-03 的按 Profile 目录隔离、PV-001/PV-004 的无痕零持久化与删除边界要求。
+- 输出与允许修改：新增 `browser/history/`（`HistoryStore` + `HistoryCodec` + 独立测试/CMake）与 `browser/shared-ui/history/`（`HistoryPageStateMachine` + 独立测试/CMake）；允许修改根 CMake 和本 Roadmap 索引。新增生产文件不超过 6 个；不得出现 CEF/Win32/AppKit/ArkWeb 类型；不引入第三方依赖。
+- 禁止修改：`browser/engine-api`、BUX-09 书签、omnibox、PRV crate、下载/投屏业务、Cast-SDK/Relay/Agent。
+- 领域边界：条目含单调 ID、URL（仅 http/https，≤2048，无控制字符）、标题（≤512）与调用方注入的秒级时间戳（模块不读真实时钟）；容量 4096，超出逐出最旧；`RecordVisit` 在 ephemeral 实例上稳定拒绝（无痕零持久化）；`DeleteRange(from,to)` 闭区间、from>to 拒绝；`DeleteUrl`/`ClearAll` 精确生效；最近关闭栈 ≤10 条且只记录可恢复 URL/标题；持久化在 ephemeral 实例上拒绝。
+- 编解码边界：`CRAYON-HISTORY v1` 头 + 长度前缀记录；坏头/截断/越界/未知记录 fail closed；保存经 `.tmp` 原子 rename。
+- 视图边界：`HistoryPageStateMachine` 持有 ≤256 条投影、搜索查询状态与清空事件；不持完整 URL 之外的页面数据，不直接读写文件。
+- 验收与测试：UX-009；contract 覆盖记录/逐出、ephemeral 拒绝、范围删除边界（空/逆序/精确端点）、URL 删除、清空、最近关闭栈容量与顺序、搜索边界、编解码 round-trip/损坏矩阵、跨实例（Profile）隔离。执行独立 configure/build/ctest、零告警、共享层回归、`git diff --check`。
+- 明确不做：历史页像素 UI、按站点 favicon、与 BUX-04A 建议索引的接线（后续接线任务）、同步、macOS 实机。
+
+## BUX-10 完成记录（历史领域模型、版本化编解码与历史页视图）
+
+- 状态：`DONE`；依赖 `BUX-06 DONE`、`PRV-03 DONE`。
+- 实现：新增 6 个生产文件。`browser/history/`：`HistoryStore`（单调 ID、URL/标题校验、容量 4096 逐出最旧、时间戳调用方注入不读真实时钟、`DeleteRange` 闭区间且逆序拒绝、`DeleteUrl`/`ClearAll`、最近关闭栈 ≤10 且新者先恢复；ephemeral 实例对 `RecordVisit`/`RecordClosedTab`/持久化全部稳定拒绝）与 `HistoryCodec`（`CRAYON-HISTORY v1` + 长度前缀记录，损坏矩阵 fail closed，`.tmp` 原子 rename，文件 ≤4MiB，u64 时间戳溢出防护；ephemeral 保存显式 `kEphemeralRefused`）。`browser/shared-ui/history/`：`HistoryPageStateMachine`（≤256 投影、查询回显 ≤256 字节、清空事件、shutdown 全拒绝）。
+- 自动验证：独立 configure/build 成功且 `-Wall -Wextra -Wpedantic -Werror` 零告警；`ctest -R history` 2/2 通过（store+codec 11 组、view 4 组：校验矩阵、逐出顺序、ephemeral 全拒、最近关闭容量/顺序、范围删除端点、round-trip 含中文与查询串、损坏矩阵、临时文件不残留）；共享层全量回归 20/20 通过（除本机缺 Ninja 的 `cef_build_graph_contract` 环境阻塞）；`git diff --check` 通过。
+- Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；P0/P1/P2 均为 `0`。无痕零持久化由 store 层与 codec 层双重门禁保证；错误与报告不含用户数据。
+- 未覆盖与风险：历史页像素 UI、favicon、与 BUX-04A 建议索引的接线和 macOS 实机归后续任务。`BUX-10` 转为 `DONE`。
 
 ## BUX-09 完成记录（书签领域模型、版本化编解码与书签栏视图）
 
