@@ -106,3 +106,28 @@
 - 自动验证：`cargo test -p crayon-profile` 31/31 通过（13 model + 9 persistent + 9 ephemeral：窗口生命周期/下溢/Closing 门禁、每类存储 Cleared/NotPresent/Failed fixture、部分失败显式报告与重试恢复、Disposed 门禁）；`cargo clippy -p crayon-profile --all-targets -- -D warnings` 零告警；`cargo fmt --all -- --check` 通过；workspace 基线 3/3 与 58/58 回归通过；`git diff --check` 通过。
 - Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；P0/P1/P2 均为 `0`。红线“清理失败必须显式报告”由 `fully_cleared` 判据和 `CleanupIncomplete` 错误双重保证；报告与错误不含 URL/Cookie/页面数据。
 - 未覆盖与风险：CEF 临时 context 真实缓存/Cookie 删除接线归后续 CEF adapter 任务；崩溃残留补偿清理归 `PRV-04`；UI 归 `BUX-15`。`PRV-02` 转为 `DONE`，与 `PRV-03` 共同解锁 `PRV-04`，并满足 `BUX-15` 的 PRV-01..04 依赖中的两项。
+
+## PRV-04 原子范围（路径防护与启动补偿清理）
+
+- 状态：`DONE`；依赖 `PRV-02 DONE`、`PRV-03 DONE`。
+- 单一目标：在 `crayon-profile` crate 新增 `path_guard` 模块，交付绝对根验证、symlink/junction/reparse 逃逸防护与有界启动补偿清理，并把防护接入 `PersistentStore` 的销毁与续跑路径；本任务不做平台安全存储（PRV-05）或全存储 LeakScanner（PRV-11）。
+- 输入：PRV-03 的 `PersistentStore` 事务与 staging 命名、PV-006（符号链接/目录联接逃逸 → 拒绝删除目标，外部文件不受影响）、红线“逃逸目标零修改”。
+- 输出与允许修改：`crates/crayon-profile`（新增 `src/path_guard.rs` 与 `tests/path_guard.rs`；接线修改 `src/persistent.rs` 的 `create_space` 幂等分支、`destroy_space` 与 `retry_pending_destroys` 及 staging 常量归属、`src/lib.rs` re-export；`PersistentStoreError` 增加闭合变体 `GuardRejected`）、本 Roadmap 状态与证据。不新增第三方依赖：Unix 经 `symlink_metadata`，Windows 经 `std::os::windows::fs::MetadataExt` 检测 `FILE_ATTRIBUTE_REPARSE_POINT`，平台差异隔离在单一函数内。
+- 禁止修改：PRV-01 model 语义、PRV-02 ephemeral 语义、其他 crate、CEF shell、UI；逃逸目标零修改（红线）；错误 Display 不得携带路径或用户数据。
+- 边界：
+  - 根必须绝对、存在且为目录；`PathGuard` 持有 canonical 根，后续验证以 canonical 根为锚。
+  - 受验相对路径拒绝空路径、绝对路径、父引用与前缀组件；深度 ≤4、字节 ≤256；逐组件 `symlink_metadata` 检测 symlink/reparse，任一组件逃逸即 fail closed 且不产生任何修改。
+  - 补偿清理只处理根直属的 `*.deleting-0` staging 目录；逐项先验证非 symlink/reparse 再删除，逃逸项与删除失败项计入剩余且永不跟随；每次调用处理 ≤16 项。
+  - `destroy_space`/`retry_pending_destroys` 经 guard 执行；guard 拒绝时返回 `GuardRejected` 且不修改任何目标（含 staging 预清理）。
+  - TOCTOU 残余风险：std 无法提供 openat2 级防竞争防护，验证与删除之间存在窗口，记录在案（PV-006 覆盖静态逃逸构造，竞争防护归后续平台强化）。
+- 验收与测试：PV-006。覆盖相对/缺失/文件根拒绝、空/`..`/绝对组件/越界拒绝、中间组件与目标 symlink 逃逸拒绝且外部 sentinel 文件零修改、staging symlink 跳过并计入剩余、正常创建/销毁/续跑回归不回归、补偿清理容量。命令：`cargo test -p crayon-profile`、clippy `-D warnings`、`cargo fmt --all -- --check`、workspace 基线回归、`git diff --check`。
+- 明确不做：Windows junction/reparse 真机验证（cfg(windows) 路径本机无法执行，记录为风险）、崩溃后非 staging 残留的深度清理（PRV-11 扫描）、平台安全存储（PRV-05）。
+
+## PRV-04 完成记录（路径防护与启动补偿清理）
+
+- 状态：`DONE`；依赖 `PRV-02 DONE`、`PRV-03 DONE`。
+- 实现：`crayon-profile` 新增 `path_guard` 模块（1 个生产文件，约 215 行）。`PathGuard`：根必须绝对、存在且为目录，锚定 canonical 根；`verify_inside` 两段式校验——先做纯形状检查（拒绝空/绝对/父引用/前缀组件、深度 ≤4、字节 ≤256），再逐组件 `symlink_metadata` 检测 symlink/reparse（Windows 经 `FILE_ATTRIBUTE_REPARSE_POINT`，Unix 经 `is_symlink`，平台差异隔离在单一 `is_reparse` 函数），任一逃逸即 fail closed 零修改；`remove_tree` 先验后删；`cleanup_staging` 只处理根直属 `*.deleting-0`、每次 ≤16 项、逃逸项与失败项计入剩余且永不跟随。接线：`create_space` 幂等分支与 `destroy_space` 先 guard 后读 marker（连穿越 symlink 的越界读取也拒绝）、staging 预清理逃逸即整体失败；`retry_pending_destroys` 改为委托 guard 清理；`PersistentStoreError` 新增闭合变体 `GuardRejected`（同时移除从未构造的 `ResumeCapacity`）；staging 后缀常量归 `path_guard` 所有。无新增第三方依赖。
+- 自动验证：`cargo test -p crayon-profile` 42/42 通过（13 model + 9 persistent + 9 ephemeral + 11 path_guard：根形状矩阵、相对路径形状/深度/长度/缺失矩阵、目标与中间组件 symlink 逃逸拒绝且 sentinel 零修改、真实目录删除、补偿清理容量/跳过非 staging/逃逸项计剩余不跟随、destroy/create/retry 接线逃逸拒绝、正常销毁与续跑回归）；`cargo clippy -p crayon-profile --all-targets -- -D warnings` 零告警；`cargo fmt --all -- --check` 通过；workspace 基线 3/3 与 58/58 回归通过；`git diff --check` 通过。
+- 失败基线：首轮 `relative_path_shape_is_enforced` 失败——单段式实现在不存在组件处先命中 I/O 错误，深度上界不可达；先复现后改为形状/元数据两段式校验，证明测试在错误实现下确实失败。
+- Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；关闭 1 个 P1（单段校验顺序使深度上界不可达，改两段式）、1 个 P1（`destroy_space` 先读 marker 后 guard，会穿越 symlink 越界读取，已改为 guard 优先）、1 个 P2（`create_space` 幂等分支未防护 symlink 替换，已接线），最终 P0/P1/P2 均为 `0`。红线“逃逸目标零修改”由 sentinel 测试直接断言；错误不含路径或用户数据。
+- 未覆盖与风险：TOCTOU 竞争窗口（验证与删除为两次系统调用，std 无 openat2 级防护）已在模块文档与 Roadmap 记录；Windows junction/reparse 代码路径 cfg(windows) 本机无法执行，真机验证归后续平台门禁任务；非 staging 残留的深度扫描归 `PRV-11`。`PRV-04` 转为 `DONE`，解锁 `PRV-11` 的一项依赖与 `BUX-15` 的 PRV-01..04 全部 Profile 依赖。

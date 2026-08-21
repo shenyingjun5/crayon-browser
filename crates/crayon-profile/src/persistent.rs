@@ -8,11 +8,13 @@
 //! Safety rules:
 //! - A directory is destroyed only after its marker matches the directory ID
 //!   registered for the profile and the profile lifecycle is `Closed`.
-//! - Operations never follow out-of-root targets; deeper symlink/reparse
-//!   protection belongs to PRV-04.
+//! - Every mutating operation is anchored by [`PathGuard`]: symlink or
+//!   reparse components anywhere under the root fail closed and escape
+//!   targets are never modified.
 //! - Error values never carry paths or user data.
 
 use crate::model::{DirectoryId, ProfileLifecycle, ProfileRegistry, ProfileType};
+use crate::path_guard::{PathGuard, PathGuardError, MAX_CLEANUP_PER_CALL, STAGING_SUFFIX};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::fs;
@@ -24,9 +26,6 @@ const MARKER_FILE_NAME: &str = ".crayon-profile";
 
 /// Marker schema version written into the marker file.
 const MARKER_SCHEMA_VERSION: u32 = 1;
-
-/// Maximum number of stale `*.deleting-*` directories resumed per call.
-const MAX_RESUME_PER_CALL: usize = 16;
 
 /// Persistent-store transaction failure.  Variants are stable and never
 /// carry paths or user data.
@@ -40,8 +39,9 @@ pub enum PersistentStoreError {
     /// The on-disk marker is missing, corrupt or belongs to another
     /// directory ID; the directory is left untouched (fail closed).
     OwnershipMismatch,
-    /// Too many stale deletions pending; resume was bounded.
-    ResumeCapacity,
+    /// The path guard rejected the operation (invalid root, invalid
+    /// relative path or symlink/reparse escape); nothing was modified.
+    GuardRejected,
     /// Underlying I/O failure with no further detail exposed.
     Io,
 }
@@ -55,7 +55,7 @@ impl Display for PersistentStoreError {
             Self::OwnershipMismatch => {
                 "on-disk marker does not match the registered profile directory"
             }
-            Self::ResumeCapacity => "too many stale deletions pending resume",
+            Self::GuardRejected => "path guard rejected the storage operation",
             Self::Io => "storage operation failed",
         };
         formatter.write_str(message)
@@ -67,6 +67,17 @@ impl Error for PersistentStoreError {}
 impl From<io::Error> for PersistentStoreError {
     fn from(_: io::Error) -> Self {
         Self::Io
+    }
+}
+
+impl From<PathGuardError> for PersistentStoreError {
+    fn from(error: PathGuardError) -> Self {
+        match error {
+            PathGuardError::Io => Self::Io,
+            PathGuardError::RootInvalid
+            | PathGuardError::InvalidRelative
+            | PathGuardError::EscapeDetected => Self::GuardRejected,
+        }
     }
 }
 
@@ -107,6 +118,10 @@ impl<'a> PersistentStore<'a> {
             .profile_path(profile_id)
             .ok_or(PersistentStoreError::UnknownProfile)?;
         if path.exists() {
+            // An existing directory could have been replaced by a symlink
+            // escape; verify before trusting its marker.
+            let guard = PathGuard::new(self.registry.root())?;
+            guard.verify_inside(Path::new(&profile.directory_id().to_hex()))?;
             return self
                 .verify_marker(&path, profile.directory_id())
                 .map(|()| path);
@@ -137,10 +152,15 @@ impl<'a> PersistentStore<'a> {
         if !path.exists() {
             return Ok(DestroyOutcome::Removed);
         }
+        let guard = PathGuard::new(self.registry.root())?;
+        guard.verify_inside(Path::new(&profile.directory_id().to_hex()))?;
         self.verify_marker(&path, profile.directory_id())?;
-        let staging = staging_path(self.registry.root(), profile.directory_id());
+        let staging_name = format!("{}{STAGING_SUFFIX}", profile.directory_id().to_hex());
+        let staging = self.registry.root().join(&staging_name);
         if staging.exists() {
-            let _ = fs::remove_dir_all(&staging);
+            // Fail closed when the pre-existing staging entry is an escape
+            // construction; the escape target is never modified.
+            guard.remove_tree(Path::new(&staging_name))?;
         }
         fs::rename(&path, &staging)?;
         match fs::remove_dir_all(&staging) {
@@ -149,16 +169,12 @@ impl<'a> PersistentStore<'a> {
         }
     }
 
-    /// Resumes stale `*.deleting-*` directories directly under the root.
-    /// Bounded per call; returns the number of directories still pending.
+    /// Resumes stale staging directories directly under the root, guarded
+    /// against symlink/reparse escapes.  Bounded per call; returns the
+    /// number of directories still pending.
     pub fn retry_pending_destroys(&self) -> Result<usize, PersistentStoreError> {
-        let mut pending = staging_entries(self.registry.root())?;
-        let resumed = pending.len().saturating_sub(MAX_RESUME_PER_CALL);
-        pending.truncate(MAX_RESUME_PER_CALL);
-        for entry in pending {
-            let _ = fs::remove_dir_all(entry);
-        }
-        Ok(staging_entries(self.registry.root())?.len().max(resumed))
+        let guard = PathGuard::new(self.registry.root())?;
+        Ok(guard.cleanup_staging(MAX_CLEANUP_PER_CALL)?)
     }
 
     fn registered_regular_profile(
@@ -207,21 +223,4 @@ fn marker_content(directory_id: DirectoryId) -> String {
         "schema={MARKER_SCHEMA_VERSION}\ndirectory={}\n",
         directory_id.to_hex()
     )
-}
-
-fn staging_path(root: &Path, directory_id: DirectoryId) -> PathBuf {
-    root.join(format!("{}.deleting-0", directory_id.to_hex()))
-}
-
-fn staging_entries(root: &Path) -> Result<Vec<PathBuf>, PersistentStoreError> {
-    let mut entries = Vec::new();
-    for entry in fs::read_dir(root)? {
-        let entry = entry?;
-        let name = entry.file_name();
-        let name = name.to_string_lossy();
-        if name.ends_with(".deleting-0") {
-            entries.push(entry.path());
-        }
-    }
-    Ok(entries)
 }
