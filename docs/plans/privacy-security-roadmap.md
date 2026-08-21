@@ -131,3 +131,27 @@
 - 失败基线：首轮 `relative_path_shape_is_enforced` 失败——单段式实现在不存在组件处先命中 I/O 错误，深度上界不可达；先复现后改为形状/元数据两段式校验，证明测试在错误实现下确实失败。
 - Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；关闭 1 个 P1（单段校验顺序使深度上界不可达，改两段式）、1 个 P1（`destroy_space` 先读 marker 后 guard，会穿越 symlink 越界读取，已改为 guard 优先）、1 个 P2（`create_space` 幂等分支未防护 symlink 替换，已接线），最终 P0/P1/P2 均为 `0`。红线“逃逸目标零修改”由 sentinel 测试直接断言；错误不含路径或用户数据。
 - 未覆盖与风险：TOCTOU 竞争窗口（验证与删除为两次系统调用，std 无 openat2 级防护）已在模块文档与 Roadmap 记录；Windows junction/reparse 代码路径 cfg(windows) 本机无法执行，真机验证归后续平台门禁任务；非 staging 残留的深度扫描归 `PRV-11`。`PRV-04` 转为 `DONE`，解锁 `PRV-11` 的一项依赖与 `BUX-15` 的 PRV-01..04 全部 Profile 依赖。
+
+## PRV-07 原子范围（严格模式高熵 API 降精度策略）
+
+- 状态：`DONE`；依赖 `PRV-06 DONE`。
+- 单一目标：新增 `browser/privacy/strict` 模块，交付严格防追踪模式下的高熵 API 统一降精度/限制策略（闭合 API 枚举 → 闭合处置动作的纯函数映射、能力/兼容开关、确定性钳制/量化函数）；本任务不做 CEF 拦截接线或像素 UI。
+- 输入：PRV-06 的 `PrivacyDefaults` 模式（闭合枚举、Normalize 冲突向上折叠、Describe golden）、PV-009（标准/严格模式统一策略，不为不同 Profile 生成唯一随机指纹）。
+- 输出与允许修改：新增 `browser/privacy/strict/`（`StrictModePolicy` + `ActionFor` + 钳制/量化函数 + 独立测试/CMake）；允许修改根 CMake 和本 Roadmap 索引。新增生产文件 2 个；不得出现 CEF/Win32/AppKit/ArkWeb 类型；无第三方依赖。
+- 禁止修改：PRV-06 standard 模块、其他 browser 模块、Cast-SDK/Relay/Agent；策略不得引入任何按 Profile/会话/时间变化的随机身份（PV-009 红线）。
+- 边界：
+  - API 枚举闭合（user-agent、client-hints、屏幕指标、canvas 读回、WebGL 参数、音频指纹、字体枚举、hardware-concurrency、device-memory、时区、Battery、WebRTC 本地 IP、媒体设备标签）；处置动作闭合（allow/freeze/quantize/clamp/block）。
+  - `enabled == false` 时一律 allow；`Normalize` 在禁用时将兼容开关折叠为 false（隐私一致优先）；非法枚举输入 fail closed 为 block。
+  - 兼容开关只把 `kBlock` 放宽为 `kClamp`（WebGL 基线参数、字体精选列表），永不放宽为 allow。
+  - 钳制/量化函数纯确定性：hardware-concurrency 上界 4、device-memory 上界 4.0、屏幕尺寸按 100px 向下取整；相同输入必得相同输出，与 Profile/时间无关。
+  - 模块零 I/O、零随机源、零时钟读取；`Describe` golden 只含枚举名与布尔，不含站点或用户数据。
+- 验收与测试：PV-009。contract 覆盖禁用全允许、严格表逐 API 断言、兼容开关只放宽到 clamp、非法枚举 block、钳制一致性与上界（不同高输入得相同输出）、量化步进、Describe golden、求值无随机性（重复求值逐字段一致）。执行独立 configure/build/ctest、零告警、共享层回归、`git diff --check`。
+- 明确不做：CEF 请求/JS 层拦截接线（后续 CEF adapter 任务）、UA/时区具体冻结值的本地化决策（由 adapter 消费策略）、像素 UI、按站点例外列表。
+
+## PRV-07 完成记录（严格模式高熵 API 降精度策略）
+
+- 状态：`DONE`；依赖 `PRV-06 DONE`。
+- 实现：新增 2 个生产文件。`browser/privacy/strict/`：闭合 `HighEntropyApi` 十三类（user-agent、client-hints、屏幕指标、canvas 读回、WebGL 参数、音频指纹、字体枚举、hardware-concurrency、device-memory、时区、Battery、WebRTC 本地 IP、媒体设备标签）与闭合 `RestrictionAction`（allow/freeze/quantize/clamp/block）；`ActionFor` 纯函数映射——禁用时一律 allow，严格模式 UA/时区 freeze、屏幕 quantize、并发/内存 clamp、其余 block；兼容开关（webgl_compatibility/font_compatibility）只把 block 放宽为 clamp、永不放宽为 allow；非法枚举 fail closed 为 block；`Normalize` 在禁用时折叠兼容开关保持 canonical；确定性钳制/量化函数（并发上界 4、内存上界 4.0 GiB、屏幕按 100px 向下取整、可疑输入归一到统一值）；`Describe` golden 单行只含布尔。模块零 I/O、零随机源、零时钟、无 Profile 参数（PV-009 统一策略红线）。
+- 自动验证：独立 `cmake -S . -B .cache/build/privacy-strict -DCRAYON_BUILD_TESTS=ON -DCRAYON_ENABLE_CEF=OFF` configure/build 成功且 `-Wall -Wextra -Wpedantic -Werror` 零告警；`ctest -R privacy` 2/2 通过（strict 8 组：禁用全允许与 Normalize 折叠、严格表逐 API、兼容开关只放宽到 clamp、非法枚举 block、钳制一致性与上界（16/64 → 同一输出）、量化步进含零与负数、Describe golden、重复求值逐字段一致无随机身份）；共享层全量回归 24/24 通过（除本机缺 Ninja 的 `cef_build_graph_contract` 环境阻塞）；`git diff --check` 通过。
+- Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；P0/P1/P2 均为 `0`。文件规模：生产头 121 行、实现 80 行、测试 191 行；函数均 <50 行。
+- 未覆盖与风险：CEF 请求/JS 层拦截接线（后续 CEF adapter 任务）、UA/时区具体冻结值决策、像素 UI 与按站点例外列表归后续任务。`PRV-07` 转为 `DONE`，满足 `PRV-11` 的一项依赖。
