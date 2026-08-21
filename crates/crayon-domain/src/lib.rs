@@ -2,6 +2,7 @@
 
 mod capabilities;
 mod config;
+mod diagnostics;
 mod error;
 mod ids;
 
@@ -12,6 +13,11 @@ pub use capabilities::{
 pub use config::{
     CapacityConfig, ConfigError, LogLevel, LoggingConfig, NetworkConfig, ProductConfig,
     TimeoutConfig, UpdateChannel, UpdateSection, CONFIG_SCHEMA_VERSION,
+};
+pub use diagnostics::{
+    redact_sensitive, DataClass, DiagnosticError, DiagnosticEvent, DiagnosticProducer,
+    DEFAULT_QUEUE_CAPACITY, DIAGNOSTICS_SCHEMA_VERSION, MAX_ATTRIBUTES_PER_EVENT,
+    MAX_ATTRIBUTE_KEY_LEN, MAX_ATTRIBUTE_VALUE_LEN, MAX_EVENT_NAME_LEN,
 };
 pub use error::CoreError;
 pub use ids::{DeviceId, IdError, ResourceId, SessionGeneration, SessionId, TabId};

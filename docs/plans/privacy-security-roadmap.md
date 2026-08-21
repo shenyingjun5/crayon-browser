@@ -155,3 +155,28 @@
 - 自动验证：独立 `cmake -S . -B .cache/build/privacy-strict -DCRAYON_BUILD_TESTS=ON -DCRAYON_ENABLE_CEF=OFF` configure/build 成功且 `-Wall -Wextra -Wpedantic -Werror` 零告警；`ctest -R privacy` 2/2 通过（strict 8 组：禁用全允许与 Normalize 折叠、严格表逐 API、兼容开关只放宽到 clamp、非法枚举 block、钳制一致性与上界（16/64 → 同一输出）、量化步进含零与负数、Describe golden、重复求值逐字段一致无随机身份）；共享层全量回归 24/24 通过（除本机缺 Ninja 的 `cef_build_graph_contract` 环境阻塞）；`git diff --check` 通过。
 - Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；P0/P1/P2 均为 `0`。文件规模：生产头 121 行、实现 80 行、测试 191 行；函数均 <50 行。
 - 未覆盖与风险：CEF 请求/JS 层拦截接线（后续 CEF adapter 任务）、UA/时区具体冻结值决策、像素 UI 与按站点例外列表归后续任务。`PRV-07` 转为 `DONE`，满足 `PRV-11` 的一项依赖。
+
+## PRV-08 原子范围（诊断数据分类、redaction、事件 schema 与有界生产者）
+
+- 状态：`DONE`；依赖 `FND-08 DONE`、`FND-09 DONE`。
+- 单一目标：在 `crayon-domain` crate 新增 `diagnostics` 模块，交付数据分类闭合枚举、确定性 redaction、版本化诊断事件 schema 和有界非阻塞生产者；本任务不做遥测开关 UI、发送管线或崩溃捕获（PRV-09）。
+- 输入：RL-014（日志/DTO/诊断/磁盘无完整 URL query、Cookie、Authorization、token）、PV-008（遥测默认关闭、无浏览 URL/标题上报）、PV-010（导出预览与实际发送一致、无秘密）、架构红线“辅助诊断不得参与主业务正确性；生产者非阻塞，队列有界，dropped 计数”。
+- 输出与允许修改：`crates/crayon-domain/src/diagnostics.rs`、`crates/crayon-domain/tests/diagnostics.rs`、`src/lib.rs` re-export、本 Roadmap 状态与证据。仅使用既有 serde/serde_json 依赖，不新增第三方依赖。
+- 禁止修改：CoreError/capabilities/ids 等既有 v1 冻结 API、其他 crate、CEF shell；诊断事件永远不得携带 UserContent/Secret 类别数据；redaction 不得引入随机性或外部状态。
+- 边界：
+  - `DataClass` 闭合四类（Operational/Diagnostic/UserContent/Secret）；只有 Operational/Diagnostic 允许进入诊断事件，构造时类别拒绝即 fail closed。
+  - 事件名与属性键字符集闭合（小写字母数字与 `_.:-`）、名称 ≤64、键 ≤32、值 ≤256、每事件属性 ≤8；时间戳调用方注入，模块不读真实时钟。
+  - 属性值写入时经 `redact_sensitive` 确定性脱敏：URL query 与 userinfo、`Cookie`/`Set-Cookie`/`Authorization`/`Proxy-Authorization` 头、`Bearer`/`Basic` token、`token=`/`sign=`/`sessdata=` 参数；良性文本逐字保留；redaction 无随机、无 I/O。
+  - 事件 wire schema `diagnostics v1`：`deny_unknown_fields`、schema 字段恒为 1；反序列化后必须经 `validate()` 复检才算可用。
+  - `DiagnosticProducer` 队列有界（默认 256，容量 0 收敛为 1）、enqueue 满即丢弃并计入 `dropped()`、非阻塞、FIFO drain；生产者任何失败不得影响调用方主流程。
+- 验收与测试：RL-014、PV-008、PV-010。测试覆盖分类门禁、名称/键/值/容量校验矩阵、redaction 逐规则与良性文本不变、serde roundtrip/未知字段/版本拒绝、生产者容量/dropped/FIFO/drain。命令：`cargo test -p crayon-domain`、clippy `-D warnings`、`cargo fmt --all -- --check`、workspace 基线回归、`git diff --check`。
+- 明确不做：遥测开关与发送前预览 UI（PRV-09）、崩溃捕获、网络发送管线、与 test-support LeakScanner 的规则共享（生产 redaction 与测试扫描器独立实现，规则口径在两侧注释对齐）。
+
+## PRV-08 完成记录（诊断数据分类、redaction、事件 schema 与有界生产者）
+
+- 状态：`DONE`；依赖 `FND-08 DONE`、`FND-09 DONE`。
+- 实现：`crayon-domain` 新增 `diagnostics` 模块（1 个生产文件，约 350 行）。`DataClass` 闭合四类（Operational/Diagnostic/UserContent/Secret），UserContent/Secret 构造事件时 `ForbiddenClass` fail closed；`DiagnosticEvent` wire schema `diagnostics v1`（`deny_unknown_fields`、schema 恒 1、时间戳调用方注入、反序列化后必须 `validate()` 复检类别/名称/键/值/容量）；名称与键字符集闭合 `[a-z0-9_.:-]`，名称 ≤64、键 ≤32、值 ≤256、属性 ≤8；`redact_sensitive` 确定性脱敏（URL query 与 userinfo、Cookie/Set-Cookie/Authorization/Proxy-Authorization 头、Bearer/Basic token、token=/sign=/sessdata= 参数；保留字段名只擦除值；`assigned=` 等良性文本逐字不变；无随机无 I/O），属性值写入时强制脱敏；`DiagnosticProducer` 队列有界（默认 256，0 收敛为 1）、满即丢弃并计入 `dropped()`、非阻塞、FIFO drain。无新增第三方依赖。
+- 自动验证：`cargo test -p crayon-domain` 28/28 通过（11 diagnostics：分类门禁、名称/键形状矩阵、属性容量与值上界、URL query/userinfo/凭证头/token 参数逐规则脱敏、良性文本与 `assigned=` 不变、写入即脱敏、wire roundtrip/未知字段/版本/禁用类别拒绝、生产者容量/dropped/FIFO/drain/零容量收敛；其余 17 项既有测试回归）；`cargo clippy -p crayon-domain --all-targets -- -D warnings` 零告警；`cargo fmt --all -- --check` 通过；workspace 基线 3/3 与 58/58、profile 42/42 回归通过；`git diff --check` 通过。
+- 失败基线：首轮 `redaction_scrubs_tokens_and_params` 失败——测试预期整体擦除 token 参数（含键名），实现为保留键名只擦值；复核 RL-014 口径后确认“键名可见、值擦除”更利于诊断且满足无 token 泄漏，修正测试预期并锁定该语义，证明测试对实现行为有真实判别力。
+- Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；P0/P1/P2 均为 `0`。诊断不参与主业务正确性：生产者满队列只丢弃计数、不阻塞不失败；错误闭合枚举不携带载荷。
+- 未覆盖与风险：遥测开关、发送前预览 UI 与网络发送管线归 `PRV-09`；生产 redaction 与 test-support `LeakScanner` 为独立实现（规则口径两侧注释对齐），联合零泄漏扫描归 `PRV-11`。`PRV-08` 转为 `DONE`，解锁 `PRV-09`。
