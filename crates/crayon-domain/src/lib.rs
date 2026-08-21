@@ -1,11 +1,13 @@
 //! Platform-independent domain foundations shared by Crayon product crates.
 
+mod agent;
 mod capabilities;
 mod config;
 mod diagnostics;
 mod error;
 mod ids;
 
+pub use agent::{AgentCapability, AgentTarget, CaapError, RiskLevel};
 pub use capabilities::{
     BrowserEngineKind, LocalDiscoveryKind, PlatformCapabilities, ProtectedSurfaceKind,
     ReceiverCapabilities, SecureStoreKind,

@@ -1,9 +1,15 @@
 //! Version negotiation primitives and frozen v1 wire messages for
-//! browser/core communication.
+//! browser/core communication, plus the CAAP v1 agent envelope set.
 
+mod caap;
 mod messages;
 mod secret;
 
+pub use caap::{
+    CaapCancel, CaapChunk, CaapErrorReply, CaapHello, CaapRequest, CaapSchemaError, CaapWelcome,
+    MAX_CAAP_CAPABILITIES, MAX_CAAP_CHUNK_BYTES, MAX_CAAP_PARAMS, MAX_CAAP_PARAM_KEY_LEN,
+    MAX_CAAP_PARAM_VALUE_LEN, MAX_CAAP_TOKEN_LEN,
+};
 pub use messages::{
     AdContinuity, AudioCodecKind, CastPolicyDecision, CastPolicyInput, ExternalClientHandoff,
     HandoffConfirmation, HandoffReason, HeadersClass, MediaCandidate, PageContext, PlaybackState,

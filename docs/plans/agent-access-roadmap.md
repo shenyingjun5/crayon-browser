@@ -19,7 +19,7 @@
 
 | ID | 状态 | 依赖 | 允许修改路径 | 单一交付 | 验收与测试 | 阶段 |
 |---|---|---|---|---|---|---|
-| AGT-01 | TODO | FND-08,PRV-08 | `crayon-domain/agent/**`,`crayon-ipc-schema/**`,`docs/current/**` | 冻结 CAAP v1 envelope、握手、版本/能力、target、stream、cancel、deadline、错误和 previous/current golden | `AG-001`; schema/compat/fuzz；无 OS/CEF/SDK 类型 | A0 |
+| AGT-01 | DONE | FND-08,PRV-08 | `crayon-domain/agent/**`,`crayon-ipc-schema/**`,`docs/current/**` | 冻结 CAAP v1 envelope、握手、版本/能力、target、stream、cancel、deadline、错误和 previous/current golden | `AG-001`; schema/compat/fuzz；无 OS/CEF/SDK 类型 | A0 |
 | AGT-02 | TODO | AGT-01 | `crayon-domain/agent/**`,`crayon-agent-gateway/registry/**` | Tool/capability/risk R0～R4 registry 与永久禁止清单 | `AG-001`,`AG-015`; registry snapshot | A0 |
 | AGT-03 | TODO | AGT-01,FND-09 | `crayon-agent-gateway/session/**` | client/task/session/target/generation、取消、超时、幂等和有界队列状态机 | `AG-002`; unit/property | A0 |
 | AGT-04 | TODO | AGT-02,AGT-03,PRV-08 | `crayon-agent-gateway/grant/**` | 单次/任务/App 会话 grant、Profile 隔离、撤销和目标变化失效 | `AG-003`,`AG-005`; default deny | A0 |
@@ -56,3 +56,26 @@
 - 检查 confused deputy、跨 Profile、target 替换、TOCTOU、重放、间接提示注入和旧结果副作用。
 - Release 扫描 remote bind、CDP/WebDriver、任意脚本、Cookie API、密码/支付、文件上传和通用文件/网络工具。
 - Agent 功能可以单独 NO-GO，不阻塞浏览器/投屏核心；但不能以 debug 后门代替正式 Preview。
+
+## AGT-01 原子范围（CAAP v1 envelope 与握手冻结）
+
+- 状态：`DONE`；依赖 `FND-08 DONE`、`PRV-08 DONE`。
+- 单一目标：冻结 CAAP v1 的 wire 契约——envelope（hello/welcome/request/chunk/cancel/error_reply 闭合六种）、握手与版本/能力协商、target、stream chunk、cancel、deadline、稳定错误码和 previous/current golden；本任务不开 transport、不做 registry/session 状态机（AGT-02/03）。
+- 输入：架构 §CAAP 边界（CLI 本机 IPC、MCP loopback adapter、共享握手/工具/错误/取消/幂等/generation 语义）、AG-001（版本协商、R0～R4、错误、chunk/cancel/deadline 稳定；永久禁止能力不可表达）、FND-08 的 golden/previous 窗口机制与 PRV-08 的数据分类。
+- 输出与允许修改：`crates/crayon-domain/src/agent.rs`（`AgentTarget`/`AgentCapability`/`RiskLevel`/`CaapError` + 校验）、`crates/crayon-ipc-schema/src/caap.rs`（六个 envelope 消息 + 边界）、`schemas/current/caap_*.json` 与 `schemas/previous/caap_*.json` golden、`crates/crayon-domain/tests/agent.rs`、`crates/crayon-ipc-schema/tests/caap_v1_contract.rs`、`docs/current/caap-v1.md` 与 README 索引行、本 Roadmap 状态。仅使用既有 serde/serde_json 依赖。
+- 禁止修改：FND-08 已冻结的 v1 消息与 golden（只新增不改动）、CoreError、其他 crate、CEF shell；不得出现 OS/CEF/SDK 类型；不得引入远程监听或 transport 代码。
+- 边界：
+  - `AgentCapability` 闭合五类（page_read/navigation/cast_read/cast_control/semantic_action）；永久禁止能力（原始 CDP、任意 JavaScript、Cookie/凭证、密码/支付、文件上传、任意文件/网络）在类型上不可表达，golden 键集合契约锁定。
+  - `RiskLevel` 闭合 R0～R4；`AgentTarget` 闭合（`tab(TabId)` / `active_tab`）；`CaapError` 闭合稳定码（版本不支持/能力拒绝/target 无效或过期/取消/deadline/队列满/未授权/消息非法），wire 为 snake_case 字符串。
+  - 消息边界：client/tool 名为闭合字符集 token ≤64；request 参数 ≤16 项、键 ≤32、值 ≤1024；chunk `data` ≤4096 字节、`seq` 单调由 session 层（AGT-03）校验、schema 层只冻结字段；deadline 为调用方注入 epoch ms；`deny_unknown_fields` 全覆盖；schema 版本复用 FND-08 非零 `SchemaVersion`。
+  - golden：current 与 previous 各 6 个向量逐字节一致（v1 为首个版本，previous 镜像 current 直到 v2）。
+- 验收与测试：AG-001。golden roundtrip、previous 窗口兼容、未知字段/零版本/越界拒绝、能力闭合与永久禁止不可表达、错误码 golden 锁定、确定性伪 fuzz（golden 字节确定性变异/截断输入只返回错误不 panic）。命令：`cargo test -p crayon-domain -p crayon-ipc-schema`、clippy `-D warnings`、`cargo fmt --all -- --check`、workspace 基线回归、`git diff --check`。
+- 明确不做：transport（AGT-12）、tool registry（AGT-02）、session/取消/幂等状态机（AGT-03）、grant（AGT-04）、确认 UI（AGT-05）。
+
+## AGT-01 完成记录（CAAP v1 envelope 与握手冻结）
+
+- 状态：`DONE`；依赖 `FND-08 DONE`、`PRV-08 DONE`。
+- 实现：`crayon-domain` 新增 `agent` 模块（1 个生产文件，约 150 行）：`AgentCapability` 闭合五类（page_read/navigation/cast_read/cast_control/semantic_action）与 R0～R4 风险映射、`AgentTarget` 闭合（tab(TabId)/active_tab）、`CaapError` 闭合十码（wire snake_case，Display 不参与契约）。`crayon-ipc-schema` 新增 `caap` 模块（1 个生产文件，约 390 行）：闭合六种 envelope（`CaapHello`/`CaapWelcome`/`CaapRequest`/`CaapChunk`/`CaapCancel`/`CaapErrorReply`），全部 `deny_unknown_fields`、构造校验 + 解码后 `validate()` 复检；token 字符集 `[a-z0-9_.:-]` ≤64、参数 ≤16 项/键 ≤32/值 ≤1024、chunk ≤4096 字节、能力 ≤8；schema 版本复用 FND-08 非零 `SchemaVersion`。golden：`schemas/current` 与 `schemas/previous` 各新增 6 个向量（v1 首版逐字节镜像）。文档：新增 `docs/current/caap-v1.md` 并登记 README 索引。无新增依赖、无 OS/CEF/SDK 类型、无 transport 代码。
+- 自动验证：`cargo test -p crayon-domain -p crayon-ipc-schema` 49/49 通过（agent 5 组：能力闭合与 wire 名锁定、13 个永久禁止能力名不可反序列化、风险映射闭合、target wire/非法拒绝、错误码集合锁定与 roundtrip；caap 5 组：current/previous golden roundtrip 与逐字节镜像、未知字段六消息全拒、零版本拒绝、边界矩阵、固定种子 LCG 变异/截断 1200 样本解码零 panic；其余既有测试回归）；`cargo clippy -p crayon-domain -p crayon-ipc-schema --all-targets -- -D warnings` 零告警；`cargo fmt --all -- --check` 通过；workspace 基线 3/3 与 58/58、profile 42/42 回归通过；`git diff --check` 通过。
+- Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；P0/P1/P2 均为 `0`。永久禁止能力在类型层不可表达由黄金测试锁定；`CaapWelcome` 不携带任何 session 材料（grant 归 AGT-03/04）；参数值凭证禁令写入模块文档与契约文档。
+- 未覆盖与风险：transport（`AGT-12`）、tool registry（`AGT-02`）、session/取消/幂等状态机（`AGT-03`）、grant（`AGT-04`）、确认 UI（`AGT-05`）归后续任务；v2 起 previous 窗口演进规则已写入契约文档。`AGT-01` 转为 `DONE`，解锁 `AGT-02`、`AGT-03`。
