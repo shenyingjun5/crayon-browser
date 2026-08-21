@@ -54,6 +54,7 @@ add_subdirectory(browser/shared-ui/downloads)
 add_subdirectory(browser/shared-ui/bookmarks)
 add_subdirectory(browser/shared-ui/history)
 add_subdirectory(browser/shared-ui/settings)
+add_subdirectory(browser/shared-ui/site-controls)
 add_subdirectory(browser/shared-ui/new-tab)
 
 if(CRAYON_ENABLE_CEF)

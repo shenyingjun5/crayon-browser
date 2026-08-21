@@ -28,7 +28,7 @@
 | BUX-11 | DONE | CEF-05,BUX-02 | `browser/downloads`,`browser/shared-ui/downloads` | 下载 shelf/页、暂停/恢复/取消/重命名/打开位置和危险状态 | UX-010；路径、重复、断点、外部打开、失败释放 |
 | BUX-12 | TODO | BUX-05,PLT-02 | `browser/shared-ui/page-tools` | 查找、缩放、全屏、打印/PDF 与保存页面命令 | UX-011；取消/失败/输出路径/跨 Profile |
 | BUX-13 | DONE | BUX-01,PRV-03 | `browser/preferences`,`browser/shared-ui/settings` | 版本化 preference store 与启动/搜索/外观/下载/内容设置 UI | UX-012；migration/corrupt/reset/restart readback |
-| BUX-14 | TODO | CEF-05,BUX-05,BUX-13 | `browser/shared-ui/site-controls` | 站点权限、安全信息、证书错误、popup 与外部协议确认 UI | UX-013；origin/Profile/TTL/取消/伪造/危险 scheme |
+| BUX-14 | DONE | CEF-05,BUX-05,BUX-13 | `browser/shared-ui/site-controls` | 站点权限、安全信息、证书错误、popup 与外部协议确认 UI | UX-013；origin/Profile/TTL/取消/伪造/危险 scheme |
 | BUX-15 | TODO | CEF-04,PRV-01..04,BUX-06 | `browser/shared-ui/profiles`,`browser/session` | Profile picker、普通/无痕窗口、启动会话与崩溃恢复编排 | UX-014；清理失败、无痕不恢复、旧 session、跨 Profile |
 | BUX-16 | TODO | BUX-05,BUX-11,PLT-02 | `browser/shared-ui/context-menu` | 上下文菜单、拖放、剪贴板与受控本地文件入口 | UX-015；上下文最小化、路径/scheme、取消/外部动作 |
 | BUX-17 | TODO | BUX-13,PRV-05,PRV-11 | `browser/autofill/address`,`browser/shared-ui/autofill` | 仅地址/联系信息的本地保存确认、匹配、编辑和删除；明确排除密码/支付 | UX-017；PII redaction、无痕、Agent 不可见、跨 Profile |
@@ -219,6 +219,31 @@
 - 视图边界：`SettingsPageStateMachine` 持有闭合 section 列表与当前 section、dirty 标记与重置事件；不直接读写文件，不持有真实偏好值之外的页面数据。
 - 验收与测试：UX-012；contract 覆盖每键 Set/Get/类型拒绝/未知键、Reset/ResetAll、迁移（v0→v1 丢未知键补默认值）、损坏矩阵、原子保存无残留、保存-重载逐键一致、视图 section/dirty/重置。执行独立 configure/build/ctest、零告警、共享层回归、`git diff --check`。
 - 明确不做：设置页像素 UI、chrome://settings 拦截替换（CEF 层后续任务）、偏好与 PrivacyDefaults 的运行时合并装配（后续 adapter）、同步、macOS 实机。
+
+## BUX-14 原子范围（站点控制面板：权限、安全信息、证书错误与外部协议确认）
+
+- 状态：`DONE`；依赖 `CEF-05 DONE`、`BUX-05 DONE`、`BUX-13 DONE`。
+- 单一目标：交付平台中立、可独立测试的站点控制面板状态机：站点安全身份信息、按 origin 的权限条目（含 TTL）、证书错误决策和外部协议确认模型；本任务不做面板像素 UI、CEF handler 接线或真实证书链解析。
+- 输入：CEF-05 的 `PermissionStore`（默认 deny）与 `ExtractSiteOrigin`、BUX-05 的 `SiteIdentity`、BUX-13 的偏好契约、UX-013 的 origin/Profile/TTL/取消/伪造/危险 scheme 要求。
+- 输出与允许修改：新增 `browser/shared-ui/site-controls/`（`SiteControlsStateMachine` + `PermissionPromptQueue` + 独立测试/CMake）；允许修改根 CMake 和本 Roadmap 索引。新增生产文件不超过 4 个；不得出现 CEF/Win32/AppKit/ArkWeb 类型；可链接 `browser_navigation`（消费 `SiteIdentity`）。
+- 禁止修改：CEF-05 handler 行为、PRV-06 默认值、`browser/engine-api`、下载/投屏业务、Cast-SDK/Relay/Agent；页面内容不得设置或伪造安全 UI 状态。
+- 状态与错误边界：
+  - 安全身份/证书状态只接受 `kEngine` 来源写入；`kPageContent` 来源稳定拒绝（防伪造）。
+  - 权限条目按 (origin, kind) 存储，决策闭合（allow-session/allow-until/deny）；`allow-until` 携带调用方注入的到期时间戳，查询以注入 now 判定过期（过期视为无记录）；容量 ≤256 条，逐出最旧。
+  - 权限请求队列为 FIFO、容量 ≤4、按 origin+kind 去重；grant/deny/dismiss 三态闭合；取消与超时（调用方注入 now）移除请求不产生副作用。
+  - 证书错误为闭合错误类（expired/name-mismatch/untrusted/generic）；用户决策闭合（go-back/proceed-once），`proceed-once` 只作用于当前导航 generation，导航后失效。
+  - 外部协议确认按 (scheme, origin) 记忆，闭合决策（allow-once/deny/remember-allow/remember-deny）；危险 scheme（javascript:/data:/vbscript:）请求稳定拒绝且不进入确认流程。
+- 验收与测试：UX-013；contract 覆盖来源伪造拒绝、权限 TTL 到期/取消/容量逐出、队列 FIFO/去重/容量、证书决策与 generation 失效、外部协议记忆与危险 scheme 拒绝、shutdown 全拒绝。执行独立 configure/build/ctest、零告警、共享层回归、`git diff --check`。
+- 明确不做：面板/气泡像素 UI、CEF permission/cert handler 接线（后续 adapter 任务）、真实证书链/吊销检查、按 Profile 隔离的持久化（复用 PRV-03 根，由后续装配任务完成）、macOS 实机。
+
+## BUX-14 完成记录（站点控制面板：权限、安全信息、证书错误与外部协议确认）
+
+- 状态：`DONE`；依赖 `CEF-05 DONE`、`BUX-05 DONE`、`BUX-13 DONE`。
+- 实现：新增 4 个生产文件。`browser/shared-ui/site-controls/`：`SiteControlsStateMachine`（安全身份只接受 `kEngine` 来源写入、`kPageContent` 稳定拒绝防伪造；权限按 (origin, kind) 存储、决策闭合 deny/allow-session/allow-until、TTL 以调用方注入 now 判定、过期视为 deny、容量 256 条 LRU 逐出、clear/re-add 循环下 recency 有界；证书错误闭合四类、go-back/proceed-once 闭合决策、proceed-once 绑定授予时的 navigation generation、跨 generation 与新错误到达即失效；外部协议按 (scheme, origin) 记忆、容量 256 条 FIFO 逐出、javascript:/data:/vbscript: 危险 scheme 稳定拒绝且不进入确认流程；Shutdown 清空并全拒）与 `PermissionPromptQueue`（FIFO、容量 ≤4、按 origin+kind 去重、grant/deny/dismiss 三态闭合、仅队首可决议、取消与注入 now 的超时移除均无副作用）。origin 校验只接受 https/http/crayon scheme、≤256 字节、无控制字符/`@`/`|`；`PermissionKind` 与 CEF-05 覆盖一一对齐；全部时间戳调用方注入、模块不读真实时钟；错误为闭合枚举、不携带站点数据。
+- 自动验证：独立 `cmake -S . -B .cache/build/site-controls -DCRAYON_BUILD_TESTS=ON -DCRAYON_ENABLE_CEF=OFF` configure/build 成功且 `-Wall -Wextra -Wpedantic -Werror` 零告警；`ctest -R site_controls` 1/1 通过（12 组：身份/证书伪造拒绝、权限校验矩阵、TTL 到期、容量 LRU 逐出与刷新存活、clear/re-add 有界、队列 FIFO/去重/容量/队首决议、取消与超时无副作用、证书 proceed-once generation 绑定与失效、外部协议记忆与危险 scheme 拒绝、协议记忆容量、shutdown 全拒、枚举闭合）；共享层全量回归 23/23 通过（除本机缺 Ninja 的 `cef_build_graph_contract` 环境阻塞）；`git diff --check` 通过。
+- 失败基线：首轮 `site_controls_contract` 失败——容量逐出测试暴露出初版实现按首次插入 FIFO 逐出（重复记录不刷新位置）与“逐出最旧”语义不符，先复现后改为 LRU 刷新，证明测试在错误实现下确实失败。
+- Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；关闭 1 个 P1（重复记录导致的 FIFO 逐出语义错误，改 LRU）、1 个 P2（origin 未拒绝内部键分隔符 `|`，已在形状校验中拒绝）和 1 个 P2（外部协议记忆 map 初版无界，已加 256 条容量 + FIFO 逐出 + recency 压缩），最终 P0/P1/P2 均为 `0`。文件规模：生产头 252/90 行、生产实现 224/91 行、测试 369 行，函数均 <100 行。
+- 未覆盖与风险：面板/气泡像素 UI、CEF permission/cert handler 接线（后续 adapter 任务）、真实证书链/吊销检查、按 Profile 隔离的权限持久化装配（复用 PRV-03 根）与 macOS 实机归后续任务。`BUX-14` 转为 `DONE`。
 
 ## BUX-13 完成记录（版本化偏好 store 与设置页视图）
 
