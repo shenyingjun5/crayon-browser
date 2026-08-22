@@ -41,6 +41,18 @@ impl AgentCapability {
         Self::SemanticAction,
     ];
 
+    /// Stable wire name (snake_case), identical to the serde form.
+    #[must_use]
+    pub const fn wire_name(self) -> &'static str {
+        match self {
+            Self::PageRead => "page_read",
+            Self::Navigation => "navigation",
+            Self::CastRead => "cast_read",
+            Self::CastControl => "cast_control",
+            Self::SemanticAction => "semantic_action",
+        }
+    }
+
     /// The risk level governing this capability.
     #[must_use]
     pub const fn risk_level(self) -> RiskLevel {
@@ -63,6 +75,20 @@ pub enum RiskLevel {
     R2,
     R3,
     R4,
+}
+
+impl RiskLevel {
+    /// Stable wire name (`r0`..`r4`), identical to the serde form.
+    #[must_use]
+    pub const fn wire_name(self) -> &'static str {
+        match self {
+            Self::R0 => "r0",
+            Self::R1 => "r1",
+            Self::R2 => "r2",
+            Self::R3 => "r3",
+            Self::R4 => "r4",
+        }
+    }
 }
 
 /// Closed target of an agent request.

@@ -384,6 +384,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "crayon-agent-gateway"
+version = "0.1.0"
+dependencies = [
+ "crayon-domain",
+]
+
+[[package]]
 name = "crayon-app-runtime"
 version = "0.1.0"
 dependencies = [

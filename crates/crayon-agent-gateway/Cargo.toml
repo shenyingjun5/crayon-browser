@@ -1,0 +1,13 @@
+[package]
+name = "crayon-agent-gateway"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Agent access gateway: tool registry, sessions, grants and receipts (A0 wave)"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+crayon-domain = { path = "../crayon-domain" }

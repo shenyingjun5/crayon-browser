@@ -20,7 +20,7 @@
 | ID | 状态 | 依赖 | 允许修改路径 | 单一交付 | 验收与测试 | 阶段 |
 |---|---|---|---|---|---|---|
 | AGT-01 | DONE | FND-08,PRV-08 | `crayon-domain/agent/**`,`crayon-ipc-schema/**`,`docs/current/**` | 冻结 CAAP v1 envelope、握手、版本/能力、target、stream、cancel、deadline、错误和 previous/current golden | `AG-001`; schema/compat/fuzz；无 OS/CEF/SDK 类型 | A0 |
-| AGT-02 | TODO | AGT-01 | `crayon-domain/agent/**`,`crayon-agent-gateway/registry/**` | Tool/capability/risk R0～R4 registry 与永久禁止清单 | `AG-001`,`AG-015`; registry snapshot | A0 |
+| AGT-02 | DONE | AGT-01 | `crayon-domain/agent/**`,`crayon-agent-gateway/registry/**` | Tool/capability/risk R0～R4 registry 与永久禁止清单 | `AG-001`,`AG-015`; registry snapshot | A0 |
 | AGT-03 | TODO | AGT-01,FND-09 | `crayon-agent-gateway/session/**` | client/task/session/target/generation、取消、超时、幂等和有界队列状态机 | `AG-002`; unit/property | A0 |
 | AGT-04 | TODO | AGT-02,AGT-03,PRV-08 | `crayon-agent-gateway/grant/**` | 单次/任务/App 会话 grant、Profile 隔离、撤销和目标变化失效 | `AG-003`,`AG-005`; default deny | A0 |
 | AGT-05 | TODO | AGT-04,CEF-08 | `apps/desktop-cef/**/agent-confirm/**`,locales | 确认 UI：client、工具、route、目标、参数摘要、数据披露、到期和无障碍 | `AG-004`; UI integration | A0 |
@@ -79,3 +79,27 @@
 - 自动验证：`cargo test -p crayon-domain -p crayon-ipc-schema` 49/49 通过（agent 5 组：能力闭合与 wire 名锁定、13 个永久禁止能力名不可反序列化、风险映射闭合、target wire/非法拒绝、错误码集合锁定与 roundtrip；caap 5 组：current/previous golden roundtrip 与逐字节镜像、未知字段六消息全拒、零版本拒绝、边界矩阵、固定种子 LCG 变异/截断 1200 样本解码零 panic；其余既有测试回归）；`cargo clippy -p crayon-domain -p crayon-ipc-schema --all-targets -- -D warnings` 零告警；`cargo fmt --all -- --check` 通过；workspace 基线 3/3 与 58/58、profile 42/42 回归通过；`git diff --check` 通过。
 - Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；P0/P1/P2 均为 `0`。永久禁止能力在类型层不可表达由黄金测试锁定；`CaapWelcome` 不携带任何 session 材料（grant 归 AGT-03/04）；参数值凭证禁令写入模块文档与契约文档。
 - 未覆盖与风险：transport（`AGT-12`）、tool registry（`AGT-02`）、session/取消/幂等状态机（`AGT-03`）、grant（`AGT-04`）、确认 UI（`AGT-05`）归后续任务；v2 起 previous 窗口演进规则已写入契约文档。`AGT-01` 转为 `DONE`，解锁 `AGT-02`、`AGT-03`。
+
+## AGT-02 原子范围（Tool/capability/risk registry 与永久禁止清单）
+
+- 状态：`DONE`；依赖 `AGT-01 DONE`。
+- 单一目标：新建 `crates/crayon-agent-gateway`，交付 v1 工具 registry（闭合 ToolSpec：名称/所需能力/风险级/确认要求/幂等/流式/参数表）与永久禁止清单；registry 只做声明与查询，不做调度、grant 或 session（AGT-03/04）。
+- 输入：AG-001（tool/risk schema 稳定）、AG-015（永久禁止 surface 零命中）、架构红线（无原始 CDP/任意 JS/Cookie/密码支付/文件上传/任意文件网络）、Roadmap 垂直切片（R0/R1 先交付，R4 仅专项 Review 后 Preview）。
+- 输出与允许修改：`crates/crayon-agent-gateway/**`（registry 模块 + 契约测试 + snapshot golden）、`crates/crayon-domain/src/agent.rs`（仅追加 `AgentCapability`/`RiskLevel` 的 `wire_name()` 常量方法）、根 `Cargo.toml` members、本 Roadmap 状态。无新增第三方依赖。
+- 禁止修改：AGT-01 已冻结的 CAAP wire 消息与 golden、其他 crate、CEF shell；registry 不得包含永久禁止工具或自由文本参数 schema。
+- 边界：
+  - v1 工具集冻结 20 个：page_read 5（page.list_targets/get_title/get_selection/snapshot/markdown）、cast_read 2（cast.list_receivers/get_state，均为 R0）、navigation 7（nav.open_tab/switch_tab/close_tab/navigate/go_back/reload/scroll）、cast_control 5（cast.select_receiver/start/pause/seek/stop）、semantic_action 1（act.invoke，PreviewGated）。
+  - 每个工具的 risk 与其 capability 的 `risk_level()` 一致（`validate()` 强制）；确认要求由风险级派生：R0/R1 无需确认，R2/R3 需要确认，R4 PreviewGated（专项 Review 前不可启用）。
+  - 注册拒绝：重复名称、非法 token、永久禁止清单命中（`cdp.*`/`webdriver`/`*.execute_js`/cookie/credential/password/payment/file/upload/network/proxy 等闭合名表）；查找未知工具返回 None。
+  - 参数表为闭合 `ParamSpec { key, required }`，键为 token；registry 容量 ≤64。
+  - snapshot golden 锁定全部工具的 (name|capability|risk|confirmation|availability|idempotent|streaming|params) 行序。
+- 验收与测试：AG-001、AG-015。测试覆盖 snapshot golden 逐行一致、capability-risk 一致性全量自检、确认派生规则、注册拒绝矩阵、永久禁止清单命中与误放行（如 `page.read_cookies` 含 cookies 字样但属禁止表；`page.snapshot` 放行）、容量上界。命令：`cargo test -p crayon-agent-gateway -p crayon-domain`、clippy `-D warnings`、fmt、workspace 基线回归、`git diff --check`。
+- 明确不做：工具执行/调度（AGT-07..10）、grant/确认（AGT-04/05）、session 状态机（AGT-03）、MCP 映射（AGT-14）。
+
+### AGT-02 完成记录（2026-08-22）
+
+- 实现：`crates/crayon-agent-gateway` 新 crate（`registry.rs` 405 行）；闭合 `ToolSpec`/`ParamSpec`，`ToolSpec::build` 由 capability 派生 risk、由 risk 派生 confirmation（R0/R1 无需确认，R2/R3/R4 需要确认）与 availability（R4 PreviewGated），矛盾声明在构造上不可能；`ToolRegistry` BTreeMap 确定序、容量 64、注册拒绝 InvalidName/PermanentlyDenied/DuplicateTool/Capacity/RiskMismatch/TooManyParams/InvalidParamKey；永久禁止清单 15 个闭合子串（cdp/webdriver/execute_js/eval/javascript/cookie/credential/password/payment/file_upload/file_system/filesystem/network/proxy/screenshot_capture）；v1 冻结 20 工具；`snapshot()` 行格式 `name|capability|risk|confirmation|availability|idempotent|streaming|params`；`crayon-domain` 仅追加 `AgentCapability`/`RiskLevel` 的 `wire_name()` 常量方法；根 `Cargo.toml` 加入 members。无新增第三方依赖。
+- 修正：原子范围初稿把 `cast.get_state` 写成 R1，与 domain `CastRead→R0` 矛盾，已统一为"cast_read 2（均为 R0）"。
+- 验证：`cargo test -p crayon-agent-gateway -p crayon-domain` 通过（registry 12 项：snapshot golden 逐行一致、capability-risk 全量自检、确认/可用性派生矩阵、重复/非法名/禁止清单 15 命中与 4 个误放行对照/容量 64 上界/参数形状/查找未知/确定序）；`cargo clippy -p crayon-agent-gateway -p crayon-domain --all-targets -- -D warnings` 通过；`cargo fmt --all -- --check` 通过；`git diff --check` 通过；基线回归 `crayon-browser-core --lib` 3/3、`--no-default-features --features legacy-dev --lib` 58/58、`crayon-profile` 42/42 不变。
+- Code Review：P0 0、P1 0、P2 1（`RegistryError::RiskMismatch` 为防御性保留——`ToolSpec::build` 私有且 risk 由 capability 派生，公共路径不可能构造矛盾 spec；保留作为注册入口纵深防御，后续若有第二个构造入口即生效）。
+- 未覆盖与风险：无工具执行/调度/grant/session（AGT-03/04/07..10）；snapshot golden 变更需与 Roadmap 同步评审。`AGT-02` 转为 `DONE`，解锁 `AGT-04`（另需 AGT-03）与后续工具实现任务的 registry 依赖。

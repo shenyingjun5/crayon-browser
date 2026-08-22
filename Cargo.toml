@@ -28,6 +28,7 @@ legacy-dev = [
 [workspace]
 resolver = "2"
 members = [
+    "crates/crayon-agent-gateway",
     "crates/crayon-app-runtime",
     "crates/crayon-cast-adapter",
     "crates/crayon-domain",
