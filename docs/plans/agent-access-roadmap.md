@@ -22,7 +22,7 @@
 | AGT-01 | DONE | FND-08,PRV-08 | `crayon-domain/agent/**`,`crayon-ipc-schema/**`,`docs/current/**` | 冻结 CAAP v1 envelope、握手、版本/能力、target、stream、cancel、deadline、错误和 previous/current golden | `AG-001`; schema/compat/fuzz；无 OS/CEF/SDK 类型 | A0 |
 | AGT-02 | DONE | AGT-01 | `crayon-domain/agent/**`,`crayon-agent-gateway/registry/**` | Tool/capability/risk R0～R4 registry 与永久禁止清单 | `AG-001`,`AG-015`; registry snapshot | A0 |
 | AGT-03 | DONE | AGT-01,FND-09 | `crayon-agent-gateway/session/**` | client/task/session/target/generation、取消、超时、幂等和有界队列状态机 | `AG-002`; unit/property | A0 |
-| AGT-04 | TODO | AGT-02,AGT-03,PRV-08 | `crayon-agent-gateway/grant/**` | 单次/任务/App 会话 grant、Profile 隔离、撤销和目标变化失效 | `AG-003`,`AG-005`; default deny | A0 |
+| AGT-04 | VERIFIED | AGT-02,AGT-03,PRV-08 | `crayon-agent-gateway/grant/**` | 单次/任务/App 会话 grant、Profile 隔离、撤销和目标变化失效 | `AG-003`,`AG-005`; default deny | A0 |
 | AGT-05 | TODO | AGT-04,CEF-08 | `apps/desktop-cef/**/agent-confirm/**`,locales | 确认 UI：client、工具、route、目标、参数摘要、数据披露、到期和无障碍 | `AG-004`; UI integration | A0 |
 | AGT-06 | TODO | CNT-03,AGT-03 | `crayon-page-data/**`,`crayon-agent-gateway/page_stream/**` | generation-scoped 快照缓存、分页/流式/增量、索引、背压和性能 instrumentation | `AG-006`,`AG-015`; benchmark/soak | A1 |
 | AGT-07 | TODO | AGT-04,AGT-06,CNT-08 | `crayon-agent-gateway/tools/content/**`,`crayon-app-runtime/**` | R1 target/标题/选区/结构化页面/Markdown 读取工具 | `AG-006`; 跨 Profile/后台/过期/超量拒绝 | A1 |
@@ -127,3 +127,25 @@
 - 验证：`cargo test -p crayon-agent-gateway` 25/25 通过（session 13 项：名称/容量/重复拒绝矩阵、幂等去重与异指纹、deadline 即过期与 sweep、cancel 幂等、chunk seq 生命周期、终态不可逆、generation 精确收敛与 stale 拒绝、close_session 收敛、容量逐出+全 live QueueFull、LCG 3000 步伪随机序列不变量——容量上界/终态不回退/seq 单调）；`cargo clippy --all-targets -- -D warnings` 通过；fmt、`git diff --check` 通过；基线回归 core lib 3/3、legacy-dev lib 58/58、profile 42/42 不变，workspace 全量无失败。
 - Code Review：P0 0、P1 0、P2 1（idempotency fingerprint 在内存中拼接参数值如 URL——不落盘不进日志，AGT-11 receipt 必须另行脱敏，其任务行已注明"无正文/query/secret"）。
 - 未覆盖与风险：transport 事件派发、grant/确认接线、工具执行归后续任务；fingerprint 仅内存态，进程重启后幂等键不保留（v1 会话级语义，符合预期）。`AGT-03` 转为 `DONE`，解锁 `AGT-04`、`AGT-06`、`AGT-11` 的 session 依赖。
+
+## AGT-04 原子范围（grant 模型与 default-deny 授权面）
+
+- 状态：`VERIFIED`；依赖 `AGT-02 DONE`、`AGT-03 DONE`、`PRV-08 DONE`。
+- 单一目标：`crayon-agent-gateway` 新增 `grant.rs`：单次（single-use）/任务（task）/App 会话（app_session）三类 grant 的签发、校验、撤销、Profile 隔离与目标变化失效，默认 deny；不含确认 UI、transport 与工具执行。
+- 输入：AG-003（grant 不跨 Profile/目标/会话且立即撤销）、AG-005（untrusted 内容不能扩大 grant）、AGT-02 registry 的 capability/risk、AGT-03 session 的 client token 口径（`is_token`）。
+- 输出与允许修改：`crates/crayon-agent-gateway/src/grant.rs`、`grant_tests.rs`、`lib.rs` 模块声明、本 Roadmap。Profile 隔离用 crate 内已校验 `ProfileScope` token 表达（不引入 `crayon-profile` 依赖）；时间调用方注入（`now_ms`），无锁/线程/IO；零第三方新增。
+- 边界：
+  - `GrantKind = SingleUse | Task | AppSession`；SingleUse 授权即消费；Task 绑定 task id 且授权计数有界；AppSession 绑定 client session token，session 关闭即全部失效。
+  - grant 绑定 `(session token, ProfileScope, capability, Option<AgentTarget>)` 四元组；authorize 必须全匹配才放行，任何不匹配/过期/撤销/未知都 deny（closed error），并提供到 `CaapError` 的稳定映射。
+  - 撤销：单 grant、整个 session、整个 Profile 三级，立即生效；`invalidate_target(tab)` 把绑定该 tab 的 grant 立即失效（AG-003 目标变化）。
+  - AG-005：authorize 只消费调用方给的 `(session, profile, capability, target)` 四元组，不存在任何以页面/工具输出为来源的扩大路径；grant 只能通过显式用户确认签发（本任务暴露 `issue`，调用方语义约束写入文档注释）。
+  - 容量有界（`MAX_GRANTS`），满载拒绝并计数；grant id 为内部不透明 token。
+- 验收与测试：`AG-003`、`AG-005` 的模型部分（确认 UI 归 AGT-05）。测试矩阵：kind 消费语义、四元组任一不匹配 deny、撤销三级立即生效、目标失效、过期（注入时钟）、容量、错误映射 golden、随机序列不变量（default-deny 永不放行未签发组合）。命令：`cargo test -p crayon-agent-gateway`、clippy `-D warnings`、fmt、workspace 基线回归、`git diff --check`。
+- 明确不做：确认 UI（AGT-05）、transport（AGT-12）、工具执行（AGT-07..10）、receipt（AGT-11）、grant 持久化（进程内 v1 语义）。
+
+### AGT-04 完成记录（2026-08-22）
+
+- 实现：`crayon-agent-gateway` 新增 `grant.rs`（约 430 行）：`GrantKind = SingleUse/Task/AppSession`；`GrantManager.issue` 校验 session/profile/task token（复用 registry `is_token` 闭合字符集）与 TTL（1..=MAX_GRANT_TTL_MS=1h），容量 `MAX_GRANTS=128` 满载拒绝；`authorize` 按 `(session, ProfileScope, capability, target)` 四元组 default-deny 匹配，优先未撤销匹配项，过期即移除并拒绝，SingleUse 授权即消费，Task grant 有 `MAX_TASK_GRANT_USES=64` 上限；撤销三级（单 grant 幂等/`revoke_session`/`revoke_profile`）立即生效；`invalidate_target(tab)` 只失效绑定该 tab 的 grant；`sweep_expired` 清扫；`GrantStats` 有界计数；`GrantError` 闭合枚举带稳定 Display 与 `to_caap_error()` 映射。AG-005 语义由结构保证：authorize 仅消费调用方四元组，模块内不存在以页面/模型/工具输出为输入的扩大路径，`issue` 的用户确认约束写入文档注释（确认 UI 归 AGT-05）。全同步、无锁/线程/IO/时钟（`now_ms` 注入）、无第三方新增。
+- 验证：`cargo test -p crayon-agent-gateway` 40/40 通过（grant 15 项：token/TTL/容量矩阵、SingleUse 消费、Task 用量上界、AppSession 过期、四元组任一不匹配 deny、未绑定目标授权任意目标、三级撤销立即生效与幂等、目标失效只杀绑定 grant 且不遮蔽新匹配、容量回收、sweep、错误 Display+CAAP 映射 golden、stats 计数、LCG 3000 步伪随机序列 default-deny 不变量）；`cargo clippy -p crayon-agent-gateway --all-targets -- -D warnings` 通过；`cargo fmt --all -- --check`、`git diff --check` 通过；基线回归 core lib 3/3、legacy-dev lib 58/58，workspace 全量无失败。
+- Code Review：P0 0、P1 0、P2 1（未绑定目标的 grant 可授权该 session+profile+capability 的任意目标——这是有意的默认语义，但 AGT-05 确认 UI 摘要必须显式区分"未绑定目标"与"绑定特定 tab"，避免用户误读授权范围；已在此记录，AGT-05 验收需覆盖）。
+- 未覆盖与风险：确认 UI（AGT-05）、transport 接线（AGT-12）、工具执行调度（AGT-07..10）、receipt（AGT-11）；grant 为进程内 v1 语义，无持久化；GrantId 为内部单调 id，transport 落地时如需跨进程引用须换成高熵 token（AGT-12 范围）。`AGT-04` 转为 `VERIFIED`（真机门禁不适用，纯模型任务；DONE 待 AGT-05 确认 UI 联动评审后统一处理）。

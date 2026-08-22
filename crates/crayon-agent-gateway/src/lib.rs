@@ -5,5 +5,6 @@
 //! app-runtime use cases.  This crate currently hosts the A0 wave tool
 //! registry (AGT-02).
 
+pub mod grant;
 pub mod registry;
 pub mod session;
