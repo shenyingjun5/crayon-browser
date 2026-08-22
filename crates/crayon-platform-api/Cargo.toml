@@ -1,0 +1,12 @@
+[package]
+name = "crayon-platform-api"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Platform adapter interface contracts (secure store, network, lifecycle, update, local IPC, client handoff)"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
