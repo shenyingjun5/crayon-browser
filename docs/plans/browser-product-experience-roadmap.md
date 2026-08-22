@@ -26,7 +26,7 @@
 | BUX-09 | DONE | BUX-03,PRV-03 | `browser/bookmarks`,`browser/shared-ui/bookmarks` | 书签 store、栏、管理器、搜索、导入/导出 | UX-008；事务/损坏/超大/重复/跨 Profile |
 | BUX-10 | DONE | BUX-06,PRV-03 | `browser/history`,`browser/shared-ui/history` | 历史、最近关闭、搜索、范围删除与恢复 | UX-009；无痕零持久化、删除边界、跨 Profile |
 | BUX-11 | DONE | CEF-05,BUX-02 | `browser/downloads`,`browser/shared-ui/downloads` | 下载 shelf/页、暂停/恢复/取消/重命名/打开位置和危险状态 | UX-010；路径、重复、断点、外部打开、失败释放 |
-| BUX-12 | TODO | BUX-05,PLT-02 | `browser/shared-ui/page-tools` | 查找、缩放、全屏、打印/PDF 与保存页面命令 | UX-011；取消/失败/输出路径/跨 Profile |
+| BUX-12 | VERIFIED | BUX-05,PLT-02 | `browser/shared-ui/page-tools` | 查找、缩放、全屏、打印/PDF 与保存页面命令 | UX-011；取消/失败/输出路径/跨 Profile |
 | BUX-13 | DONE | BUX-01,PRV-03 | `browser/preferences`,`browser/shared-ui/settings` | 版本化 preference store 与启动/搜索/外观/下载/内容设置 UI | UX-012；migration/corrupt/reset/restart readback |
 | BUX-14 | DONE | CEF-05,BUX-05,BUX-13 | `browser/shared-ui/site-controls` | 站点权限、安全信息、证书错误、popup 与外部协议确认 UI | UX-013；origin/Profile/TTL/取消/伪造/危险 scheme |
 | BUX-15 | TODO | CEF-04,PRV-01..04,BUX-06 | `browser/shared-ui/profiles`,`browser/session` | Profile picker、普通/无痕窗口、启动会话与崩溃恢复编排 | UX-014；清理失败、无痕不恢复、旧 session、跨 Profile |
@@ -332,3 +332,10 @@
   - 隐私配置与 provider 配置冲突时，以隐私配置为优先；冲突场景记录为 P2 跟踪项。
 - 验收与测试：UX-003B；provider 配置覆盖合法/损坏/空/多 provider/危险 scheme、HTTPS 升级开关矩阵（开/关/无 scheme 输入/有 scheme 输入）、隐私参数注入（Referer/Cookie 策略）、配置冲突降级。执行独立 provider configure/build/ctest、Windows Debug/Release build+ctest、适用 Google-style clang-format、`scripts/check.ps1 fast/security`、`git diff --check`。
 - 明确不做：不实现远程搜索建议 API、搜索引擎自动发现、搜索词补全、趋势搜索、语音搜索、地址栏安全标识渲染、自动填充或 macOS 实机；分别由后续任务和平台总验收完成。
+
+### BUX-12 完成记录（2026-08-22）
+
+- 实现：新增 `browser/shared-ui/page-tools/`（header/impl/CMake/契约测试各 1）。`FindBarController`：查找会话（query ≤1024 字节、大小写选项、match cursor wrap、EndFind 无残留清空）；`ZoomController`：17 档闭合缩放集合（25%..500%），ZoomIn/Out 沿集合步进且边界拒绝、SetZoom 仅接受集合成员；`FullscreenController`：Windowed→Entering→Fullscreen→Exiting 闭合迁移，过渡态抑制重复命令；`PageOutputJobController`：打印 PDF/保存页面共用作业管线（Idle→Preparing→Running→Succeeded/Failed/Cancelled，终态需 Acknowledge 复位），文件名闭合字符集校验（禁分隔符/前导点/超长），作业绑定 Profile token，跨 Profile 的成功投递 fail-closed 为 `kProfileMismatch` 且不产出（UX-011 输出路径受控、不泄漏其他 Profile）。无 CEF/平台类型、无 IO；单线程 UI 契约注明。
+- 验证：`cmake -S . -B .cache/build/page-tools -DCRAYON_BUILD_TESTS=ON -DCRAYON_ENABLE_CEF=OFF` configure/build 成功，`-Wall -Wextra -Wpedantic -Werror` 零告警；`ctest -R page_tools_contract` 1/1 通过（8 组：查找生命周期、缩放闭合集合与边界、全屏迁移、文件名矩阵、作业生命周期、失败/取消、跨 Profile fail-closed、Start 校验）；共享层回归 24/26 通过（2 失败为本机既有 CEF 环境阻塞 `cef_distribution_contract`/`cef_build_graph_contract`，与 PRV-06 记录一致，非本任务影响）；`git diff --check` 通过。
+- Code Review：P0 0、P1 0、P2 1（FindBarController 的 case_sensitive 只能在 StartFind 设置、无独立开关命令——与 Chrome Ctrl+F 行为一致，若后续 UX 评审需要查找栏内切换，再补独立任务）。
+- 未覆盖与风险：CEF shell 命令接线与 Windows/macOS 实机 UX 验收归 CEF/QAR 装配任务；打印/PDF 引擎侧与保存格式实现属 engine adapter。`BUX-12` 转为 `VERIFIED`（实机门禁后置）。
