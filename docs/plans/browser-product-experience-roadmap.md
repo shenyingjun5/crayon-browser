@@ -29,7 +29,7 @@
 | BUX-12 | VERIFIED | BUX-05,PLT-02 | `browser/shared-ui/page-tools` | 查找、缩放、全屏、打印/PDF 与保存页面命令 | UX-011；取消/失败/输出路径/跨 Profile |
 | BUX-13 | DONE | BUX-01,PRV-03 | `browser/preferences`,`browser/shared-ui/settings` | 版本化 preference store 与启动/搜索/外观/下载/内容设置 UI | UX-012；migration/corrupt/reset/restart readback |
 | BUX-14 | DONE | CEF-05,BUX-05,BUX-13 | `browser/shared-ui/site-controls` | 站点权限、安全信息、证书错误、popup 与外部协议确认 UI | UX-013；origin/Profile/TTL/取消/伪造/危险 scheme |
-| BUX-15 | TODO | CEF-04,PRV-01..04,BUX-06 | `browser/shared-ui/profiles`,`browser/session` | Profile picker、普通/无痕窗口、启动会话与崩溃恢复编排 | UX-014；清理失败、无痕不恢复、旧 session、跨 Profile |
+| BUX-15 | VERIFIED | CEF-04,PRV-01..04,BUX-06 | `browser/shared-ui/profiles`,`browser/session` | Profile picker、普通/无痕窗口、启动会话与崩溃恢复编排 | UX-014；清理失败、无痕不恢复、旧 session、跨 Profile |
 | BUX-16 | VERIFIED | BUX-05,BUX-11,PLT-02 | `browser/shared-ui/context-menu` | 上下文菜单、拖放、剪贴板与受控本地文件入口 | UX-015；上下文最小化、路径/scheme、取消/外部动作 |
 | BUX-17 | TODO | BUX-13,PRV-05,PRV-11 | `browser/autofill/address`,`browser/shared-ui/autofill` | 仅地址/联系信息的本地保存确认、匹配、编辑和删除；明确排除密码/支付 | UX-017；PII redaction、无痕、Agent 不可见、跨 Profile |
 | BUX-18 | TODO | BUX-01..17,CEF-14,PRV-12 | `tests/e2e/desktop/browser-ux`,`docs/current` | Windows/macOS 浏览器体验、性能、包体、隐私与品牌总 Review | UX-001..018；Debug/Release、P0/P1=0、未覆盖真机明确 |
@@ -346,3 +346,12 @@
 - 验证：`cmake -S . -B .cache/build/context-menu -DCRAYON_BUILD_TESTS=ON -DCRAYON_ENABLE_CEF=OFF` configure/build 零告警零错误；`ctest -R context_menu_contract` 1/1 通过（5 组：矩阵最小化、菜单生命周期与隐藏命令不可达、scheme 矩阵、剪贴板边界/来源、本地文件两步流）；共享层回归 25/27 通过（2 失败为本机既有 CEF 环境阻塞，与 BUX-12/PRV-06 记录一致）；`git diff --check` 通过。
 - Code Review：P0 0、P1 0、P2 1（拖放（drag-drop）目标侧策略未建模——本任务只覆盖菜单/剪贴板/文件入口命令面，拖放归 CEF shell 装配任务时按同 scheme/路径守卫接线，已在此记录归属）。
 - 未覆盖与风险：CEF shell 菜单呈现/拖放接线与实机验收归后续装配任务；剪贴板读取面（paste 内容来源）不在本模型。`BUX-16` 转为 `VERIFIED`（实机门禁后置）。
+
+### BUX-15 完成记录（2026-08-22）
+
+- 实现：新增两个平台中立模块（各 header/impl/CMake/契约测试）。
+  `browser/session`（`SessionRestoreCoordinator`）：按 Profile 隔离的会话记录（闭合 id token、窗口 ≤32/Profile、Profile ≤16、tab ≤64 全部有界，满载拒绝）；无痕窗口在 RecordWindow 层直接拒绝进入恢复集（无痕不恢复）；启动策略映射 preference 的 `startup_policy` 值（NewTab/Restore），PlanRestore 返回闭合决策（NewTabOnly/RestoreRecorded/RestoreAfterCrash）；崩溃恢复只恢复 Checkpoint 过的窗口，未确认 tail 丢弃并显式报告 dropped 数（旧 session 不误恢复）；每 Profile epoch 单调递增，旧 epoch 结果拒绝；ClearProfile 释放。
+  `browser/shared-ui/profiles`（`ProfilePickerModel`）：有界 Profile 列表（≤64、重复拒绝、id 与显示名分离字符集——id 无空格）；切换矩阵（Switched/UnknownProfile/AlreadyActive/Busy）；无痕窗口请求仅对活跃 Profile 成立且按构造不进入会话恢复；清理失败显式报告（ReportCleanupFailure 置位 pending、切换被 kBusy 阻塞、Acknowledge 后才放行——失败不被吞掉）。无 CEF/平台类型、无 IO；单线程 UI 契约注明。
+- 验证：`cmake -S . -B .cache/build/bux15 -DCRAYON_BUILD_TESTS=ON -DCRAYON_ENABLE_CEF=OFF` configure/build 零告警零错误；`session_restore_contract`（7 组：id 校验、无痕拒绝、策略决策、崩溃 tail 丢弃、旧 epoch 拒绝、跨 Profile 隔离、容量）与 `profile_picker_contract`（5 组：列表管理、开合、切换矩阵、无痕请求、清理失败显式）均 1/1 通过；共享层回归 27/29（2 失败为本机既有 CEF 环境阻塞，与前次记录一致）；`git diff --check` 通过。
+- Code Review：P0 0、P1 0、P2 1（会话记录为视图模型，未含磁盘持久化 schema——崩溃后进程内 tail 丢失语义与真实崩溃场景的 checkpoint 频率需在 CEF shell 接线时定义，持久化归后续 engine adapter 任务）。
+- 未覆盖与风险：CEF shell 装配（picker UI 呈现、无痕窗口创建接线、崩溃标记来源）、磁盘 session 持久化与实机验收归后续任务。`BUX-15` 转为 `VERIFIED`（实机门禁后置）。

@@ -57,6 +57,8 @@ add_subdirectory(browser/shared-ui/history)
 add_subdirectory(browser/shared-ui/settings)
 add_subdirectory(browser/shared-ui/page-tools)
 add_subdirectory(browser/shared-ui/context-menu)
+add_subdirectory(browser/session)
+add_subdirectory(browser/shared-ui/profiles)
 add_subdirectory(browser/shared-ui/site-controls)
 add_subdirectory(browser/shared-ui/new-tab)
 
