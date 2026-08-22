@@ -388,6 +388,7 @@ name = "crayon-agent-gateway"
 version = "0.1.0"
 dependencies = [
  "crayon-domain",
+ "crayon-ipc-schema",
 ]
 
 [[package]]

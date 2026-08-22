@@ -21,7 +21,7 @@
 |---|---|---|---|---|---|---|
 | AGT-01 | DONE | FND-08,PRV-08 | `crayon-domain/agent/**`,`crayon-ipc-schema/**`,`docs/current/**` | 冻结 CAAP v1 envelope、握手、版本/能力、target、stream、cancel、deadline、错误和 previous/current golden | `AG-001`; schema/compat/fuzz；无 OS/CEF/SDK 类型 | A0 |
 | AGT-02 | DONE | AGT-01 | `crayon-domain/agent/**`,`crayon-agent-gateway/registry/**` | Tool/capability/risk R0～R4 registry 与永久禁止清单 | `AG-001`,`AG-015`; registry snapshot | A0 |
-| AGT-03 | TODO | AGT-01,FND-09 | `crayon-agent-gateway/session/**` | client/task/session/target/generation、取消、超时、幂等和有界队列状态机 | `AG-002`; unit/property | A0 |
+| AGT-03 | DONE | AGT-01,FND-09 | `crayon-agent-gateway/session/**` | client/task/session/target/generation、取消、超时、幂等和有界队列状态机 | `AG-002`; unit/property | A0 |
 | AGT-04 | TODO | AGT-02,AGT-03,PRV-08 | `crayon-agent-gateway/grant/**` | 单次/任务/App 会话 grant、Profile 隔离、撤销和目标变化失效 | `AG-003`,`AG-005`; default deny | A0 |
 | AGT-05 | TODO | AGT-04,CEF-08 | `apps/desktop-cef/**/agent-confirm/**`,locales | 确认 UI：client、工具、route、目标、参数摘要、数据披露、到期和无障碍 | `AG-004`; UI integration | A0 |
 | AGT-06 | TODO | CNT-03,AGT-03 | `crayon-page-data/**`,`crayon-agent-gateway/page_stream/**` | generation-scoped 快照缓存、分页/流式/增量、索引、背压和性能 instrumentation | `AG-006`,`AG-015`; benchmark/soak | A1 |
@@ -103,3 +103,27 @@
 - 验证：`cargo test -p crayon-agent-gateway -p crayon-domain` 通过（registry 12 项：snapshot golden 逐行一致、capability-risk 全量自检、确认/可用性派生矩阵、重复/非法名/禁止清单 15 命中与 4 个误放行对照/容量 64 上界/参数形状/查找未知/确定序）；`cargo clippy -p crayon-agent-gateway -p crayon-domain --all-targets -- -D warnings` 通过；`cargo fmt --all -- --check` 通过；`git diff --check` 通过；基线回归 `crayon-browser-core --lib` 3/3、`--no-default-features --features legacy-dev --lib` 58/58、`crayon-profile` 42/42 不变。
 - Code Review：P0 0、P1 0、P2 1（`RegistryError::RiskMismatch` 为防御性保留——`ToolSpec::build` 私有且 risk 由 capability 派生，公共路径不可能构造矛盾 spec；保留作为注册入口纵深防御，后续若有第二个构造入口即生效）。
 - 未覆盖与风险：无工具执行/调度/grant/session（AGT-03/04/07..10）；snapshot golden 变更需与 Roadmap 同步评审。`AGT-02` 转为 `DONE`，解锁 `AGT-04`（另需 AGT-03）与后续工具实现任务的 registry 依赖。
+
+## AGT-03 原子范围（client/task/session/target/generation 状态机）
+
+- 状态：`DONE`；依赖 `AGT-01 DONE`、`FND-09 DONE`。
+- 单一目标：在 `crayon-agent-gateway` 交付 CAAP session 状态机——client session 集合（有界）、task 生命周期（Queued→Running→Completed/Failed/Cancelled 终态不可逆）、target generation 跟踪与旧结果丢弃、幂等键去重、deadline 清扫、chunk seq 单调分配、有界队列背压；本任务不做 transport、grant/确认、工具执行与 MCP 映射。
+- 输入：AG-002（重复 invoke/cancel、超时、旧 generation、断连、App/Profile/标签退出 → task 幂等收敛、旧结果丢弃、资源有界）、AGT-01 冻结的 `CaapRequest`/`CaapChunk`/`CaapCancel` 字段（deadline 为调用方注入 epoch ms；chunk seq 单调由本层校验）、domain `SessionGeneration`/`TabId`/`CaapError`、架构 §9（有界、幂等、逆序释放）。
+- 输出与允许修改：`crates/crayon-agent-gateway/src/session.rs` + `src/session_tests.rs`、`src/lib.rs`（仅加 `pub mod session;`）、`src/registry.rs`（仅把 `is_token` 提为 `pub(crate)` 复用）、`Cargo.toml`（crate 内追加 `crayon-ipc-schema` path 依赖，无第三方新增）、本 Roadmap 状态。
+- 禁止修改：AGT-01 golden 与 wire 消息、AGT-02 registry 行为与 snapshot、domain 既有类型、其他 crate；不得引入线程/时钟/IO（`now_ms` 由调用方注入）。
+- 边界：
+  - session  keyed by client token（同 registry 字符集 ≤64）；`MAX_SESSIONS=4`；每 session `MAX_TASKS=64`（满时先逐出最老终态 task，全为非终态才 `QueueFull`）。
+  - submit：request id 在 session 内唯一（重复 → `InvalidMessage`）；幂等键首发注册；同键同指纹（tool+target+params）→ 返回既有 task（去重）；同键异指纹 → `InvalidMessage`；提交时 `deadline_ms <= now_ms` → `DeadlineExceeded` 直接终态。
+  - target 必须先由调用方解析为具体 `TabId`（`ActiveTab` 解析归后续工具任务）；generation 按 TabId 跟踪，`advance_generation` 把该 tab 全部非终态 task 置为 `Failed(TargetStale)` 并返回清单；对已终态/已 stale task 的 chunk 与完成回调一律丢弃（`TargetStale` 或幂等 no-op），旧结果不得流出。
+  - cancel：Queued/Running → `Cancelled` 终态；终态 task 幂等 no-op；未知 id → `InvalidMessage`；断连（close_session）把该 session 全部非终态 task 置 `Cancelled` 并整体移除。
+  - chunk seq 每 task 从 0 单调分配，仅 Running 可发 chunk；final chunk 使 task → `Completed`；`sweep_expired(now)` 把到期非终态 task → `Failed(DeadlineExceeded)` 并返回清单。
+  - 全部状态迁移同步完成，无锁无 await；返回的事件清单供 transport 层派发，session 层不持有回调。
+- 验收与测试：AG-002。测试覆盖：session 开关与容量、request id 重复、幂等去重/异指纹拒绝、deadline 即过期与 sweep、cancel 三分支（含重复 cancel 幂等）、generation advance 使 task stale、stale task 的 chunk/complete 被拒、close_session 收敛、chunk seq 单调与非 Running 拒绝、终态不可逆、容量逐出策略、确定性伪随机（LCG）操作序列不变量（容量上界/终态不回退/seq 单调/无 stale 交付）。命令：`cargo test -p crayon-agent-gateway`、clippy `-D warnings`、fmt、workspace 基线回归、`git diff --check`。
+- 明确不做：transport（AGT-12）、grant/确认（AGT-04/05）、工具执行与 app-runtime 接线（AGT-07..10）、receipt（AGT-11）、MCP 映射（AGT-14）。
+
+### AGT-03 完成记录（2026-08-22）
+
+- 实现：`crayon-agent-gateway` 新增 `session.rs`（442 行）：`SessionManager` 管理有界 session 集合（`MAX_SESSIONS=4`，client token 复用 registry `is_token` 校验，提为 `pub(crate)`）与每 session 64 task 容量（满时逐出最老终态，全 live 才 `QueueFull`）；task 生命周期 Queued→Running→Completed/Failed/Cancelled，终态不可逆；幂等键去重（同指纹 `Duplicate` 返回既有 id/状态，异指纹 `InvalidMessage`）；deadline 提交即检（`<=now` 直接 `Failed(DeadlineExceeded)` 终态并参与去重）与 `sweep_expired` 清扫；generation 按 TabId 跟踪，`advance_generation` 收敛该 tab 全部旧 generation 非终态 task 为 `Failed(TargetStale)`，stale task 的 start/complete/fail/chunk 一律拒绝（`TargetStale`），旧结果不可流出；cancel 三分支幂等；`close_session` 收敛并移除整个 session；chunk seq 每 task 从 0 单调分配，final chunk 完成 task；全部迁移同步完成，无锁/线程/IO/时钟，`now_ms` 调用方注入。crate 追加 `crayon-ipc-schema` path 依赖（复用 `CaapRequest`/`SchemaVersion`），无第三方新增。
+- 验证：`cargo test -p crayon-agent-gateway` 25/25 通过（session 13 项：名称/容量/重复拒绝矩阵、幂等去重与异指纹、deadline 即过期与 sweep、cancel 幂等、chunk seq 生命周期、终态不可逆、generation 精确收敛与 stale 拒绝、close_session 收敛、容量逐出+全 live QueueFull、LCG 3000 步伪随机序列不变量——容量上界/终态不回退/seq 单调）；`cargo clippy --all-targets -- -D warnings` 通过；fmt、`git diff --check` 通过；基线回归 core lib 3/3、legacy-dev lib 58/58、profile 42/42 不变，workspace 全量无失败。
+- Code Review：P0 0、P1 0、P2 1（idempotency fingerprint 在内存中拼接参数值如 URL——不落盘不进日志，AGT-11 receipt 必须另行脱敏，其任务行已注明"无正文/query/secret"）。
+- 未覆盖与风险：transport 事件派发、grant/确认接线、工具执行归后续任务；fingerprint 仅内存态，进程重启后幂等键不保留（v1 会话级语义，符合预期）。`AGT-03` 转为 `DONE`，解锁 `AGT-04`、`AGT-06`、`AGT-11` 的 session 依赖。

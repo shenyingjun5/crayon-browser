@@ -232,7 +232,7 @@ impl Error for RegistryError {}
 
 /// Reports whether `name` uses the closed token charset `[a-z0-9_.:-]`
 /// within `max_len`.
-fn is_token(name: &str, max_len: usize) -> bool {
+pub(crate) fn is_token(name: &str, max_len: usize) -> bool {
     !name.is_empty()
         && name.len() <= max_len
         && name.bytes().all(|byte| {

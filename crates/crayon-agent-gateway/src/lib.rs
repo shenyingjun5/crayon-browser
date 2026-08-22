@@ -6,3 +6,4 @@
 //! registry (AGT-02).
 
 pub mod registry;
+pub mod session;

@@ -11,3 +11,4 @@ workspace = true
 
 [dependencies]
 crayon-domain = { path = "../crayon-domain" }
+crayon-ipc-schema = { path = "../crayon-ipc-schema" }
