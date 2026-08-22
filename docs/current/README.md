@@ -23,11 +23,12 @@
 |---|---|
 | [CEF distribution](cef-distribution.md) | CEF 固定版本、已完成 hash/缓存/许可基线；Linux hash 仅是历史 `CEF-01A` 证据，不代表当前支持 |
 | [FND migration review](fnd-migration-review.md) | Foundation 迁移和 Review 证据 |
+| [威胁模型](threat-model.md) | PRV-10 交付的资产/信任边界/威胁/缓解/残余风险与安全用例映射 |
 | [MED security review](med-security-review.md) | `MED-01..18` 历史策略/Relay 安全证据；Mirror 语义已由 `MED-19` 迁移为 `ExternalClientHandoff` |
 | [CAAP v1 契约](caap-v1.md) | `AGT-01` 冻结的 Agent 协议 envelope/握手/能力/错误码与 golden 兼容窗口 |
 | [Agent-native PRD 补充稿](../AI投屏浏览器_PRD更新稿_Agent-Native-Browser.md) | v0.7 的重要输入材料；不是独立权威契约，冲突处以当前 PRD/架构/Roadmap 为准 |
 
-Cast-SDK source lock 的当前事实位于 `config/cast-sdk-source.toml`、`.gitmodules`、`SDK-01` Roadmap 证据和真实 gitlink；当前不存在独立的 source decision/threat-model 文档，后续任务不得引用不存在的文件作为完成证据。
+Cast-SDK source lock 的当前事实位于 `config/cast-sdk-source.toml`、`.gitmodules`、`SDK-01` Roadmap 证据和真实 gitlink；source decision 仍无独立文档，不得引用不存在的文件作为完成证据；威胁模型自 PRV-10 起位于 [threat-model.md](threat-model.md)。
 
 ## 3. 已确认产品范围
 

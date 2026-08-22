@@ -180,3 +180,11 @@
 - 失败基线：首轮 `redaction_scrubs_tokens_and_params` 失败——测试预期整体擦除 token 参数（含键名），实现为保留键名只擦值；复核 RL-014 口径后确认“键名可见、值擦除”更利于诊断且满足无 token 泄漏，修正测试预期并锁定该语义，证明测试对实现行为有真实判别力。
 - Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；P0/P1/P2 均为 `0`。诊断不参与主业务正确性：生产者满队列只丢弃计数、不阻塞不失败；错误闭合枚举不携带载荷。
 - 未覆盖与风险：遥测开关、发送前预览 UI 与网络发送管线归 `PRV-09`；生产 redaction 与 test-support `LeakScanner` 为独立实现（规则口径两侧注释对齐），联合零泄漏扫描归 `PRV-11`。`PRV-08` 转为 `DONE`，解锁 `PRV-09`。
+
+## PRV-10 完成记录（威胁模型 v1.0）
+
+- 状态：`VERIFIED`；依赖 `MED-18 DONE`、`SDK-12 DONE`。
+- 实现：新增 `docs/current/threat-model.md`（权威安全契约）：§2 资产与安全目标（凭证/历史/投屏会话/Agent 授权面/系统资源/供应链）；§3 七条信任边界（B1 网页内容一律不可信 → B7 供应链）与跨界数据规则（untrusted 内容不扩大 grant、入站/出站分离、引擎/CDP/平台类型不进公共 schema）；§4 按七个领域的威胁/缓解/证据矩阵——网页内容、IPC/LAN 投屏与 Relay、入站 CAAP/CLI/MCP、语义动作、Workflow/Challenge、出站 Partner connector、模型与供应链，每行标注当前实现状态（已实现的引用 PL/RL/PV/AG/AC/CS 用例与 PLT-01/AGT-02..04/11/PRV-06..08 等 DONE 证据，未实现的注明归属任务）；§5 残余风险登记六项（SDK-13 真机 BLOCKED、AGT transport/UI 未落地、ACT/WFL/HUB 契约级缓解、DASH v1 缺口、平台清理限制、注入长文变体）；§6 安全用例映射（PL/RL/CS/PV/AG/AC/E2E/CP 族全覆盖核对规则）；§7 维护规则（专项 Review 回填）。
+- 验证：用例映射无缺口经脚本核对（test-cases.md 全部安全用例族均在文档 §6 出现，missing=none）；`git diff --check` 通过。纯文档任务，无代码/构建影响（workspace 测试未运行——不适用）。
+- Code Review：P0 0、P1 0、P2 0（对照 PRD 红线逐条核对：DRM/广告/验证码/文件上传/WebRTC 采集/开放代理/凭证外泄均有威胁行与归属；模型不参与安全决策边界与架构 v0.7 一致）。
+- 未覆盖与风险：ACT/WFL/HUB/QAR 威胁行为契约级描述，模块落地后专项 Review 必须回填；SDK-13 真机证据待真机环境。`PRV-10` 转为 `VERIFIED`，解锁 `AGT-12`（AGT-04/AGT-11/PLT-01/PRV-10 全满足）与 `PRV-11`（另需 PRV-05/09）。
