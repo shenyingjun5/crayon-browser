@@ -29,7 +29,7 @@
 | AGT-08 | TODO | AGT-04,SDK-08 | `crayon-agent-gateway/tools/cast_read/**` | R0/R1 接收端能力和投屏状态读取，不返回 IP/URL/token | `AG-007`; adapter tests | A1 |
 | AGT-09 | TODO | AGT-05,CEF-07,ACT-07,ACT-11 | `crayon-agent-gateway/tools/navigation/**`,`crayon-app-runtime/**` | R2 打开/切换/关闭标签、导航、后退、刷新、滚动及人工接管结果 | `AG-008`; scheme/redirect/download/popup/cancel | A2 |
 | AGT-10 | TODO | AGT-05,SDK-12,MED-19 | `crayon-agent-gateway/tools/cast_control/**` | R3 选择设备、开始/暂停/seek/停止；沿用正常投屏门禁 | `AG-009`; 目标变化重确认；不控制外部镜像客户端 | A2 |
-| AGT-11 | TODO | AGT-03,AGT-04 | `crayon-agent-gateway/receipt/**`,diagnostics | 有界脱敏 action receipt、TTL、用户预览/清除 | `AG-011`,`PV-010`; 无正文/query/secret | A0 |
+| AGT-11 | VERIFIED | AGT-03,AGT-04 | `crayon-agent-gateway/receipt/**`,diagnostics | 有界脱敏 action receipt、TTL、用户预览/清除 | `AG-011`,`PV-010`; 无正文/query/secret | A0 |
 | AGT-12 | TODO | AGT-04,AGT-11,PRV-10,PLT-01 | `apps/desktop-cef/agent-transport/**`,`crayon-platform-api/**` | Windows named pipe/macOS UDS CAAP transport；当前用户 ACL、限流、单客户端、stop | `AG-012`; 恶意本机 client/replay/oversize | A1 |
 | AGT-13 | TODO | AGT-05,AGT-07,AGT-08,AGT-12 | `apps/agent-cli/**`,docs/tests | R0/R1 CLI Developer Preview；机器可读结果、版本、cancel | `AG-013`; 无交互不绕确认 | A1 |
 | AGT-14 | TODO | AGT-05,AGT-07,AGT-08,AGT-12 | `apps/mcp/**`,MCP contracts | 只读 MCP Developer Preview，将 initialize/list/call/cancel 映射到 CAAP | `AG-014`; schema 同源、loopback only | A1 |
@@ -149,3 +149,24 @@
 - 验证：`cargo test -p crayon-agent-gateway` 40/40 通过（grant 15 项：token/TTL/容量矩阵、SingleUse 消费、Task 用量上界、AppSession 过期、四元组任一不匹配 deny、未绑定目标授权任意目标、三级撤销立即生效与幂等、目标失效只杀绑定 grant 且不遮蔽新匹配、容量回收、sweep、错误 Display+CAAP 映射 golden、stats 计数、LCG 3000 步伪随机序列 default-deny 不变量）；`cargo clippy -p crayon-agent-gateway --all-targets -- -D warnings` 通过；`cargo fmt --all -- --check`、`git diff --check` 通过；基线回归 core lib 3/3、legacy-dev lib 58/58，workspace 全量无失败。
 - Code Review：P0 0、P1 0、P2 1（未绑定目标的 grant 可授权该 session+profile+capability 的任意目标——这是有意的默认语义，但 AGT-05 确认 UI 摘要必须显式区分"未绑定目标"与"绑定特定 tab"，避免用户误读授权范围；已在此记录，AGT-05 验收需覆盖）。
 - 未覆盖与风险：确认 UI（AGT-05）、transport 接线（AGT-12）、工具执行调度（AGT-07..10）、receipt（AGT-11）；grant 为进程内 v1 语义，无持久化；GrantId 为内部单调 id，transport 落地时如需跨进程引用须换成高熵 token（AGT-12 范围）。`AGT-04` 转为 `VERIFIED`（真机门禁不适用，纯模型任务；DONE 待 AGT-05 确认 UI 联动评审后统一处理）。
+
+## AGT-11 原子范围（有界脱敏 action receipt）
+
+- 状态：`VERIFIED`；依赖 `AGT-03 DONE`、`AGT-04 DONE`。
+- 单一目标：`crayon-agent-gateway` 新增 `receipt.rs`：agent 已执行动作的有界、脱敏、TTL receipt 记录，支持用户预览（导出快照）与清除；不含正文、完整 query、Cookie、Authorization、token。
+- 输入：AG-011（预览/清除 receipt，有界 TTL，无正文/query/secret）、PV-010（预览与实际内容一致）、AGT-03 session 的 client token 口径、AGT-02 registry 的工具名闭合集合、PRV-08 `DataClass::Diagnostic` 诊断口径与 `redact_sensitive`。
+- 输出与允许修改：`crates/crayon-agent-gateway/src/receipt.rs`、`receipt_tests.rs`、`lib.rs` 模块声明、本 Roadmap。全同步、无锁/线程/IO/时钟（`now_ms` 注入）、无第三方新增；不落盘（进程内 v1 语义）。
+- 边界：
+  - `ActionReceipt` 字段全部为闭合 token/枚举：client session、tool 名、capability、risk、目标描述（tab id token 或 `active`）、GrantId、闭合 outcome、时间戳、错误码（可选）；不存在自由文本参数快照。
+  - 容量 `MAX_RECEIPTS`（满载逐出最老）与 `RECEIPT_TTL_MS` 有界；`sweep_expired` 清扫。
+  - `preview()` 返回用户可见快照，内容与内存记录逐字段一致（PV-010）；`clear_all()`/`clear_session()` 立即清除。
+  - 防泄漏测试：对所有字段值断言不含正文特征与 secret 模式（复用 domain `redact_sensitive` 语义或等价断言），并验证 `to_diagnostic_event()` 产出 `DataClass::Diagnostic` 事件。
+- 验收与测试：AG-011/PV-010 模型部分。矩阵：记录校验、TTL 过期与 sweep、容量逐出、预览一致性、清除、泄漏扫描、诊断事件映射、随机序列不变量。命令：`cargo test -p crayon-agent-gateway`、clippy `-D warnings`、fmt、workspace 基线、`git diff --check`。
+- 明确不做：transport（AGT-12）、工具执行接线（AGT-07..10）、确认 UI（AGT-05）、持久化与跨进程导出。
+
+### AGT-11 完成记录（2026-08-22）
+
+- 实现：`crayon-agent-gateway` 新增 `receipt.rs`（约 300 行）：`ActionReceipt` 字段全为闭合 token/枚举（client、tool、capability、risk、目标描述 token、GrantId、闭合 outcome、可选闭合错误码、时间戳），无自由文本参数快照，正文/query/Cookie/Authorization/token 在类型上不可表达；`ReceiptStore` 容量 `MAX_RECEIPTS=256`（满载逐出最老）+ `RECEIPT_TTL_MS=24h`；`preview(now)` 用户可见快照与保留记录逐字段一致（PV-010）；`clear_all`/`clear_client` 立即清除；`sweep_expired` 清扫；`to_diagnostic_event()` 产出 PRV-08 `DataClass::Diagnostic` 事件（tool/risk/outcome/target/error_code 全闭合 token）；`ReceiptError` 闭合枚举。全同步、无锁/IO/时钟（`now_ms` 注入）、不落盘；`GrantId` 内部字段提为 `pub(crate)` 供同 crate 构造，无第三方新增。
+- 验证：`cargo test -p crayon-agent-gateway` 48/48 通过（receipt 8 项：字段校验矩阵、泄漏标记扫描、TTL 过期与 sweep、容量逐出最老、预览一致性、清除、诊断事件映射 golden、LCG 3000 步容量/泄漏不变量）；`cargo clippy -p crayon-agent-gateway --all-targets -- -D warnings` 通过；fmt、`git diff --check` 通过；基线 core lib 3/3、legacy-dev 58/58 不变，workspace 全量无失败。
+- Code Review：P0 0、P1 0、P2 0（AGT-03 遗留 P2 已按本任务"无正文/query/secret"口径关闭：receipt 不含参数值，fingerprint 脱敏风险不再外溢）。
+- 未覆盖与风险：transport 接线（AGT-12）、工具执行记录入口（AGT-07..10 调用 `record`）、用户预览 UI 与磁盘导出（后续 BUX/PRV 任务）；receipt 进程内 v1 语义，重启即清。`AGT-11` 转为 `VERIFIED`，解锁 `AGT-12` 的 receipt 依赖（另需 `PRV-10`、`PLT-01 DONE` 已满足）。

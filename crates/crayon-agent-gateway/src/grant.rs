@@ -127,7 +127,7 @@ impl ProfileScope {
 
 /// Opaque grant identifier issued by [`GrantManager::issue`].
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub struct GrantId(u64);
+pub struct GrantId(pub(crate) u64);
 
 /// A single issued grant.
 #[derive(Clone, Debug, Eq, PartialEq)]
