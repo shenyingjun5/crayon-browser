@@ -170,3 +170,23 @@
 - 验证：`cargo test -p crayon-agent-gateway` 48/48 通过（receipt 8 项：字段校验矩阵、泄漏标记扫描、TTL 过期与 sweep、容量逐出最老、预览一致性、清除、诊断事件映射 golden、LCG 3000 步容量/泄漏不变量）；`cargo clippy -p crayon-agent-gateway --all-targets -- -D warnings` 通过；fmt、`git diff --check` 通过；基线 core lib 3/3、legacy-dev 58/58 不变，workspace 全量无失败。
 - Code Review：P0 0、P1 0、P2 0（AGT-03 遗留 P2 已按本任务"无正文/query/secret"口径关闭：receipt 不含参数值，fingerprint 脱敏风险不再外溢）。
 - 未覆盖与风险：transport 接线（AGT-12）、工具执行记录入口（AGT-07..10 调用 `record`）、用户预览 UI 与磁盘导出（后续 BUX/PRV 任务）；receipt 进程内 v1 语义，重启即清。`AGT-11` 转为 `VERIFIED`，解锁 `AGT-12` 的 receipt 依赖（另需 `PRV-10`、`PLT-01 DONE` 已满足）。
+
+## AGT-12 原子范围（transport 守卫层，AGT-12A 切片）
+
+- 状态：`VERIFIED`（AGT-12A 守卫层切片）；依赖 `AGT-04 DONE`、`AGT-11 DONE`、`PRV-10 VERIFIED`、`PLT-01 DONE`。
+- 路径修订说明：原允许路径 `apps/desktop-cef/agent-transport/**` 的目录尚不存在（CEF 壳位于 `browser/cef-shell`，桌面 app 装配归 CEF/QAR 后续任务），且 named pipe/UDS 的 OS 端点绑定属平台实现。本切片把 transport 无关的守卫层落在 `crayon-agent-gateway`（与 session/grant/receipt 同 crate，schema 同源），OS 端点绑定（Windows named pipe ACL、macOS UDS peer credentials 实测）保留为后续平台切片，复用 `crayon-platform-api::LocalAgentIpcEndpoint` 契约。
+- 单一目标：新增 `crayon-agent-gateway/src/transport.rs`：CAAP 帧编解码（长度前缀 + 上限）、单客户端接入、每客户端限流、重放/超大/畸形拒绝与幂等 stop；不含 OS socket、确认 UI、工具执行。
+- 边界：
+  - `FrameCodec`：`u32 BE 长度 + payload` 流式解码；`MAX_FRAME_BYTES=65536` 上限，超限/畸形/残留字节闭合拒绝；部分帧等待更多数据。
+  - `TransportGuard`：单客户端（首个接入者绑定，断开/stop 前拒绝第二者）；令牌桶限流（容量/间隔常量、`now_ms` 注入、满载拒绝）；request-id 重放拒绝（有界 seen 集合）；畸形帧 strike 计数超阈值断开。
+  - `stop` 幂等并释放客户端占用；`TransportError` 闭合枚举 + `to_caap_error()` 映射。
+  - 全同步、无锁/线程/IO/时钟注入、无第三方新增；帧载荷不解析、不记录。
+- 验收与测试：AG-012 守卫语义部分。矩阵：编解码（完整/分片/超限/畸形/残留）、单客户端、限流（窗口边界/恢复）、重放、strike 断开、stop 幂等、错误映射 golden、LCG 不变量。命令：`cargo test -p crayon-agent-gateway`、clippy `-D warnings`、fmt、workspace 基线、`git diff --check`。
+- 明确不做：OS named pipe/UDS 端点绑定与真实 peer credential/ACL 实测（后续平台切片，真机归 PLT-W04/M04 门禁）、确认 UI（AGT-05）、工具执行（AGT-07..10）、MCP 映射（AGT-14）。
+
+### AGT-12A 完成记录（2026-08-22，transport 守卫层切片）
+
+- 实现：`crayon-agent-gateway` 新增 `transport.rs`（约 300 行）：`FrameCodec` 流式 `u32 BE 长度前缀`解码，`MAX_FRAME_BYTES=65536` 硬上限（超限帧返回 Oversize 并丢弃 header、payload 视为 poisoned；单次 feed 超 `2*MAX` 直接 fail-closed 拒绝且不缓存）；`TransportGuard` 单客户端绑定（首者绑定、幂等重绑、第二者 `ClientBound` 拒绝）、令牌桶限流（`RATE_BURST=32`、`RATE_INTERVAL_MS=100`、`now_ms` 注入、满载 `RateLimited`）、request-id 重放拒绝（`MAX_SEEN_IDS=512` 有界窗口，语义级幂等仍由 AGT-03 session 保证）、strike 计数（`MAX_STRIKES=8` 满则断开并复位）；`stop`/`disconnect` 幂等并释放；`TransportError` 闭合枚举 + `to_caap_error()` 映射。全同步、无锁/线程/IO/时钟、无第三方新增；帧载荷不解析不记录。
+- 验证：`cargo test -p crayon-agent-gateway` 60/60 通过（transport 12 项：往返/分片/背靠背/最大合法帧/超限/buffer fail-closed、单客户端矩阵、限流突发耗尽与恢复、重放有界窗口、strike 阈值断开、stop 幂等、错误 Display+CAAP golden、LCG 3000 步敌意流不变量——无 panic、strike 上界、pending 有界）；`cargo clippy -p crayon-agent-gateway --all-targets -- -D warnings` 通过；fmt、`git diff --check` 通过；基线 core lib 3/3、legacy-dev 58/58、workspace 全量无失败。
+- Code Review：P0 0、P1 0、P2 1（重放窗口 512 条滑出后旧 id 可再次通过 transport 层——已注明由 AGT-03 session 幂等键提供语义级去重兜底，且窗口大小在 AGT-15 fuzz 时应结合实际 chunk 速率复核）。
+- 未覆盖与风险：OS named pipe/UDS 端点绑定、真实 peer credential/ACL 实测（后续平台切片，Windows 真机归 PLT-W04 门禁）、与 session/grant 的运行时装配、MCP 映射（AGT-14）。`AGT-12A` 转为 `VERIFIED`；AGT-12 整体 DONE 待 OS 端点切片与实机门禁。
