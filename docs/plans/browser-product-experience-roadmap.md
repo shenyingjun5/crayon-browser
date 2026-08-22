@@ -30,7 +30,7 @@
 | BUX-13 | DONE | BUX-01,PRV-03 | `browser/preferences`,`browser/shared-ui/settings` | 版本化 preference store 与启动/搜索/外观/下载/内容设置 UI | UX-012；migration/corrupt/reset/restart readback |
 | BUX-14 | DONE | CEF-05,BUX-05,BUX-13 | `browser/shared-ui/site-controls` | 站点权限、安全信息、证书错误、popup 与外部协议确认 UI | UX-013；origin/Profile/TTL/取消/伪造/危险 scheme |
 | BUX-15 | TODO | CEF-04,PRV-01..04,BUX-06 | `browser/shared-ui/profiles`,`browser/session` | Profile picker、普通/无痕窗口、启动会话与崩溃恢复编排 | UX-014；清理失败、无痕不恢复、旧 session、跨 Profile |
-| BUX-16 | TODO | BUX-05,BUX-11,PLT-02 | `browser/shared-ui/context-menu` | 上下文菜单、拖放、剪贴板与受控本地文件入口 | UX-015；上下文最小化、路径/scheme、取消/外部动作 |
+| BUX-16 | VERIFIED | BUX-05,BUX-11,PLT-02 | `browser/shared-ui/context-menu` | 上下文菜单、拖放、剪贴板与受控本地文件入口 | UX-015；上下文最小化、路径/scheme、取消/外部动作 |
 | BUX-17 | TODO | BUX-13,PRV-05,PRV-11 | `browser/autofill/address`,`browser/shared-ui/autofill` | 仅地址/联系信息的本地保存确认、匹配、编辑和删除；明确排除密码/支付 | UX-017；PII redaction、无痕、Agent 不可见、跨 Profile |
 | BUX-18 | TODO | BUX-01..17,CEF-14,PRV-12 | `tests/e2e/desktop/browser-ux`,`docs/current` | Windows/macOS 浏览器体验、性能、包体、隐私与品牌总 Review | UX-001..018；Debug/Release、P0/P1=0、未覆盖真机明确 |
 
@@ -339,3 +339,10 @@
 - 验证：`cmake -S . -B .cache/build/page-tools -DCRAYON_BUILD_TESTS=ON -DCRAYON_ENABLE_CEF=OFF` configure/build 成功，`-Wall -Wextra -Wpedantic -Werror` 零告警；`ctest -R page_tools_contract` 1/1 通过（8 组：查找生命周期、缩放闭合集合与边界、全屏迁移、文件名矩阵、作业生命周期、失败/取消、跨 Profile fail-closed、Start 校验）；共享层回归 24/26 通过（2 失败为本机既有 CEF 环境阻塞 `cef_distribution_contract`/`cef_build_graph_contract`，与 PRV-06 记录一致，非本任务影响）；`git diff --check` 通过。
 - Code Review：P0 0、P1 0、P2 1（FindBarController 的 case_sensitive 只能在 StartFind 设置、无独立开关命令——与 Chrome Ctrl+F 行为一致，若后续 UX 评审需要查找栏内切换，再补独立任务）。
 - 未覆盖与风险：CEF shell 命令接线与 Windows/macOS 实机 UX 验收归 CEF/QAR 装配任务；打印/PDF 引擎侧与保存格式实现属 engine adapter。`BUX-12` 转为 `VERIFIED`（实机门禁后置）。
+
+### BUX-16 完成记录（2026-08-22）
+
+- 实现：新增 `browser/shared-ui/context-menu/`（header/impl/CMake/契约测试各 1）。`IsAvailableIn` 闭合可用性矩阵实现上下文最小化（Link/Image/Selection/Page 四上下文各自命令集，隐藏命令在 `Execute` 层稳定拒绝）；`ValidateContextUrl` 闭合 scheme 守卫（仅 `http`/`https` 可打开，`javascript:`/`data:`/`file:`/`vbscript:`/`blob:` 等一律 `kSchemeRejected`，空/无 scheme/超 2048 字节 `kMalformed`）；`ClipboardGuard` 用户命令复制（页面来源拒绝、1MiB 上限、Acknowledge 后清空缓冲）；`LocalFileEntryGuard` 受控本地文件入口（闭合字符集、禁分隔符/前导点/`..`/超长、单一 pending、两步 Request→Confirm/Cancel、页面来源不可发起）。无 CEF/平台类型、无 IO；单线程 UI 契约注明。
+- 验证：`cmake -S . -B .cache/build/context-menu -DCRAYON_BUILD_TESTS=ON -DCRAYON_ENABLE_CEF=OFF` configure/build 零告警零错误；`ctest -R context_menu_contract` 1/1 通过（5 组：矩阵最小化、菜单生命周期与隐藏命令不可达、scheme 矩阵、剪贴板边界/来源、本地文件两步流）；共享层回归 25/27 通过（2 失败为本机既有 CEF 环境阻塞，与 BUX-12/PRV-06 记录一致）；`git diff --check` 通过。
+- Code Review：P0 0、P1 0、P2 1（拖放（drag-drop）目标侧策略未建模——本任务只覆盖菜单/剪贴板/文件入口命令面，拖放归 CEF shell 装配任务时按同 scheme/路径守卫接线，已在此记录归属）。
+- 未覆盖与风险：CEF shell 菜单呈现/拖放接线与实机验收归后续装配任务；剪贴板读取面（paste 内容来源）不在本模型。`BUX-16` 转为 `VERIFIED`（实机门禁后置）。
