@@ -10,7 +10,7 @@
 | ID | 状态 | 依赖 | 允许修改路径 | 交付目标 | 验收/测试 | 阶段 |
 |---|---|---|---|---|---|---|
 | PLT-01 | DONE | FND-09 | `crates/crayon-platform-api/**` | 定义安全存储、本地网络、生命周期、更新、当前用户本机 IPC 和外部客户端交接接口 | `CP-004`,`CP-W01`,`CP-M01`,`AG-012`; unit | V1 |
-| PLT-02 | TODO | PLT-01,FND-10 | `crates/crayon-platform-api/**`, `crates/crayon-platform-capabilities/**` | 定义 `secure_store`、`local_network`、`lifecycle`、`update`、`local_agent_ipc`、`external_client_handoff` 能力模型 | `CP-004`,`AG-012`; schema/golden | V1 |
+| PLT-02 | DONE | PLT-01,FND-10 | `crates/crayon-platform-api/**`, `crates/crayon-platform-capabilities/**` | 定义 `secure_store`、`local_network`、`lifecycle`、`update`、`local_agent_ipc`、`external_client_handoff` 能力模型 | `CP-004`,`AG-012`; schema/golden | V1 |
 | PLT-W04 | TODO | PLT-02,CEF-12,SDK-08 | `platform/windows/**` | 实现 DPAPI、本地网络/防火墙、多网卡、睡眠唤醒、更新、当前用户 named pipe 与投屏客户端交接 | `CP-W01`,`AG-012`; Windows integration | V4W |
 | PLT-W05 | TODO | PLT-W04,CEF-15,SDK-14,PRV-12 | `apps/desktop-cef/**`, `platform/windows/**` | Windows 产品装配与 Direct/Relay/外部客户端交接验收 | `E2E-001..005`,`CP-W01`; Windows device | V4W |
 | PLT-M04 | TODO | PLT-02,CEF-01E,CEF-12,SDK-08 | `platform/macos/**` | 实现 Keychain、本地网络权限、生命周期、更新、当前用户 UDS 与投屏客户端交接 | `CP-M01`,`AG-012`; macOS integration | V4M |
@@ -65,3 +65,26 @@
 - 自动验证：`cargo test -p crayon-platform-api` 24/24 通过（17 项模块内测试：key/value/接口名/计数校验矩阵、四个模块错误 Display golden、UpdateState 合法表 12 条 + 非法表 9 条 + 全命令 happy path、PeerIdentity 门禁矩阵、handoff purpose 矩阵与结果闭合；7 项 contract 测试：六个 trait 对象安全编译断言、std::error::Error 实现、handoff 请求闭合面、CP-004 事件覆盖、loopback 标志、更新迁移全函数性、AG-012 合取门禁、无 mirror 变体）；`cargo clippy -p crayon-platform-api --all-targets -- -D warnings` 零告警；`cargo fmt --all -- --check` 通过；workspace 基线 3/3 与 58/58、domain/ipc-schema/profile 全量回归通过；`git diff --check` 通过。
 - Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；P0/P1/P2 均为 `0`。交接请求类型上无法携带页面数据；更新迁移为全函数（6 态 × 10 命令全部有定义结果）；listener 替换式注册避免无界回调累积。
 - 未覆盖与风险：Windows DPAPI/named pipe 与 macOS Keychain/UDS 真实实现归 `PLT-W04/PLT-M04`（真机门禁）；能力模型 schema/golden 归 `PLT-02`；重建实现仅由幸存测试约束，若原半成品存在测试未引用的额外 API 面则不可恢复（已核对 Roadmap 范围，无缺口）。`PLT-01` 转为 `DONE`，解锁 `PLT-02`。
+
+## PLT-02 原子范围（平台能力模型 schema 与 golden）
+
+- 状态：`DONE`；依赖 `PLT-01 DONE`、`FND-10 DONE`。
+- 单一目标：新建 `crates/crayon-platform-capabilities`，为 PLT-01 六个接口面定义只读能力模型（serde wire schema v1 + golden 向量 + 一致性折叠规则），共享策略按声明能力分支而非 OS 判断；本任务不做任何平台探测实现。
+- 输入：PLT-01 六接口面、FND-08 `PlatformCapabilities` 的模式（启动时收集一次、之后只读、wire 不携带用户身份或 URL）、CP-004/AG-012 的能力差异（macOS 本地网络权限、named pipe vs UDS、DPAPI vs Keychain）。
+- 输出与允许修改：`crates/crayon-platform-capabilities/**`（能力模型 + 校验/折叠 + 契约测试）、根 `Cargo.toml` workspace members、`schemas/current/platform_adapter_capabilities*.json` 与 `schemas/previous/` 镜像、本 Roadmap 状态。依赖仅 serde/serde_json（沿用 workspace 既有版本）。
+- 禁止修改：FND-08 `PlatformCapabilities`（投屏/引擎能力面，不归本任务）、PLT-01 接口 crate、其他 crate；能力 wire 不得携带用户名、设备 ID、URL 或版本指纹字符串。
+- 边界：
+  - 六个面各有闭合能力结构；支持度闭合枚举（unavailable/available/requires_permission）；聚合 `PlatformAdapterCapabilities` 带 `schema=1`、`deny_unknown_fields`。
+  - 一致性折叠（Normalize 语义）：transport=unavailable 时 peer_credentials/per_user_acl 必为 false；handoff download/launch 之外的自由字段不存在；非法组合在 `validate()` 拒绝或折叠。
+  - golden：聚合向量 + Windows 预期剖面（dpapi/named_pipe）+ macOS 预期剖面（keychain/uds/本地网络需权限）共 3 个向量，current 与 previous 逐字节镜像（v1 首版）。
+- 验收与测试：CP-004、AG-012 的能力建模部分；schema/golden。测试覆盖 golden roundtrip、previous 镜像、未知字段/版本拒绝、折叠规则、两平台预期剖面反序列化、枚举闭合。命令：`cargo test -p crayon-platform-capabilities`、clippy `-D warnings`、fmt、workspace 基线回归、`git diff --check`。
+- 明确不做：真实平台探测代码（PLT-W04/M04 填充实际值）、运行时能力变更事件、HarmonyOS 能力面（归鸿蒙 Roadmap）。
+
+## PLT-02 完成记录（平台能力模型 schema 与 golden）
+
+- 状态：`DONE`；依赖 `PLT-01 DONE`、`FND-10 DONE`。
+- 实现：新 crate `crates/crayon-platform-capabilities`（1 个生产文件，约 230 行，仅 serde 依赖）：闭合 `SupportLevel`（unavailable/available/requires_permission）、`SecureStoreBackend`（dpapi/keychain/unavailable）、`AgentIpcTransport`（named_pipe/unix_domain_socket/unavailable）；PLT-01 六个面各一个能力结构（全部 `deny_unknown_fields`）；聚合 `PlatformAdapterCapabilities` 带 `schema=1`、`normalized()` 一致性折叠（transport=unavailable 时 peer_credentials/per_user_acl 折叠为 false）与 `validate()` 复检（版本不符 `UnsupportedSchema`、矛盾组合 `Inconsistent` fail closed）；wire 只含闭合枚举与布尔，无用户身份/设备 ID/URL/版本指纹。golden：`schemas/current` 与 `schemas/previous` 各 3 个向量（聚合参考 + Windows 预期剖面 dpapi/named_pipe + macOS 预期剖面 keychain/uds/本地网络需权限），v1 首版逐字节镜像。
+- 自动验证：`cargo test -p crayon-platform-capabilities` 6/6 通过（golden roundtrip + validate、previous 逐字节镜像、未知字段/错误版本拒绝、矛盾组合 fail closed 与折叠恢复、CP-W01/CP-M01 预期剖面锚定、枚举闭合拒绝矩阵）；`cargo clippy -p crayon-platform-capabilities --all-targets -- -D warnings` 零告警；`cargo fmt --all -- --check` 通过；workspace 基线 3/3 与 58/58 回归通过；`git diff --check` 通过。
+- 失败基线：首轮 clippy `-D warnings` 命中 `needless_borrows_for_generic_args`（测试里 `to_value(&parsed)` 多余借用），修复后通过，证明门禁生效。
+- Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；P0/P1/P2 均为 `0`。能力模型只读、启动期收集一次的契约写入模块文档；与 FND-08 `PlatformCapabilities`（投屏/引擎面）无字段重叠。
+- 未覆盖与风险：真实平台探测填充归 `PLT-W04/PLT-M04`（真机门禁）；HarmonyOS 能力面归鸿蒙 Roadmap。`PLT-02` 转为 `DONE`，解锁 `PLT-W04`、`PLT-M04` 的接口依赖。

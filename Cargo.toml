@@ -38,6 +38,7 @@ members = [
     "crates/crayon-cast-policy",
     "crates/crayon-profile",
     "crates/crayon-platform-api",
+    "crates/crayon-platform-capabilities",
     "tools/repo-guard",
     "test-support",
     "crates/crayon-relay",

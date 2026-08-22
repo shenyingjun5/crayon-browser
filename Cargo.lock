@@ -504,6 +504,14 @@ name = "crayon-platform-api"
 version = "0.1.0"
 
 [[package]]
+name = "crayon-platform-capabilities"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "crayon-profile"
 version = "0.1.0"
 dependencies = [
