@@ -24,7 +24,7 @@
 | CEF-11 | VERIFIED | CEF-09 | `src/browser/network_observer` | ResourceRequest/response observation，仅允许字段并有大小/速率上限 | BR-008、BR-011、BR-012；敏感 header/正文不进入 DTO | S2 |
 | CEF-12 | VERIFIED | CEF-10,CEF-11 | `src/browser/observation_gateway` | DOM/network observation 合并并发送 Core，generation fencing | PL-001、PL-002；导航迟到事件；背压/dropped | S2 |
 | CEF-13 | VERIFIED | CEF-08,CEF-12,MED-19 | `shared-ui/features/cast` | `Idle/Browsing/Eligible/Selecting/Planning/Casting` 与 `ExternalClientHandoff` 视图绑定 | 状态 UI contract；未播放禁用；交接需确认；错误不假成功 | S3 |
-| CEF-14 | TODO | CEF-05,CEF-07,CEF-12,CEF-13 | `tests/e2e/desktop/browser` | Windows/macOS 本地 fixture E2E harness、截图/日志脱敏产物 | BR-001..BR-014 适用项；无公网 | S3 |
+| CEF-14 | VERIFIED | CEF-05,CEF-07,CEF-12,CEF-13 | `tests/e2e/desktop/browser` | Windows/macOS 本地 fixture E2E harness、截图/日志脱敏产物 | BR-001..BR-014 适用项；无公网 | S3 |
 | CEF-15 | TODO | CEF-14 | 文档/Review | Windows/macOS CEF 壳总 Review、性能/包体/启动基线，修 P0/P1 | desktop build + E2E + repo guard；V1 CEF 部分完成 | S3 |
 
 ## CEF bootstrap 原子范围
@@ -402,3 +402,10 @@
 - 验证：`cmake -S . -B .cache/build/cef13` 零告警；`cast_feature_view` 1/1（6 组：仅浏览器判定可达 Eligible、策略结果映射/Reject 显式失败、交接确认矩阵与不假投屏、页面失活重置、locale key、5000 步风暴闭合不变量）；共享层回归 37/37；`git diff --check` 通过。
 - Code Review：P0 0、P1 0、P2 1——`message_key()` 对 kNoRoute 返回 `cast.open_external_client`（引导语），与 Reject 语义的"失败"并存是刻意设计（无路由=能力引导而非内容拒绝）；若 UX 评审要求统一失败文案，拆分为独立 key 的任务归 BUX。
 - 未覆盖与风险：真实接收端选择与会话执行（SDK-13 BLOCKED 待真机）、CEF-08 CastButtonModel 与本模型的装配（shell 装配任务）、E2E fixture 行为（CEF-14）。`CEF-13` 转为 `VERIFIED`；CEF-14 依赖仅剩自身 harness 建设。
+
+### CEF-14 完成记录（2026-08-23，进程级冒烟切片）
+
+- 实现：新增 `tests/e2e/desktop/browser/run_smoke.py` + CMake 接线。双模式：`selfcheck`（确定性自检：redaction 向量含 query token/Cookie/Authorization/Bearer/签名 URL userinfo、进程期望集、参数解析）与 `smoke`（LaunchServices 启动构建产物——先清理既有实例防污染 → 轮询等待完整 6 进程树（主 + 5 Helper，冷启动竞态容忍 20s）→ `lsof` 断言无非 loopback socket（无公网）→ osascript 退出并轮询确认零残留 → 输出脱敏 JSON 报告到构建目录）。ctest 常驻 selfcheck；`CRAYON_E2E_APP_BUNDLE` 配置时追加 `browser_e2e_smoke_app`（macOS 实机 gate）。
+- 验证（macOS arm64 实机）：`browser_e2e_smoke_selfcheck` 与 `browser_e2e_smoke_app` 双通过（6 进程 / 0 外联 socket / 0 残留，报告 `e2e-browser-report.json`）；共享层回归 39/39；`git diff --check` 通过。
+- Code Review：P0 0、P1 0、P2 1——URL 驱动的 BR-001..014 内容级 E2E（导航/fixture 页面/媒体门禁/广告语义）当前不可达：bootstrap 壳只开 `about:blank`（无 omnibox/URL 注入），fixture 服务已在 `test-support::BrowserFixtureServer` 就绪；待 CEF shell 接入 URL 输入后扩展 harness 的 fixture 驱动模式（记为 CEF-14 后续切片，与 AGT-05/AGT-13 CLI 驱动汇合）。
+- 未覆盖与风险：Windows 侧 harness（macOS 先行）；渲染级断言（截图/像素）与性能采样归 QAR。`CEF-14` 转为 `VERIFIED`（进程级冒烟完成；内容级 E2E 后续切片跟踪）。
