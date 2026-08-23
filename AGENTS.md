@@ -26,6 +26,20 @@
 
 权威顺序：当前 PRD/架构/协议与安全契约 > 当前模块 Roadmap > 代码与测试确认的现状 > 历史文档。Roadmap 描述不等于代码已实现，必须读取真实代码和 Git 状态。
 
+## 项目记忆
+
+<!-- project-memory:begin -->
+- 稳定事实：产品为“蜡笔 AI Agent 投屏浏览器”，Windows/macOS CEF 双桌面平台，HarmonyOS PC 形态技术预览，Linux 不在范围；Workspace 根包 `crayon-browser-core` + `crates/*`（Rust）与 `browser/*`（C++17 共享层 + CEF 壳）。
+- 已确认平台策略（2026-08-22 用户决策）：**macOS 先行跑通、最后再做 Windows**。macOS 开发机（arm64）承担 CEF 壳、共享层与 Rust 全部开发验证；`CEF-01E DONE`（双架构构建/测试/arm64 实机启停）与 `CEF-02M VERIFIED`（sandbox 强制 + ad-hoc 签名）已完成。
+- Rosetta 边界：x64 产物在 arm64 Mac 上只能做短启停 smoke；长跑会被 Chromium `StackSamplingProfiler`/sandbox 路径触发 `Namespace ROSETTA` 终止（非产品缺陷）。x64 长稳验收必须原生 x64 硬件，挂 QAR/PLT-M05 真机矩阵。
+- Code Review 约束：统一按 `docs/current/code-review-standard.md` v0.8 审查；函数 `100/200` 行、文件 `2000/3000` 行为两级提醒而非机械拆分门槛，强制检查死锁与热路径日志/trace 性能；结论必须带证据与未覆盖项。
+- 架构约束：依赖方向 UI/编排 → 领域接口 → 共享 Core/Cast-SDK facade → 平台 adapter；CEF/ArkWeb/平台类型只在对应 adapter/shell；只有 `crayon-cast-adapter` 依赖 Cast-SDK；Roadmap 路径 `src/**` 映射 `browser/cef-shell/src/**`。
+- 测试基线：`cargo test -p crayon-browser-core --lib` 3 项；`--no-default-features --features legacy-dev --lib` 58 项；共享层 CMake ctest 基线见各任务记录（35+）；CEF preset 需要 `CRAYON_CEF_ROOT` 指向离线分发（归档缓存在 `.cache/cef-archives/`，已 gitignore）。
+- 交付纪律：一次只领一个原子任务、一个可审查提交；Roadmap 记录实际命令与证据，不写“应该通过”；并行 Agent 不得互相覆盖工作区文件，冲突时以先提交者为准、后来者重读后重做。
+<!-- project-memory:end -->
+
+只记录已确认且会持续影响后续工作的内容（标注来源与日期）；新证据出现时更新旧记忆，不记录临时步骤、猜测或秘密。
+
 ## 3. Roadmap 驱动执行
 
 - 实质性开发只能从 `docs/plans/README.md` 中的活跃 Roadmap 领取一个原子任务。
@@ -142,7 +156,7 @@
 
 ## 11. Code Review 与完成门禁
 
-- 每个原子任务实现并验证后必须按 `docs/current/code-review-standard.md` 做独立 Review。
+- 每个原子任务实现并验证后必须按 `docs/current/code-review-standard.md`（v0.8）做独立 Review。
 - Review 顺序：需求/边界 -> 正确性 -> 架构/API -> 并发/生命周期 -> 安全/隐私 -> 性能 -> 测试 -> 可维护性。
 - P0/P1 未关闭不得合并；P2 延期必须记录理由和后续任务 ID；没有发现也要记录审查范围、验证和未覆盖项。
 - 完成不以“已修改”为准，必须同时具备：实现、规定测试证据、文档同步、Review 结论和可接受的剩余风险。
@@ -177,3 +191,31 @@ Code Review：
 Roadmap 更新：
 - <状态、证据和下一任务>
 ```
+
+## 14. 执行原则
+
+- 修改前先读相关代码、测试和相邻调用方，遵循现有架构、技术栈与命名；发现既有缺陷时先报告，经确认再修，不顺手夹带。
+- 改动保持最小且完整；同类问题来自共同根因时修共同入口，不复制修补逻辑。
+- 不覆盖用户或其他 Agent 未要求修改的内容，不做无关重构；并行 Agent 的工作区文件冲突以先提交者为准。
+- 按影响范围验证；未实际运行的测试、构建、Lint、真机或性能测试不得声称通过。
+- Skill、MCP 和脚本仅在任务需要时调用，不预加载，不借工具引入额外流程。
+- 小任务直接完成，不为流程本身创建计划、台账或汇报文档。
+
+## 15. 完成口径
+
+- 以可用结果为准，不以“已修改”代替“已解决”；完成 = 实现 + 规定测试证据 + 文档同步 + Review 结论 + 可接受的剩余风险。
+- 输出只包含结果、关键改动、验证证据和剩余风险；失败与跳过项如实报告。
+- 默认使用中文汇报；代码、命令、API、路径和原始错误保持原文。
+
+<!-- development-baseline:begin -->
+
+## 16. 计划与验证基线
+
+- 实质性开发前，先读取本文件与 `docs/current/README.md` 指向的当前 PRD/架构/测试/Review 契约，再读 `docs/plans/README.md` 与所属模块 Roadmap；需要历史证据时才检索归档文档。
+- 不重复新建同义计划或契约文档；确实没有时才创建，并在开工前填入已确认内容，不带占位进入实质开发。
+- Roadmap 原子任务在开始前补齐"原子范围"段（状态、单一目标、输入、允许/禁止路径、边界、验收命令、明确不做）；完成时追加"完成记录"（实现、验证、Review、未覆盖）。
+- 任务超出当前 Roadmap 范围、需要新协议/状态机/持久化 schema/平台能力时，先更新 Roadmap 并重新评审，不偷跑。
+- 代码改动执行适用的 Format、Lint、Unit、Integration、Build；平台、设备、性能、安全任务追加对应 Harness/真机验证；缺少自动化时补最小验证或写明手工验证与风险。
+- 专项 Harness 仅覆盖设备、真机、长稳、安全等普通命令无法覆盖的场景，不引入台账、审批或额外汇报流程。
+
+<!-- development-baseline:end -->

@@ -1,112 +1,257 @@
 # 蜡笔 AI Agent 投屏浏览器 Code Review 标准
 
-- 版本：v0.7
-- 日期：2026-08-11
+- 版本：v0.8
+- 日期：2026-08-23
+- 变更：参照 Cast-SDK Review 标准重构——新增基本原则、问题等级（P0–P3 + Question/Nit）、执行顺序、合并条件与结论模板；并发死锁与热路径日志清单细化；保留浏览器/投屏/CAAP/语义动作/Workflow/Hub 域专属检查。
 
-每个原子任务实现并验证后必须独立 Review。顺序固定为：需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试、可维护性。
+## 1. 目标
 
-## 1. 需求与边界
+Code Review 不只确认代码“能够运行”，还要确认改动：
 
-- 任务 ID、依赖、允许/禁止路径、验收、非目标和实际 diff 一致。
-- Roadmap 目标没有被表述成已实现事实；历史完成证据没有被改写。
-- Windows/macOS 是当前桌面范围；HarmonyOS 只按电脑 PC 形态；Linux 无当前实现/发布承诺。
-- 浏览器/局域网投屏先于正式 Markdown；CAAP/Agent 权限内核可先行，语义动作、Workflow/Challenge、Hub/Partner 和模型按独立阶段门禁启用。
+- 满足需求且不会破坏已有行为；
+- 符合项目架构、模块边界与 Cast-SDK/平台边界；
+- 清晰、必要、可维护，没有无意义的重复和硬编码；
+- 在并发、生命周期、隐私、安全、性能和资源占用方面可控；
+- 有与风险相匹配的验证证据。
 
-## 2. 架构与 API
+本标准适用于 Rust workspace、C++ 共享层与 CEF 壳、平台 adapter、协议/Schema、工具和测试资产。格式、排版和可自动检查的语法问题优先交给 formatter、lint 和静态检查；人工 Review 重点判断正确性、设计和风险。
 
-- 依赖方向为 UI/应用编排→领域接口→Core/Cast-SDK facade→平台 adapter。
-- CEF、ArkWeb 和系统 API 不泄漏到共享领域层。
-- 只有 `crayon-cast-adapter` 调 Cast-SDK；App 不拼 SOAP、DLNA metadata、CastExtension 或 receiver URL。
+每个原子任务实现并验证后必须按本标准做独立 Review。
+
+## 2. 基本原则
+
+1. **正确优先**：先判断需求、状态和边界条件，再讨论代码风格。
+2. **架构优先于局部便利**：不能为了少写几行代码破坏模块边界、依赖方向或公共 API。
+3. **简单但不过度简化**：优先使用容易理解和验证的实现，避免炫技、过度抽象和隐式约定。
+4. **消除共同根因**：同类问题来自同一规则时修共同入口，不复制修补逻辑。
+5. **规模是提醒，不是目标**：长函数和大文件需要解释和检查，但不得为了行数机械拆分。
+6. **结论基于证据**：未运行的测试、构建、Lint、真机或性能测试不得声称通过；环境阻塞保留原始错误。
+7. **区分问题和偏好**：阻断项必须说明具体场景、影响和证据，个人偏好不能伪装成缺陷。
+8. **页面内容不可信是默认前提**：DOM、无障碍树、页面消息、模型输出和工具结果一律 untrusted，Review 时主动寻找它们进入授权/安全结论的路径。
+
+## 3. 必查维度
+
+### 3.1 需求与边界
+
+- 任务 ID、依赖、允许/禁止路径、验收、非目标和实际 diff 一致；Roadmap 目标没有被表述成已实现事实，历史完成证据没有被改写。
+- 正常、失败、取消、超时、重试、重复调用和空输入是否处理完整；是否出现假成功、吞错误或只处理理想路径。
+- 边界值、状态迁移、恢复路径和回滚路径是否正确；修复是否覆盖真正根因。
+- 时间、顺序、导航代际（generation）、缓存和异步结果是否可能使用过期状态。
+- Windows/macOS 是当前桌面范围；HarmonyOS 只按电脑 PC 形态；Linux 无当前实现/发布承诺。当前平台策略为 macOS 先行（见根 `AGENTS.md` 项目记忆）。
+
+### 3.2 架构、职责与依赖
+
+- 依赖方向固定为：产品 UI/应用编排 → 领域接口 → 共享 Core/Cast-SDK facade → 平台 adapter；禁止反向依赖、循环依赖或跨层读取内部状态。
+- CEF、ArkWeb、Win32/AppKit 类型和系统 API 只出现在对应 adapter/shell；不泄漏到共享领域层。
+- 只有 `crayon-cast-adapter` 调 Cast-SDK；App 不拼 SOAP、DLNA metadata、CastExtension 或 receiver 控制_URL。
+- 入站 MCP 与出站 Partner MCP/API 位于不同 crate/registry/session/token/network/audit 边界，无双向权限继承。
+- 状态唯一所有，不直接修改其他模块的集合、锁、缓存或 generation；新抽象对应稳定业务概念。
 - 公共 schema/状态机/持久化/安全边界变化先有独立 Roadmap、previous/current golden 和迁移方案。
-- 入站 MCP 与出站 Partner MCP/API 是否位于不同 crate/registry/session/token/network/audit 边界；是否出现双向权限继承。
-- 状态唯一所有，不直接修改其他模块的集合、锁、缓存或 generation。
+- `lib.rs`/`main.rs` 只做装配与 re-export；禁止无边界 `utils.rs`/`manager.rs`。
 
-## 3. 浏览器与投屏
+### 3.3 浏览器与投屏
 
-- 页面消息不能替代 Browser process 的可信输入与播放推进验证。
+- 页面消息不能替代 Browser process 的可信输入与播放推进验证（CEF-09 观测 untrusted，CEF-10 门禁唯一定夺）。
 - observer 只提供事实，policy 才产生 `Direct/Relay/ExternalClientHandoff/Reject`。
 - Direct/Relay 仅限 LAN；Relay route opaque、会话/设备/TTL/allow-set 绑定且不是通用代理。
-- `ExternalClientHandoff` 需要用户确认，不创建 receiver handle、Relay token、WebRTC transport、采集器或编码器，不显示“投屏已开始”。
-- 新代码不得引用历史 `Mirror`、`tab_video`、`system_audio`、硬编码能力作为浏览器镜像授权；兼容读取只在 `MED-19` 明确范围内。
-- DRM/EME/受保护表面只允许识别和拒绝，不提取 key/license 或绕过保护。
+- `ExternalClientHandoff` 需要用户确认，不创建 receiver handle、Relay token、WebRTC transport、采集器或编码器，结果类型上不存在“投屏已开始”。
+- 新代码不得引用历史 `Mirror`、`tab_video`、`system_audio`；兼容读取只在 `MED-19` 明确窗口内。
+- DRM/EME/受保护表面只允许识别和拒绝，不提取 key/license 或绕过保护；禁止自动点击播放/广告/跳过和按广告域名过滤候选。
 
-## 4. 页面内容、语义动作、CAAP 与模型
+### 3.4 页面内容、语义动作、CAAP 与模型
 
-- 只处理用户触发的当前 tab/navigation/generation 快照。
+- 只处理用户触发的当前 tab/navigation/generation 快照；导航/关闭/取消后的旧结果不能覆盖新页面。
 - 节点、深度、文本、URL、时间、输出和文件写入都有界且可取消。
 - 隐藏表单值、跨源正文、Cookie、Authorization、页面存储和危险 scheme 不进入结果。
-- 导航/关闭/取消后的旧结果不能覆盖新页面。
-- CLI/MCP 是否只映射同一 CAAP/tool registry/guard/app-runtime；是否存在第二套工具、错误或授权语义。
-- CAAP 是否有版本/能力握手、current/previous golden、消息/chunk/递归/并发上限、cancel/deadline/幂等和 generation。
-- R1 是否最小化数据；R2～R4 是否绑定目标/参数 hash/短期 handle 并经确认；页面/模型结果能否间接扩权。
-- 是否暴露 remote bind、raw CDP/WebDriver、任意 JS、Cookie/Authorization、密码/支付、文件上传或通用文件/网络工具。
-- 页面数据面是否复用 verified snapshot/cache/index，避免每个工具重复整树遍历；性能结论是否有可重复 benchmark。
-- Page/Action/Form/Media/Risk Map 与 ChangeSet 是否有版本、资源上限和 provenance；`full` 是否仍为内部有界 profile，而非 raw DOM/HTML/CDP 后门。
-- action_id 是否绑定 target/navigation/generation/TTL；外部是否完全没有长期 CSS/XPath；内部多信号定位是否在执行前重新验证唯一、可见、同源和风险。
-- 动作是否经正常 app-runtime 用例、precondition、confirmation、idempotency 与 effect verification；`Indeterminate` 副作用是否停止而非自动重放。
-- M2 provider 是否有独立发送确认、origin/redirect、安全存储和 payload readback；模型输出是否保持 untrusted。
+- CLI/MCP 只映射同一 CAAP/tool registry/guard/app-runtime；不存在第二套工具、错误或授权语义。
+- CAAP 有版本/能力握手、current/previous golden、消息/chunk/递归/并发上限、cancel/deadline/幂等和 generation；错误码为闭合枚举且 golden 锁定。
+- Grant 默认 deny、四元组绑定、撤销与目标失效立即生效；R2～R4 绑定确认；页面/模型结果不能间接扩权（AG-005）。
+- 不暴露 remote bind、raw CDP/WebDriver、任意 JS、Cookie/Authorization、密码/支付、文件上传或通用文件/网络工具；永久 deny list 命中为零。
+- action_id 绑定 target/navigation/generation/TTL；外部无长期 CSS/XPath；内部多信号定位执行前重新验证唯一、可见、同源和风险；`Indeterminate` 副作用停止而非自动重放。
+- 第二阶段模型 provider 有独立发送确认、origin/redirect、安全存储和 payload readback；模型输出保持 untrusted，不参与权限/风险/路由决策。
 
-## 5. Workflow、Challenge 与 Capability Hub
+### 3.5 Workflow、Challenge 与 Capability Hub
 
-- trace 是否只记录最小语义意图和 verified effect；失败/取消/未知结果是否无法生成 Recipe；写盘前是否移除字段值、正文、secret 和账户标识。
-- 个人 Site Skill 是否必须由用户预览保存、按 OS user/Profile 加密隔离、每次重新授权，并具备 schema/version/health/disable/rollback。
-- Challenge Detector 是否仅检测、暂停、交给用户和重新验证；是否存在自动解题、打码、自动点击或隐藏挑战的路径。
-- checkpoint 是否短期、有界、加密、无 secret，恢复是否重做 snapshot/risk/grant/precondition 并处理未知副作用。
-- self-heal 是否只接受唯一、低风险、效果可验证的等价变化；高风险、跨源、低置信度或语义变化是否必须审阅。
-- Registry 是否声明 source/trust/version/lifecycle/data scope；Router 是否返回 route_reason；fallback 是否重新授权、确认与幂等判断。
-- connector 是否校验来源/签名/版本/revoke/kill switch、OAuth state/PKCE/scope/tenant、endpoint/DNS/redirect/SSRF、schema/大小/限流/熔断和脱敏审计。
-- Partner/TV Cast Manifest 是否仍由 Cast-SDK/接收端拥有；浏览器是否只消费正式 facade，没有 raw manifest、协议或控制 URL 拼接。
+- trace 只记录最小语义意图和 verified effect；失败/取消/未知结果不能生成 Recipe；写盘前移除字段值、正文、secret 和账户标识。
+- 个人 Site Skill 必须用户预览保存、按 OS user/Profile 加密隔离、每次重新授权，具备 schema/version/health/disable/rollback；版本变化不静默覆盖。
+- Challenge Detector 仅检测、暂停、交给用户和重新验证；不存在自动解题、打码、自动点击或隐藏挑战路径。
+- checkpoint 短期、有界、加密、无 secret；恢复重做 snapshot/risk/grant/precondition。
+- self-heal 只接受唯一、低风险、效果可验证的等价变化；高风险/跨源/低置信度/语义变化必须审阅；Partner API 失败不得静默降级网页执行。
+- Registry 声明 source/trust/version/lifecycle/data scope；Router 返回 route_reason；fallback 重新授权、确认与幂等判断。
+- connector 校验来源/签名/版本/revoke/kill switch、OAuth state/PKCE/scope/tenant、endpoint/DNS/redirect/SSRF、schema/大小/限流/熔断和脱敏审计。
+- Partner/TV Cast Manifest 仍由 Cast-SDK/接收端拥有；浏览器只消费正式 facade，无 raw manifest、协议或控制 URL 拼接。
 
-## 6. 并发与生命周期
+### 3.6 并发、线程与死锁
 
-- 持锁期间无网络/文件 IO、await、外部 callback、IPC、join 或不可控平台调用。
-- 多锁有固定锁序；callback/timer/worker 的 stop/release 不反向死锁。
-- 队列、缓存、连接、并发、重试和日志均有界，满载与 dropped 计数明确。
-- start/stop、导航、网络/设备切换、睡眠唤醒和退出幂等，旧 generation 事件无副作用。
-- 资源按 owner 逆序释放；清理失败明确报告。
+任何涉及锁、线程、回调、队列、会话或网络 IO 的改动，都必须检查死锁和竞态：
 
-## 7. 安全与隐私
+- 列出共享状态的所有者、同步方式和必要的锁顺序；多把锁保持全局一致顺序。
+- 检查正向与反向调用链，防止 `A -> B` 与 `B -> A` 的 ABBA 死锁。
+- 不在持锁期间执行外部回调、listener 分发、网络/文件 IO、IPC、播放器/引擎调用、阻塞等待、线程 `join` 或不可控耗时操作；不在锁内 `await`。
+- Stop/Release 与 callback、worker、timer 的停止顺序明确，避免互相等待或释放后回调；start/stop、导航、设备切换、网络切换、休眠唤醒和退出幂等并逆序释放资源。
+- 等待、重试、队列和条件变量有明确唤醒条件、取消路径和合理上限；检查重复回调、回调错序、旧会话污染新会话、代际复用、丢失唤醒和饥饿。
+- 并发容器、原子变量或无锁结构仍需验证组合操作一致性；不能因为“没有 mutex”就认为没有竞态。
+- 高风险并发修复应补锁序推演、压力测试或长稳验证。
 
-- Cookie、Authorization、浏览历史、完整签名 URL、token 和 key 不出可信内存边界。
-- URL、redirect、DNS、路径、IPC 消息长度/数量覆盖 SSRF、rebind、开放代理、重放和穿越。
+存在可永久死锁、稳定竞态、释放后访问或线程泄漏时，不能批准合并。
+
+### 3.7 性能、日志与诊断
+
+- 识别热路径：导航、Relay 逐分片、socket 读写、渲染、Agent 页面快照/增量流、高频 UI 事件和状态轮询。
+- 热路径避免不必要的内存分配、复制、JSON 序列化、字符串格式化、文件 IO、同步网络调用、锁竞争和重复整树遍历。
+- 队列、缓存、连接、并发、重试、日志和采样窗口必须有界，并定义满载时的背压、覆盖、降级或丢弃策略与 dropped 计数。
+- 辅助日志/诊断/遥测不参与主业务正确性；生产者非阻塞，消费者缺失、变慢或离线不得反压主业务。
+- 不允许默认开启逐帧、逐分片、逐像素或高频轮询日志；`trace`/diagnostics 默认关闭且关闭时接近零成本。
+- 日志结构化、等级与频率匹配；正常重试和预期状态不得持续刷 `WARN/ERROR`。
+- 日志、receipt、诊断、trace 不输出凭证、Cookie、Authorization、URL query token、用户内容或不必要设备隐私数据。
+- 性能优化给出基线、口径、测试条件和修复后数据；不得以关闭必要校验、破坏兼容性或删除错误处理换取指标。
+
+高频日志/trace 明确造成卡顿、延迟、吞吐下降、锁竞争或内存增长时，按实际影响定为 P0/P1，不作为可选建议。
+
+### 3.8 生命周期、错误与资源
+
+- start/stop、connect/disconnect、导航、无痕清理、Profile 切换是否完整且按契约幂等。
+- Socket、文件描述符、线程、timer、listener、引擎对象、临时文件和子进程是否释放；部分初始化失败时逆序清理已成功资源（无 orphan：每次退出恰一次确认）。
+- 错误保留 operation、stage 和可诊断原因且不泄漏底层实现给产品 UI；错误恢复不伪造成功，失败后状态收敛到可重试或已终止。
+- 无痕清理失败显式报告，不得把 best-effort 宣称为已清除。
+
+### 3.9 公共 API、协议与兼容性
+
+- 公共 API 最小、稳定、语义明确，不暴露内部实现和可变状态；参数校验、默认行为、错误语义和线程约束明确。
+- 协议字段、错误码、事件和持久化结构变化向前/向后兼容；CAAP/golden/schema 变化走独立 Roadmap 与 previous/current 向量。
+- 用户文案进入本地化资源（`browser/shared-ui/locales`），不硬编码在业务代码。
+- 废弃接口保留合理迁移路径，不直接破坏已有集成方。
+
+### 3.10 安全与隐私
+
+- 外部输入、协议消息、URL、重定向、DNS、文件路径、消息长度和数量全部边界验证；覆盖 SSRF、DNS rebind、开放代理、重放和路径穿越。
 - 删除前验证显式根、规范路径、符号链接/目录联接和目标数量；失败停止，不扩大范围。
-- Debug/日志/错误不泄密；诊断非阻塞且不参与正确性。
-- 无痕清理 best-effort 不能被写成已清除。
-- receipt、trace、checkpoint、Skill Store、route/audit 和 connector cache 是否全部最小化、有界、可撤销并按 Profile/provider/tenant 隔离。
+- Cookie、Authorization、浏览历史、完整签名 URL、token 和 key 不出可信内存边界；LAN 不暴露通用 extract/proxy 或无鉴权控制接口。
+- Debug 入口、远程诊断、测试开关和敏感日志不得意外进入 Release 默认能力。
+- 依赖升级检查来源、许可证、维护状态、包体和跨平台影响。
+- receipt、trace、checkpoint、Skill Store、route/audit 和 connector cache 全部最小化、有界、可撤销并按 Profile/provider/tenant 隔离。
 
-## 8. 性能与可维护性
+### 3.11 硬编码、配置与数据模型
 
-- 导航、Relay 分片、socket、渲染和 Agent snapshot/stream 热路径无默认高频日志、重复整树序列化、不必要复制/JSON/格式化和锁竞争。
-- 慢上游/接收端、满队列和背压行为明确；辅助诊断不反压主业务。
-- magic 端口、超时、重试、容量、协议、错误码、URL、UA 和路径进入命名配置/常量/枚举。
-- 生产代码无 fixture、Mock/Fake、故障注入和测试依赖。
-- 函数/文件规模遵守根 `AGENTS.md` 提醒，不为行数制造无边界 wrapper。
-- 地图/ChangeSet/Workflow/Router 是否复用 verified facts，避免重复整页遍历；合作方健康检查不得后台无界轮询站点或反压浏览器。
+- 不散落超时、端口、重试次数、容量、协议字符串、错误码、编码参数、URL、UA 和平台路径等 magic value；可能独立变化的值使用命名常量、强类型配置、枚举或能力模型。
+- 协议标准固定值集中在协议定义附近并注明语义；平台/设备差异用 capability，不堆型号判断。
+- 不得在源码、日志、fixture 或文档示例中写真实凭证、Cookie、Authorization、私有签名 URL、本机绝对路径和生产秘密。
+- 多个布尔参数、字符串状态或松散 Map 应改为能表达约束的类型；局部天然清晰的字面量不要求形式化提取。
 
-## 9. 测试与证据
+### 3.12 清晰度、内聚与规模
 
-- 新行为有正常、失败、空/边界、重复、取消、超时、旧结果、恢复和释放测试。
-- Bug 修复先有失败复现；自动化使用本地 fixture、确定性时钟和 mock upstream。
-- 实际执行 Format、Lint、Unit、Integration、Build 和适用 Harness；记录命令、数量、耗时、平台及未覆盖项。
-- P0/P1 必须关闭；P2 延期记录理由和后续任务 ID。
+- 命名表达领域含义，避免 `data`、`info`、`manager2`、`handleSomething`；函数处于一致抽象层次，一句话可描述职责。
+- 注释解释约束、背景和“为什么”，不复述代码；删除不可达代码、废弃分支和临时调试逻辑。
+- 同一业务规则、协议解析、错误转换或常量不重复实现；不通过无意义 wrapper 制造形式复用。
+- 规模阈值只触发提醒，不是合并门槛：
 
-## 10. Review 输出模板
+| 对象 | 提醒级别 | Review 要求 |
+|---|---:|---|
+| 函数 | `100–199` 行 | 检查多职责、深层分支、状态阶段和可测试性 |
+| 函数 | `>= 200` 行 | 强提醒；给出保持整体或拆分的明确理由 |
+| 生产文件 | `2000–2999` 行 | 检查是否混入多个领域或平台职责 |
+| 生产文件 | `>= 3000` 行 | 强提醒；建立模块化 Roadmap 或说明 vendor/生成例外 |
+| 测试文件 | `>= 2000` 行 | 按 fixture、领域和场景审查拆分 |
+| 测试文件 | `>= 3000` 行 | 不允许合并；生成数据除外且生成源可审查 |
+
+自动生成代码、第三方 vendor 代码可不按阈值拆分，但必须审查生成源、版本来源和接入风险；历史大文件不因小改动被强制机械重构。
+
+### 3.13 测试、构建与可验证性
+
+- 新功能有行为测试；Bug 修复先有能复现原问题的失败测试。
+- 生产源码不包含测试实现、fixture、Mock/Fake、测试入口、故障注入或 `xxxForTest` API；Rust 生产文件只允许 `#[cfg(test)] mod xxx_tests;` 声明（`#[path]` 指向独立文件）；C++ 用独立 test target；`test-support` 不进入生产依赖图。
+- 覆盖正常、失败、空输入、边界、重复调用、取消、超时、旧结果、恢复和资源释放；敌意输入任务补伪随机风暴/LCG 不变量。
+- 不使用固定长 `sleep`、公共网络或第三方影视站作为成功条件；用确定性时钟、本地 fixture 和 mock upstream。
+- 当前基线：`cargo test -p crayon-browser-core --lib` 3 项、`--no-default-features --features legacy-dev --lib` 58 项、共享层 ctest 基线见 Roadmap 记录；全 workspace、CEF 与平台任务按各 Roadmap 记录实际证据。
+- Review 必须列出实际运行的 Test/Build/Lint/真机命令及结果；未运行或环境阻塞的项明确写出，不能用“应该通过”代替证据。
+- 性能结论使用正确的端到端口径；内部阶段点不能替代用户可感知结果。
+
+### 3.14 改动范围与文档同步
+
+- 改动围绕一个清晰目标，不夹带无关重构、格式化、依赖升级或生成文件变化；大规模重构与行为变更分开。
+- 同步更新公共 API、架构、协议、测试和必要文档；Roadmap 完成记录包含实现、验证、Review 与未覆盖。
+- 生成文件与源定义一致；锁文件变化有明确原因；不保留临时开关、调试文件和本地环境产物。
+
+## 4. 问题等级
+
+| 等级 | 含义 | 处理要求 |
+|---|---|---|
+| `P0 阻断` | 严重安全/隐私事故、数据破坏、核心能力不可用、稳定崩溃/死锁、无法构建发布 | 必须修复并验证后才能合并 |
+| `P1 必须修改` | 明确功能错误、架构边界破坏、兼容性回退、重要竞态/资源泄漏、显著性能问题 | 原则上必须在本次合并前修复 |
+| `P2 应当修改` | 可维护性明显下降、重复规则、职责混乱、重要测试缺失或可预见中期风险 | 应修复；延期必须记录理由和后续任务 ID |
+| `P3 可选建议` | 命名、表达、局部简化或非关键优化 | 不阻塞合并，由作者判断 |
+
+补充标记：
+
+- `Question`：现有证据不足，需要作者解释设计、约束或行为。
+- `Nit`：非常轻微且不阻塞的建议，不得反复拉扯。
+
+每条 P0/P1/P2 发现必须包含：
+
+1. 具体文件和尽可能精确的行号。
+2. 可触发场景或调用链。
+3. 实际影响，而不是抽象地说“可能有问题”。
+4. 证据或推演过程。
+5. 修复方向；不要求 Reviewer 代写完整实现。
+
+## 5. Review 执行顺序
+
+1. 确认任务 ID、Roadmap 原子范围、评审边界和明确不在范围内的内容。
+2. 阅读相关架构、协议、公共 API、实现和测试，不能只看 Diff 的孤立代码。
+3. 先检查正确性、架构、公共契约、并发和安全/隐私，再检查性能、可维护性与规模。
+4. 根据改动影响追踪调用方、被调用方、线程边界、资源所有权和跨平台路径。
+5. 运行与风险相匹配的 Test、Build、Lint、Harness 或真机验证。
+6. 先输出按严重度排序的发现，再输出验证证据和剩余风险。
+7. 没有发现时也说明审查范围、实际验证和未覆盖项，不能只写“LGTM”。
+
+## 6. 合并条件
+
+满足以下条件才可以批准：
+
+- 需求和边界明确，实现与权威文档一致。
+- 没有未处理的 P0/P1。
+- 架构职责、依赖方向、公共 API 和协议兼容性正确。
+- 不存在已知死锁、稳定竞态、释放后访问或无界资源增长。
+- 热路径没有不受控日志、trace、分配、阻塞或 IO。
+- 页面/模型/工具内容不可信边界没有被突破；隐私红线（Cookie/Authorization/历史/正文）无泄漏路径。
+- 必要的错误处理、资源释放和生命周期路径完整。
+- Test、Build、Lint 和专项验证与风险匹配，结果有证据。
+- 未覆盖项和剩余风险已明确且可以接受。
+
+P2 可以在有明确理由和后续任务入口时延期；P3、Nit 和纯个人偏好不能阻塞合并。函数或文件触发规模提醒本身不构成 P0/P1，也不能单独作为拒绝合并的理由。
+
+## 7. Review 输出模板
 
 ```markdown
 任务：<TASK-ID> <名称>
 
 范围：<文件、行为、明确不做>
 
-验证：
-- `<实际命令>`：PASS/FAIL/TIMEOUT/NOT_RUN
-
-发现：
-- P0：<数量与结论>
-- P1：<数量与结论>
-- P2：<数量与结论/延期 ID>
-
-未覆盖与风险：
-- <没有则写“无”>
-
 结论：APPROVE | CHANGES_REQUIRED | BLOCKED
+- P0 / P1 / P2 / P3 数量：
+
+## 发现
+
+### [P1] <准确标题>
+- 位置：`path/to/file:line`
+- 场景/调用链：
+- 影响：
+- 证据：
+- 修复方向：
+
+## 专项检查
+- 架构与依赖：
+- 并发、锁序与生命周期：
+- 隐私/安全红线：
+- 性能与热路径日志：
+- 规模提醒（函数/文件）：
+
+## 验证
+- `<实际命令>`：PASS/FAIL/TIMEOUT/NOT_RUN
+- 真机或 Harness：
+
+## 未覆盖与剩余风险
+- <没有则写“无”>
 ```
+
+无发现时“发现”节写“无”，但专项检查、验证与未覆盖三项必须逐条填写。
