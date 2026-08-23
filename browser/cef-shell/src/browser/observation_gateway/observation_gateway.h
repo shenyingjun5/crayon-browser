@@ -53,10 +53,11 @@ struct GatewayStats {
 /// Per-tab generation-fenced merge queue toward the core client.
 class ObservationGateway final {
  public:
-  /// Marks a navigation on `tab_id`: the tab generation advances and
-  /// all still-queued events of older generations are dropped
-  /// immediately (late results never flow out).
-  std::size_t AdvanceGeneration(std::uint32_t tab_id);
+  /// Marks a navigation on `tab_id`: the tab generation advances, the
+  /// tab's current navigation id is recorded for precheck and all
+  /// still-queued events of older generations are dropped immediately
+  /// (late results never flow out).
+  std::size_t AdvanceGeneration(std::uint32_t tab_id, std::uint64_t navigation_id);
 
   /// Current generation of a tab (starts at 0, first navigation -> 1).
   std::uint32_t GenerationOf(std::uint32_t tab_id) const;
@@ -78,6 +79,7 @@ class ObservationGateway final {
  private:
   struct TabState {
     std::uint32_t generation = 0;
+    std::uint64_t current_navigation_id = 0;
   };
 
   GatewayResult Submit(GatewayEvent event);

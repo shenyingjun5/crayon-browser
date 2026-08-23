@@ -21,10 +21,11 @@ namespace crayon::cef_shell::network {
 inline constexpr std::size_t kMaxUrlLen = 2'048;
 /// Maximum retained observations (bounded store).
 inline constexpr std::size_t kMaxObservations = 128;
-/// Maximum accepted observations per rate window.
-inline constexpr std::uint32_t kRateWindowBudget = 256;
-/// Rate window length in milliseconds.
-inline constexpr std::uint64_t kRateWindowMs = 1'000;
+/// Token-bucket capacity: bursts up to this many observations pass
+/// instantly.
+inline constexpr std::uint32_t kRateBurst = 256;
+/// Token refill interval: one token per this many milliseconds.
+inline constexpr std::uint64_t kRateRefillIntervalMs = 4;
 
 /// Closed resource kinds.
 enum class ResourceKind { kMedia = 0, kManifest, kSegment, kDocument, kOther };
@@ -86,8 +87,8 @@ class NetworkObserver final {
 
  private:
   std::vector<NetworkObservation> observations_;
-  std::uint64_t window_start_ms_ = 0;
-  std::uint32_t window_used_ = 0;
+  std::uint32_t rate_tokens_ = kRateBurst;
+  std::uint64_t rate_last_ms_ = 0;
 };
 
 }  // namespace crayon::cef_shell::network

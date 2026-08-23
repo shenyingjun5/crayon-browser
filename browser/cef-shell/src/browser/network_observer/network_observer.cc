@@ -81,15 +81,21 @@ NetworkObserveResult NetworkObserver::Observe(NetworkObservation observation,
   if (observation.content_length > kMaxUrlLen * 1024) {
     return NetworkObserveResult::kDroppedOversize;
   }
-  // Token-bucket style fixed window with the injected clock.
-  if (now_ms - window_start_ms_ >= kRateWindowMs) {
-    window_start_ms_ = now_ms;
-    window_used_ = 0;
+  // Token bucket (CEF-11 review follow-up): steady refill removes the
+  // fixed-window boundary burst; the burst cap bounds spikes.
+  const std::uint64_t elapsed = now_ms - rate_last_ms_;
+  const std::uint64_t refill = elapsed / kRateRefillIntervalMs;
+  if (refill > 0) {
+    rate_tokens_ = rate_tokens_ + static_cast<std::uint32_t>(refill);
+    if (rate_tokens_ > kRateBurst) {
+      rate_tokens_ = kRateBurst;
+    }
+    rate_last_ms_ = now_ms;
   }
-  if (window_used_ >= kRateWindowBudget) {
+  if (rate_tokens_ == 0) {
     return NetworkObserveResult::kDroppedRateLimited;
   }
-  ++window_used_;
+  --rate_tokens_;
 
   observation.url = normalized;  // blob keeps an empty URL
   if (observations_.size() >= kMaxObservations) {

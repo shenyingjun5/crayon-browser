@@ -49,6 +49,12 @@ class InputProofGate final {
   void NotePlaybackProgress(std::uint32_t tab, std::uint64_t navigation_id,
                             double current_seconds);
 
+  /// Records that the tab's player is verifiably paused/started from
+  /// idle.  This explicit marker removes the reliance on dense
+  /// progress sampling: the next input on this tab cannot be mistaken
+  /// for "already progressing" (CEF-10 review follow-up).
+  void NotePlaybackSuspended(std::uint32_t tab, std::uint64_t navigation_id);
+
   /// Switches the foreground tab.
   void SetActiveTab(std::uint32_t tab);
 

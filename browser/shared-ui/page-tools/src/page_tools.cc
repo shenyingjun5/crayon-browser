@@ -54,6 +54,16 @@ bool FindBarController::UpdateQuery(const std::string& query) {
   return ApplyQuery(query);
 }
 
+bool FindBarController::SetCaseSensitive(bool case_sensitive) {
+  if (!active_) {
+    return false;
+  }
+  case_sensitive_ = case_sensitive;
+  match_count_ = 0;
+  cursor_ = 0;
+  return true;
+}
+
 void FindBarController::ReportMatchCount(std::size_t count) {
   match_count_ = count;
   if (cursor_ >= count) {

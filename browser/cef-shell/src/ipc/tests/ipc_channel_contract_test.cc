@@ -102,6 +102,26 @@ bool FrameCodecOversizeAndHostileFeed() {
   return true;
 }
 
+bool ResetClearsHostileLeftovers() {
+  // CEF-06 P2 fix: a connection reset must drop every buffered byte so
+  // leftovers from a hostile stream never bleed into the next
+  // connection.
+  FrameCodec codec;
+  std::vector<std::uint8_t> junk(64, 0xFF);
+  CHECK(codec.Feed(junk.data(), junk.size(), nullptr));
+  CHECK(codec.pending_bytes() == 64);
+  codec.Reset();
+  CHECK(codec.pending_bytes() == 0);
+  // A clean frame decodes immediately after the reset.
+  const std::vector<std::uint8_t> frame = FrameCodec::Encode(Bytes("clean"));
+  CHECK(codec.Feed(frame.data(), frame.size(), nullptr));
+  std::vector<std::uint8_t> payload;
+  std::uint32_t declared = 0;
+  CHECK(codec.Take(&payload, &declared) == DecodeStatus::kComplete);
+  CHECK(payload == Bytes("clean"));
+  return true;
+}
+
 bool SecretVerifyAndRotation() {
   SessionSecretVerifier verifier;
   std::vector<std::uint8_t> s1 = Secret(0x11);
@@ -218,7 +238,8 @@ bool HostileStreamInvariants() {
 
 int main() {
   const bool ok = FrameCodecRoundTrip() && FrameCodecPartialAndBackToBack() &&
-                  FrameCodecOversizeAndHostileFeed() && SecretVerifyAndRotation() &&
+                  FrameCodecOversizeAndHostileFeed() && ResetClearsHostileLeftovers() &&
+                  SecretVerifyAndRotation() &&
                   ConstantTimeEqualsSanity() && ProcessTokenMatrix() && MessageGuardMatrix() &&
                   HostileStreamInvariants();
   if (!ok) {

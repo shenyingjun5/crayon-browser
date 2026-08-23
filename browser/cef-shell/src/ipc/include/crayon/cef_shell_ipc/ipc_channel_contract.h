@@ -55,6 +55,10 @@ class FrameCodec final {
   /// Decodes the next frame from already-buffered bytes.
   DecodeStatus Take(std::vector<std::uint8_t>* payload, std::uint32_t* declared);
 
+  /// Clears all buffered bytes (connection reset / resynchronize);
+  /// pending hostile leftovers must not leak into a new connection.
+  void Reset();
+
   /// Encodes `payload` into a full frame.
   static std::vector<std::uint8_t> Encode(const std::vector<std::uint8_t>& payload);
 

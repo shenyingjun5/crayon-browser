@@ -484,6 +484,32 @@ fn error_display_and_caap_mapping_golden() {
 }
 
 #[test]
+fn scope_summary_distinguishes_targeted_and_untargeted() {
+    // AGT-04 P2 fix: confirmation UIs must be able to render untargeted
+    // grants as any-target scope instead of relying on Option shapes.
+    let mut manager = GrantManager::new();
+    let mut req = request(GrantKind::AppSession);
+    let untargeted = manager.issue(req.clone(), 0).unwrap();
+    req.target = Some(tab(9));
+    let targeted = manager.issue(req.clone(), 0).unwrap();
+    req.target = Some(AgentTarget::ActiveTab);
+    let active = manager.issue(req, 0).unwrap();
+
+    let untargeted_grant = manager.get(&untargeted).unwrap();
+    let targeted_grant = manager.get(&targeted).unwrap();
+    let active_grant = manager.get(&active).unwrap();
+    assert!(!untargeted_grant.is_targeted());
+    assert!(targeted_grant.is_targeted());
+    assert!(active_grant.is_targeted());
+    assert_eq!(
+        untargeted_grant.scope_summary(),
+        "grant:page_read:any-target"
+    );
+    assert_eq!(targeted_grant.scope_summary(), "grant:page_read:tab:tab-9");
+    assert_eq!(active_grant.scope_summary(), "grant:page_read:active-tab");
+}
+
+#[test]
 fn stats_counters_track_transitions() {
     let mut manager = GrantManager::new();
     manager.issue(request(GrantKind::SingleUse), 0).unwrap();

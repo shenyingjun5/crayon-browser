@@ -36,6 +36,15 @@ void InputProofGate::NotePlaybackProgress(std::uint32_t tab, std::uint64_t navig
   last_progress_seconds_ = current_seconds;
 }
 
+void InputProofGate::NotePlaybackSuspended(std::uint32_t tab,
+                                          std::uint64_t navigation_id) {
+  if (last_progress_tab_ == tab && last_progress_navigation_ == navigation_id) {
+    // Freeze the baseline at the current position and mark the stream
+    // as not advancing, so an input now snapshots "paused".
+    previous_progress_seconds_ = last_progress_seconds_;
+  }
+}
+
 void InputProofGate::SetActiveTab(std::uint32_t tab) {
   active_tab_ = tab;
 }

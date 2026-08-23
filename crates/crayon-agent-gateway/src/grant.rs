@@ -179,6 +179,29 @@ impl Grant {
         self.revoked
     }
 
+    /// Whether the grant is bound to one specific target.  Confirmation
+    /// UIs must render untargeted grants as "any target of this client
+    /// and profile" so users cannot misread the scope (AGT-05).
+    #[must_use]
+    pub const fn is_targeted(&self) -> bool {
+        self.target.is_some()
+    }
+
+    /// Closed-form scope descriptor for confirmation summaries; carries
+    /// no page data and never fails.
+    #[must_use]
+    pub fn scope_summary(&self) -> String {
+        match &self.target {
+            None => format!("grant:{}:any-target", self.capability.wire_name()),
+            Some(AgentTarget::Tab { tab }) => {
+                format!("grant:{}:tab:{}", self.capability.wire_name(), tab)
+            }
+            Some(AgentTarget::ActiveTab) => {
+                format!("grant:{}:active-tab", self.capability.wire_name())
+            }
+        }
+    }
+
     #[must_use]
     pub const fn uses(&self) -> u32 {
         self.uses

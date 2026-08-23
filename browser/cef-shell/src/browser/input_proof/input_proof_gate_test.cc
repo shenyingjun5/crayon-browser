@@ -57,6 +57,29 @@ bool AutoplayAfterUnrelatedClickDenied() {  // BR-005
   return true;
 }
 
+bool ExplicitPauseMarkerBeatsSparseSampling() {
+  // CEF-10 P2 fix: an explicitly reported pause must clear the
+  // progressing snapshot even with a single dense sample, so a
+  // subsequent user input qualifies instead of being mistaken for
+  // autoplay coexistence.
+  InputProofGate gate(/*active_tab=*/1);
+  gate.NotePlaybackProgress(1, 10, 1.0);
+  gate.NotePlaybackProgress(1, 10, 2.0);  // dense progressing stream
+  gate.NotePlaybackSuspended(1, 10);      // explicit pause marker
+  gate.NoteUserInput(1, 10);              // user resumes
+  gate.NotePlaybackProgress(1, 10, 2.4);
+  CHECK(gate.Evaluate(1, 10) == ProofResult::kEligible);
+  // Marker scoped to the same tab/navigation only.
+  InputProofGate scoped(/*active_tab=*/1);
+  scoped.NotePlaybackProgress(1, 10, 1.0);
+  scoped.NotePlaybackProgress(1, 10, 2.0);
+  scoped.NotePlaybackSuspended(2, 10);  // other tab: no effect
+  scoped.NoteUserInput(1, 10);
+  scoped.NotePlaybackProgress(1, 10, 2.4);
+  CHECK(scoped.Evaluate(1, 10) == ProofResult::kDeniedAlreadyProgressing);
+  return true;
+}
+
 bool StaleNavigationDenied() {  // BR-007
   InputProofGate gate(/*active_tab=*/1);
   gate.NoteUserInput(1, 10);
@@ -137,7 +160,8 @@ bool StormInvariants() {
 
 int main() {
   const bool ok = ForgedPlayingDenied() && TrustedInputAndProgressAllowed() &&
-                  AutoplayAfterUnrelatedClickDenied() && StaleNavigationDenied() &&
+                  AutoplayAfterUnrelatedClickDenied() &&
+                  ExplicitPauseMarkerBeatsSparseSampling() && StaleNavigationDenied() &&
                   ActiveTabAndBackgroundInput() && ClickWithoutPlaybackDenied() &&
                   StormInvariants();
   if (!ok) {

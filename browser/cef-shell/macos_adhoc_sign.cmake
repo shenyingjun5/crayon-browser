@@ -27,13 +27,17 @@ function(sign_bundle bundle)
   endif()
 endfunction()
 
-if(EXISTS "${CRAYON_HELPER_MANIFEST}")
-  file(STRINGS "${CRAYON_HELPER_MANIFEST}" helper_names)
-  foreach(helper_name IN LISTS helper_names)
-    get_filename_component(helper_dir "${CRAYON_APP_BUNDLE}" DIRECTORY)
-    sign_bundle("${helper_dir}/${helper_name}.app")
-  endforeach()
+# The helper manifest is generated at configure time; a missing
+# manifest means the assembly contract broke and helpers would be
+# silently unsigned — fail instead.
+if(NOT EXISTS "${CRAYON_HELPER_MANIFEST}")
+  message(FATAL_ERROR "helper manifest missing: ${CRAYON_HELPER_MANIFEST}")
 endif()
+file(STRINGS "${CRAYON_HELPER_MANIFEST}" helper_names)
+foreach(helper_name IN LISTS helper_names)
+  get_filename_component(helper_dir "${CRAYON_APP_BUNDLE}" DIRECTORY)
+  sign_bundle("${helper_dir}/${helper_name}.app")
+endforeach()
 
 sign_bundle("${CRAYON_APP_BUNDLE}")
 message(STATUS "Ad-hoc signed ${CRAYON_APP_BUNDLE} (+ helpers) for the macOS sandbox")

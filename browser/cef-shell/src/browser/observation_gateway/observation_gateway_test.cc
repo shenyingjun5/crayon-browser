@@ -49,7 +49,7 @@ NetworkObservation Net(std::uint64_t nav) {
 
 bool MergeAndDrain() {
   ObservationGateway gateway;
-  gateway.AdvanceGeneration(/*tab_id=*/1);
+  gateway.AdvanceGeneration(/*tab_id=*/1, /*navigation_id=*/10);
   CHECK(gateway.SubmitMedia(1, 10, Media(10)) == GatewayResult::kAccepted);
   CHECK(gateway.SubmitNetwork(1, 10, Net(10)) == GatewayResult::kAccepted);
   const auto batch = gateway.Drain(10);
@@ -63,28 +63,32 @@ bool MergeAndDrain() {
 
 bool GenerationFencingDropsLateEvents() {
   ObservationGateway gateway;
-  gateway.AdvanceGeneration(1);  // generation 1
+  gateway.AdvanceGeneration(1, 10);  // generation 1
   CHECK(gateway.SubmitMedia(1, 10, Media(10)) == GatewayResult::kAccepted);
   // Navigation: generation 2; queued generation-1 events drop now.
-  CHECK(gateway.AdvanceGeneration(1) == 1);
+  CHECK(gateway.AdvanceGeneration(1, 11) == 1);
   CHECK(gateway.stats().queued == 0);
   CHECK(gateway.GenerationOf(1) == 2);
   // A straggler from the old navigation re-submits under the current
   // generation but carries the old navigation id; it merges (the
   // downstream consumer rejects on navigation mismatch), while a tab
   // without any navigation is dropped at the gate.
-  CHECK(gateway.SubmitMedia(1, 10, Media(10)) == GatewayResult::kAccepted);
+  // A straggler carrying the OLD navigation id is now rejected at the
+  // gateway itself (CEF-12 review follow-up) instead of downstream.
+  CHECK(gateway.SubmitMedia(1, 10, Media(10)) == GatewayResult::kDroppedStaleGeneration);
   CHECK(gateway.SubmitMedia(2, 10, Media(10)) == GatewayResult::kDroppedStaleGeneration);
+  // The current navigation flows.
+  CHECK(gateway.SubmitMedia(1, 11, Media(11)) == GatewayResult::kAccepted);
   // Other tabs are unaffected.
-  gateway.AdvanceGeneration(3);
+  gateway.AdvanceGeneration(3, 30);
   CHECK(gateway.SubmitNetwork(3, 30, Net(30)) == GatewayResult::kAccepted);
-  CHECK(gateway.stats().dropped_stale_total == 2);
+  CHECK(gateway.stats().dropped_stale_total == 3);
   return true;
 }
 
 bool BackpressureBounded() {
   ObservationGateway gateway;
-  gateway.AdvanceGeneration(1);
+  gateway.AdvanceGeneration(1, 10);
   for (std::size_t i = 0; i < kMaxQueuedEvents; ++i) {
     CHECK(gateway.SubmitMedia(1, 10, Media(10)) == GatewayResult::kAccepted);
   }
@@ -104,7 +108,7 @@ bool BackpressureBounded() {
 bool TabCapacityBounded() {
   ObservationGateway gateway;
   for (std::uint32_t tab = 1; tab <= 64; ++tab) {
-    gateway.AdvanceGeneration(tab);
+    gateway.AdvanceGeneration(tab, tab);
   }
   CHECK(gateway.GenerationOf(64) == 1);
   // The 65th untracked tab cannot fence and its events drop.
@@ -127,7 +131,7 @@ bool StormInvariants() {
     const std::uint64_t nav = next() % 4;
     switch (next() % 4) {
       case 0:
-        static_cast<void>(gateway.AdvanceGeneration(tab));
+        static_cast<void>(gateway.AdvanceGeneration(tab, nav));
         break;
       case 1:
         static_cast<void>(gateway.SubmitMedia(tab, nav, Media(nav)));

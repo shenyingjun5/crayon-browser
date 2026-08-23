@@ -11,7 +11,7 @@ namespace {
 
 using crayon::cef_shell::network::HeaderClass;
 using crayon::cef_shell::network::kMaxObservations;
-using crayon::cef_shell::network::kRateWindowBudget;
+using crayon::cef_shell::network::kRateBurst;
 using crayon::cef_shell::network::NetworkObservation;
 using crayon::cef_shell::network::NetworkObserveResult;
 using crayon::cef_shell::network::NetworkObserver;
@@ -118,17 +118,25 @@ bool EmeAssociationUpgradesProtection() {  // BR-011
 
 bool RateAndCapacityBounds() {
   NetworkObserver observer;
-  // Fixed window budget.
-  for (std::uint32_t i = 0; i < kRateWindowBudget; ++i) {
+  // Token bucket: drain the burst inside one instant.
+  for (std::uint32_t i = 0; i < kRateBurst; ++i) {
     CHECK(observer.Observe(Media("https://a.example/s.mp4", 1), "", 0) ==
           NetworkObserveResult::kAccepted);
   }
   CHECK(observer.Observe(Media("https://a.example/s.mp4", 1), "", 0) ==
         NetworkObserveResult::kDroppedRateLimited);
-  // The next window admits again, until capacity binds.
+  // No boundary doubling: the next millisecond only refills a quarter
+  // token, so a second instant burst is still shed (the CEF-11 review
+  // follow-up this fixed window used to allow).
+  CHECK(observer.Observe(Media("https://a.example/s.mp4", 1), "", 1) ==
+        NetworkObserveResult::kDroppedRateLimited);
+  // After enough elapsed time the bucket refills toward capacity.
+  CHECK(observer.Observe(Media("https://a.example/s.mp4", 1), "", 100'000) ==
+        NetworkObserveResult::kAccepted);
+  // Capacity still binds the retained store.
   std::size_t accepted = observer.retained_count();
-  for (std::uint32_t i = 0; i < kRateWindowBudget && accepted < kMaxObservations; ++i) {
-    const auto result = observer.Observe(Media("https://a.example/s.mp4", 1), "", 1'000);
+  for (std::uint32_t i = 0; accepted < kMaxObservations; ++i) {
+    const auto result = observer.Observe(Media("https://a.example/s.mp4", 1), "", 100'000 + i * 100'000ULL);
     if (result == NetworkObserveResult::kAccepted) {
       ++accepted;
     } else {
@@ -136,8 +144,8 @@ bool RateAndCapacityBounds() {
       break;
     }
   }
-  CHECK(observer.retained_count() <= kMaxObservations);
-  CHECK(observer.Observe(Media("https://a.example/s.mp4", 1), "", 1'000) ==
+  CHECK(observer.retained_count() == kMaxObservations);
+  CHECK(observer.Observe(Media("https://a.example/s.mp4", 1), "", 10'000'000) ==
         NetworkObserveResult::kDroppedCapacity);
   // Oversize content_length metadata is dropped.
   NetworkObserver fresh;

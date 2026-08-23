@@ -355,3 +355,8 @@
 - 验证：`cmake -S . -B .cache/build/bux15 -DCRAYON_BUILD_TESTS=ON -DCRAYON_ENABLE_CEF=OFF` configure/build 零告警零错误；`session_restore_contract`（7 组：id 校验、无痕拒绝、策略决策、崩溃 tail 丢弃、旧 epoch 拒绝、跨 Profile 隔离、容量）与 `profile_picker_contract`（5 组：列表管理、开合、切换矩阵、无痕请求、清理失败显式）均 1/1 通过；共享层回归 27/29（2 失败为本机既有 CEF 环境阻塞，与前次记录一致）；`git diff --check` 通过。
 - Code Review：P0 0、P1 0、P2 1（会话记录为视图模型，未含磁盘持久化 schema——崩溃后进程内 tail 丢失语义与真实崩溃场景的 checkpoint 频率需在 CEF shell 接线时定义，持久化归后续 engine adapter 任务）。
 - 未覆盖与风险：CEF shell 装配（picker UI 呈现、无痕窗口创建接线、崩溃标记来源）、磁盘 session 持久化与实机验收归后续任务。`BUX-15` 转为 `VERIFIED`（实机门禁后置）。
+
+### Review P2 修复记录（2026-08-23）
+
+- BUX-12：`FindBarController::SetCaseSensitive(bool)` 查找栏打开时切换大小写并重置 cursor/match 计数，关闭态拒绝；契约测试补切换与隐藏态拒绝断言。原 P2（只能在 StartFind 设置）关闭。
+- BUX-15/16 的 P2 维持延期（持久化 schema 归 engine adapter、拖放归 CEF shell 装配，归属已在完成记录注明）。

@@ -49,11 +49,22 @@ bool FindSessionLifecycle() {
   CHECK(find.UpdateQuery("need"));
   CHECK(find.match_count() == 0 && find.cursor() == 0);
   CHECK(!find.FindNext());
+  // Match-case toggles live and reset the cursor; rejected while
+  // hidden.
+  find.ReportMatchCount(4);
+  CHECK(find.FindNext() && find.cursor() == 1);
+  CHECK(find.SetCaseSensitive(true));
+  CHECK(find.case_sensitive());
+  CHECK(find.match_count() == 0 && find.cursor() == 0);
+  find.ReportMatchCount(2);
+  CHECK(find.FindNext() && find.cursor() == 1);
+  CHECK(find.SetCaseSensitive(false) && !find.case_sensitive());
   // Refinement is rejected while hidden.
   find.EndFind();
   CHECK(!find.active() && find.query().empty() && !find.case_sensitive());
   CHECK(find.match_count() == 0);
   CHECK(!find.UpdateQuery("x"));
+  CHECK(!find.SetCaseSensitive(true));
   return true;
 }
 

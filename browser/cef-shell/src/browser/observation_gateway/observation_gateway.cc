@@ -10,7 +10,8 @@ constexpr std::size_t kMaxTrackedTabs = 64;
 
 }  // namespace
 
-std::size_t ObservationGateway::AdvanceGeneration(std::uint32_t tab_id) {
+std::size_t ObservationGateway::AdvanceGeneration(std::uint32_t tab_id,
+                                                  std::uint64_t navigation_id) {
   auto it = std::find_if(tabs_.begin(), tabs_.end(),
                          [tab_id](const std::pair<std::uint32_t, TabState>& entry) {
                            return entry.first == tab_id;
@@ -23,6 +24,7 @@ std::size_t ObservationGateway::AdvanceGeneration(std::uint32_t tab_id) {
     it = std::prev(tabs_.end());
   }
   ++it->second.generation;
+  it->second.current_navigation_id = navigation_id;
   const std::uint32_t generation = it->second.generation;
   // Drop every queued event of an older generation for this tab.
   const auto before = queue_.size();
@@ -49,8 +51,16 @@ GatewayResult ObservationGateway::Submit(GatewayEvent event) {
   // Fence first: events stamped with an older generation than the
   // tab's current one are stale (BR-007-shaped stragglers).
   event.generation = GenerationOf(event.tab_id);
-  if (event.navigation_id == 0 || event.generation == 0) {
-    // No navigation recorded for the tab: nothing can be attributed.
+  const auto tab_it = std::find_if(
+      tabs_.begin(), tabs_.end(),
+      [&event](const std::pair<std::uint32_t, TabState>& entry) {
+        return entry.first == event.tab_id;
+      });
+  // Precheck (CEF-12 review follow-up): reject stragglers carrying a
+  // navigation id other than the tab's current one before queueing,
+  // instead of relying on downstream navigation matching.
+  if (tab_it == tabs_.end() || event.navigation_id == 0 ||
+      event.navigation_id != tab_it->second.current_navigation_id) {
     ++dropped_stale_total_;
     return GatewayResult::kDroppedStaleGeneration;
   }

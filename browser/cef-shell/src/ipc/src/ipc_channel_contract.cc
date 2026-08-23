@@ -82,6 +82,10 @@ DecodeStatus FrameCodec::Take(std::vector<std::uint8_t>* payload, std::uint32_t*
   return DecodeStatus::kComplete;
 }
 
+void FrameCodec::Reset() {
+  buffer_.clear();
+}
+
 // static
 std::vector<std::uint8_t> FrameCodec::Encode(const std::vector<std::uint8_t>& payload) {
   if (payload.size() > kMaxFrameBytes) {

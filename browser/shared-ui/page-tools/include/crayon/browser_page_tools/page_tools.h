@@ -32,6 +32,10 @@ class FindBarController final {
   /// Live query refinement while the bar is open.
   bool UpdateQuery(const std::string& query);
 
+  /// Toggles match-case while the bar is open; resets the cursor so
+  /// the engine restarts the search under the new option.
+  bool SetCaseSensitive(bool case_sensitive);
+
   /// Engine-reported match count for the current query; the cursor is
   /// clamped into range.
   void ReportMatchCount(std::size_t count);

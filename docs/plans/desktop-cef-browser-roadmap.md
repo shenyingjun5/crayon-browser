@@ -354,3 +354,15 @@
 - Code Review：P0 0、P1 0、P2 1——入口未按 navigation_id 与当前代导航比对（同一 tab 新导航 id 旧值仍可入队，靠下游消费方 navigation 匹配拒绝）；CEF-14 接线时可在 gateway 增加 tab→current_navigation 映射前置拒绝。
 - 未覆盖与风险：CEF 事件→gateway 接线与 Core client（CEF-07 supervisor）传输装配、wire DTO 编码（crayon-ipc-schema）、E2E fixture 行为（CEF-14）。`CEF-12` 转为 `VERIFIED`；`CEF-13`（依赖 CEF-08+12）待 CEF-08 UI 壳任务。
 - 批注（2026-08-23 CEF-06..12 五连任务）：全部为平台中立契约/模型层，macOS arm64 开发机完成；CEF 壳内真实事件接线与实机 E2E 统一归 CEF-08/13/14 后续任务。
+
+### Review P2 批量修复记录（2026-08-23）
+
+- 范围：各任务 Code Review 登记的 P2 中可在模型层关闭的 7 项；归属未来接线/真机任务的 P2（CEF-07/09 接线、BUX-15/16 装配、AGT-12A AGT-15 复核、CEF-01E Rosetta/x64 真机）维持原延期理由不变。
+- 修复：
+  1. CEF-02M：`macos_adhoc_sign.cmake` 在 helper manifest 缺失时 FATAL（原为静默跳过——helpers 会无声未签名）。
+  2. CEF-06：`FrameCodec::Reset()` 连接重置清空缓冲，敌意残留不再泄入新连接（新测试 ResetClearsHostileLeftovers）。
+  3. CEF-10：`InputProofGate::NotePlaybackSuspended(tab, nav)` 显式暂停标记（冻结基线、清除推进快照），消除"输入前至少两个采样点"的隐式依赖（新测试 ExplicitPauseMarkerBeatsSparseSampling，含跨 tab 作用域验证）。
+  4. CEF-11：限流由固定窗口改为令牌桶（容量 256、每 4ms 补 1），消除窗口边界 2× 突发（测试新增边界不双倍断言）。
+  5. CEF-12：gateway 记录 tab→current_navigation_id，携带非当前导航 id 的事件在入队前拒绝（原靠下游消费方拒绝；测试更新为前置拒绝 + dropped 计数 3）。
+- 修复 6/7（BUX/AGT 侧，见各 Roadmap）：BUX-12 `FindBarController::SetCaseSensitive` 查找栏内切换并重置 cursor；AGT-04 `Grant::is_targeted()/scope_summary()` 闭合作用域描述——AGT-05 确认 UI 必须渲染 `any-target` 与 `tab:<id>` 的区别（验收项）。
+- 验证：`cargo test -p crayon-agent-gateway` 61/61；clippy `-D warnings`、fmt 通过；C++ 共享层四个构建目录 ctest 各 35/35；`git diff --check` 通过。
