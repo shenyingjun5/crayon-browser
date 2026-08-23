@@ -61,7 +61,7 @@
         "PROJECT_ARCH": "x86_64",
         "CRAYON_ENABLE_CEF": "ON",
         "CRAYON_CEF_ROOT": "$env{CRAYON_CEF_ROOT}",
-        "USE_SANDBOX": "OFF"
+        "USE_SANDBOX": "ON"
       }
     },
     {
@@ -80,7 +80,7 @@
         "PROJECT_ARCH": "arm64",
         "CRAYON_ENABLE_CEF": "ON",
         "CRAYON_CEF_ROOT": "$env{CRAYON_CEF_ROOT}",
-        "USE_SANDBOX": "OFF"
+        "USE_SANDBOX": "ON"
       }
     }
   ],

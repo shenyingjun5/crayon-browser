@@ -136,6 +136,10 @@ if(OS_WINDOWS)
 endif()
 
 if(OS_MAC)
+  if(NOT USE_SANDBOX)
+    message(FATAL_ERROR
+            "macOS product builds require the CEF sandbox (CEF-02M)")
+  endif()
   set(CRAYON_MACOS_EXECUTABLE "CrayonBrowser")
   set(CRAYON_MACOS_PRODUCT_NAME "CrayonBrowser")
   set(CRAYON_MACOS_BUNDLE_ID "com.crayon.browser")
@@ -262,6 +266,19 @@ if(OS_MAC)
   file(GENERATE
        OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/crayon-macos-helper-apps.txt"
        CONTENT "${crayon_macos_helper_manifest}\n")
+
+  # The macOS sandbox requires signed bundles (ad-hoc for local builds;
+  # distribution signing/notarization belongs to PLT-M05). Helpers must be
+  # signed before the main app so the main signature covers them.
+  add_custom_command(
+    TARGET ${CRAYON_BROWSER_TARGET} POST_BUILD
+    COMMAND
+      "${CMAKE_COMMAND}" "-DCRAYON_APP_BUNDLE=${CRAYON_MACOS_APP}"
+      "-DCRAYON_HELPER_MANIFEST=${CMAKE_CURRENT_BINARY_DIR}/crayon-macos-helper-apps.txt"
+      "-DCRAYON_CEF_SHELL_SOURCE=${CMAKE_CURRENT_SOURCE_DIR}" -P
+      "${CMAKE_CURRENT_SOURCE_DIR}/macos_adhoc_sign.cmake"
+    COMMENT "Ad-hoc signing CrayonBrowser bundles for the macOS sandbox"
+    VERBATIM)
 
   if(CRAYON_BUILD_TESTS)
     add_test(
