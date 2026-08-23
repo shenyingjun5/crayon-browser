@@ -16,7 +16,9 @@ constexpr uint32_t kMediaAccessAudio = 1 << 2;
 CefPermissionHandlerAdapter::CefPermissionHandlerAdapter(
     PermissionStore* store)
     : store_(store) {
-  CEF_REQUIRE_UI_THREAD();
+  // Passive adapter: no CEF state is touched here, and construction runs
+  // before CefInitialize on the main thread; thread checks live in the
+  // callback methods.
 }
 
 bool CefPermissionHandlerAdapter::OnRequestMediaAccessPermission(
@@ -49,95 +51,76 @@ bool CefPermissionHandlerAdapter::OnRequestMediaAccessPermission(
   }
 
   if (allow_video || allow_audio) {
-    callback->Continue(allow_video ? kMediaAccessVideo : 0 |
-                       allow_audio ? kMediaAccessAudio : 0);
+    callback->Continue((allow_video ? kMediaAccessVideo : 0u) |
+                       (allow_audio ? kMediaAccessAudio : 0u));
   } else {
     callback->Cancel();
   }
   return true;
 }
 
-bool CefPermissionHandlerAdapter::OnShowNotification(
+bool CefPermissionHandlerAdapter::OnShowPermissionPrompt(
     CefRefPtr<CefBrowser> browser,
-    CefRefPtr<CefFrame> frame,
-    const CefString& origin_url,
-    CefRefPtr<CefNotification> notification,
-    CefRefPtr<CefNotificationCallback> callback) {
+    uint64_t prompt_id,
+    const CefString& requesting_origin,
+    uint32_t requested_permissions,
+    CefRefPtr<CefPermissionPromptCallback> callback) {
   CEF_REQUIRE_UI_THREAD();
   static_cast<void>(browser);
-  static_cast<void>(frame);
-  static_cast<void>(notification);
+  static_cast<void>(prompt_id);
+
+  // CEF permission type bits (cef_permission_request_types_t).
+  constexpr uint32_t kPermissionClipboard = 1 << 4;
+  constexpr uint32_t kPermissionGeolocation = 1 << 8;
+  constexpr uint32_t kPermissionNotifications = 1 << 15;
 
   const std::optional<std::string> origin =
-      ExtractSiteOrigin(origin_url.ToString());
-  if (!origin.has_value() ||
-      store_->Query(*origin, PermissionKind::kNotifications) ==
-          PermissionDecision::kDeny) {
-    callback->Cancel();
-    return true;
-  }
-  callback->Continue();
-  return true;
-}
-
-bool CefPermissionHandlerAdapter::OnRequestGeolocationPermission(
-    CefRefPtr<CefBrowser> browser,
-    CefRefPtr<CefFrame> frame,
-    const CefString& requesting_url,
-    CefRefPtr<CefGeolocationCallback> callback) {
-  CEF_REQUIRE_UI_THREAD();
-  static_cast<void>(browser);
-  static_cast<void>(frame);
-
-  const std::optional<std::string> origin =
-      ExtractSiteOrigin(requesting_url.ToString());
-  if (!origin.has_value() ||
-      store_->Query(*origin, PermissionKind::kGeolocation) ==
-          PermissionDecision::kDeny) {
-    callback->Cancel();
-    return true;
-  }
-  callback->Continue();
-  return true;
-}
-
-bool CefPermissionHandlerAdapter::OnRequestClipboardPermission(
-    CefRefPtr<CefBrowser> browser,
-    CefRefPtr<CefFrame> frame,
-    const CefString& requesting_url,
-    CefRefPtr<CefClipboardCallback> callback) {
-  CEF_REQUIRE_UI_THREAD();
-  static_cast<void>(browser);
-  static_cast<void>(frame);
-
-  const std::optional<std::string> origin =
-      ExtractSiteOrigin(requesting_url.ToString());
+      ExtractSiteOrigin(requesting_origin.ToString());
   if (!origin.has_value()) {
-    callback->Cancel();
+    callback->Continue(CEF_PERMISSION_RESULT_DENY);
     return true;
   }
 
-  // Distinguish read vs write by checking both; deny if either is denied.
-  const PermissionDecision read_decision =
-      store_->Query(*origin, PermissionKind::kClipboardRead);
-  const PermissionDecision write_decision =
-      store_->Query(*origin, PermissionKind::kClipboardWrite);
-  if (read_decision == PermissionDecision::kDeny &&
-      write_decision == PermissionDecision::kDeny) {
-    callback->Cancel();
-    return true;
+  // Default deny: every requested bit must map onto a store kind with an
+  // explicit allow; unmapped types always deny.
+  bool allowed = false;
+  const auto allow_kind = [&](PermissionKind kind) {
+    if (store_->Query(*origin, kind) != PermissionDecision::kDeny) {
+      allowed = true;
+    }
+  };
+  if ((requested_permissions & kPermissionNotifications) != 0) {
+    allow_kind(PermissionKind::kNotifications);
   }
-  callback->Continue();
+  if ((requested_permissions & kPermissionGeolocation) != 0) {
+    allow_kind(PermissionKind::kGeolocation);
+  }
+  if ((requested_permissions & kPermissionClipboard) != 0) {
+    allow_kind(PermissionKind::kClipboardRead);
+    allow_kind(PermissionKind::kClipboardWrite);
+  }
+  // Any requested bit without a mapping keeps `allowed` untouched
+  // (deny); grant only when at least one mapped kind is allowed AND no
+  // unmapped bit is requested.
+  const uint32_t kMappedMask =
+      kPermissionNotifications | kPermissionGeolocation | kPermissionClipboard;
+  if ((requested_permissions & ~kMappedMask) != 0) {
+    allowed = false;
+  }
+  callback->Continue(allowed ? CEF_PERMISSION_RESULT_ACCEPT
+                             : CEF_PERMISSION_RESULT_DENY);
   return true;
 }
 
-bool CefPermissionHandlerAdapter::IsAllowed(const CefString& url,
-                                            PermissionKind kind) {
-  const std::optional<std::string> origin = ExtractSiteOrigin(url.ToString());
-  if (!origin.has_value()) {
-    return false;
-  }
-  return store_->Query(*origin, kind) != PermissionDecision::kDeny;
+void CefPermissionHandlerAdapter::OnDismissPermissionPrompt(
+    CefRefPtr<CefBrowser> browser,
+    uint64_t prompt_id,
+    cef_permission_request_result_t result) {
+  CEF_REQUIRE_UI_THREAD();
+  static_cast<void>(browser);
+  static_cast<void>(prompt_id);
+  static_cast<void>(result);
+  // No queued prompt state to clean up: decisions are immediate.
 }
 
 }  // namespace crayon::browser::cef_shell::permission

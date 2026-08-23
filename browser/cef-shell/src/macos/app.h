@@ -7,7 +7,6 @@
 #include "browser/permission/permission_store.h"
 #include "browser/window/tab_controller.h"
 
-#include "browser/window/tab_controller.h"
 #include "include/cef_app.h"
 
 namespace crayon::browser::cef_shell {
@@ -30,8 +29,6 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
  private:
   const std::string product_name_;
   std::unique_ptr<permission::PermissionStore> permission_store_;
-  CefRefPtr<window::TabController> tab_controller_;
-  const std::string product_name_;
   CefRefPtr<window::TabController> tab_controller_;
 
   IMPLEMENT_REFCOUNTING(BrowserApp);

@@ -16,7 +16,7 @@ class CefDownloadHandlerAdapter final : public CefDownloadHandler {
   explicit CefDownloadHandlerAdapter(PermissionStore* store);
 
   // CefDownloadHandler overrides.
-  void OnBeforeDownload(
+  bool OnBeforeDownload(
       CefRefPtr<CefBrowser> browser,
       CefRefPtr<CefDownloadItem> download_item,
       const CefString& suggested_name,

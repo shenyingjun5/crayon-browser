@@ -48,6 +48,16 @@ endforeach()
 
 include("${REPOSITORY_ROOT}/cmake/cef/DownloadCef.cmake")
 
+# Windows exports TEMP; macOS/Linux use TMPDIR. Fall back so the contract
+# never tries to create directories at the filesystem root.
+if(NOT DEFINED ENV{TEMP})
+  if(DEFINED ENV{TMPDIR})
+    set(ENV{TEMP} "$ENV{TMPDIR}")
+  else()
+    set(ENV{TEMP} "/tmp")
+  endif()
+endif()
+
 string(RANDOM LENGTH 12 ALPHABET 0123456789abcdef contract_suffix)
 file(TO_CMAKE_PATH "$ENV{TEMP}/crayon-cef-contract-${contract_suffix}" contract_tmp)
 set(valid_root "${contract_tmp}/valid-root")

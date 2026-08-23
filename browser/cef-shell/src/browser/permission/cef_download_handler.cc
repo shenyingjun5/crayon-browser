@@ -7,10 +7,12 @@ namespace crayon::browser::cef_shell::permission {
 
 CefDownloadHandlerAdapter::CefDownloadHandlerAdapter(PermissionStore* store)
     : store_(store) {
-  CEF_REQUIRE_UI_THREAD();
+  // Passive adapter: no CEF state is touched here, and construction runs
+  // before CefInitialize on the main thread; thread checks live in the
+  // callback methods.
 }
 
-void CefDownloadHandlerAdapter::OnBeforeDownload(
+bool CefDownloadHandlerAdapter::OnBeforeDownload(
     CefRefPtr<CefBrowser> browser,
     CefRefPtr<CefDownloadItem> download_item,
     const CefString& suggested_name,
@@ -18,13 +20,15 @@ void CefDownloadHandlerAdapter::OnBeforeDownload(
   CEF_REQUIRE_UI_THREAD();
   static_cast<void>(suggested_name);
 
+  // The decision is always ours (handled); returning false would fall
+  // back to CEF default handling and bypass the permission store.
   if (!browser || !download_item) {
-    return;
+    return true;  // fail closed: cancel by not invoking the callback
   }
 
   CefRefPtr<CefFrame> main_frame = browser->GetMainFrame();
   if (!main_frame) {
-    return;
+    return true;  // fail closed
   }
 
   const std::optional<std::string> origin =
@@ -33,10 +37,11 @@ void CefDownloadHandlerAdapter::OnBeforeDownload(
       store_->Query(*origin, PermissionKind::kDownload) ==
           PermissionDecision::kDeny) {
     // Cancel the download by not invoking the callback.
-    return;
+    return true;
   }
 
   callback->Continue(CefString(), true);
+  return true;
 }
 
 void CefDownloadHandlerAdapter::OnDownloadUpdated(

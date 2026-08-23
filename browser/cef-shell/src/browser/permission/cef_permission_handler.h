@@ -13,7 +13,11 @@ namespace crayon::browser::cef_shell::permission {
 // All callbacks run on the CEF UI thread.  The default for every request is
 // deny; an explicit allow in the store is required to permit the operation.
 //
-// Supported CEF permission kinds:
+// Supported CEF permission surfaces (CEF 150 vtable):
+// - Media access (camera/microphone)  -> OnRequestMediaAccessPermission
+// - Per-site permission prompts       -> OnShowPermissionPrompt, mapping
+//   CEF permission type bits onto PermissionKind (notifications,
+//   geolocation, clipboard); every unmapped type is denied by default.
 // - Media (camera / microphone)  -> OnRequestMediaAccessPermission
 // - Notifications                -> OnShowNotification
 // - Geolocation                  -> OnRequestGeolocationPermission (if avail)
@@ -31,21 +35,14 @@ class CefPermissionHandlerAdapter final : public CefPermissionHandler {
       uint32_t requested_permissions,
       CefRefPtr<CefMediaAccessCallback> callback) override;
 
-  bool OnShowNotification(
-      CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
-      const CefString& origin_url,
-      CefRefPtr<CefNotification> notification,
-      CefRefPtr<CefNotificationCallback> callback) override;
+  bool OnShowPermissionPrompt(
+      CefRefPtr<CefBrowser> browser, uint64_t prompt_id,
+      const CefString& requesting_origin, uint32_t requested_permissions,
+      CefRefPtr<CefPermissionPromptCallback> callback) override;
 
-  bool OnRequestGeolocationPermission(
-      CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
-      const CefString& requesting_url,
-      CefRefPtr<CefGeolocationCallback> callback) override;
-
-  bool OnRequestClipboardPermission(
-      CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
-      const CefString& requesting_url,
-      CefRefPtr<CefClipboardCallback> callback) override;
+  void OnDismissPermissionPrompt(
+      CefRefPtr<CefBrowser> browser, uint64_t prompt_id,
+      cef_permission_request_result_t result) override;
 
  private:
   // Maps a CEF URL to a PermissionKind decision via the store.

@@ -3,6 +3,7 @@
 
 #include "browser/context/profile_id_validator.h"
 #include "include/cef_request_context.h"
+#include "include/cef_request_context_handler.h"
 
 #include <string>
 #include <unordered_map>

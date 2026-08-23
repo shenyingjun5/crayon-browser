@@ -40,39 +40,6 @@ class WindowClient final : public CefClient,
   CefRefPtr<CefCommandHandler> GetCommandHandler() override { return this; }
 
   void OnAfterCreated(CefRefPtr<CefBrowser> browser) override;
-#include <map>
-#include <optional>
-#include <string>
-
-#include "browser/window/tab_model.h"
-#include "include/cef_client.h"
-#include "include/cef_command_handler.h"
-
-namespace crayon::browser::cef_shell::window {
-
-class TabController;
-
-// Normalizes CEF browser callbacks into TabModel state transitions. The
-// controller is owned by the application and outlives every browser.
-// All methods run on the CEF UI thread.
-class WindowClient final : public CefClient,
-                           public CefLifeSpanHandler,
-                           public CefDisplayHandler,
-                           public CefLoadHandler,
-                           public CefRequestHandler,
-                           public CefFocusHandler,
-                           public CefCommandHandler {
- public:
-  explicit WindowClient(TabController* controller) : controller_(controller) {}
-
-  CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
-  CefRefPtr<CefDisplayHandler> GetDisplayHandler() override { return this; }
-  CefRefPtr<CefLoadHandler> GetLoadHandler() override { return this; }
-  CefRefPtr<CefRequestHandler> GetRequestHandler() override { return this; }
-  CefRefPtr<CefFocusHandler> GetFocusHandler() override { return this; }
-  CefRefPtr<CefCommandHandler> GetCommandHandler() override { return this; }
-
-  void OnAfterCreated(CefRefPtr<CefBrowser> browser) override;
   bool DoClose(CefRefPtr<CefBrowser> browser) override;
   void OnBeforeClose(CefRefPtr<CefBrowser> browser) override;
 
@@ -106,15 +73,6 @@ class WindowClient final : public CefClient,
   IMPLEMENT_REFCOUNTING(WindowClient);
   DISALLOW_COPY_AND_ASSIGN(WindowClient);
 };
-  bool OnChromeCommand(CefRefPtr<CefBrowser> browser, int command_id,
-                       cef_window_open_disposition_t disposition) override;
-
- private:
-  TabController* controller_;
-
-  IMPLEMENT_REFCOUNTING(WindowClient);
-  DISALLOW_COPY_AND_ASSIGN(WindowClient);
-};
 
 // Single owner of the browser window/tab lifecycle. Windows are Chrome-style
 // browser windows created through CefBrowserHost::CreateBrowser, so the tab
@@ -133,8 +91,6 @@ class TabController final : public CefBaseRefCounted {
       BrowserCreatedCallback browser_created_callback = {},
       std::optional<std::string> new_tab_url = std::nullopt,
       permission::PermissionStore* permission_store = nullptr);
-                         BrowserCreatedCallback browser_created_callback = {},
-                         std::optional<std::string> new_tab_url = std::nullopt);
 
   // Creates the first Chrome-style browser window. Returns false when CEF
   // rejected the browser creation.
@@ -188,10 +144,6 @@ class TabController final : public CefBaseRefCounted {
   BrowsersClosedCallback browsers_closed_callback_;
   TabModel model_;
   permission::PermissionStore* permission_store_;
-  CefRefPtr<WindowClient> client_;
-  std::map<int, CefRefPtr<CefBrowser>> browsers_;
-  BrowsersClosedCallback browsers_closed_callback_;
-  TabModel model_;
   CefRefPtr<WindowClient> client_;
   std::map<int, CefRefPtr<CefBrowser>> browsers_;
   std::size_t pending_new_tab_commands_ = 0;

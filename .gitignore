@@ -5,3 +5,4 @@ demo/gen/
 .cache/build/
 .cache/toolchains/
 .DS_Store
+.cache/cef-archives/
