@@ -25,7 +25,7 @@
 | CEF-12 | VERIFIED | CEF-10,CEF-11 | `src/browser/observation_gateway` | DOM/network observation 合并并发送 Core，generation fencing | PL-001、PL-002；导航迟到事件；背压/dropped | S2 |
 | CEF-13 | VERIFIED | CEF-08,CEF-12,MED-19 | `shared-ui/features/cast` | `Idle/Browsing/Eligible/Selecting/Planning/Casting` 与 `ExternalClientHandoff` 视图绑定 | 状态 UI contract；未播放禁用；交接需确认；错误不假成功 | S3 |
 | CEF-14 | VERIFIED | CEF-05,CEF-07,CEF-12,CEF-13 | `tests/e2e/desktop/browser` | Windows/macOS 本地 fixture E2E harness、截图/日志脱敏产物 | BR-001..BR-014 适用项；无公网 | S3 |
-| CEF-15 | TODO | CEF-14 | 文档/Review | Windows/macOS CEF 壳总 Review、性能/包体/启动基线，修 P0/P1 | desktop build + E2E + repo guard；V1 CEF 部分完成 | S3 |
+| CEF-15 | IN_PROGRESS | CEF-14 | 文档/Review | Windows/macOS CEF 壳总 Review、性能/包体/启动基线，修 P0/P1 | desktop build + E2E + repo guard；V1 CEF 部分完成 | S3 |
 
 ## CEF bootstrap 原子范围
 
@@ -409,3 +409,41 @@
 - 验证（macOS arm64 实机）：`browser_e2e_smoke_selfcheck` 与 `browser_e2e_smoke_app` 双通过（6 进程 / 0 外联 socket / 0 残留，报告 `e2e-browser-report.json`）；共享层回归 39/39；`git diff --check` 通过。
 - Code Review：P0 0、P1 0、P2 1——URL 驱动的 BR-001..014 内容级 E2E（导航/fixture 页面/媒体门禁/广告语义）当前不可达：bootstrap 壳只开 `about:blank`（无 omnibox/URL 注入），fixture 服务已在 `test-support::BrowserFixtureServer` 就绪；待 CEF shell 接入 URL 输入后扩展 harness 的 fixture 驱动模式（记为 CEF-14 后续切片，与 AGT-05/AGT-13 CLI 驱动汇合）。
 - 未覆盖与风险：Windows 侧 harness（macOS 先行）；渲染级断言（截图/像素）与性能采样归 QAR。`CEF-14` 转为 `VERIFIED`（进程级冒烟完成；内容级 E2E 后续切片跟踪）。
+
+### CEF-15 完成记录（2026-08-23，macOS 总 Review；Windows 待 Windows 机）
+
+按 `docs/current/code-review-standard.md` v0.8 执行。范围：`browser/cef-shell`、`browser/*` 共享层、`crates/*`、`tests/e2e` 的 2026-08-22..23 全部新增工作（PLT-01/02、AGT-01..04/11/12A、CEF-01E/02M/06/07/08/09/10/11/12/13/14、BUX-12/15/16、PRV-10）。
+
+## 结论
+
+- 是否可以合并：已合并（逐任务独立 Review + 本次聚合复核）
+- P0/P1/P2 数量：0 / 0 / 0（本次聚合未发现新问题；历史 P2 状态见下）
+- 核心判断：依赖方向全程未破坏（平台类型零泄漏进共享层）；页面内容 untrusted 边界由结构保证（CEF-09 观测→CEF-10 门禁唯一定夺→CEF-13 仅消费判定）；隐私红线无泄漏路径（receipt/诊断闭合 token、header 值不入 DTO、Keychain 产品决策落地）；热路径无日志/分配失控；并发模型层无锁设计规避了锁序风险。
+
+## 架构与专项检查
+
+- 架构和依赖：`crayon-platform-api` std-only 无 OS 类型；agent-gateway 无第三方新增；共享层各模块独立 static lib + 契约测试，CEF 类型只在 cef-shell。
+- 并发、锁序与生命周期：全部为单线程纯状态机 + 注入时钟（session/grant/transport/supervisor/gateway），无真实锁引入；exit 恰一次确认、generation fencing、幂等 stop/close 已有测试。
+- 性能、日志和 trace：生产代码零日志语句（relay 口径延续）；帧/观测队列全部有界带 dropped 计数；限流令牌桶化。
+- API、协议和兼容性：CAAP v1 golden 未动；MED-19 mirror 语义零残留（locale 扫描通过）；schema 单版本窗口一致（Rust/C++ 双侧 v1）。
+- 函数/文件规模提醒：新增生产文件最大约 430 行（grant.rs），无 200+/3000 行触发；RG-003 warning 全部位于遗留 `app/`（Tauri demo），非本次范围且无新增。
+
+## 基线（macOS arm64 实机）
+
+- 构建：workspace 全量 0 失败；clippy `-D warnings` 干净；fmt 干净；CEF arm64 preset 构建零错误。
+- 测试：Rust workspace 全绿（含 agent-gateway 61）；C++ 共享层 ctest 39/39；CEF 壳完整 ctest **48/48**（含 macos source/package contract）。
+- E2E 冒烟：`browser_e2e_smoke_app` 通过——6 进程树、0 非 loopback socket、退出零残留。
+- repo-guard：RG-001/002/005/007/008 passed；RG-003/RG-004 warning 仅遗留 `app/`；RG-006 not_applicable（无 Release artifact 扫描目标）。
+- 启动基线：`open` → 完整 6 进程就绪 0.41–0.81s（3 次采样，暖缓存 Debug 构建）。
+- 包体基线：App bundle 434MB，其中 CEF framework 420MB（官方分发主体）；自有代码增量可忽略。
+- Keychain：冷启动零 Keychain item、系统日志零 SecItem 活动（产品决策 `use-mock-keychain` 固化于 AGENTS.md 项目记忆）。
+
+## 发现
+
+- 无新增 P0/P1/P2。历史延期项状态：AGT-12A 重放窗口（AGT-15 fuzz 复核）、CEF-07/09 接线类（shell 装配）、BUX-15/16 装配类、CEF-01E x64 原生机——均已有归属任务，维持。
+
+## 未覆盖与剩余风险
+
+- **Windows 侧全部证据缺失**（构建/ctest/E2E/基线）：本机为 macOS arm64；Windows 机可用后按同一套命令复跑并补记，届时 CEF-15 转 DONE。已知 Windows 侧风险：CEF-05 提交的坏合并/API 漂移在 Windows 构建目录可能被缓存掩盖（macOS 侧全新 configure 曾必失败，修复见 `ef26113`），Windows 复验必须全新 configure。
+- 渲染级断言（截图/像素）、性能长稳采样归 QAR 真机矩阵；URL 驱动内容级 E2E（BR-001..014）待 shell omnibox 接线（CEF-14 后续切片）。
+- 签名/公证、分发打包归 PLT-M05/QAR 发布门禁。
