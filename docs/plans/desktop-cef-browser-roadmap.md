@@ -1,6 +1,6 @@
 # CEF：Desktop 浏览器壳 Roadmap
 
-状态：`CEF-01A..01D DONE`，`CEF-01E VERIFIED`，`CEF-02W DONE`，`CEF-03 DONE`；Windows 正式 CEF bootstrap 多进程、sandbox、共享窗口/标签控制器与基础导航命令链均已完成并实机验证。`RNM-01..08 DONE` 已完成命名和本地路径迁移。macOS bootstrap 保持冻结且不再阻塞 Windows 主线，后续由 `CEF-02M` 恢复平台对齐。当前目标平台仍为 Windows、macOS；Linux 不在当前范围。每项以目标路径、测试 ID 和证据作为验收，不以单平台截图替代。
+状态：`CEF-01A..01E DONE`，`CEF-02W DONE`，`CEF-03 DONE`；Windows 正式 CEF bootstrap 多进程、sandbox、共享窗口/标签控制器与基础导航命令链均已完成并实机验证。`RNM-01..08 DONE` 已完成命名和本地路径迁移。macOS bootstrap 保持冻结且不再阻塞 Windows 主线，后续由 `CEF-02M` 恢复平台对齐。当前目标平台仍为 Windows、macOS；Linux 不在当前范围。每项以目标路径、测试 ID 和证据作为验收，不以单平台截图替代。
 
 ## 原子任务
 
@@ -10,7 +10,7 @@
 | CEF-01B | DONE | CEF-01A | `browser/engine-api` | 不含 CEF 类型和产品策略的 C++17 `BrowserEngineAdapter` 最小接口、独立 Fake 与 compile contract | 接口 contract；Fake 生命周期/错误/重复释放；Harmony 可实现性说明 | S1 |
 | CEF-01C | DONE | CEF-01B | 根 `CMakeLists.txt`、`CMakePresets.json`、`cmake/cef` | 共享 CMake/preset、离线 CEF root 接入和最小 test target | preset/schema、无网络 configure、错误 root、RG-005 | S1 |
 | CEF-01D | DONE | CEF-01C,BRD-04 | `browser/cef-shell` Windows 构建文件、验证记录 | Windows x64 CEF 最小壳 configure/build；只消费 `assets/brand/generated/windows/app.ico`/PNG 完成 Debug/Release 资源装配 | VS2022 configure/build；启动前依赖 smoke；验证 EXE/窗口/任务栏图标；包不入 Git | S2 |
-| CEF-01E | VERIFIED | CEF-01D | macOS 构建文件、CI/验证记录 | macOS x64/arm64 configure/build；只消费 `assets/brand/generated/macos/AppIcon.iconset`/`app.icns` 并收口 bootstrap Review | 两个 macOS 架构 CI/configure/build；`iconutil`/包内图标资源复核；P0/P1=0；未实机项显式记录 | Windows/static 证据已完成；S2 待运行 |
+| CEF-01E | DONE | CEF-01D | macOS 构建文件、CI/验证记录 | macOS x64/arm64 configure/build；只消费 `assets/brand/generated/macos/AppIcon.iconset`/`app.icns` 并收口 bootstrap Review | 两个 macOS 架构 CI/configure/build；`iconutil`/包内图标资源复核；P0/P1=0；未实机项显式记录 | Windows/static 证据已完成；S2 待运行 |
 | CEF-02W | DONE | CEF-01D | `browser/cef-shell/src/process/windows`、Windows 构建/测试 | 固定 CEF bootstrap DLL/EXE 多进程入口，Debug/Release 强制 sandbox，品牌窗口资源不回退 | Windows Debug/Release build；Browser/render/GPU sandbox smoke；启动/退出无残留；无业务代码在 main | S3 |
 | CEF-02M | TODO | CEF-01E,CEF-02W | `browser/cef-shell/src/process/macos` | 在 02W 冻结的进程/错误契约上补齐 macOS sandbox 与 Helper 平台验收 | macOS x64/arm64 启动/退出；sandbox smoke；Helper 无业务 | V4M |
 | CEF-03 | DONE | CEF-02W | `src/browser/window` | Windows 首发的单窗口/标签生命周期、导航、前后退、刷新、停止、缩放；共享接口保持 macOS 可实现 | BR-001、重复关闭、崩溃恢复；Windows 实机资源无泄漏 | S3 |
@@ -122,7 +122,7 @@
 
 ### CEF-01E macOS x64/arm64 最小 CEF 壳（已实现，待平台证据）
 
-- 状态：`VERIFIED`；依赖 `CEF-01D DONE`；未达到 `DONE`，因此尚未解锁 macOS 对齐任务 `CEF-02M`，但不阻塞 Windows 任务 `CEF-02W`。
+- 状态：`DONE`（2026-08-23 macOS arm64 开发机补齐双架构实机证据）；依赖 `CEF-01D DONE`；解锁 `CEF-02M`。
 - 单一目标：让与 Windows bootstrap 行为一致的最小产品壳在 macOS x64/arm64 形成可复现的 App/Helper Bundle 构建和验证门禁；本任务不实现地址栏、标签、Profile、权限、媒体观察或投屏业务。
 - 输入：01D 已验证的最小生命周期与 `about:blank` 边界、CEF 150 固定发行包中的 macOS 官方 main/helper 装配方式、BRD-04 受管 `assets/brand/generated/macos/app.icns` 与 `AppIcon.iconset`、现有两个 macOS preset。
 - 输出与允许修改：根/`browser/cef-shell` CMake、`browser/cef-shell/src/macos/`、`browser/cef-shell/resources/macos/`、该模块独立 contract、macOS CI workflow，以及本 Roadmap/current 索引的任务状态和证据。CI 只允许通过仓库固定 manifest/downloader 获取对应架构 Standard archive，产物仅进入 runner/build 缓存。
@@ -285,3 +285,12 @@
 - C++ format/static analysis、目标 test target、目标平台 build。
 - 变更 renderer/browser IPC 时执行畸形消息、大小上限、旧 navigation 和 secret 泄漏测试。
 - Windows/macOS 实现允许分任务完成，但共同接口变更由一个 owner 先合并，平台实现不得各自修改 schema。
+
+### CEF-01E 完成记录（2026-08-23，macOS arm64 开发机实机证据）
+
+- 分发下载与校验：macosarm64 归档 SHA1 `2e77063444e3ca07aea2651b763d3c4248bf2543`、macosx64 归档 SHA1 `17e14fe00415e01a79e8b6d7ecaad8a861f1b388`，均与 CEF-01A 锁定值一致（cef-builds.spotifycdn.com，缓存 `.cache/cef-archives/` 已入 `.gitignore`）。
+- arm64：`cmake --preset macos-arm64-cef-debug`（本机安装 Ninja 1.13.2 后）configure/build 零错误零告警；`ctest` 39/39 通过（含此前本机阻塞的 `cef_distribution_contract`——已修复其 `$ENV{TEMP}` 无 TMPDIR 回退导致向文件系统根建目录的问题——与 `cef_build_graph_contract`）；Bundle 验证：`CFBundleIdentifier=com.crayon.browser`、受管 `app.icns` 经 `iconutil -c iconset` 复核通过、en/zh-Hans lproj、CEF Framework 与 5 个 Helper 变体齐备、`lipo` 确认单一 arm64；真实启动出现完整 6 进程多进程结构（主 + GPU/Renderer/Alerts/Plugin/基础 Helper），`quit` 后零残留进程。
+- macosx64：同 preset 交叉构建零错误、`lipo` 确认 x86_64、`ctest` 39/39；经 Rosetta 实际启动并干净退出（0 残留）。
+- 前置修复（commit `ef26113`）：CEF-05 提交的坏合并（三处重复源列表/测试块、`tab_controller.h`/`app.h`/`app.cc` 类与成员重复）导致全新 configure 必失败；按 CEF 150 真实 API 对齐 `OnBeforeDownload`（返回 bool、永不回落默认处理）与权限适配器（`OnShowPermissionPrompt`/`OnDismissPermissionPrompt`，未映射 permission bit 一律 deny）；修复启动即崩（adapter 构造函数在 `CefInitialize` 前 `CEF_REQUIRE_UI_THREAD` SIGTRAP）。这些修复同时惠及 Windows 分支（同一源）。
+- Code Review：P0 0（启动崩溃已修）、P1 0、P2 2——1) x64 运行证据来自 Rosetta 而非原生 x64 硬件（构建/测试为原生交叉产物，若需原生 x64 实机归 QAR/PLT-M05 真机矩阵）；2) CEF-05 的 Windows 实机证据与本机发现的坏合并/API 漂移矛盾，其 Roadmap 记录的验证命令需后续在 Windows 机复核（已在 CEF-02M/PLT-W 线跟踪）。
+- 未覆盖与风险：正式 macOS sandbox 强制仍归 `CEF-02M`（当前 `USE_SANDBOX=OFF` bootstrap 语义）；签名/公证归 PLT-M05。`CEF-01E` 转为 `DONE`，`CEF-02M` 依赖满足。
