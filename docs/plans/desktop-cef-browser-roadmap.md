@@ -19,7 +19,7 @@
 | CEF-06 | VERIFIED | CEF-02W,FND-08 | `src/ipc`、`crayon-ipc-schema` | length-prefixed IPC、session secret、schema/大小/进程校验 | RG-007；畸形/超大/错误 secret/旧版本 | S2 |
 | CEF-07 | VERIFIED | CEF-06 | `src/browser/core_client` | Core 子进程启动、健康、崩溃、有界关闭与重连 | 启动失败/崩溃/超时/退出；无 orphan | S3 |
 | CEF-08 | TODO | FND-11,CEF-03 | `browser/shared-ui` | 地址栏、标签、投屏按钮、错误/权限壳和本地化，不接真实设备 | UI unit；locale parity；键盘/缩放/无障碍 smoke | S3 |
-| CEF-09 | TODO | CEF-06 | `src/renderer/media_observer` | 独立 document-start 资源：media events、可见性、frame/navigation ID；无自动交互 | BR-003..BR-013；尤其 BR-009、BR-010 | S2 |
+| CEF-09 | VERIFIED | CEF-06 | `src/renderer/media_observer` | 独立 document-start 资源：media events、可见性、frame/navigation ID；无自动交互 | BR-003..BR-013；尤其 BR-009、BR-010 | S2 |
 | CEF-10 | TODO | CEF-09 | `src/browser/input_proof` | Browser process 可信输入、前台标签和播放推进交叉校验 | BR-003、BR-004、BR-005、BR-007；页面伪造全部失败 | S2 |
 | CEF-11 | TODO | CEF-09 | `src/browser/network_observer` | ResourceRequest/response observation，仅允许字段并有大小/速率上限 | BR-008、BR-011、BR-012；敏感 header/正文不进入 DTO | S2 |
 | CEF-12 | TODO | CEF-10,CEF-11 | `src/browser/observation_gateway` | DOM/network observation 合并并发送 Core，generation fencing | PL-001、PL-002；导航迟到事件；背压/dropped | S2 |
@@ -325,3 +325,10 @@
 - 验证：`cmake -S . -B .cache/build/cef07` 零告警；`core_client_supervisor` 1/1（7 组：正常启动、启动失败 backoff 恢复、崩溃有界重启直至 GaveUp、健康超时收敛、幂等关闭与无孤儿、Spawning/Idle 停止矩阵、5000 步事件风暴不变量）；共享层回归 31/31；`git diff --check` 通过。
 - Code Review：P0 0、P1 0、P2 1——健康超时后 port 层必须 kill+reap 子进程再 ack，状态机只表达"恰一次确认"契约；CEF-07 真实进程接线（spawn/kill/健康心跳实现）归 CEF-08+ shell 装配与 CEF-14 E2E，本任务为纯模型层。
 - 未覆盖与风险：真实子进程 spawn/kill 与心跳 transport 接线（后续 shell 装配任务）；多 Core 实例（v1 单实例语义）。`CEF-07` 转为 `VERIFIED`，`CEF-09`（依赖 CEF-06）同时可领取。
+
+### CEF-09 完成记录（2026-08-23）
+
+- 实现：新增 `browser/cef-shell/src/renderer/media_observer`（header/impl/CMake/契约测试各 1）。`ClassifySourceUrl` 闭合源分类（http/https、blob:、mediastream:、Unknown——超长/控制字符/危险 scheme 一律 Unknown）；`MediaObserver` 按 frame 聚合：navigation 推进清空旧观测且旧 navigation_id 事件丢弃（BR-007）、容量 16 元素有界（更新已有元素不受限）、TearDown 后一切观测丢弃且不可重建候选（BR-013）、blob/stream 源携带伪造 URL 或 kind 标签不一致即整体丢弃（BR-012 不伪造直投 URL）、可见度钳制 [0,1]、FindEligible 只报告 playing∧visible 的候选（面积优先，BR-006 形态）且注释显式声明结果 untrusted、授权判定归 Browser 侧（CEF-10）。**无自动交互面**：API 只有分类/观测/查询，不存在 click/seek/rate/过滤方法（BR-009/BR-010 结构保证）。
+- 验证：`cmake -S . -B .cache/build/cef09` 零告警；`media_observer` 1/1（7 组：源分类矩阵、旧导航丢弃、blob/stream 反伪造、teardown 阻断、容量、可见播放资格、无交互面断言）；共享层回归 32/32；`git diff --check` 通过。
+- Code Review：P0 0、P1 0、P2 1——kind 与 URL 的一致性校验采用保守白名单（tag=HttpUrl 必须有合法 http URL；blob/stream 必须空 URL；Unknown tag 接受空 URL），未知 tag 携带 URL 的组合未来若出现合法场景需显式扩契约。
+- 未覆盖与风险：CEF document-start JS 注入与 DOM/MSE 事件采集接线（shell 装配任务）；跨 frame 聚合（CEF-12 gateway）；真实广告/EME fixture 行为（CEF-14）。`CEF-09` 转为 `VERIFIED`，解锁 `CEF-10`（依赖 09）。
