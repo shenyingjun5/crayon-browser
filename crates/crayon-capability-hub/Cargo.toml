@@ -11,3 +11,6 @@ workspace = true
 
 [dependencies]
 crayon-domain = { path = "../crayon-domain" }
+
+[dev-dependencies]
+crayon-agent-gateway = { path = "../crayon-agent-gateway" }

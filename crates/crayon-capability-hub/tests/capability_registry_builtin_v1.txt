@@ -1,0 +1,4 @@
+builtin.browser|1.0.0|builtin|system|local_only|active
+builtin.cast|1.0.0|builtin|system|cast_control|active
+builtin.content|1.0.0|builtin|system|page_content|active
+builtin.handoff|1.0.0|builtin|system|local_only|active

@@ -1,6 +1,6 @@
 # HUB：Capability Registry、Router 与合作方连接器 Roadmap
 
-- 状态：`HUB-01 DONE`（2026-08-23）；`HUB-02/HUB-03 READY`，其余 TODO
+- 状态：`HUB-01/HUB-02 DONE`（2026-08-23）；`HUB-03 READY`，其余 TODO
 - 任务数：16
 - 目标：为内建能力、个人 Site Skill、受控网页自动化、人工接管及已批准 Partner API/MCP 提供统一描述、可解释路由和隔离的出站执行边界
 - 非目标：远程入站控制、动态插件任意代码、凭证暴露、开放代理、透明跨路径重复副作用、浏览器自行定义 Cast 协议
@@ -17,7 +17,7 @@
 | ID | 状态 | 依赖 | 允许修改路径 | 单一交付 | 验收与测试 |
 |---|---|---|---|---|---|
 | HUB-01 | DONE | AGT-02,PRV-08 | `crayon-domain/capability/**`,`crayon-capability-hub/registry/**` | Capability descriptor、source/trust/lifecycle/version schema | `HB-001`; golden/冲突/撤销 |
-| HUB-02 | TODO | HUB-01 | `crayon-capability-hub/builtin/**` | 内建 browser/content/cast/handoff 能力从权威 registry 注册 | `HB-002`; 无重复 schema/隐藏强工具 |
+| HUB-02 | DONE | HUB-01 | `crayon-capability-hub/builtin/**` | 内建 browser/content/cast/handoff 能力从权威 registry 注册 | `HB-002`; 无重复 schema/隐藏强工具 |
 | HUB-03 | TODO | HUB-01 | `crayon-capability-hub/router/**` | RouteInput/RouteDecision/candidate/route_reason 稳定契约 | `HB-003`; 确定性 snapshot |
 | HUB-04 | TODO | HUB-02,HUB-03 | `crayon-capability-hub/policy/**` | partner -> skill -> web -> human -> reject 默认策略及覆盖规则 | `HB-004`; trust/risk/health/preference 矩阵 |
 | HUB-05 | TODO | HUB-04,AGT-04,AGT-11 | `crayon-capability-hub/fallback/**` | fallback 重授权、重确认、幂等和未知副作用停止 | `HB-005`; 跨 route 不静默重放 |
@@ -51,6 +51,27 @@
   - snapshot 为确定性排序输出（golden 锁定）；撤销立即反映在 snapshot 与查询。
 - 验收与测试：HB-001。矩阵：注册/幂等、覆盖优先级矩阵、冲突拒绝、撤销立即生效与终态、trust 冲突、golden 快照、风暴不变量。命令：`cargo test -p crayon-capability-hub`、clippy `-D warnings`、fmt、workspace 回归、`git diff --check`。
 - 明确不做：router/policy/fallback（HUB-03/04/05）、内建能力清单（HUB-02）、partner connector（HUB-09+）、网络/IO。
+
+### HUB-02 原子范围（内建能力权威注册）
+
+- 状态：`DONE`（2026-08-23）；依赖 `HUB-01 DONE`。
+- 单一目标：`crayon-capability-hub` 新增 `builtin.rs`：编译期权威的内建能力目录（browser/content/cast/handoff 四域各一项，全部 `source=Builtin`、`trust=System`），经 `HUB-01` 正常注册路径写入 `CapabilityRegistry` 并提供快照 golden；本任务不定义路由、策略或新 schema。
+- 输入：HB-002（schema 来自权威来源；无重复工具和隐藏强能力）、架构 §8（每个能力声明稳定 ID/version/来源/信任/数据范围/生命周期）、PRD §4.7、`HUB-01` 的 descriptor schema 与 registry 规则。
+- 输出与允许修改：`crates/crayon-capability-hub/src/builtin.rs`、`builtin_tests.rs`、`lib.rs` 仅加模块声明、crate `tests/` 新增快照 golden、`Cargo.toml` 仅可加 `crayon-agent-gateway` dev-dependency（永久禁止清单交叉核对，测试图专用）、本 Roadmap。
+- 禁止修改：`HUB-01` registry/descriptor 行为与其 golden、domain schema、其他 crate 生产代码；不得注册超出四域目录的能力，不得引入网络/IO 或 partner 包加载。
+- 边界：
+  - 目录冻结 4 项：`builtin.browser`（受控导航/标签操作，`local_only`）、`builtin.content`（有界当前页内容提取与确定性 Markdown，`page_content`）、`builtin.cast`（经正常投屏门禁的会话选择与播放控制，`cast_control`）、`builtin.handoff`（暂停并移交人工接管/建议外部客户端，`local_only`）；统一版本取自单一目录常量。
+  - 全部描述符必须通过 schema 校验；id 以 `builtin.` 前缀且不命中 AGT 永久禁止词汇表（dev 测试交叉核对）；summary ≤256 字节且不含凭证形态内容。
+  - 注册只走 `CapabilityRegistry::register` 公共路径，无旁路注入；重复调用稳定拒绝且注册表不变。
+- 验收与测试：HB-002。矩阵：全量注册成功、schema/source/trust/data_scope 断言、id 集合精确锁定（防隐藏能力）、永久禁止清单零命中、built-in 不可被 personal/partner 覆盖（Conflict）、同版本重注册拒绝、golden 快照逐字节一致。命令：`cargo test -p crayon-capability-hub`、clippy `-D warnings`、fmt、workspace 回归、`git diff --check`。
+- 明确不做：router/policy/fallback（HUB-03/04/05）、Site Skill adapter（HUB-07）、partner connector（HUB-09+）、CAAP 能力发现暴露（HUB-08）。
+
+### HUB-02 完成记录（2026-08-23）
+
+- 实现：`crayon-capability-hub` 新增 `builtin.rs`（约 100 行）：编译期权威目录冻结 4 项内建能力——`builtin.browser`（受控导航/标签，`local_only`）、`builtin.content`（有界当前页提取与确定性 Markdown，`page_content`）、`builtin.cast`（正常投屏门禁内的会话选择与播放控制，`cast_control`）、`builtin.handoff`（暂停移交人工/建议外部客户端，`local_only`）；统一 `BUILTIN_CATALOG_VERSION = "1.0.0"`，全部 `source=Builtin`、`trust=System`；`builtin_descriptors()` 按冻结 `BUILTIN_IDS` 序产出，`register_builtins()` 只走 `CapabilityRegistry::register` 公共路径（严格模式：任何拒绝即中止且注册表保持一致），`builtin_registry()` 提供预装注册表。`Cargo.toml` 新增 `crayon-agent-gateway` dev-dependency（仅测试图）用于永久禁止清单交叉核对；无生产依赖新增。
+- 验证：`cargo test -p crayon-capability-hub` 18/18 通过（新增 7 项：全量注册与 active 态、schema/source/trust/summary 断言、data_scope 域映射锁定、id 集合精确等于冻结集、永久禁止清单零命中、personal/partner 任意版本覆盖均 Conflict 且原注册不变、golden 快照逐字节一致）；`cargo clippy -p crayon-capability-hub -p crayon-domain -p crayon-agent-gateway --all-targets -- -D warnings` 零告警；fmt 通过；基线 core lib 3/3、legacy-dev lib 58/58、workspace 全量无失败；`git diff --check` 通过。
+- Code Review：按标准八维复核。P0 0、P1 0、P2 0——目录与 `BUILTIN_IDS` 双源一致性由 id 集合精确锁定测试保证；`register_builtins` 中途失败仅可能来自冻结目录自身缺陷（同优先级+不同版本必然可注册），预装入口以 expect 兜底为编译期契约错误口径（与 `with_v1_tools` 一致）。
+- 未覆盖与风险：router/policy/fallback（HUB-03/04/05）、Site Skill adapter（HUB-07）、CAAP 能力发现（HUB-08）、partner connector（HUB-09+）未涉及；目录演进（新增第五域或版本升级）属协议化变更，需先修订本 Roadmap。`HUB-02` 转为 `DONE`，解锁 `HUB-04`（另需 `HUB-03`）与 `HUB-07` 的 builtin 依赖。
 
 ### HUB-01 完成记录（2026-08-23）
 

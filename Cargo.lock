@@ -439,6 +439,7 @@ dependencies = [
 name = "crayon-capability-hub"
 version = "0.1.0"
 dependencies = [
+ "crayon-agent-gateway",
  "crayon-domain",
 ]
 

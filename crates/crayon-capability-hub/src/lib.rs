@@ -5,4 +5,5 @@
 //! This crate currently hosts the HUB-01 registry.  Router, policy,
 //! fallback and the outbound partner connector belong to later HUB tasks.
 
+pub mod builtin;
 pub mod registry;
