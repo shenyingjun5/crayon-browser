@@ -37,5 +37,15 @@
   "cast.feature.idle": "投屏",
   "cast.planning": "正在准备投屏",
   "cast.handoff.confirm": "为此媒体打开蜡笔投屏客户端？",
-  "cast.handoff.requested": "正在请求蜡笔投屏客户端…"
+  "cast.handoff.requested": "正在请求蜡笔投屏客户端…",
+  "agent.confirm.title": "Agent 请求在此页面上执行操作",
+  "agent.confirm.client": "客户端",
+  "agent.confirm.tool": "工具",
+  "agent.confirm.risk": "风险等级",
+  "agent.confirm.target": "目标",
+  "agent.confirm.params": "参数",
+  "agent.confirm.disclosure": "这可能读取页面内容",
+  "agent.confirm.expires": "有效期至",
+  "agent.confirm.allow": "仅允许一次",
+  "agent.confirm.deny": "拒绝"
 }

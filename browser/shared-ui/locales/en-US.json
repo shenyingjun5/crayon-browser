@@ -37,5 +37,15 @@
   "cast.feature.idle": "Cast",
   "cast.planning": "Preparing to cast",
   "cast.handoff.confirm": "Open the Crayon cast client for this media?",
-  "cast.handoff.requested": "Asking the Crayon cast client…"
+  "cast.handoff.requested": "Asking the Crayon cast client…",
+  "agent.confirm.title": "Agent wants to act on this page",
+  "agent.confirm.client": "Client",
+  "agent.confirm.tool": "Tool",
+  "agent.confirm.risk": "Risk",
+  "agent.confirm.target": "Target",
+  "agent.confirm.params": "Parameters",
+  "agent.confirm.disclosure": "This may read page content",
+  "agent.confirm.expires": "Expires",
+  "agent.confirm.allow": "Allow once",
+  "agent.confirm.deny": "Deny"
 }

@@ -23,7 +23,7 @@
 | AGT-02 | DONE | AGT-01 | `crayon-domain/agent/**`,`crayon-agent-gateway/registry/**` | Tool/capability/risk R0～R4 registry 与永久禁止清单 | `AG-001`,`AG-015`; registry snapshot | A0 |
 | AGT-03 | DONE | AGT-01,FND-09 | `crayon-agent-gateway/session/**` | client/task/session/target/generation、取消、超时、幂等和有界队列状态机 | `AG-002`; unit/property | A0 |
 | AGT-04 | VERIFIED | AGT-02,AGT-03,PRV-08 | `crayon-agent-gateway/grant/**` | 单次/任务/App 会话 grant、Profile 隔离、撤销和目标变化失效 | `AG-003`,`AG-005`; default deny | A0 |
-| AGT-05 | TODO | AGT-04,CEF-08 | `apps/desktop-cef/**/agent-confirm/**`,locales | 确认 UI：client、工具、route、目标、参数摘要、数据披露、到期和无障碍 | `AG-004`; UI integration | A0 |
+| AGT-05 | VERIFIED | AGT-04,CEF-08 | `apps/desktop-cef/**/agent-confirm/**`,locales | 确认 UI：client、工具、route、目标、参数摘要、数据披露、到期和无障碍 | `AG-004`; UI integration | A0 |
 | AGT-06 | TODO | CNT-03,AGT-03 | `crayon-page-data/**`,`crayon-agent-gateway/page_stream/**` | generation-scoped 快照缓存、分页/流式/增量、索引、背压和性能 instrumentation | `AG-006`,`AG-015`; benchmark/soak | A1 |
 | AGT-07 | TODO | AGT-04,AGT-06,CNT-08 | `crayon-agent-gateway/tools/content/**`,`crayon-app-runtime/**` | R1 target/标题/选区/结构化页面/Markdown 读取工具 | `AG-006`; 跨 Profile/后台/过期/超量拒绝 | A1 |
 | AGT-08 | TODO | AGT-04,SDK-08 | `crayon-agent-gateway/tools/cast_read/**` | R0/R1 接收端能力和投屏状态读取，不返回 IP/URL/token | `AG-007`; adapter tests | A1 |
@@ -195,3 +195,23 @@
 
 - AGT-04：`Grant::is_targeted()` + `scope_summary()` 闭合作用域描述（`grant:<capability>:any-target|tab:<id>|active-tab`，无页面数据）。原 P2 的 UI 歧义风险收敛为：AGT-05 确认 UI 验收必须按该摘要渲染目标范围（新增测试 scope_summary_distinguishes_targeted_and_untargeted）。
 - AGT-12A 的 P2（重放窗口滑动）维持：由 AGT-03 session 幂等键兜底，AGT-15 fuzz 复核窗口大小（理由见任务记录）。
+
+### AGT-05 原子范围（确认 UI 视图模型与本地化）
+
+- 状态：`VERIFIED`；依赖 `AGT-04 VERIFIED`、`CEF-08 VERIFIED`。
+- 路径说明：Roadmap `apps/desktop-cef/**/agent-confirm/**` 的目录尚不存在；按既有映射惯例落在 `browser/shared-ui/agent-confirm`（共享层视图模型），CEF shell 呈现归后续装配。
+- 单一目标：R2～R4 工具调用确认的共享视图模型——展示 client/工具/risk/目标作用域（消费 AGT-04 `scope_summary` 口径）/参数摘要/数据披露/到期，Confirm/Deny 两步流；任何上下文变化（导航/设备/参数指纹）强制重新确认；无障碍经本地化 label key 全覆盖。
+- 边界：
+  - 参数摘要只含闭合字符集 key + 值长度 + 敏感标志；敏感 key（password/payment/cookie/token/file 等）值完全遮蔽，普通值显示长度掩码——原始值永不进入 UI 模型。
+  - 到期用注入时钟；过期后 Confirm 稳定拒绝；Deny 终态。
+  - 上下文指纹（navigation/device/params）任一变化即失效待确认态，必须重新 Present；不存在绕过路径。
+  - 全部文案走 locales（en/zh parity），无障碍 label key 与字段一一对应。
+- 验收与测试：`AG-004` 模型部分（UI 呈现与实机无障碍归 BUX/QAR）。矩阵：Present 校验、Confirm/Deny/过期、指纹变化重确认、敏感遮蔽、locale parity、风暴不变量。命令：独立 configure/build/ctest、共享层回归、`git diff --check`。
+- 明确不做：真实 grant 签发接线（app-runtime）、CEF 呈现与无障碍实机验证（QAR/BUX）、transport。
+
+### AGT-05 完成记录（2026-08-23）
+
+- 实现：新增 `browser/shared-ui/agent-confirm`（header/impl/CMake/契约测试各 1）。`AgentConfirmRequest` 闭合字段——client/tool/capability/risk（wire token）、target_scope（消费 AGT-04 `scope_summary` 口径，含 any-target/tab:id 区分）、参数摘要（**只含 key+值长度+敏感标志，原始值永不进入模型**）、数据披露标志、到期时间；`Fingerprint()` 覆盖 identity+params（值为长度标记）供上下文变化检测。`AgentConfirmModel` 两步流：Present 校验（token 闭合字符集、scope ≤256、params ≤16、过期即拒）→ Confirm 仅在未过期 pending 态放行 / Deny 终态；`OnContextChanged(fingerprint)` 任一变化使 pending/confirmed 全部失效强制重新 Present（AG-004 变化后重确认）；Tick 主动过期。敏感 key 家族（password/payment/card/cookie/auth/token/file 等）全遮蔽。locales 新增 10 个无障碍 label key（title/client/tool/risk/target/params/disclosure/expires/allow/deny，en/zh 49/49 全等），parity 入契约测试。
+- 验证：`cmake -S . -B .cache/build/agt05` 零告警；`agent_confirm` 1/1（7 组：Present 校验矩阵、Confirm/Deny/边界过期、上下文变化强制重确认含 confirmed 失效、敏感遮蔽与指纹无原始值、token 矩阵、locale parity、5000 步风暴）；共享层回归 39/39；`git diff --check` 通过。
+- Code Review：P0 0、P1 0、P2 1——Fingerprint 为确定性拼接字符串（仅元数据无值），碰撞理论上可由超长 key 构造；确认判定还依赖 expires/token 校验兜底，若后续需要密码学强度指纹归 gateway 层（AGT-12 transport 已有 secret 通道）。
+- 未覆盖与风险：真实 grant 签发接线（app-runtime 用例）、CEF 呈现与键盘/读屏实机验证（QAR/BUX）、R2～R4 与 AGT-04 grant 的端到端串联（后续装配）。`AGT-05` 转为 `VERIFIED`。**A0 波次（AGT-01..05/11）全部完成。**
