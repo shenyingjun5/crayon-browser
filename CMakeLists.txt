@@ -60,6 +60,7 @@ add_subdirectory(browser/shared-ui/context-menu)
 add_subdirectory(browser/session)
 add_subdirectory(browser/shared-ui/profiles)
 add_subdirectory(browser/cef-shell/src/ipc)
+add_subdirectory(browser/cef-shell/src/browser/core_client)
 add_subdirectory(browser/shared-ui/site-controls)
 add_subdirectory(browser/shared-ui/new-tab)
 

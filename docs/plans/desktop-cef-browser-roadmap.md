@@ -17,7 +17,7 @@
 | CEF-04 | DONE | CEF-03 | `src/browser/context` | 临时/持久 `CefRequestContext` factory，Profile ID 不用名称作路径 | BR-002、PV-001、PV-004 基础；context 隔离 | S3 |
 | CEF-05 | DONE | CEF-04 | `src/browser/permission` | 摄像头/麦克风/通知/定位/剪贴板/下载按站点控制 | allow/deny/remember/session tests；默认最小权限 | S3 |
 | CEF-06 | VERIFIED | CEF-02W,FND-08 | `src/ipc`、`crayon-ipc-schema` | length-prefixed IPC、session secret、schema/大小/进程校验 | RG-007；畸形/超大/错误 secret/旧版本 | S2 |
-| CEF-07 | TODO | CEF-06 | `src/browser/core_client` | Core 子进程启动、健康、崩溃、有界关闭与重连 | 启动失败/崩溃/超时/退出；无 orphan | S3 |
+| CEF-07 | VERIFIED | CEF-06 | `src/browser/core_client` | Core 子进程启动、健康、崩溃、有界关闭与重连 | 启动失败/崩溃/超时/退出；无 orphan | S3 |
 | CEF-08 | TODO | FND-11,CEF-03 | `browser/shared-ui` | 地址栏、标签、投屏按钮、错误/权限壳和本地化，不接真实设备 | UI unit；locale parity；键盘/缩放/无障碍 smoke | S3 |
 | CEF-09 | TODO | CEF-06 | `src/renderer/media_observer` | 独立 document-start 资源：media events、可见性、frame/navigation ID；无自动交互 | BR-003..BR-013；尤其 BR-009、BR-010 | S2 |
 | CEF-10 | TODO | CEF-09 | `src/browser/input_proof` | Browser process 可信输入、前台标签和播放推进交叉校验 | BR-003、BR-004、BR-005、BR-007；页面伪造全部失败 | S2 |
@@ -318,3 +318,10 @@
 - 验证：`cmake -S . -B .cache/build/cef06 -DCRAYON_BUILD_TESTS=ON -DCRAYON_ENABLE_CEF=OFF` 零告警零错误；`ipc_channel_contract` 1/1（8 组：往返、分片/背靠背/最大合法帧、超限与敌意 feed、secret 校验与轮换窗口、常数时间比较、进程 token 矩阵、消息守卫矩阵、LCG 3000 步敌意流——有界 pending、不崩溃）；共享层回归 30/30 通过；`git diff --check` 通过。RG-007 golden 语义由 `crayon-ipc-schema` 既有向量承担（本任务未改 schema，无兼容性影响）。
 - Code Review：P0 0、P1 0、P2 1——LCG 敌意流测试因缓冲残留只能断言全局不变量（不崩溃/有界），精确语义靠确定性用例覆盖（已注明）；后续 CEF-07 接真实传输时可考虑加"连接重置即清空 codec"用例。
 - 未覆盖与风险：真实 OS 传输与 Core 子进程生命周期（CEF-07）、CAAP transport（AGT-12 复用 Rust 侧 transport 守卫）、消息 JSON 编解码（crayon-ipc-schema 所有）。`CEF-06` 转为 `VERIFIED`，解锁 `CEF-07`、`CEF-09`。
+
+### CEF-07 完成记录（2026-08-23）
+
+- 实现：新增 `browser/cef-shell/src/browser/core_client`（header/impl/CMake/契约测试各 1）。`CoreClientSupervisor` 纯生命周期状态机（Idle/Spawning/Healthy/Backoff/Failed/ShuttingDown/Stopped，时钟注入、零资源/IO）：启动（重复启动 Busy 拒绝、Stopped/Failed 后不可复活）；崩溃/健康超时（`kHealthTimeoutMs=5s`，边界仍健康、超时即 exit pending）经唯一 AcknowledgeExit 收敛——重复 exit 事件丢弃（无孤儿语义：一次退出恰一次确认），随后有界重启（`kMaxRestartAttempts=3`、递增 backoff），预算耗尽转 Failed 终态；`Stop` 从任意活跃态收敛且幂等，关闭期间迟到 spawn 结果丢弃不复活，exit ack 后转 Stopped；全部结果为闭合枚举。
+- 验证：`cmake -S . -B .cache/build/cef07` 零告警；`core_client_supervisor` 1/1（7 组：正常启动、启动失败 backoff 恢复、崩溃有界重启直至 GaveUp、健康超时收敛、幂等关闭与无孤儿、Spawning/Idle 停止矩阵、5000 步事件风暴不变量）；共享层回归 31/31；`git diff --check` 通过。
+- Code Review：P0 0、P1 0、P2 1——健康超时后 port 层必须 kill+reap 子进程再 ack，状态机只表达"恰一次确认"契约；CEF-07 真实进程接线（spawn/kill/健康心跳实现）归 CEF-08+ shell 装配与 CEF-14 E2E，本任务为纯模型层。
+- 未覆盖与风险：真实子进程 spawn/kill 与心跳 transport 接线（后续 shell 装配任务）；多 Core 实例（v1 单实例语义）。`CEF-07` 转为 `VERIFIED`，`CEF-09`（依赖 CEF-06）同时可领取。
