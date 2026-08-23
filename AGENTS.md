@@ -36,6 +36,7 @@
 - 架构约束：依赖方向 UI/编排 → 领域接口 → 共享 Core/Cast-SDK facade → 平台 adapter；CEF/ArkWeb/平台类型只在对应 adapter/shell；只有 `crayon-cast-adapter` 依赖 Cast-SDK；Roadmap 路径 `src/**` 映射 `browser/cef-shell/src/**`。
 - 测试基线：`cargo test -p crayon-browser-core --lib` 3 项；`--no-default-features --features legacy-dev --lib` 58 项；共享层 CMake ctest 基线见各任务记录（35+）；CEF preset 需要 `CRAYON_CEF_ROOT` 指向离线分发（归档缓存在 `.cache/cef-archives/`，已 gitignore）。
 - 交付纪律：一次只领一个原子任务、一个可审查提交；Roadmap 记录实际命令与证据，不写“应该通过”；并行 Agent 不得互相覆盖工作区文件，冲突时以先提交者为准、后来者重读后重做。
+- Keychain 边界（2026-08-23 用户决策）：浏览器**永不**把 Cookie 加密密钥（Chromium "Safe Storage"）存入系统 Keychain——`use-mock-keychain` 为产品语义而非开发开关；macOS Keychain 只在 `SecureStore`（PLT-M04/PRV-05）用户真实保存/读取机密时触碰，启动/构建全程零 Keychain 访问。
 <!-- project-memory:end -->
 
 只记录已确认且会持续影响后续工作的内容（标注来源与日期）；新证据出现时更新旧记忆，不记录临时步骤、猜测或秘密。

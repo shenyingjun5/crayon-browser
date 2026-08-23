@@ -19,12 +19,12 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
     return this;
   }
 
-  // Dev/ad-hoc builds cannot anchor a Keychain ACL (every rebuild
-  // changes the signature), so Chromium's "Safe Storage" key would
-  // prompt for keychain access on every launch.  Real keychain-backed
-  // secret storage lands with the SecureStore platform adapter
-  // (PLT-M04/PRV-05) behind a stable signing identity; until then the
-  // in-memory mock keeps launches prompt-free.
+  // Product decision (2026-08-23): this browser never stores its
+  // cookie-encryption "Safe Storage" key in the system keychain — dev
+  // or release, ad-hoc or signed.  The macOS keychain is touched only
+  // by the SecureStore platform adapter (PLT-M04/PRV-05) when the user
+  // actually saves or reads a secret, so launches stay prompt-free by
+  // design and cookies at rest use the in-memory mock key.
   void OnBeforeCommandLineProcessing(const CefString& process_type,
                                      CefRefPtr<CefCommandLine> command_line) override;
   void OnContextInitialized() override;
