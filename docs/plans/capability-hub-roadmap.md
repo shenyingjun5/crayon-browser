@@ -39,3 +39,15 @@
 - 动态 tool description、schema 和响应均不可信，不能注册高于 manifest 的能力或改变本地 policy。
 - package/manifest 未签名、版本不兼容、已撤销或 kill switch 命中时 fail closed。
 - Partner 能力未达到门禁时 Hub 仍可只运行 built-in/Site Skill/Web/Human 路径，不阻塞核心浏览器发布。
+
+### HUB-01 原子范围（Capability descriptor 与 registry schema）
+
+- 状态：`IN_PROGRESS`；依赖 `AGT-02 DONE`、`PRV-08 DONE`。
+- 单一目标：`crayon-domain` 新增 `capability.rs`（闭合 source/trust/lifecycle/version schema + serde）与新建 `crayon-capability-hub` crate 的 `registry` 模块：确定性注册、冲突拒绝、撤销立即生效、快照 golden。不含 router/policy/fallback/connector。
+- 边界：
+  - `CapabilitySource = Builtin/PersonalSkill/Partner`（优先级递减）；`TrustLevel = System/UserApproved/Untrusted`；`LifecycleState = Active/Disabled/Revoked`（Revoked 对该 id+version 终态）。
+  - 注册规则：同 id 首次注册生效；覆盖仅允许"source 优先级 ≥ 既有且版本不同"，否则 `Conflict` 稳定拒绝——Builtin 不可被 Personal/Partner 覆盖（不可未签名覆盖）；Revoked 后同 id+version 拒绝重注册，新版本可注册。
+  - trust 与 source 一致性校验（Partner 不得声明 System trust）；id 为闭合 token；描述字段有界。
+  - snapshot 为确定性排序输出（golden 锁定）；撤销立即反映在 snapshot 与查询。
+- 验收与测试：HB-001。矩阵：注册/幂等、覆盖优先级矩阵、冲突拒绝、撤销立即生效与终态、trust 冲突、golden 快照、风暴不变量。命令：`cargo test -p crayon-capability-hub`、clippy `-D warnings`、fmt、workspace 回归、`git diff --check`。
+- 明确不做：router/policy/fallback（HUB-03/04/05）、内建能力清单（HUB-02）、partner connector（HUB-09+）、网络/IO。

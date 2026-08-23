@@ -1,10 +1,10 @@
 # 蜡笔 AI Agent 投屏浏览器总 Roadmap
 
-- 版本：v0.7
-- 日期：2026-08-13
+- 版本：v0.8
+- 日期：2026-08-22
 - 状态：活跃
-- 当前任务总数：227
-- 当前测试用例总数：186
+- 当前任务总数：234
+- 当前测试用例总数：193
 
 ## 1. 当前结论
 
@@ -13,7 +13,7 @@
 - 产品仍按“浏览器与 LAN 投屏 -> 页面数据/Markdown -> Agent 协议与语义动作 -> Workflow/Challenge -> Capability Hub/合作方 -> 模型”的依赖顺序交付。
 - CAAP、CLI/入站 MCP、高性能读页和授权操作是核心；具体模型/provider 与视频/文档总结属于第二阶段。
 - Windows/macOS 为当前桌面；HarmonyOS 只做鸿蒙电脑 PC 形态技术预览；Linux 无活跃任务。
-- `BUX` 独立承接完整桌面浏览器体验；`ACT`、`WFL`、`HUB` 分别承接语义动作、持久化工作流和 connector 安全边界，避免把大模块塞进 CEF、AGT 或 CNT。
+- `BUX` 独立承接完整桌面浏览器体验；`MDV` 独立承接本地 Markdown 查看/预览/分栏编辑内置页（PRD v0.8）；`ACT`、`WFL`、`HUB` 分别承接语义动作、持久化工作流和 connector 安全边界，避免把大模块塞进 CEF、AGT 或 CNT。
 
 ## 2. 交付不变量
 
@@ -36,6 +36,7 @@
 | FND | 19 | Workspace、契约、质量入口与仓库基线 |
 | CEF | 19 | Windows/macOS CEF 浏览器壳 |
 | BUX | 18 | Chrome-inspired 蜡笔浏览器 UI 与日用基础功能 |
+| MDV | 7 | 本地 Markdown 查看器：内置查看/预览/分栏编辑与受控文件入口 |
 | MED | 19 | 媒体观察、LAN Relay 与外部客户端交接语义 |
 | SDK | 16 | Cast-SDK 发现/投送/控制；后续 Partner Cast facade |
 | PLT | 7 | Windows/macOS 系统与本机 IPC/客户端交接适配 |
@@ -47,7 +48,7 @@
 | HUB | 16 | Capability Registry、Router 与 Partner connector |
 | HM | 12 | HarmonyOS 电脑 PC 形态技术预览 |
 | QAR | 15 | 质量、性能、安全、发布和回滚 |
-| **合计** | **218** | |
+| **合计** | **225** | |
 
 ## 4. 依赖关系
 
@@ -59,6 +60,8 @@ flowchart LR
   FND --> CEF
   CEF --> BUX
   PRV --> BUX
+  BUX --> MDV["MDV 本地 Markdown 查看器"]
+  PRV --> MDV
   FND --> MED
   FND --> SDK
   MED --> SDK
@@ -104,8 +107,8 @@ flowchart LR
 
 ### V1：Windows 浏览器可用
 
-- `CEF-01D`、`CEF-02W`、`CEF-03..12`、`BUX-01..18`、`PLT-01/02/W04` 与适用 PRV。
-- 验收：Chrome-inspired 蜡笔 UI、本地起始页、地址栏、导航、标签/窗口、书签、历史、下载、设置、Profile/无痕、权限、安全反馈、崩溃恢复、快捷键/无障碍和生命周期可用。
+- `CEF-01D`、`CEF-02W`、`CEF-03..12`、`BUX-01..18`、`MDV-01..07`、`PLT-01/02/W04` 与适用 PRV；`MDV` 在 `BUX-16` 完成后领取，不阻塞 BUX 主线。
+- 验收：Chrome-inspired 蜡笔 UI、本地起始页、地址栏、导航、标签/窗口、书签、历史、下载、设置、Profile/无痕、权限、安全反馈、崩溃恢复、快捷键/无障碍、生命周期和本地 Markdown 查看/预览/分栏编辑/保存可用。
 
 ### A0：Agent 协议与权限内核
 
@@ -216,10 +219,11 @@ flowchart LR
 4. `AGT-01` 在 `FND-08/PRV-08` 满足后冻结 CAAP v1；不得提前开放 CLI/MCP。
 5. `CNT-01` 等 `CEF-15/BUX-18/SDK-14/MED-19/PRV-08` 完成。
 6. `ACT-01` 等 `CNT-03/AGT-01` 完成；`WFL/HUB` 不得越过语义动作和权限依赖。
+7. `MDV-01` 依赖 `BUX-03 DONE` 已满足，可领取冻结本地 Markdown 查看器契约；`MDV-04` 起等 `BUX-16` 完成，不与 BUX 主线抢位。
 
 ## 8. 发布门禁
 
-- 227 项任务按所选发布范围提供真实状态、命令与证据；186 个唯一测试 ID 可追踪，P0/P1 Review 为零。
+- 234 项任务按所选发布范围提供真实状态、命令与证据；193 个唯一测试 ID 可追踪，P0/P1 Review 为零。
 - CLI/入站 MCP 共用 CAAP；出站 connector 独立；无 raw CDP/WebDriver/任意 JS/remote bind/通用文件上传。
 - 页面数据有界、action 有前置与效果、Workflow verified-only、Challenge 不绕过、self-heal 高风险 fail closed。
 - Hub route_reason/fallback 重授权和 Partner 信任/OAuth/SSRF/kill switch 通过后才开放对应 feature。
