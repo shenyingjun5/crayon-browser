@@ -1,6 +1,6 @@
 # HUB：Capability Registry、Router 与合作方连接器 Roadmap
 
-- 状态：`HUB-01/HUB-02 DONE`（2026-08-23）；`HUB-03 READY`，其余 TODO
+- 状态：`HUB-01/HUB-02 DONE`（2026-08-23）、`HUB-03 DONE`（2026-08-24）；`HUB-04 READY`，其余 TODO
 - 任务数：16
 - 目标：为内建能力、个人 Site Skill、受控网页自动化、人工接管及已批准 Partner API/MCP 提供统一描述、可解释路由和隔离的出站执行边界
 - 非目标：远程入站控制、动态插件任意代码、凭证暴露、开放代理、透明跨路径重复副作用、浏览器自行定义 Cast 协议
@@ -18,7 +18,7 @@
 |---|---|---|---|---|---|
 | HUB-01 | DONE | AGT-02,PRV-08 | `crayon-domain/capability/**`,`crayon-capability-hub/registry/**` | Capability descriptor、source/trust/lifecycle/version schema | `HB-001`; golden/冲突/撤销 |
 | HUB-02 | DONE | HUB-01 | `crayon-capability-hub/builtin/**` | 内建 browser/content/cast/handoff 能力从权威 registry 注册 | `HB-002`; 无重复 schema/隐藏强工具 |
-| HUB-03 | TODO | HUB-01 | `crayon-capability-hub/router/**` | RouteInput/RouteDecision/candidate/route_reason 稳定契约 | `HB-003`; 确定性 snapshot |
+| HUB-03 | DONE | HUB-01 | `crayon-capability-hub/router/**` | RouteInput/RouteDecision/candidate/route_reason 稳定契约 | `HB-003`; 确定性 snapshot |
 | HUB-04 | TODO | HUB-02,HUB-03 | `crayon-capability-hub/policy/**` | partner -> skill -> web -> human -> reject 默认策略及覆盖规则 | `HB-004`; trust/risk/health/preference 矩阵 |
 | HUB-05 | TODO | HUB-04,AGT-04,AGT-11 | `crayon-capability-hub/fallback/**` | fallback 重授权、重确认、幂等和未知副作用停止 | `HB-005`; 跨 route 不静默重放 |
 | HUB-06 | TODO | HUB-04,AGT-05 | `apps/desktop-cef/**/capability-route/**`,locales | route 预览、理由、偏好和临时覆盖 UI | `HB-006`; 数据外发/成本/风险可见 |
@@ -65,6 +65,28 @@
   - 注册只走 `CapabilityRegistry::register` 公共路径，无旁路注入；重复调用稳定拒绝且注册表不变。
 - 验收与测试：HB-002。矩阵：全量注册成功、schema/source/trust/data_scope 断言、id 集合精确锁定（防隐藏能力）、永久禁止清单零命中、built-in 不可被 personal/partner 覆盖（Conflict）、同版本重注册拒绝、golden 快照逐字节一致。命令：`cargo test -p crayon-capability-hub`、clippy `-D warnings`、fmt、workspace 回归、`git diff --check`。
 - 明确不做：router/policy/fallback（HUB-03/04/05）、Site Skill adapter（HUB-07）、partner connector（HUB-09+）、CAAP 能力发现暴露（HUB-08）。
+
+### HUB-03 原子范围（Router 稳定契约与确定性解析）
+
+- 状态：`DONE`（2026-08-24）；依赖 `HUB-01 DONE`。
+- 单一目标：`crayon-capability-hub` 新增 `router.rs`：冻结 `RouteInput`/`RouteCandidate`/`RouteEvaluation`/`RouteOutcome`/`RouteKind`/`RouteReason`(以闭合 outcome 承载)/`RouteDecision` 契约与确定性 `resolve()`——把输入 id 对照 registry 解析为候选与逐项结论，输出确定性快照；本任务不实现默认策略选择、trust/health/preference 覆盖或 fallback 重授权（HUB-04/05）。
+- 输入：HB-003（相同 RouteInput 重复求值稳定、理由完整、无 secret/内部 endpoint）、架构 §8（Router 输出选定 route、候选、route_reason、必要授权和 fallback 条件；默认顺序 partner→skill→web→human→reject 由 HUB-04 落地）、`HUB-01` registry 查询视图。
+- 输出与允许修改：`crates/crayon-capability-hub/src/router.rs`、`router_tests.rs`、`lib.rs` 仅加模块声明、crate `tests/` 新增决策快照 golden、本 Roadmap。零第三方新增。
+- 禁止修改：registry/descriptor 行为与既有 golden、builtin 目录、其他 crate；不得引入网络/IO/时钟；不得在契约中携带 endpoint/token/summary 自由文本。
+- 边界：
+  - `RouteKind` 闭合五类且声明序即默认优先级序（Partner/SiteSkill/WebAutomation/HumanHandoff/Reject）；由 `CapabilitySource` 派生前三类，HumanHandoff/Reject 只能由后续策略层显式构造、不可从注册派生。
+  - `RouteOutcome` 闭合四类：resolved/unknown_id/disabled/revoked；逐输入 id 一条评估，输入顺序保持；候选只含 resolved 且按 (kind 序, id) 确定排序。
+  - `RouteInput` 校验：闭合 token、数量 ≤16、拒绝重复 id；错误闭合枚举。
+  - 快照只含闭合 token 与枚举 wire 名，排除 summary/endpoint/secret；同输入重复解析逐字节一致。
+- 验收与测试：HB-003。矩阵：重复求值一致性、四种 outcome、候选确定排序与输入顺序无关、输入校验（非法/超量/重复）、快照无自由文本泄漏、golden 逐字节一致、LCG 不变量（同输入同输出、候选恒排序）。命令：`cargo test -p crayon-capability-hub`、clippy `-D warnings`、fmt、workspace 回归、`git diff --check`。
+- 明确不做：默认策略与选择逻辑、覆盖规则（HUB-04）、fallback 重授权（HUB-05）、CAAP 能力发现暴露（HUB-08）。
+
+### HUB-03 完成记录（2026-08-24）
+
+- 实现：`crayon-capability-hub` 新增 `router.rs`（约 280 行）：`RouteKind` 闭合五类且声明序即冻结默认优先级序（Partner/SiteSkill/WebAutomation/HumanHandoff/Reject，`rank()` 与 `Ord` 同源），`route_kind_of_source()` 只从 `CapabilitySource` 派生前三类、HumanHandoff/Reject 不可由注册派生；`RouteInput::new` 校验闭合 token、≤16 个 id、拒绝重复（`RouterError` 闭合三态）——输入是 untrusted 提案，只能经 registry 解析；`resolve()` 对每个 id 产出一条 `RouteEvaluation`（`RouteOutcome` 闭合四类 resolved/unknown_id/disabled/revoked，Resolved 才携带候选），live 注册成为 `RouteCandidate { id, version, kind, trust }` 并按 `(kind rank, id)` 确定排序；`RouteDecision::snapshot()` 只输出闭合 token 与枚举 wire 名两段列表，排除 summary/endpoint/secret。零第三方新增；全同步、无锁/线程/IO/时钟。
+- 验证：`cargo test -p crayon-capability-hub` 26/26 通过（router 新增 8 项：golden 决策快照逐字节一致、HB-003 核心属性——同输入重复求值含重建 registry 后值相等且字节一致、四 outcome 全可达且 Resolved 与候选一一对应、候选排序与输入顺序无关并锁定 (rank,id) 序、kind 派生闭合与优先级序锁定、输入校验矩阵含边界 16/17、快照无自由文本泄漏（注入 summary/endpoint/token 标记断言不出现）、LCG 3000 步不变量——同输入同输出/候选严格有序/候选数=resolved 数）；clippy `-D warnings` 零告警；fmt 通过；基线 core lib 3/3、legacy-dev lib 58/58、workspace 全量无失败；`git diff --check` 通过。
+- Code Review：按标准八维复核。P0 0、P1 0、P2 1——`RouteDecision` 当前只含 evaluations+candidates 两字段，HUB-04 落地策略时将追加 selected/fallback 形状；该演进发生在任何外部 wire 消费者出现之前，届时两个 golden 文件需随 Roadmap 同步重审。
+- 未覆盖与风险：选择逻辑/trust-risk-health-preference 覆盖矩阵（HUB-04）、fallback 重授权（HUB-05）、CAAP 能力发现暴露（HUB-08）未涉及；`rank()` 依赖枚举判别值（声明序），重排 RouteKind 属协议化变更需先修订契约。`HUB-03` 转为 `DONE`，解锁 `HUB-04`。
 
 ### HUB-02 完成记录（2026-08-23）
 

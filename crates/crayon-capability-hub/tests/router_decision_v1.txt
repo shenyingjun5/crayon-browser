@@ -1,0 +1,10 @@
+candidates
+site_skill|skill.export|1.0.0|user_approved
+web_automation|builtin.content|1.0.0|system
+web_automation|builtin.handoff|1.0.0|system
+evaluations
+skill.export|resolved
+builtin.content|resolved
+missing.cap|unknown_id
+builtin.cast|disabled
+builtin.handoff|resolved
