@@ -19,7 +19,6 @@
   "new_tab.empty_shortcuts": "No pinned shortcuts yet",
   "new_tab.config_error": "The shortcut configuration was damaged and was safely ignored",
   "cast.select_receiver": "Select receiver",
-  "cast.mode.mirror": "Mirror tab",
   "cast.mode.direct": "Direct cast",
   "cast.stop": "Stop casting",
   "cast.rejected": "This content cannot be cast",
@@ -27,5 +26,12 @@
   "privacy.cleanup_failed": "Private data cleanup failed",
   "login.open": "Sign in to site",
   "error.network": "Network error",
-  "update.available": "Update available"
+  "update.available": "Update available",
+  "cast.mode.relay": "Relay cast",
+  "cast.open_external_client": "Open the Crayon cast client",
+  "cast.disabled": "Play a video to cast",
+  "cast.selecting": "Choosing a receiver",
+  "cast.stopping": "Stopping cast",
+  "error.crash": "This page crashed",
+  "error.blocked_scheme": "This address was blocked"
 }

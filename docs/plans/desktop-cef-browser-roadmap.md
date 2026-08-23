@@ -18,7 +18,7 @@
 | CEF-05 | DONE | CEF-04 | `src/browser/permission` | 摄像头/麦克风/通知/定位/剪贴板/下载按站点控制 | allow/deny/remember/session tests；默认最小权限 | S3 |
 | CEF-06 | VERIFIED | CEF-02W,FND-08 | `src/ipc`、`crayon-ipc-schema` | length-prefixed IPC、session secret、schema/大小/进程校验 | RG-007；畸形/超大/错误 secret/旧版本 | S2 |
 | CEF-07 | VERIFIED | CEF-06 | `src/browser/core_client` | Core 子进程启动、健康、崩溃、有界关闭与重连 | 启动失败/崩溃/超时/退出；无 orphan | S3 |
-| CEF-08 | TODO | FND-11,CEF-03 | `browser/shared-ui` | 地址栏、标签、投屏按钮、错误/权限壳和本地化，不接真实设备 | UI unit；locale parity；键盘/缩放/无障碍 smoke | S3 |
+| CEF-08 | VERIFIED | FND-11,CEF-03 | `browser/shared-ui` | 地址栏、标签、投屏按钮、错误/权限壳和本地化，不接真实设备 | UI unit；locale parity；键盘/缩放/无障碍 smoke | S3 |
 | CEF-09 | VERIFIED | CEF-06 | `src/renderer/media_observer` | 独立 document-start 资源：media events、可见性、frame/navigation ID；无自动交互 | BR-003..BR-013；尤其 BR-009、BR-010 | S2 |
 | CEF-10 | VERIFIED | CEF-09 | `src/browser/input_proof` | Browser process 可信输入、前台标签和播放推进交叉校验 | BR-003、BR-004、BR-005、BR-007；页面伪造全部失败 | S2 |
 | CEF-11 | VERIFIED | CEF-09 | `src/browser/network_observer` | ResourceRequest/response observation，仅允许字段并有大小/速率上限 | BR-008、BR-011、BR-012；敏感 header/正文不进入 DTO | S2 |
@@ -366,3 +366,19 @@
   5. CEF-12：gateway 记录 tab→current_navigation_id，携带非当前导航 id 的事件在入队前拒绝（原靠下游消费方拒绝；测试更新为前置拒绝 + dropped 计数 3）。
 - 修复 6/7（BUX/AGT 侧，见各 Roadmap）：BUX-12 `FindBarController::SetCaseSensitive` 查找栏内切换并重置 cursor；AGT-04 `Grant::is_targeted()/scope_summary()` 闭合作用域描述——AGT-05 确认 UI 必须渲染 `any-target` 与 `tab:<id>` 的区别（验收项）。
 - 验证：`cargo test -p crayon-agent-gateway` 61/61；clippy `-D warnings`、fmt 通过；C++ 共享层四个构建目录 ctest 各 35/35；`git diff --check` 通过。
+
+### CEF-08 原子范围（共享壳 UI 绑定与本地化门禁）
+
+- 状态：`VERIFIED`；依赖 `FND-11 DONE`、`CEF-03 DONE`。
+- 路径说明：Roadmap `browser/shared-ui` 映射新增 `browser/shared-ui/chrome` 子模块与 locales。
+- 单一目标：工具栏视图模型（导航/地址/标签聚合）、投屏按钮共享状态机（无设备绑定，禁用为默认）、页面错误壳模型、locale parity 契约测试；清理 MED-19 已废弃的 `cast.mode.mirror` 文案。不接真实设备（CEF-13）、不做最终视觉（BUX）。
+- 边界：投屏按钮闭合状态 `Hidden/Disabled/Eligible/Selecting/Casting/Stopping`，仅当外部喂入 BrowserVerified 级别的 Eligible 事实才离开 Disabled（页面自报不可触发）；ExternalClientHandoff 语境永不显示"投屏中"，只显示"打开外部客户端"；错误壳闭合错误族 + 本地化 key + 动作（reload/back）；locale parity：en-US 与 zh-CN key 集全等、禁止 `mirror` 语义 key 复活。
+- 验收与测试：UI unit（CMake 契约测试）；命令：独立 configure/build/ctest、共享层回归、`git diff --check`。
+- 明确不做：真实设备绑定（CEF-13）、投屏决策（cast-policy/MED）、键盘/缩放/无障碍实机 smoke（CEF-14/QAR）。
+
+### CEF-08 完成记录（2026-08-23）
+
+- 实现：新增 `browser/shared-ui/chrome`（header/impl/CMake/契约测试各 1）。`ChromeToolbar` 聚合导航/地址/标签事实（地址 ≤2048、标题 ≤512 有界拒绝，事实由既有 omnibox/navigation/tabs 模块拥有）；`CastButtonModel` 闭合状态机 `Hidden/Disabled/Eligible/Selecting/Casting/Stopping`——Hidden 为粘性默认（无媒体面时浏览器级 eligible 事实也不生效），仅 Browser 验证事实可离开 Disabled，验证撤回收敛 pre-session 态，session 停止回落 Disabled 需重新验证，页面自报状态在任何路径都无法启用按钮；`label_key()` 闭合文案 key，ExternalClientHandoff 语境复用 `cast.open_external_client` 且永不渲染"投屏中"；`PageErrorShell` 闭合错误族（Network/Crash/BlockedScheme）+ 本地化 key + 动作（reload/back）。locales：删除 MED-19 废弃 `cast.mode.mirror`，新增 direct/relay/open_external_client/disabled/selecting/stopping/error.crash/error.blocked_scheme（en/zh 35/35 全等）；locale parity 契约测试入 `chrome_contract`（key 集全等、mirror 禁令、chrome 模型所需 key 双语存在）。
+- 验证：`cmake -S . -B .cache/build/cef08` 零告警；`chrome_contract` 1/1（4 组：工具栏边界、投屏按钮粘性默认/启用路径/撤回收敛、错误壳动作、locale parity+mirror 禁令）；共享层回归 36/36；`cast.mode.mirror|Mirror tab` 全仓扫描零残留；`git diff --check` 通过。
+- Code Review：P0 0、P1 0、P2 1——locale parity 测试用行级 JSON 解析（扁平文件当前足够；若 locales 引入嵌套或数组结构需换真解析器并保留禁令断言）。
+- 未覆盖与风险：真实设备/接收端选择接线（CEF-13，本模型 OpenReceiverPicker 即其挂点）、键盘/缩放/无障碍实机 smoke（CEF-14/QAR）、最终视觉（BUX 契约）。`CEF-08` 转为 `VERIFIED`，`CEF-13` 依赖满足（另需 CEF-12 DONE 已满足）。

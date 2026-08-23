@@ -19,13 +19,19 @@
   "new_tab.empty_shortcuts": "还没有固定入口",
   "new_tab.config_error": "固定入口配置损坏，已安全忽略",
   "cast.select_receiver": "选择接收端",
-  "cast.mode.mirror": "标签页投屏",
-  "cast.mode.direct": "高清直投",
+  "cast.mode.direct": "直接投屏",
   "cast.stop": "停止投屏",
   "cast.rejected": "当前内容不能投屏",
   "privacy.incognito": "无痕窗口",
   "privacy.cleanup_failed": "无痕数据清理失败",
   "login.open": "登录站点",
   "error.network": "网络错误",
-  "update.available": "发现新版本"
+  "update.available": "发现新版本",
+  "cast.mode.relay": "中继投屏",
+  "cast.open_external_client": "打开蜡笔投屏客户端",
+  "cast.disabled": "播放视频后可投屏",
+  "cast.selecting": "正在选择接收设备",
+  "cast.stopping": "正在停止投屏",
+  "error.crash": "此页面已崩溃",
+  "error.blocked_scheme": "此地址已被阻止"
 }
