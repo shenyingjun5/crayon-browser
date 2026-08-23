@@ -22,7 +22,7 @@
 | CEF-09 | VERIFIED | CEF-06 | `src/renderer/media_observer` | 独立 document-start 资源：media events、可见性、frame/navigation ID；无自动交互 | BR-003..BR-013；尤其 BR-009、BR-010 | S2 |
 | CEF-10 | VERIFIED | CEF-09 | `src/browser/input_proof` | Browser process 可信输入、前台标签和播放推进交叉校验 | BR-003、BR-004、BR-005、BR-007；页面伪造全部失败 | S2 |
 | CEF-11 | VERIFIED | CEF-09 | `src/browser/network_observer` | ResourceRequest/response observation，仅允许字段并有大小/速率上限 | BR-008、BR-011、BR-012；敏感 header/正文不进入 DTO | S2 |
-| CEF-12 | TODO | CEF-10,CEF-11 | `src/browser/observation_gateway` | DOM/network observation 合并并发送 Core，generation fencing | PL-001、PL-002；导航迟到事件；背压/dropped | S2 |
+| CEF-12 | VERIFIED | CEF-10,CEF-11 | `src/browser/observation_gateway` | DOM/network observation 合并并发送 Core，generation fencing | PL-001、PL-002；导航迟到事件；背压/dropped | S2 |
 | CEF-13 | TODO | CEF-08,CEF-12,MED-19 | `shared-ui/features/cast` | `Idle/Browsing/Eligible/Selecting/Planning/Casting` 与 `ExternalClientHandoff` 视图绑定 | 状态 UI contract；未播放禁用；交接需确认；错误不假成功 | S3 |
 | CEF-14 | TODO | CEF-05,CEF-07,CEF-12,CEF-13 | `tests/e2e/desktop/browser` | Windows/macOS 本地 fixture E2E harness、截图/日志脱敏产物 | BR-001..BR-014 适用项；无公网 | S3 |
 | CEF-15 | TODO | CEF-14 | 文档/Review | Windows/macOS CEF 壳总 Review、性能/包体/启动基线，修 P0/P1 | desktop build + E2E + repo guard；V1 CEF 部分完成 | S3 |
@@ -346,3 +346,11 @@
 - 验证：`cmake -S . -B .cache/build/cef11` 零告警；`network_observer` 1/1（6 组：URL 矩阵、header 白名单矩阵、敏感 header 拒绝且 DTO 无值、blob 不伪造、EME 关联升级与跨 navigation 隔离、限流/容量/超限）；共享层回归 34/34；`git diff --check` 通过。
 - Code Review：P0 0、P1 0、P2 1——限流为固定窗口（窗口边界瞬时 2×预算突发可能），CEF-12/14 接真实事件流时若需平滑可换令牌桶（与 AGT-12A transport 守卫同型）。
 - 未覆盖与风险：CEF ResourceRequest/Response 事件接线（shell 装配）、与 media_observer 的候选合成（CEF-12）、真实 MSE/EME fixture（CEF-14）。`CEF-11` 转为 `VERIFIED`，解锁 `CEF-12`（依赖 10+11）。
+
+### CEF-12 完成记录（2026-08-23）
+
+- 实现：新增 `browser/cef-shell/src/browser/observation_gateway`（header/impl/CMake/契约测试各 1，复用 CEF-09/11 DTO 类型，无第三方依赖）。`ObservationGateway` 按 tab 合并 media/network 观测：每 tab 单调 generation（导航推进即 +1 并**立即**从队列剔除该 tab 全部旧 generation 事件——旧结果绝不流出，PL-001/PL-002 形态）；无导航记录的 tab 事件在入口丢弃（不可归属）；出站队列 256 有界、满载 `DroppedBackpressure` 计数（消费方 Drain 批量拉取，永不阻塞）；tab 追踪 64 有界；`GatewayStats` 诊断计数单调。
+- 验证：`cmake -S . -B .cache/build/cef12` 零告警；`observation_gateway` 1/1（5 组：media+network 合并出站、generation fencing 与迟到事件/未导航 tab 丢弃及跨 tab 隔离、背压有界与 Drain 释放、tab 容量、5000 步风暴——队列上界/计数单调/零越界 Drain）；共享层回归 35/35；`git diff --check` 通过。
+- Code Review：P0 0、P1 0、P2 1——入口未按 navigation_id 与当前代导航比对（同一 tab 新导航 id 旧值仍可入队，靠下游消费方 navigation 匹配拒绝）；CEF-14 接线时可在 gateway 增加 tab→current_navigation 映射前置拒绝。
+- 未覆盖与风险：CEF 事件→gateway 接线与 Core client（CEF-07 supervisor）传输装配、wire DTO 编码（crayon-ipc-schema）、E2E fixture 行为（CEF-14）。`CEF-12` 转为 `VERIFIED`；`CEF-13`（依赖 CEF-08+12）待 CEF-08 UI 壳任务。
+- 批注（2026-08-23 CEF-06..12 五连任务）：全部为平台中立契约/模型层，macOS arm64 开发机完成；CEF 壳内真实事件接线与实机 E2E 统一归 CEF-08/13/14 后续任务。

@@ -64,6 +64,7 @@ add_subdirectory(browser/cef-shell/src/browser/core_client)
 add_subdirectory(browser/cef-shell/src/renderer/media_observer)
 add_subdirectory(browser/cef-shell/src/browser/input_proof)
 add_subdirectory(browser/cef-shell/src/browser/network_observer)
+add_subdirectory(browser/cef-shell/src/browser/observation_gateway)
 add_subdirectory(browser/shared-ui/site-controls)
 add_subdirectory(browser/shared-ui/new-tab)
 
