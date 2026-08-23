@@ -23,7 +23,7 @@
 | CEF-10 | VERIFIED | CEF-09 | `src/browser/input_proof` | Browser process 可信输入、前台标签和播放推进交叉校验 | BR-003、BR-004、BR-005、BR-007；页面伪造全部失败 | S2 |
 | CEF-11 | VERIFIED | CEF-09 | `src/browser/network_observer` | ResourceRequest/response observation，仅允许字段并有大小/速率上限 | BR-008、BR-011、BR-012；敏感 header/正文不进入 DTO | S2 |
 | CEF-12 | VERIFIED | CEF-10,CEF-11 | `src/browser/observation_gateway` | DOM/network observation 合并并发送 Core，generation fencing | PL-001、PL-002；导航迟到事件；背压/dropped | S2 |
-| CEF-13 | TODO | CEF-08,CEF-12,MED-19 | `shared-ui/features/cast` | `Idle/Browsing/Eligible/Selecting/Planning/Casting` 与 `ExternalClientHandoff` 视图绑定 | 状态 UI contract；未播放禁用；交接需确认；错误不假成功 | S3 |
+| CEF-13 | VERIFIED | CEF-08,CEF-12,MED-19 | `shared-ui/features/cast` | `Idle/Browsing/Eligible/Selecting/Planning/Casting` 与 `ExternalClientHandoff` 视图绑定 | 状态 UI contract；未播放禁用；交接需确认；错误不假成功 | S3 |
 | CEF-14 | TODO | CEF-05,CEF-07,CEF-12,CEF-13 | `tests/e2e/desktop/browser` | Windows/macOS 本地 fixture E2E harness、截图/日志脱敏产物 | BR-001..BR-014 适用项；无公网 | S3 |
 | CEF-15 | TODO | CEF-14 | 文档/Review | Windows/macOS CEF 壳总 Review、性能/包体/启动基线，修 P0/P1 | desktop build + E2E + repo guard；V1 CEF 部分完成 | S3 |
 
@@ -382,3 +382,23 @@
 - 验证：`cmake -S . -B .cache/build/cef08` 零告警；`chrome_contract` 1/1（4 组：工具栏边界、投屏按钮粘性默认/启用路径/撤回收敛、错误壳动作、locale parity+mirror 禁令）；共享层回归 36/36；`cast.mode.mirror|Mirror tab` 全仓扫描零残留；`git diff --check` 通过。
 - Code Review：P0 0、P1 0、P2 1——locale parity 测试用行级 JSON 解析（扁平文件当前足够；若 locales 引入嵌套或数组结构需换真解析器并保留禁令断言）。
 - 未覆盖与风险：真实设备/接收端选择接线（CEF-13，本模型 OpenReceiverPicker 即其挂点）、键盘/缩放/无障碍实机 smoke（CEF-14/QAR）、最终视觉（BUX 契约）。`CEF-08` 转为 `VERIFIED`，`CEF-13` 依赖满足（另需 CEF-12 DONE 已满足）。
+
+### CEF-13 原子范围（投屏功能视图状态机）
+
+- 状态：`VERIFIED`；依赖 `CEF-08 VERIFIED`、`CEF-12 VERIFIED`、`MED-19 DONE`。
+- 路径说明：Roadmap `shared-ui/features/cast` 映射 `browser/shared-ui/features/cast`。
+- 单一目标：投屏功能视图状态机 `Idle/Browsing/Eligible/Selecting/Planning/Casting` + `ExternalClientHandoff` 确认流与闭合结果绑定；不接真实设备（SDK-13 BLOCKED）、不执行投屏决策（cast-policy/MED 所有）。
+- 边界：
+  - Eligible 只能由 Browser 验证事实（CEF-10 判定）进入；页面自报状态不可达。
+  - Planning 消费闭合策略结果 `Direct/Relay→Casting`、`ExternalClientHandoff→HandoffConfirm`（需用户确认，未确认不发出任何请求）、`Reject→Rejected`（闭合原因 key，不假成功）。
+  - 交接结果闭合 `DownloadStarted/LaunchRequested/NotInstalled/Cancelled/Failed`——任何结果都不渲染"投屏中"，Failed/NotInstalled 明确失败文案 key。
+  - Casting 会话结束/错误收敛到 Browsing（eligibility 需重新验证）；全部状态迁移闭合非法即拒绝。
+- 验收与测试：状态 UI contract（CMake 契约测试）：粘性默认/启用路径/策略结果映射/交接确认矩阵/错误不假成功/会话收敛/风暴不变量。命令：独立 configure/build/ctest、共享层回归、`git diff --check`。
+- 明确不做：真实接收端（SDK-13）、投屏执行（MED/SDK）、确认 UI 呈现（AGT-05/BUX）、投屏按钮渲染（CEF-08 CastButtonModel 已有）。
+
+### CEF-13 完成记录（2026-08-23）
+
+- 实现：新增 `browser/shared-ui/features/cast`（header/impl/CMake/契约测试各 1）。`CastFeatureViewModel` 闭合状态机 `Idle/Browsing/Eligible/Selecting/Planning/Casting/HandoffConfirm/HandoffRequested/Rejected`：Eligible 只能由 Browser 验证事实（CEF-10 判定）进入且无页面时事实无效；策略结果闭合映射（Direct/Relay→Planning→NotifySessionStarted→Casting；ExternalClientHandoff→HandoffConfirm 需显式确认，未确认时任何结果投递被拒、不发请求；Reject→Rejected 携带闭合原因，DRM/无路由等显式失败 key 不假成功）；交接结果闭合五元组全部落回 Browsing 且**任何结果都不渲染"投屏中"**（Cancel 未确认/已发出均收敛 Browsing）；会话结束/页面失活收敛 Browsing/Idle，eligibility 需重新验证；全部非法迁移稳定拒绝。locales 新增 4 个 cast 文案 key（en/zh 39/39 全等），契约测试含 locale parity + 本模块所需 key 存在性。
+- 验证：`cmake -S . -B .cache/build/cef13` 零告警；`cast_feature_view` 1/1（6 组：仅浏览器判定可达 Eligible、策略结果映射/Reject 显式失败、交接确认矩阵与不假投屏、页面失活重置、locale key、5000 步风暴闭合不变量）；共享层回归 37/37；`git diff --check` 通过。
+- Code Review：P0 0、P1 0、P2 1——`message_key()` 对 kNoRoute 返回 `cast.open_external_client`（引导语），与 Reject 语义的"失败"并存是刻意设计（无路由=能力引导而非内容拒绝）；若 UX 评审要求统一失败文案，拆分为独立 key 的任务归 BUX。
+- 未覆盖与风险：真实接收端选择与会话执行（SDK-13 BLOCKED 待真机）、CEF-08 CastButtonModel 与本模型的装配（shell 装配任务）、E2E fixture 行为（CEF-14）。`CEF-13` 转为 `VERIFIED`；CEF-14 依赖仅剩自身 harness 建设。

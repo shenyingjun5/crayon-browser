@@ -33,5 +33,9 @@
   "cast.selecting": "Choosing a receiver",
   "cast.stopping": "Stopping cast",
   "error.crash": "This page crashed",
-  "error.blocked_scheme": "This address was blocked"
+  "error.blocked_scheme": "This address was blocked",
+  "cast.feature.idle": "Cast",
+  "cast.planning": "Preparing to cast",
+  "cast.handoff.confirm": "Open the Crayon cast client for this media?",
+  "cast.handoff.requested": "Asking the Crayon cast client…"
 }

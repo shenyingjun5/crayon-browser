@@ -33,5 +33,9 @@
   "cast.selecting": "正在选择接收设备",
   "cast.stopping": "正在停止投屏",
   "error.crash": "此页面已崩溃",
-  "error.blocked_scheme": "此地址已被阻止"
+  "error.blocked_scheme": "此地址已被阻止",
+  "cast.feature.idle": "投屏",
+  "cast.planning": "正在准备投屏",
+  "cast.handoff.confirm": "为此媒体打开蜡笔投屏客户端？",
+  "cast.handoff.requested": "正在请求蜡笔投屏客户端…"
 }
