@@ -16,7 +16,7 @@
 | CEF-03 | DONE | CEF-02W | `src/browser/window` | Windows 首发的单窗口/标签生命周期、导航、前后退、刷新、停止、缩放；共享接口保持 macOS 可实现 | BR-001、重复关闭、崩溃恢复；Windows 实机资源无泄漏 | S3 |
 | CEF-04 | DONE | CEF-03 | `src/browser/context` | 临时/持久 `CefRequestContext` factory，Profile ID 不用名称作路径 | BR-002、PV-001、PV-004 基础；context 隔离 | S3 |
 | CEF-05 | DONE | CEF-04 | `src/browser/permission` | 摄像头/麦克风/通知/定位/剪贴板/下载按站点控制 | allow/deny/remember/session tests；默认最小权限 | S3 |
-| CEF-06 | TODO | CEF-02W,FND-08 | `src/ipc`、`crayon-ipc-schema` | length-prefixed IPC、session secret、schema/大小/进程校验 | RG-007；畸形/超大/错误 secret/旧版本 | S2 |
+| CEF-06 | VERIFIED | CEF-02W,FND-08 | `src/ipc`、`crayon-ipc-schema` | length-prefixed IPC、session secret、schema/大小/进程校验 | RG-007；畸形/超大/错误 secret/旧版本 | S2 |
 | CEF-07 | TODO | CEF-06 | `src/browser/core_client` | Core 子进程启动、健康、崩溃、有界关闭与重连 | 启动失败/崩溃/超时/退出；无 orphan | S3 |
 | CEF-08 | TODO | FND-11,CEF-03 | `browser/shared-ui` | 地址栏、标签、投屏按钮、错误/权限壳和本地化，不接真实设备 | UI unit；locale parity；键盘/缩放/无障碍 smoke | S3 |
 | CEF-09 | TODO | CEF-06 | `src/renderer/media_observer` | 独立 document-start 资源：media events、可见性、frame/navigation ID；无自动交互 | BR-003..BR-013；尤其 BR-009、BR-010 | S2 |
@@ -301,3 +301,20 @@
 - 验证（arm64 原生实机）：`cmake --preset macos-arm64-cef-debug` configure/build 零错误，post-build 对 6 个 bundle 完成 ad-hoc 签名与验证；`ctest` 39/39；真实启动完整 6 进程（主 + GPU/Renderer/Alerts/Plugin/基础 Helper），Renderer Helper 进程命令行不含 `--no-sandbox`（sandbox 生效 smoke），`quit` 后零残留；错误的 main 进程 sandbox 初始化路径实测产生退出码 12（fail-closed 契约有效）。x64：sandbox 构建 + `ctest` 39/39 通过；运行在 Rosetta 下即刻 `Termination Reason: Namespace ROSETTA` 终止（EXC_CRASH/SIGABRT）——Rosetta 翻译层不支持 Chromium macOS sandbox 路径，与 CEF-01E 已记录的采样器限制同类，非产品缺陷。
 - Code Review：P0 0、P1 0、P2 1——`macos_adhoc_sign.cmake` 的 Helper 清单来自生成文件 `crayon-macos-helper-apps.txt`，签名顺序依赖该文件先于主 App POST_BUILD 生成（当前由同一目标的 file(GENERATE) 保证，若拆分 Helper 为独立 target 需复核顺序）。
 - 未覆盖与风险：x64 sandbox 运行验收需原生 x64 硬件（挂 QAR/PLT-M05 真机矩阵，Rosetta 不可替代）；分发签名/公证（PLT-M05）；sandbox 深度安全测试（seatbelt profile 逃逸面）不在本任务，归 PRV/QAR 安全门禁。`CEF-02M` 转为 `VERIFIED`（DONE 待 x64 原生机验收），解锁依赖它的 `CEF-06` 线（`src/ipc` 平台无关部分可先行）。
+
+### CEF-06 原子范围（浏览器侧 length-prefixed IPC 契约层）
+
+- 状态：`VERIFIED`；依赖 `CEF-02W DONE`、`FND-08 DONE`。
+- 路径说明：Roadmap `src/ipc` 映射 `browser/cef-shell/src/ipc`（与 CEF-03 `src/browser/window` 同映射）。
+- 单一目标：新增 `browser/cef-shell/src/ipc` 平台中立 C++17 契约层：length-prefixed 帧编解码（上限/畸形闭合拒绝）、session secret 常数时间校验与轮换代际、消息守卫（schema 版本窗口、大小上限、进程 token 校验）；不含真实管道/传输（CEF-07/AGT-12）、不含业务消息处理。
+- 输出与允许修改：`browser/cef-shell/src/ipc/**`（header/impl/CMake/契约测试）、根 `CMakeLists.txt` 接线、本 Roadmap。零第三方依赖、无 CEF 类型进入公共接口、无 IO（纯内存状态机）。
+- 边界：帧 `u32 BE 长度 + payload`，`kMaxFrameBytes=65536`，超限/畸形/残留闭合错误；secret 比较常数时间、旧 secret 仅在轮换窗口内接受且新 secret 立即生效；schema 版本闭窗（current±0，v1 单版本）拒绝旧/新版本；进程 token 闭合字符集校验；全部错误为闭合枚举稳定字符串。
+- 验收与测试：RG-007 语义由 `crayon-ipc-schema` golden 承担（不修改）；本任务测试矩阵：编解码（完整/分片/背靠背/超限/畸形/敌意缓冲）、secret（正确/错误/旧代际/轮换窗口）、版本（current/旧/未知）、token 校验、错误映射。命令：独立 CMake configure/build/ctest（`-Werror`）、共享层回归、`git diff --check`。
+- 明确不做：真实 OS 传输与 Core 子进程生命周期（CEF-07）、CAAP transport（AGT-12）、业务消息编码（crayon-ipc-schema 已有）。
+
+### CEF-06 完成记录（2026-08-23）
+
+- 实现：新增 `browser/cef-shell/src/ipc`（header/impl/CMake/契约测试各 1）。`FrameCodec`：`u32 BE` 长度前缀流式解码，`kMaxFrameBytes=65536` 超限返回 Oversize 并丢弃 header（payload poisoned），敌意单次 feed 超 `kMaxFeedBytes` fail-closed 且零缓存，Encode 拒绝超限 payload；`SessionSecretVerifier`：32 字节 secret 常数时间比较（`ConstantTimeEquals`），`Install`/`Rotate` 代际管理，仅上一代 secret 在轮换窗口内可验证、再旧即过期，错误尺寸 fail-closed；`MessageGuard`：进程 token 闭合字符集、声明长度上限、schema 版本闭窗（v1 单版本，与 `crayon-ipc-schema` 同步的 `kCurrentSchemaVersion=1`），旧/未知版本在 payload 解析前拒绝；`IpcError` 闭合枚举稳定字符串。零第三方、无 CEF 类型、无 IO。
+- 验证：`cmake -S . -B .cache/build/cef06 -DCRAYON_BUILD_TESTS=ON -DCRAYON_ENABLE_CEF=OFF` 零告警零错误；`ipc_channel_contract` 1/1（8 组：往返、分片/背靠背/最大合法帧、超限与敌意 feed、secret 校验与轮换窗口、常数时间比较、进程 token 矩阵、消息守卫矩阵、LCG 3000 步敌意流——有界 pending、不崩溃）；共享层回归 30/30 通过；`git diff --check` 通过。RG-007 golden 语义由 `crayon-ipc-schema` 既有向量承担（本任务未改 schema，无兼容性影响）。
+- Code Review：P0 0、P1 0、P2 1——LCG 敌意流测试因缓冲残留只能断言全局不变量（不崩溃/有界），精确语义靠确定性用例覆盖（已注明）；后续 CEF-07 接真实传输时可考虑加"连接重置即清空 codec"用例。
+- 未覆盖与风险：真实 OS 传输与 Core 子进程生命周期（CEF-07）、CAAP transport（AGT-12 复用 Rust 侧 transport 守卫）、消息 JSON 编解码（crayon-ipc-schema 所有）。`CEF-06` 转为 `VERIFIED`，解锁 `CEF-07`、`CEF-09`。
