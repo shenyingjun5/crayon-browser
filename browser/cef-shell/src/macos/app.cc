@@ -21,6 +21,13 @@ BrowserApp::BrowserApp(std::string product_name)
           kInitialUrl, window::TabController::BrowserCreatedCallback{},
           std::nullopt, permission_store_.get())) {}
 
+void BrowserApp::OnBeforeCommandLineProcessing(
+    const CefString& process_type,
+    CefRefPtr<CefCommandLine> command_line) {
+  static_cast<void>(process_type);
+  command_line->AppendSwitch("use-mock-keychain");
+}
+
 void BrowserApp::OnContextInitialized() {
   CEF_REQUIRE_UI_THREAD();
   if (!tab_controller_->CreateMainWindow()) {

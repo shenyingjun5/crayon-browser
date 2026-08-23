@@ -6,3 +6,4 @@ demo/gen/
 .cache/toolchains/
 .DS_Store
 .cache/cef-archives/
+__pycache__/

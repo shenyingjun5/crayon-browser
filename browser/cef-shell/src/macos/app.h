@@ -18,6 +18,15 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   CefRefPtr<CefBrowserProcessHandler> GetBrowserProcessHandler() override {
     return this;
   }
+
+  // Dev/ad-hoc builds cannot anchor a Keychain ACL (every rebuild
+  // changes the signature), so Chromium's "Safe Storage" key would
+  // prompt for keychain access on every launch.  Real keychain-backed
+  // secret storage lands with the SecureStore platform adapter
+  // (PLT-M04/PRV-05) behind a stable signing identity; until then the
+  // in-memory mock keeps launches prompt-free.
+  void OnBeforeCommandLineProcessing(const CefString& process_type,
+                                     CefRefPtr<CefCommandLine> command_line) override;
   void OnContextInitialized() override;
   // Chrome-style windows created by the Chrome UI (new tab/window, popups)
   // must run through our client so callbacks stay normalized.
