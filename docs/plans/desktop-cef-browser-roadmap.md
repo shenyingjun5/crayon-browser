@@ -20,7 +20,7 @@
 | CEF-07 | VERIFIED | CEF-06 | `src/browser/core_client` | Core 子进程启动、健康、崩溃、有界关闭与重连 | 启动失败/崩溃/超时/退出；无 orphan | S3 |
 | CEF-08 | TODO | FND-11,CEF-03 | `browser/shared-ui` | 地址栏、标签、投屏按钮、错误/权限壳和本地化，不接真实设备 | UI unit；locale parity；键盘/缩放/无障碍 smoke | S3 |
 | CEF-09 | VERIFIED | CEF-06 | `src/renderer/media_observer` | 独立 document-start 资源：media events、可见性、frame/navigation ID；无自动交互 | BR-003..BR-013；尤其 BR-009、BR-010 | S2 |
-| CEF-10 | TODO | CEF-09 | `src/browser/input_proof` | Browser process 可信输入、前台标签和播放推进交叉校验 | BR-003、BR-004、BR-005、BR-007；页面伪造全部失败 | S2 |
+| CEF-10 | VERIFIED | CEF-09 | `src/browser/input_proof` | Browser process 可信输入、前台标签和播放推进交叉校验 | BR-003、BR-004、BR-005、BR-007；页面伪造全部失败 | S2 |
 | CEF-11 | TODO | CEF-09 | `src/browser/network_observer` | ResourceRequest/response observation，仅允许字段并有大小/速率上限 | BR-008、BR-011、BR-012；敏感 header/正文不进入 DTO | S2 |
 | CEF-12 | TODO | CEF-10,CEF-11 | `src/browser/observation_gateway` | DOM/network observation 合并并发送 Core，generation fencing | PL-001、PL-002；导航迟到事件；背压/dropped | S2 |
 | CEF-13 | TODO | CEF-08,CEF-12,MED-19 | `shared-ui/features/cast` | `Idle/Browsing/Eligible/Selecting/Planning/Casting` 与 `ExternalClientHandoff` 视图绑定 | 状态 UI contract；未播放禁用；交接需确认；错误不假成功 | S3 |
@@ -332,3 +332,10 @@
 - 验证：`cmake -S . -B .cache/build/cef09` 零告警；`media_observer` 1/1（7 组：源分类矩阵、旧导航丢弃、blob/stream 反伪造、teardown 阻断、容量、可见播放资格、无交互面断言）；共享层回归 32/32；`git diff --check` 通过。
 - Code Review：P0 0、P1 0、P2 1——kind 与 URL 的一致性校验采用保守白名单（tag=HttpUrl 必须有合法 http URL；blob/stream 必须空 URL；Unknown tag 接受空 URL），未知 tag 携带 URL 的组合未来若出现合法场景需显式扩契约。
 - 未覆盖与风险：CEF document-start JS 注入与 DOM/MSE 事件采集接线（shell 装配任务）；跨 frame 聚合（CEF-12 gateway）；真实广告/EME fixture 行为（CEF-14）。`CEF-09` 转为 `VERIFIED`，解锁 `CEF-10`（依赖 09）。
+
+### CEF-10 完成记录（2026-08-23）
+
+- 实现：新增 `browser/cef-shell/src/browser/input_proof`（header/impl/CMake/契约测试各 1）。`InputProofGate` 纯门禁（浏览器 UI 线程、事实只来自 Browser 可信源：CEF 输入事件、前台 tab、Browser 侧播放采样）：`NoteUserInput` 在输入瞬间快照"当时是否已在推进"与进度基线；`NotePlaybackProgress` 记录可信采样并计算推进 delta；`Evaluate` 闭合判定——无输入（BR-003 伪造 playing 拒绝）、导航不匹配（BR-007 旧导航拒绝）、输入不在前台/声明的 tab 拒绝、输入时已在推进（BR-005 无关点击+自动播放拒绝；暂停后用户恢复播放允许）、输入后推进不足 `kMinProgressSeconds=0.05s` 拒绝（BR-004：输入+真实推进才 Eligible）。声明侧只消费 identity 元组，页面上报内容无法触及 allow 路径。
+- 验证：`cmake -S . -B .cache/build/cef10` 零告警；`input_proof_gate` 1/1（7 组：BR-003/004/005/007 全覆盖、暂停后恢复允许、前台/后台输入矩阵、无推进/微推进拒绝、5000 步事实风暴闭合不变量）；共享层回归 33/33；`git diff --check` 通过。
+- Code Review：P0 0、P1 0、P2 1——"推进快照"基于最近两次采样 delta，若采样稀疏（如暂停很久后仅一次采样）`progressing_at_input_` 可能失真为 false；CEF-14 E2E 接真实 CEF 视频状态采样时需保证输入前至少两个采样点或显式注入 paused 状态。
+- 未覆盖与风险：CEF 输入事件/视频状态采集接线（shell 装配）、与 CEF-09 观测和 cast-policy `decide` 的组合链（CEF-12/13）、多 tab 并发输入的更精细归属。`CEF-10` 转为 `VERIFIED`，`CEF-11`（依赖 09）可领取。
