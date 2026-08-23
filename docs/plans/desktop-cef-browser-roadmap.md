@@ -21,7 +21,7 @@
 | CEF-08 | TODO | FND-11,CEF-03 | `browser/shared-ui` | 地址栏、标签、投屏按钮、错误/权限壳和本地化，不接真实设备 | UI unit；locale parity；键盘/缩放/无障碍 smoke | S3 |
 | CEF-09 | VERIFIED | CEF-06 | `src/renderer/media_observer` | 独立 document-start 资源：media events、可见性、frame/navigation ID；无自动交互 | BR-003..BR-013；尤其 BR-009、BR-010 | S2 |
 | CEF-10 | VERIFIED | CEF-09 | `src/browser/input_proof` | Browser process 可信输入、前台标签和播放推进交叉校验 | BR-003、BR-004、BR-005、BR-007；页面伪造全部失败 | S2 |
-| CEF-11 | TODO | CEF-09 | `src/browser/network_observer` | ResourceRequest/response observation，仅允许字段并有大小/速率上限 | BR-008、BR-011、BR-012；敏感 header/正文不进入 DTO | S2 |
+| CEF-11 | VERIFIED | CEF-09 | `src/browser/network_observer` | ResourceRequest/response observation，仅允许字段并有大小/速率上限 | BR-008、BR-011、BR-012；敏感 header/正文不进入 DTO | S2 |
 | CEF-12 | TODO | CEF-10,CEF-11 | `src/browser/observation_gateway` | DOM/network observation 合并并发送 Core，generation fencing | PL-001、PL-002；导航迟到事件；背压/dropped | S2 |
 | CEF-13 | TODO | CEF-08,CEF-12,MED-19 | `shared-ui/features/cast` | `Idle/Browsing/Eligible/Selecting/Planning/Casting` 与 `ExternalClientHandoff` 视图绑定 | 状态 UI contract；未播放禁用；交接需确认；错误不假成功 | S3 |
 | CEF-14 | TODO | CEF-05,CEF-07,CEF-12,CEF-13 | `tests/e2e/desktop/browser` | Windows/macOS 本地 fixture E2E harness、截图/日志脱敏产物 | BR-001..BR-014 适用项；无公网 | S3 |
@@ -339,3 +339,10 @@
 - 验证：`cmake -S . -B .cache/build/cef10` 零告警；`input_proof_gate` 1/1（7 组：BR-003/004/005/007 全覆盖、暂停后恢复允许、前台/后台输入矩阵、无推进/微推进拒绝、5000 步事实风暴闭合不变量）；共享层回归 33/33；`git diff --check` 通过。
 - Code Review：P0 0、P1 0、P2 1——"推进快照"基于最近两次采样 delta，若采样稀疏（如暂停很久后仅一次采样）`progressing_at_input_` 可能失真为 false；CEF-14 E2E 接真实 CEF 视频状态采样时需保证输入前至少两个采样点或显式注入 paused 状态。
 - 未覆盖与风险：CEF 输入事件/视频状态采集接线（shell 装配）、与 CEF-09 观测和 cast-policy `decide` 的组合链（CEF-12/13）、多 tab 并发输入的更精细归属。`CEF-10` 转为 `VERIFIED`，`CEF-11`（依赖 09）可领取。
+
+### CEF-11 完成记录（2026-08-23）
+
+- 实现：新增 `browser/cef-shell/src/browser/network_observer`（header/impl/CMake/契约测试各 1）。`ClassifyUrl` 闭合 URL 分类（http/https 归一化、blob: 保留空 URL 不伪造、超长/控制字符/危险 scheme 拒绝）；`IsObservableHeader` 闭合可观测 header 集（referer/user-agent/range/authorization——仅类别标志，**值永不进入 DTO**，BR-008），cookie 等非可观测敏感 header 出现即整体拒绝观测而非泄漏；`Observe` 固定窗口限流（256/秒，注入时钟）+ 容量 128 + content_length 元数据上限；`AssociateEmeEncrypted`（BR-011）只升级同 navigation 的 media/manifest/segment 观测的 protection 标志。
+- 验证：`cmake -S . -B .cache/build/cef11` 零告警；`network_observer` 1/1（6 组：URL 矩阵、header 白名单矩阵、敏感 header 拒绝且 DTO 无值、blob 不伪造、EME 关联升级与跨 navigation 隔离、限流/容量/超限）；共享层回归 34/34；`git diff --check` 通过。
+- Code Review：P0 0、P1 0、P2 1——限流为固定窗口（窗口边界瞬时 2×预算突发可能），CEF-12/14 接真实事件流时若需平滑可换令牌桶（与 AGT-12A transport 守卫同型）。
+- 未覆盖与风险：CEF ResourceRequest/Response 事件接线（shell 装配）、与 media_observer 的候选合成（CEF-12）、真实 MSE/EME fixture（CEF-14）。`CEF-11` 转为 `VERIFIED`，解锁 `CEF-12`（依赖 10+11）。
