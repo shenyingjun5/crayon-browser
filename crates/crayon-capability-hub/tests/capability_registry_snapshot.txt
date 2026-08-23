@@ -1,0 +1,5 @@
+browser.cast|2.1.0|builtin|user_approved|cast_control|disabled
+browser.content|1.0.0|builtin|system|page_content|active
+legacy.tool|1.0.0|personal_skill|untrusted|local_only|revoked
+partner.notes|0.9.0|partner|untrusted|external_endpoint|active
+skill.export|1.0.0|personal_skill|user_approved|local_only|active

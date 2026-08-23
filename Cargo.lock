@@ -436,6 +436,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "crayon-capability-hub"
+version = "0.1.0"
+dependencies = [
+ "crayon-domain",
+]
+
+[[package]]
 name = "crayon-cast-adapter"
 version = "0.1.0"
 dependencies = [

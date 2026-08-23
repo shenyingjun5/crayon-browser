@@ -2,6 +2,7 @@
 
 mod agent;
 mod capabilities;
+mod capability;
 mod config;
 mod diagnostics;
 mod error;
@@ -11,6 +12,11 @@ pub use agent::{AgentCapability, AgentTarget, CaapError, RiskLevel};
 pub use capabilities::{
     BrowserEngineKind, LocalDiscoveryKind, PlatformCapabilities, ProtectedSurfaceKind,
     ReceiverCapabilities, SecureStoreKind,
+};
+pub use capability::{
+    is_capability_token, CapabilityDescriptor, CapabilitySchemaError, CapabilitySource, DataScope,
+    LifecycleState, TrustLevel, MAX_CAPABILITY_ID_LEN, MAX_CAPABILITY_SUMMARY_LEN,
+    MAX_CAPABILITY_VERSION_LEN,
 };
 pub use config::{
     CapacityConfig, ConfigError, LogLevel, LoggingConfig, NetworkConfig, ProductConfig,

@@ -1,6 +1,6 @@
 # HUB：Capability Registry、Router 与合作方连接器 Roadmap
 
-- 状态：规划完成，尚未开工
+- 状态：`HUB-01 DONE`（2026-08-23）；`HUB-02/HUB-03 READY`，其余 TODO
 - 任务数：16
 - 目标：为内建能力、个人 Site Skill、受控网页自动化、人工接管及已批准 Partner API/MCP 提供统一描述、可解释路由和隔离的出站执行边界
 - 非目标：远程入站控制、动态插件任意代码、凭证暴露、开放代理、透明跨路径重复副作用、浏览器自行定义 Cast 协议
@@ -16,7 +16,7 @@
 
 | ID | 状态 | 依赖 | 允许修改路径 | 单一交付 | 验收与测试 |
 |---|---|---|---|---|---|
-| HUB-01 | TODO | AGT-02,PRV-08 | `crayon-domain/capability/**`,`crayon-capability-hub/registry/**` | Capability descriptor、source/trust/lifecycle/version schema | `HB-001`; golden/冲突/撤销 |
+| HUB-01 | DONE | AGT-02,PRV-08 | `crayon-domain/capability/**`,`crayon-capability-hub/registry/**` | Capability descriptor、source/trust/lifecycle/version schema | `HB-001`; golden/冲突/撤销 |
 | HUB-02 | TODO | HUB-01 | `crayon-capability-hub/builtin/**` | 内建 browser/content/cast/handoff 能力从权威 registry 注册 | `HB-002`; 无重复 schema/隐藏强工具 |
 | HUB-03 | TODO | HUB-01 | `crayon-capability-hub/router/**` | RouteInput/RouteDecision/candidate/route_reason 稳定契约 | `HB-003`; 确定性 snapshot |
 | HUB-04 | TODO | HUB-02,HUB-03 | `crayon-capability-hub/policy/**` | partner -> skill -> web -> human -> reject 默认策略及覆盖规则 | `HB-004`; trust/risk/health/preference 矩阵 |
@@ -42,7 +42,7 @@
 
 ### HUB-01 原子范围（Capability descriptor 与 registry schema）
 
-- 状态：`IN_PROGRESS`；依赖 `AGT-02 DONE`、`PRV-08 DONE`。
+- 状态：`DONE`；依赖 `AGT-02 DONE`、`PRV-08 DONE`。
 - 单一目标：`crayon-domain` 新增 `capability.rs`（闭合 source/trust/lifecycle/version schema + serde）与新建 `crayon-capability-hub` crate 的 `registry` 模块：确定性注册、冲突拒绝、撤销立即生效、快照 golden。不含 router/policy/fallback/connector。
 - 边界：
   - `CapabilitySource = Builtin/PersonalSkill/Partner`（优先级递减）；`TrustLevel = System/UserApproved/Untrusted`；`LifecycleState = Active/Disabled/Revoked`（Revoked 对该 id+version 终态）。
@@ -51,3 +51,11 @@
   - snapshot 为确定性排序输出（golden 锁定）；撤销立即反映在 snapshot 与查询。
 - 验收与测试：HB-001。矩阵：注册/幂等、覆盖优先级矩阵、冲突拒绝、撤销立即生效与终态、trust 冲突、golden 快照、风暴不变量。命令：`cargo test -p crayon-capability-hub`、clippy `-D warnings`、fmt、workspace 回归、`git diff --check`。
 - 明确不做：router/policy/fallback（HUB-03/04/05）、内建能力清单（HUB-02）、partner connector（HUB-09+）、网络/IO。
+
+### HUB-01 完成记录（2026-08-23）
+
+- 实现：`crayon-domain` 新增 `capability.rs`（约 230 行）+ `capability_tests.rs`：闭合 `CapabilitySource = Partner(0)/PersonalSkill(1)/Builtin(2)`（precedence 大者优先，serde/wire 名一致）、`TrustLevel`、`LifecycleState`、`DataScope` 四个闭合枚举与 `CapabilityDescriptor { id, version, source, trust, data_scope, summary }`；id/version 走闭合字符集 `[a-z0-9_.:-]`（≤64/≤32 字节），summary ≤256 字节仅限长度校验；Partner 声明 System trust 在 schema 层拒绝（TrustConflict）；`wire_tag()` 产出 `id@version:source:trust:scope` 确定性标签。新建 `crates/crayon-capability-hub` crate：`registry.rs`（约 250 行）单 current-per-id 注册表——首次注册生效；替换要求 source precedence `>=` 既有且版本不同，否则 `Conflict`（Builtin 不可被 Personal/Partner 覆盖）；同 id+version 重复注册稳定拒绝（`DuplicateRegistration`）；`Revoked` 对 id+version 终态——当前版本撤销立即生效且可幂等重复，被撤销版本归档（每 id 上界 `MAX_REVOKED_HISTORY_PER_ID=8`，满载后该 id 再注册 fail closed 返回 `RevocationHistoryFull`，永不静默丢弃 tombstone），新版本可在撤销后按优先级规则接替；`set_enabled` 绑定精确 version（stale 调用者失败而非作用于已替换记录），离开 Revoked 不可能（`LifecycleTerminal`）；容量 `MAX_REGISTRATIONS=64` 满载 `Capacity`（既有 id 的替换不受影响）；`snapshot()` 按 id 确定序输出 `id|version|source|trust|data_scope|state`，排除自由文本 summary；错误枚举闭合且稳定 Display。workspace members 注册新 crate；无新增第三方依赖；全同步、无锁/线程/IO/时钟。
+- 修正（相对 WIP 初稿）：移除不可编译的 `From<CapabilitySchemaError> for CoreError`（`CoreError` 无 `InvalidInput` 变体且为 FND-08 冻结契约，域内各模块各自持有闭合错误，与 agent/config/diagnostics 一致）；`trust_wire_name()` 从 descriptor 私有方法改为 `TrustLevel::wire_name()` 公开常量方法，与其余枚举对齐。
+- 验证：`cargo test -p crayon-capability-hub` 11/11 通过（golden 快照逐字节一致与重建确定性、3x3 替换优先级矩阵全格锁定、首注生效/同 pair 拒绝含字段篡改对照、撤销即时生效+幂等+终态+未知目标、撤销后新版本接替并归档可查、lifecycle 版本绑定与 stale 拒绝、schema 校验矩阵含 Partner+System、容量上界、撤销历史满载 fail closed、LCG 3000 步风暴不变量——容量上界/每 id 活跃 precedence 不降/已撤销 pair 永不复活/快照恒定 id 序）；`cargo test -p crayon-domain --lib` 含 capability 6 项（token 边界矩阵、validate 矩阵含 256/257 字节边界、trust 冲突、precedence 序、四枚举 serde wire 名 roundtrip、wire_tag golden）；`cargo clippy -p crayon-capability-hub -p crayon-domain --all-targets -- -D warnings` 零告警；`cargo fmt --all -- --check` 通过；基线回归 core lib 3/3、legacy-dev lib 58/58、workspace 全量无失败；`git diff --check` 通过。
+- Code Review：按需求/边界→正确性→架构/API→并发/生命周期→安全/隐私→性能→测试→可维护性复核。P0 0、P1 0、P2 2：(1) 同 id+version 已存在时，低优先级来源得到 `Conflict` 而足够优先级来源得到 `DuplicateRegistration`——两序皆可辩护，取"优先级先判"使越权覆盖尝试获得更具诊断性的错误；行为已被 golden/矩阵测试锁定。(2) Active 记录被新版本替换后旧版本即被遗忘，此后旧版本可再次注册（同优先级降级换版不受 HUB-01 约束）——Roadmap 未约束该情形，partner 包的降级防护明确归 `HUB-10`（签名/篡改/降级/撤销/kill switch），builtin 由编译期权威来源（`HUB-02`）保证。
+- 未覆盖与风险：router/policy/fallback（HUB-03/04/05）、内建能力清单注册（HUB-02）、partner connector 与网络/IO（HUB-09+）均未涉及；registry 为进程内 v1 语义不持久化，重启即清（与 grant/receipt 同口径）。`HUB-01` 转为 `DONE`，解锁 `HUB-02`、`HUB-03`。

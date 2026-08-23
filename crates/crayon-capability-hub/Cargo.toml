@@ -1,0 +1,13 @@
+[package]
+name = "crayon-capability-hub"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Capability Hub: deterministic capability registry, routing contracts and partner connector boundaries"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+crayon-domain = { path = "../crayon-domain" }
