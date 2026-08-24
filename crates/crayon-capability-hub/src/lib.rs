@@ -6,6 +6,7 @@
 //! fallback and the outbound partner connector belong to later HUB tasks.
 
 pub mod builtin;
+pub mod fallback;
 pub mod policy;
 pub mod registry;
 pub mod router;

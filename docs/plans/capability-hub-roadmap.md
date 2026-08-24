@@ -1,6 +1,6 @@
 # HUB：Capability Registry、Router 与合作方连接器 Roadmap
 
-- 状态：`HUB-01..04 DONE`（2026-08-24）；`HUB-05/HUB-06 READY`，其余 TODO
+- 状态：`HUB-01..05 DONE`（2026-08-24）；`HUB-06 READY`，其余 TODO
 - 任务数：16
 - 目标：为内建能力、个人 Site Skill、受控网页自动化、人工接管及已批准 Partner API/MCP 提供统一描述、可解释路由和隔离的出站执行边界
 - 非目标：远程入站控制、动态插件任意代码、凭证暴露、开放代理、透明跨路径重复副作用、浏览器自行定义 Cast 协议
@@ -20,7 +20,7 @@
 | HUB-02 | DONE | HUB-01 | `crayon-capability-hub/builtin/**` | 内建 browser/content/cast/handoff 能力从权威 registry 注册 | `HB-002`; 无重复 schema/隐藏强工具 |
 | HUB-03 | DONE | HUB-01 | `crayon-capability-hub/router/**` | RouteInput/RouteDecision/candidate/route_reason 稳定契约 | `HB-003`; 确定性 snapshot |
 | HUB-04 | DONE | HUB-02,HUB-03 | `crayon-capability-hub/policy/**` | partner -> skill -> web -> human -> reject 默认策略及覆盖规则 | `HB-004`; trust/risk/health/preference 矩阵 |
-| HUB-05 | TODO | HUB-04,AGT-04,AGT-11 | `crayon-capability-hub/fallback/**` | fallback 重授权、重确认、幂等和未知副作用停止 | `HB-005`; 跨 route 不静默重放 |
+| HUB-05 | DONE | HUB-04,AGT-04,AGT-11 | `crayon-capability-hub/fallback/**` | fallback 重授权、重确认、幂等和未知副作用停止 | `HB-005`; 跨 route 不静默重放 |
 | HUB-06 | TODO | HUB-04,AGT-05 | `apps/desktop-cef/**/capability-route/**`,locales | route 预览、理由、偏好和临时覆盖 UI | `HB-006`; 数据外发/成本/风险可见 |
 | HUB-07 | TODO | HUB-02,WFL-12 | `crayon-capability-hub/adapters/site_skill/**` | 个人 Site Skill registry adapter | `HB-007`; owner/Profile/health/版本隔离 |
 | HUB-08 | TODO | HUB-03,AGT-14 | `crayon-agent-gateway/tools/capability/**` | 入站 MCP/CLI 能力 search/describe/preview，经 CAAP 暴露 | `HB-008`; 不泄漏 token/endpoint/隐蔽工具 |
@@ -126,3 +126,23 @@
 - 验证：`cargo test -p crayon-capability-hub` 11/11 通过（golden 快照逐字节一致与重建确定性、3x3 替换优先级矩阵全格锁定、首注生效/同 pair 拒绝含字段篡改对照、撤销即时生效+幂等+终态+未知目标、撤销后新版本接替并归档可查、lifecycle 版本绑定与 stale 拒绝、schema 校验矩阵含 Partner+System、容量上界、撤销历史满载 fail closed、LCG 3000 步风暴不变量——容量上界/每 id 活跃 precedence 不降/已撤销 pair 永不复活/快照恒定 id 序）；`cargo test -p crayon-domain --lib` 含 capability 6 项（token 边界矩阵、validate 矩阵含 256/257 字节边界、trust 冲突、precedence 序、四枚举 serde wire 名 roundtrip、wire_tag golden）；`cargo clippy -p crayon-capability-hub -p crayon-domain --all-targets -- -D warnings` 零告警；`cargo fmt --all -- --check` 通过；基线回归 core lib 3/3、legacy-dev lib 58/58、workspace 全量无失败；`git diff --check` 通过。
 - Code Review：按需求/边界→正确性→架构/API→并发/生命周期→安全/隐私→性能→测试→可维护性复核。P0 0、P1 0、P2 2：(1) 同 id+version 已存在时，低优先级来源得到 `Conflict` 而足够优先级来源得到 `DuplicateRegistration`——两序皆可辩护，取"优先级先判"使越权覆盖尝试获得更具诊断性的错误；行为已被 golden/矩阵测试锁定。(2) Active 记录被新版本替换后旧版本即被遗忘，此后旧版本可再次注册（同优先级降级换版不受 HUB-01 约束）——Roadmap 未约束该情形，partner 包的降级防护明确归 `HUB-10`（签名/篡改/降级/撤销/kill switch），builtin 由编译期权威来源（`HUB-02`）保证。
 - 未覆盖与风险：router/policy/fallback（HUB-03/04/05）、内建能力清单注册（HUB-02）、partner connector 与网络/IO（HUB-09+）均未涉及；registry 为进程内 v1 语义不持久化，重启即清（与 grant/receipt 同口径）。`HUB-01` 转为 `DONE`，解锁 `HUB-02`、`HUB-03`。
+## HUB-05 原子范围（fallback 重授权决策模型）
+
+- 状态：`IN_PROGRESS`；依赖 `HUB-04 DONE`、`AGT-04 VERIFIED`、`AGT-11 VERIFIED`。
+- 单一目标：`crayon-capability-hub` 新增 `fallback.rs`：route 执行失败后的 fallback 裁决模型——按副作用状态三分支（无副作用/已提交且可逆/未知），只有安全分支允许进入下一步骤，且任何步骤都是**全新授权决策**（附闭合重校验清单：语义目标/scope/grant/确认/幂等键/数据预览六项全部重新执行，不继承任何假设）；未知副作用或不可逆提交立即停止。不含实际执行、grant 签发与 UI。
+- 输入：HB-005（含已提交/未知副作用和不同 provider；重新 scope/risk/grant/确认/幂等；未知副作用停止）、架构 §8（fallback 不是透明重试）、红线"不得因 Partner API 失败静默降级到网页执行"、`HUB-04` PolicyDecision 的 fallback 链。
+- 输出与允许修改：`crates/crayon-capability-hub/src/fallback.rs`、`fallback_tests.rs`、`lib.rs` 仅加模块声明、本 Roadmap。零第三方新增；全同步、无锁/线程/IO/时钟。
+- 禁止修改：policy/router/registry/builtin 行为与既有 golden、domain schema、其他 crate；本层不产生任何自动执行路径——verdict 只是决策，执行归 app-runtime 装配。
+- 边界：
+  - `SideEffectState = None | Committed { reversible } | Unknown`；Unknown → `Stop(UnknownSideEffects)`、Committed{reversible:false} → `Stop(IrreversibleCommit)`，两者优先于链上位置。
+  - 安全分支 → `Reauthorize { next }`：next 取自 decision.fallback 中首个能力 kind；链上只剩 HumanHandoff → `HandOver`；只剩 Reject 或链耗尽 → `Stop(ChainExhausted)`。
+  - 每个 verdict 附完整闭合重校验清单常量（semantic_target/scope/grant/confirmation/idempotency/data_preview），快照逐项渲染——清单不可裁剪，即"不继承 provider/scope/confirmation/幂等假设"的类型化表达。
+  - attempt.executed_kind 必须等于 decision.selected.kind，否则稳定拒绝。
+- 验收与测试：HB-005。矩阵：clean 失败降级到次选并带全清单、已提交可逆仍需全量重授权（无静默重放）、不可逆停止、未知副作用无条件停止、链耗尽 Stop、HumanHandoff 判给 HandOver、attempt 不匹配拒绝、确定性渲染、LCG 不变量（Reauthorize 的 next 必为链上能力 kind 且清单恒完备）。命令：`cargo test -p crayon-capability-hub`、clippy `-D warnings`、fmt、workspace 回归、`git diff --check`。
+- 明确不做：执行/重试编排（app-runtime）、grant 签发接线、receipt 记录入口（HUB-15 audit 汇总）、UI 呈现（HUB-06）。
+### HUB-05 完成记录（2026-08-24）
+
+- 实现：`crayon-capability-hub` 新增 `fallback.rs`（约 180 行）：`RouteAttempt { executed_kind, side_effects }` + `evaluate(decision, attempt)` 三分支裁决——副作用安全优先于链位：`Unknown → Stop(UnknownSideEffects)`、`Committed{reversible:false} → Stop(IrreversibleCommit)`（partner API 失败永不静默降级到网页执行）；安全分支按 `PolicyDecision.fallback` 首元素给出 `Reauthorize{next}` / `HandOver`（链首为 HumanHandoff）/ `Stop(ChainExhausted)`（空链或 Reject 收尾）；attempt.executed_kind 必须等于 selected.kind 否则 `RouteNotSelected` 稳定拒绝；**闭合六项重校验清单常量** `REAUTHORIZATION_CHECKLIST`（semantic_target/scope/grant/confirmation/idempotency_key/data_preview）作为"不继承 provider/scope/confirmation/幂等假设"的类型化表达——清单整体生效不可裁剪，快照行格式确定（reauthorize|<kind>/hand_over/stop|<reason>）。verdict 仅是决策，执行与 grant 签发归 app-runtime 装配，审计记录归 HUB-15。零第三方新增；全同步、无锁/线程/IO/时钟。
+- 验证：`cargo test -p crayon-capability-hub` 44/44 通过（fallback 新增 9 项：clean 失败降级次选+清单完备断言、已提交可逆仍需全新重授权无静默重放、不可逆立即停、未知副作用无条件先于链位停止、HumanHandoff 判 HandOver、Reject/空链耗尽 Stop、executed 不匹配与未选中决策拒绝、真实 policy→resolve→apply→evaluate 端到端确定性、LCG 3000 步不变量——Reauthorize 目标必为链首能力 kind/安全分支外必停/渲染闭合）；clippy `-D warnings` 零告警；fmt 通过；workspace 全量无失败；`git diff --check` 通过。
+- Code Review：按标准八维复核。P0 0、P1 0、P2 1——清单目前是文档化常量，编译器不强制调用方逐项执行（Rust 无效果系统）；缓解：verdict 类型不含任何"已授权"语义、app-runtime 装配任务必须以 AGT-04 grant + AGT-05 confirm 的实际产出驱动下一步，HUB-16 总 Review 复核。
+- 未覆盖与风险：同 kind 不同 provider 的粒度（如两个 partner 包）待 partner manifest 落地后在 HUB-09+ 扩展；checkpoint/接管语义归 WFL。`HUB-05` 转为 `DONE`，解锁 `HUB-08`（另需 `AGT-14`）。
