@@ -1,7 +1,7 @@
 candidates
-site_skill|skill.export|1.0.0|user_approved
-web_automation|builtin.content|1.0.0|system
-web_automation|builtin.handoff|1.0.0|system
+site_skill|skill.export|1.0.0|user_approved|local_only
+web_automation|builtin.content|1.0.0|system|page_content
+web_automation|builtin.handoff|1.0.0|system|local_only
 evaluations
 skill.export|resolved
 builtin.content|resolved

@@ -1,6 +1,6 @@
 # HUB：Capability Registry、Router 与合作方连接器 Roadmap
 
-- 状态：`HUB-01/HUB-02 DONE`（2026-08-23）、`HUB-03 DONE`（2026-08-24）；`HUB-04 READY`，其余 TODO
+- 状态：`HUB-01..04 DONE`（2026-08-24）；`HUB-05/HUB-06 READY`，其余 TODO
 - 任务数：16
 - 目标：为内建能力、个人 Site Skill、受控网页自动化、人工接管及已批准 Partner API/MCP 提供统一描述、可解释路由和隔离的出站执行边界
 - 非目标：远程入站控制、动态插件任意代码、凭证暴露、开放代理、透明跨路径重复副作用、浏览器自行定义 Cast 协议
@@ -19,7 +19,7 @@
 | HUB-01 | DONE | AGT-02,PRV-08 | `crayon-domain/capability/**`,`crayon-capability-hub/registry/**` | Capability descriptor、source/trust/lifecycle/version schema | `HB-001`; golden/冲突/撤销 |
 | HUB-02 | DONE | HUB-01 | `crayon-capability-hub/builtin/**` | 内建 browser/content/cast/handoff 能力从权威 registry 注册 | `HB-002`; 无重复 schema/隐藏强工具 |
 | HUB-03 | DONE | HUB-01 | `crayon-capability-hub/router/**` | RouteInput/RouteDecision/candidate/route_reason 稳定契约 | `HB-003`; 确定性 snapshot |
-| HUB-04 | TODO | HUB-02,HUB-03 | `crayon-capability-hub/policy/**` | partner -> skill -> web -> human -> reject 默认策略及覆盖规则 | `HB-004`; trust/risk/health/preference 矩阵 |
+| HUB-04 | DONE | HUB-02,HUB-03 | `crayon-capability-hub/policy/**` | partner -> skill -> web -> human -> reject 默认策略及覆盖规则 | `HB-004`; trust/risk/health/preference 矩阵 |
 | HUB-05 | TODO | HUB-04,AGT-04,AGT-11 | `crayon-capability-hub/fallback/**` | fallback 重授权、重确认、幂等和未知副作用停止 | `HB-005`; 跨 route 不静默重放 |
 | HUB-06 | TODO | HUB-04,AGT-05 | `apps/desktop-cef/**/capability-route/**`,locales | route 预览、理由、偏好和临时覆盖 UI | `HB-006`; 数据外发/成本/风险可见 |
 | HUB-07 | TODO | HUB-02,WFL-12 | `crayon-capability-hub/adapters/site_skill/**` | 个人 Site Skill registry adapter | `HB-007`; owner/Profile/health/版本隔离 |
@@ -80,6 +80,30 @@
   - 快照只含闭合 token 与枚举 wire 名，排除 summary/endpoint/secret；同输入重复解析逐字节一致。
 - 验收与测试：HB-003。矩阵：重复求值一致性、四种 outcome、候选确定排序与输入顺序无关、输入校验（非法/超量/重复）、快照无自由文本泄漏、golden 逐字节一致、LCG 不变量（同输入同输出、候选恒排序）。命令：`cargo test -p crayon-capability-hub`、clippy `-D warnings`、fmt、workspace 回归、`git diff --check`。
 - 明确不做：默认策略与选择逻辑、覆盖规则（HUB-04）、fallback 重授权（HUB-05）、CAAP 能力发现暴露（HUB-08）。
+
+### HUB-04 原子范围（默认路由策略与覆盖规则）
+
+- 状态：`DONE`（2026-08-24）；依赖 `HUB-02 DONE`、`HUB-03 DONE`。
+- 单一目标：`crayon-capability-hub` 新增 `policy.rs`：在 HUB-03 解析出的候选之上落地冻结默认策略 `Partner -> SiteSkill -> WebAutomation -> HumanHandoff -> Reject` 与两类覆盖规则（用户偏好提前 kind、数据外发约束），trust 不足候选一律排除，产出独立 `PolicyDecision { selected, fallback, reason, exclusions }` 并提供组合确定性快照；本任务不含 fallback 执行/重授权（HUB-05）、UI（HUB-06）与健康度信号（数据源尚不存在）。
+- 输入：HB-004（partner/skill/web/human 的 trust/health/risk/偏好组合；默认优先级与覆盖规则确定；不可用路径不被选择）、架构 §8 默认策略与覆盖因素、`HUB-03` 路由契约。
+- 输出与允许修改：`crates/crayon-capability-hub/src/policy.rs`、`policy_tests.rs`、`router.rs`（仅追加 `RouteCandidate.data_scope` 字段及快照列，`RouteDecision` 形状不变）、router golden 因新增 data_scope 列同步重审更新、`lib.rs` 仅加模块声明、crate `tests/` 新增策略决策 golden、本 Roadmap。零第三方新增。
+- 禁止修改：registry/builtin 行为与既有 registry/builtin golden、domain schema、其他 crate；不得实现 fallback 执行或任何网络/IO；健康度因子不得凭空建模（无数据源即不进策略）。
+- 边界：
+  - 默认序即 `RouteKind` 声明序；不可用路径（unknown/disabled/revoked）天然不在候选内，策略只对 resolved 候选裁决。
+  - trust 门禁：`TrustLevel::Untrusted` 一律排除（approved partner/user-saved skill 语义）；数据外发约束关闭时 `DataScope::ExternalEndpoint` 候选排除；两项排除均记入闭合 `ExclusionReason` 且按 id 排序。
+  - 用户偏好 `prefer_kind` 只能把该 kind 提到最前，不改变其余相对序；偏好为 `Reject` 视为非法输入稳定拒绝。
+  - 无剩余候选 → selected=None、reason=all_candidates_excluded/no_candidates；fallback 为剩余 kind 升序去重并恒以 HumanHandoff、Reject 收尾——每个 fallback 步骤都是一次新的授权决策（语义写入文档注释，执行归 HUB-05）。
+  - 快照新增 selected/fallback/exclusions 段，仍只含闭合 token 与 wire 名。
+- 验收与测试：HB-004。矩阵：默认优先级全序锁定、untrusted 排除后次优接管、外发约束矩阵、偏好提前与非法偏好、不可用路径端到端不被选择、exclusions 记录与排序、fallback 链确定性与收尾项、golden 更新逐字节一致、LCG 不变量（选中者必过门禁且无更优先可用候选）。命令：`cargo test -p crayon-capability-hub`、clippy `-D warnings`、fmt、workspace 回归、`git diff --check`。
+- 明确不做：fallback 重授权/幂等（HUB-05）、route 预览 UI（HUB-06）、Site Skill 健康 adapter（HUB-07）、CAAP 能力发现（HUB-08）、partner connector（HUB-09+）。
+
+### HUB-04 完成记录（2026-08-24）
+
+- 实现：`crayon-capability-hub` 新增 `policy.rs`（约 290 行）：冻结默认策略按 `RouteKind` 声明序生效——approved Partner -> healthy Site Skill -> Web Automation -> HumanHandoff -> Reject；`PolicyPreferences { prefer_kind, allow_external_endpoint }` 两类覆盖：偏好 kind 提到最前且不改变其余相对序、外发约束关闭时排除 `DataScope::ExternalEndpoint`；trust 门禁 `Untrusted` 一律排除（approved partner / user-approved skill 语义），双门禁命中按先判 trust 记因；`apply()` 产出独立 `PolicyDecision { selected, fallback, reason, exclusions }`（`RouteDecision` 保持纯解析产物，所有权分离），`reason` 闭合五态（含 `SelectedByUserPreference` 仅在偏好实际改变胜者时给出）、exclusions 按 id 排序、fallback 为剩余可用 kind 升序去重并恒以 HumanHandoff+Reject 收尾，语义为"下一次全新授权决策"的参考顺序而非执行（HUB-05）；`prefer_kind=Reject` 稳定拒绝；`PolicyDecision::snapshot(&decision)` 组合快照仅含闭合 token 与 wire 名。`router.rs` 仅追加 `RouteCandidate.data_scope` 字段与快照列，router golden 同步更新。零第三方新增；全同步、无锁/IO/时钟。
+- 设计说明：原范围草稿写"字段并入 RouteDecision"，实现改为兄弟类型 `PolicyDecision`——避免 router↔policy 模块互相引用，保持"解析/裁决"单一所有者；HUB-03 完成记录中 P2 所述的 RouteDecision 形状演进因此不再需要，两个 golden 中仅 router golden 因 data_scope 列变化并已重审。
+- 验证：`cargo test -p crayon-capability-hub` 35/35 通过（policy 新增 9 项：默认序选中 approved partner 且 untrusted 双胞胎被记因排除、纯 untrusted 输入 Reject+AllCandidatesExcluded、外发约束矩阵与门禁先判顺序锁定、偏好提升 web 胜出且 fallback 保序、Reject 偏好非法、不可用路径端到端不可选（禁用/撤销 id 不产生候选）、空解析 NoCandidates、策略 golden 逐字节一致、LCG 3000 步不变量——选中者必过双门禁/有效排序下无更优可行候选/fallback 恒以 human_handoff+reject 收尾/exclusions 有序/重复求值字节一致）；clippy `-D warnings` 零告警；fmt 通过；workspace 全量无失败；`git diff --check` 通过。
+- Code Review：按标准八维复核。P0 0、P1 0、P2 1——每候选只记录一个排除原因（先判 trust），同时命中双门禁时外发原因被遮蔽；属可接受的确定性取舍，已由测试注释锁定，若 HUB-06 UI 需要完整原因可在 Exclusion 上扩展闭合多原因。
+- 未覆盖与风险：健康度因子无数据源未建模（待 WFL-12/HUB-07 提供 Site Skill health 后扩展）；fallback 执行/重授权/幂等归 HUB-05；route 预览 UI 归 HUB-06。`HUB-04` 转为 `DONE`。
 
 ### HUB-03 完成记录（2026-08-24）
 

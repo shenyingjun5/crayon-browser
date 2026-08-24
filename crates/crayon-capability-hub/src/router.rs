@@ -77,6 +77,9 @@ pub struct RouteCandidate {
     pub version: String,
     pub kind: RouteKind,
     pub trust: crayon_domain::TrustLevel,
+    /// Declared data scope, carried for the policy layer's data-exfiltration
+    /// constraint (HUB-04) and route previews (HUB-06).
+    pub data_scope: crayon_domain::DataScope,
 }
 
 /// Closed per-input evaluation outcome; together the outcomes form the
@@ -186,11 +189,12 @@ impl RouteDecision {
         out.push_str("candidates\n");
         for candidate in &self.candidates {
             out.push_str(&format!(
-                "{}|{}|{}|{}\n",
+                "{}|{}|{}|{}|{}\n",
                 candidate.kind.wire_name(),
                 candidate.capability_id,
                 candidate.version,
-                candidate.trust.wire_name()
+                candidate.trust.wire_name(),
+                candidate.data_scope.wire_name()
             ));
         }
         out.push_str("evaluations\n");
@@ -228,6 +232,7 @@ pub fn resolve(input: &RouteInput, registry: &CapabilityRegistry) -> RouteDecisi
                         version: view.descriptor.version.clone(),
                         kind: route_kind_of_source(view.descriptor.source),
                         trust: view.descriptor.trust,
+                        data_scope: view.descriptor.data_scope,
                     };
                     candidates.push(candidate.clone());
                     RouteEvaluation {
