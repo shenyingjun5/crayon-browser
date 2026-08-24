@@ -1,6 +1,6 @@
 # MDV：本地 Markdown 查看器 Roadmap
 
-状态：`MDV-01 READY`（依赖 `BUX-03 DONE` 已满足），`MDV-02..07 TODO`。本 Roadmap 承接“浏览器内查看本地 Markdown 文档、渲染预览与分栏编辑”的产品增量（PRD v0.8 §4.1）：`crayon://mdv` 内置查看页复用 `crayon://newtab` 的自定义 scheme、内存资源与严格 CSP 模式；本地 `.md` 只经用户手势的受控入口打开，保存走原子写。MDV 是纯用户能力，不进入 CAAP tool registry；Agent 侧任意文件访问禁令不变。排期属于 V1（Windows 优先、BUX 主线之后），`MDV-04` 起依赖 `BUX-16` 的受控本地文件入口。
+状态：`MDV-01 DONE`（契约已冻结为 `docs/current/markdown-viewer.md` v1.0），`MDV-02 READY`，`MDV-03..07 TODO`。本 Roadmap 承接“浏览器内查看本地 Markdown 文档、渲染预览与分栏编辑”的产品增量（PRD v0.8 §4.1）：`crayon://mdv` 内置查看页复用 `crayon://newtab` 的自定义 scheme、内存资源与严格 CSP 模式；本地 `.md` 只经用户手势的受控入口打开，保存走原子写。MDV 是纯用户能力，不进入 CAAP tool registry；Agent 侧任意文件访问禁令不变。排期属于 V1（Windows 优先、BUX 主线之后）。
 
 ## 产品设计结论
 
@@ -15,7 +15,7 @@
 
 | ID | 状态 | 依赖 | 目标路径 | 单一交付 | 测试/验收 |
 |---|---|---|---|---|---|
-| MDV-01 | READY | BUX-03 | `docs/current/markdown-viewer.md` | 契约冻结：`crayon://mdv` scheme/origin/CSP、入口与手势门禁、渲染语法范围、安全边界与渲染选型评审结论 | 契约 Review 通过；语法/CSP/入口矩阵冻结 |
+| MDV-01 | DONE | BUX-03 | `docs/current/markdown-viewer.md` | 契约冻结：`crayon://mdv` scheme/origin/CSP、入口与手势门禁、渲染语法范围、安全边界与渲染选型评审结论 | 契约 Review 通过；语法/CSP/入口矩阵冻结 |
 | MDV-02 | TODO | MDV-01 | `browser/shared-ui/markdown` | 平台中立确定性 Markdown 渲染引擎：MD→转义安全 HTML、golden 与注入矩阵；vendored 库接入或自研子集 | MD-002；独立 ctest、`-Werror` 零告警 |
 | MDV-03 | TODO | MDV-01,MDV-02,BUX-03 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | 只读查看内置页（fixture 内容驱动）：scheme handler、源码/预览切换、严格 CSP、零网络 | MD-003、MD-004 只读部分；Windows Debug/Release |
 | MDV-04 | TODO | MDV-03,BUX-16,PLT-02 | `browser/shared-ui/mdv`,`browser/cef-shell` | 受控本地 `.md` 入口：文件对话框/拖放/omnibox 路径路由、路径/大小/UTF-8 校验、用户手势门禁 | MD-001、MD-003 |
@@ -43,3 +43,10 @@
 - 边界：契约必须显式声明查看器不是 Agent 能力、不进 tool registry；语法范围闭合枚举，未列语法按纯文本渲染；CSP 不允许外链脚本/样式。
 - 验收与测试：契约 Review 通过（按 `docs/current/code-review-standard.md`）；语法清单、CSP、入口/路径校验矩阵可直接作为 `MDV-02..06` 的验收输入；`git diff --check`。
 - 明确不做：渲染引擎实现（MDV-02）、scheme handler（MDV-03）、文件入口（MDV-04）、编辑（MDV-05）、保存（MDV-06）。
+
+### MDV-01 完成记录（2026-08-24）
+
+- 实现：新增契约文档 `docs/current/markdown-viewer.md` v1.0（13 章）：§2 `crayon://mdv` 独立 origin、内存资源路由与全封闭 CSP（`default-src 'none'`、`img-src/connect-src/font-src 'none'`、路径不进 URL）；§3 三入口（菜单对话框/拖放/omnibox 路径）手势门禁与"页面内容零触发路径"；§4 路径校验矩阵（后缀/类型/控制字符/长度/穿越/存在六类，复用 PRV-04 path_guard）；§5 加载边界（≤5 MiB、UTF-8 严格+BOM 剥离、CRLF/LF 归一、空文件合法）；§6 渲染语法闭合清单（CommonMark 常用子集+GFM 表格/任务列表/删除线，未列语法按纯文本转义）；§7 渲染安全（确定性输出、raw HTML 全禁、生成标签/属性白名单闭合枚举、链接 scheme 白名单、图片永不加载）；§8 视图态与 dirty 确认；§9 原子写保存语义与 (size,mtime) 外部修改冲突；§10 无痕/持久化边界（V1 不落盘最近文件列表）；§11 明确不做；§12 选型评审结论——**vendored md4c 0.5.3（MIT，CommonMark 0.31 合规、单文件 C99 仅依赖 libc、支持禁用 raw HTML、Qt/LibreOffice 生产采用）**，vendor 评审不过则自研同等子集；§13 MD-001..007 验收映射。登记 `docs/current/README.md` 契约表。本任务未写任何生产代码。
+- 选型证据：2026-08-24 抓取上游 README/CHANGELOG（MIT、CommonMark 0.31、扩展 flag 化、0.5.3 最新 release）；实际 vendor 时须固定 revision+内容 hash 并复核评审表（`MDV-02` 开工前置）。
+- Code Review：按需求/边界→正确性→架构→安全/隐私复核。P0 0、P1 0、P2 1——§9 外部修改冲突用 `(size, mtime)` 检测存在同秒写入的窗口（mtime 精度限制），V1 接受并在冲突提示中提供"另存为"退路；若后续需要强一致可加内容 hash 对比（归 `MDV-06` 复核）。
+- 未覆盖与风险：渲染引擎 vendor 与 golden 体系归 `MDV-02`；scheme handler 与内置页归 `MDV-03`；Windows 实机门禁归 `MDV-07`。`MDV-01` 转为 `DONE`，解锁 `MDV-02 READY`。
