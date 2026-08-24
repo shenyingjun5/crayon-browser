@@ -5,6 +5,7 @@ mod capabilities;
 mod capability;
 mod config;
 mod diagnostics;
+mod diagnostics_outbound;
 mod error;
 mod ids;
 
@@ -26,6 +27,10 @@ pub use diagnostics::{
     redact_sensitive, DataClass, DiagnosticError, DiagnosticEvent, DiagnosticProducer,
     DEFAULT_QUEUE_CAPACITY, DIAGNOSTICS_SCHEMA_VERSION, MAX_ATTRIBUTES_PER_EVENT,
     MAX_ATTRIBUTE_KEY_LEN, MAX_ATTRIBUTE_VALUE_LEN, MAX_EVENT_NAME_LEN,
+};
+pub use diagnostics_outbound::{
+    DiagnosticsChannel, DiagnosticsConsent, OutboundDiagnostics, OutboundStats, PendingRecord,
+    RecordOutcome, SendDraft, MAX_PENDING_RECORDS, MAX_RECORD_BODY_BYTES,
 };
 pub use error::CoreError;
 pub use ids::{DeviceId, IdError, ResourceId, SessionGeneration, SessionId, TabId};

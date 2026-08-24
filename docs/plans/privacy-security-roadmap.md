@@ -1,6 +1,6 @@
 # PRV：隐私与产品安全 Roadmap
 
-状态：`FND-08 DONE`，`CEF-04/CEF-05 DONE`，`PRV-01 DONE`。Relay 网络安全实现归 MED，本 Roadmap 负责 Profile、追踪防护、安全存储，以及页面数据、Agent、Workflow/Challenge、Capability Hub/Partner connector 的隐私数据流和系统级安全门禁。
+状态：`PRV-01..04/06..09 DONE`、`PRV-10 VERIFIED`；`PRV-05 等 PLT-W04/M04 真机`、`PRV-11..13 依赖链后置`。Relay 网络安全实现归 MED，本 Roadmap 负责 Profile、追踪防护、安全存储，以及页面数据、Agent、Workflow/Challenge、Capability Hub/Partner connector 的隐私数据流和系统级安全门禁。
 
 ## 原子任务
 
@@ -14,7 +14,7 @@
 | PRV-06 | CEF-05,FND-11 | `browser/privacy/standard` | 第三方 Cookie、存储分区、Referer、HTTPS、权限默认 | PV-008、PV-009；兼容 fixture | S3 |
 | PRV-07 | PRV-06 | `browser/privacy/strict` | 高熵 API 统一降精度/限制，能力/兼容开关 | PV-009；熵/兼容；无每 Profile 随机身份 | S3 |
 | PRV-08 | FND-08,FND-09 | `crayon-domain/diagnostics` | 数据分类、redaction、事件 schema、bounded producer | RL-014、PV-008、PV-010；满队列 dropped | S2 |
-| PRV-09 | PRV-08 | `apps/*/diagnostics` | 默认关闭遥测、崩溃 opt-in、发送前预览、删除 | PV-008、PV-010；实际 payload 对照 | S3 |
+| PRV-09 | PRV-08 | `apps/*/diagnostics`,`crayon-domain/diagnostics_outbound` | 默认关闭遥测、崩溃 opt-in、发送前预览、删除 | PV-008、PV-010；实际 payload 对照 | S3 |
 | PRV-10 | MED-18,SDK-12 | `docs/current/threat-model.md` | 资产/信任边界/威胁/缓解/残余风险，覆盖网页、IPC/LAN、入站 CAAP/MCP、语义动作、Workflow/Challenge、出站 connector、模型与供应链；模块实现后的专项 Review 继续增补 | 安全用例映射无缺口；专项 Review | S0 |
 | PRV-11 | PRV-04,PRV-05,PRV-07,PRV-09,PRV-10 | `tests/security/privacy` | 磁盘/日志/DTO/网络/receipt/cache/trace/checkpoint/Skill/connector LeakScanner 与 Profile 全存储扫描 | PV 全集、RL-014、AG-011、适用 WF/HB；零秘密 | S3 |
 | PRV-12 | PRV-10,PRV-11 | `tools/repo-guard` | secret/debug/unsafe route/自动广告行为静态门禁 | 故意违规样本失败；Release 零例外 | S2 |
@@ -188,3 +188,27 @@
 - 验证：用例映射无缺口经脚本核对（test-cases.md 全部安全用例族均在文档 §6 出现，missing=none）；`git diff --check` 通过。纯文档任务，无代码/构建影响（workspace 测试未运行——不适用）。
 - Code Review：P0 0、P1 0、P2 0（对照 PRD 红线逐条核对：DRM/广告/验证码/文件上传/WebRTC 采集/开放代理/凭证外泄均有威胁行与归属；模型不参与安全决策边界与架构 v0.7 一致）。
 - 未覆盖与风险：ACT/WFL/HUB/QAR 威胁行为契约级描述，模块落地后专项 Review 必须回填；SDK-13 真机证据待真机环境。`PRV-10` 转为 `VERIFIED`，解锁 `AGT-12`（AGT-04/AGT-11/PLT-01/PRV-10 全满足）与 `PRV-11`（另需 PRV-05/09）。
+
+## PRV-09 原子范围（诊断出站门禁模型：默认关闭/崩溃 opt-in/预览/删除）
+
+- 状态：`IN_PROGRESS`；依赖 `PRV-08 DONE`。
+- 路径说明：Roadmap `apps/*/diagnostics/**` 的目录尚不存在（桌面 app 装配归 CEF/QAR 后续任务）；出站门禁是平台无关模型，落在 `crayon-domain` 与 PRV-08 数据面同 crate，UI/设置呈现归后续 BUX/QAR。
+- 单一目标：`crayon-domain` 新增 `diagnostics_outbound.rs`——遥测与崩溃两通道的默认拒绝同意模型（崩溃独立 opt-in）、有界待发队列、**预览与实际发送逐字节一致**的 draft 出口（PV-010）、立即删除与撤销同意即清除；不含网络发送、崩溃捕获与设置 UI。
+- 输入：PV-008（默认启动遥测关闭、无浏览 URL/标题上报）、PV-010（用户可见预览与实际发送一致、无秘密）、PRV-08 的 DataClass/redaction 口径（body 由调用方先脱敏，本层不二次解释）。
+- 输出与允许修改：`crates/crayon-domain/src/diagnostics_outbound.rs`、`diagnostics_outbound_tests.rs`、`lib.rs` 仅加模块声明与 re-export、本 Roadmap。零第三方新增；全同步、无锁/线程/IO/时钟。
+- 禁止修改：PRV-08 diagnostics 既有行为与其测试、其他 crate；不得引入网络/IO；不得提供绕过同意模型的出站路径。
+- 边界：
+  - `DiagnosticsConsent` 双通道（usage_telemetry/crash_reports）**默认全拒**（PV-008）；通道关闭时 `record` 稳定拒绝且不落任何内存；撤销/关闭通道立即清除该通道全部待发记录并返回清除数。
+  - 待发队列有界 `MAX_PENDING_RECORDS=256`，满载丢新并计数（与 PRV-08 满队列 dropped 口径一致）；单条 body ≤2048 字节、非空，违规拒绝。
+  - 出站唯一路径：`drain_channel` 移除待发并构建 `SendDraft`；`SendDraft::payload()` 即传输字节源——预览与发送读同一字符串，类型上不可能分叉（PV-010）；取消/丢弃即删除。
+  - 计数有界（recorded/sent/dropped/cleared 单调 u64）。
+- 验收与测试：PV-008、PV-010 模型部分。矩阵：默认双拒、单通道 opt-in、关闭即清除、预览=发送逐字节一致、容量丢新计数、删除立即生效、非法 body 拒绝、LCG 不变量（禁用通道零出站/计数单调/容量上界）。命令：`cargo test -p crayon-domain`、clippy `-D warnings`、fmt、workspace 回归、`git diff --check`。
+- 明确不做：网络发送与上传端点（后续平台/CEF 任务）、崩溃捕获接线、设置 UI（BUX）、PRV-11 全存储扫描。
+
+### PRV-09 完成记录（2026-08-24）
+
+- 路径修订说明：原允许路径 `apps/*/diagnostics/**` 的目录尚不存在；出站门禁是平台无关模型，落在 `crayon-domain/src/diagnostics_outbound.rs`（与 PRV-08 数据面同 crate），设置 UI 与实际发送管线归后续 BUX/平台任务。
+- 实现：新增 `diagnostics_outbound.rs`（约 290 行）+ 测试：`DiagnosticsConsent` 双通道（usage_telemetry/crash_reports）**默认全拒**（PV-008），崩溃报告独立 opt-in，与遥测互不影响；通道关闭时 `record` 返回 `ChannelDisabled` 且零内存驻留；`set_consent` 关闭通道即清除该通道全部待发并返回计数（撤销同意不留残留）；待发队列 `MAX_PENDING_RECORDS=256` 满载丢新并计数（与 PRV-08 dropped 口径一致）、单条 body ≤2048 字节非空；**出站唯一路径** `drain_channel` → `SendDraft`，`payload()` 同时是用户预览与传输字节源（同一 String，类型上不可能分叉，PV-010），丢弃 draft 即删除；`record_event` 渲染闭合 class token 且拒绝 UserContent/Secret 类事件进入出站 body（PRV-08 在构造源头已禁止此类事件，此处纵深防御）；`clear_channel`/`clear_all` 立即删除并计数；四项单调计数。零第三方新增；全同步、无锁/线程/IO/时钟。
+- 验证：`cargo test -p crayon-domain --lib` 15 项通过（outbound 新增 9 项：默认双拒零驻留、单通道 opt-in、关闭即清空且重开不恢复、预览=发送逐字节一致含两次读取、容量 261 入 256 留丢 5 计数且最老优先序保持、删除立即生效计数、空/超长 body 拒绝、可构造类渲染确定性+类门禁纵深防御说明、LCG 3000 步不变量——禁用通道零出站/队列上界/四计数单调）；clippy `-p crayon-domain -p crayon-agent-gateway --all-targets -D warnings` 零告警；fmt 通过；基线 core lib 3/3、legacy-dev lib 58/58、workspace 全量无失败；`git diff --check` 通过。
+- Code Review：按标准八维复核。P0 0、P1 0、P2 1——`drain_channel` 在取出后、发送前若调用方丢弃 draft 即删除（隐私安全方向），但"取消预览恢复原记录"语义不存在；V1 接受（删除优于误发），UI 若需恢复须在 drain 前自行快照。
+- 未覆盖与风险：网络发送端点、上传触发时机与崩溃捕获接线归后续平台任务；设置开关 UI 归 BUX；PRV-11 将对本模块做全存储泄漏扫描。`PRV-09` 转为 `DONE`，解锁 `PRV-11`（另需 `PRV-05`——等 PLT-W04/M04 真机门禁）。
