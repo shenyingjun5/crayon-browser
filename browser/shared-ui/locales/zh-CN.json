@@ -47,5 +47,16 @@
   "agent.confirm.disclosure": "这可能读取页面内容",
   "agent.confirm.expires": "有效期至",
   "agent.confirm.allow": "仅允许一次",
-  "agent.confirm.deny": "拒绝"
+  "agent.confirm.deny": "拒绝",
+  "capability.route.title": "选择此任务的执行方式",
+  "capability.route.selected": "选定路线",
+  "capability.route.reason": "路由理由",
+  "capability.route.candidates": "可选路线",
+  "capability.route.exclusions": "已排除路线",
+  "capability.route.data_external": "该路线会向设备外发送数据",
+  "capability.route.override.temporary": "覆盖仅对本次任务生效",
+  "capability.route.override.prefer": "偏好路线类型",
+  "capability.route.override.allow_external": "允许向外发送数据",
+  "capability.route.proceed": "继续",
+  "capability.route.cancel": "取消"
 }

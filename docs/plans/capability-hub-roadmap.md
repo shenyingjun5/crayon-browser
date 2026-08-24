@@ -1,6 +1,6 @@
 # HUB：Capability Registry、Router 与合作方连接器 Roadmap
 
-- 状态：`HUB-01..05 DONE`（2026-08-24）；`HUB-06 READY`，其余 TODO
+- 状态：`HUB-01..06 DONE`（2026-08-24），其余 TODO
 - 任务数：16
 - 目标：为内建能力、个人 Site Skill、受控网页自动化、人工接管及已批准 Partner API/MCP 提供统一描述、可解释路由和隔离的出站执行边界
 - 非目标：远程入站控制、动态插件任意代码、凭证暴露、开放代理、透明跨路径重复副作用、浏览器自行定义 Cast 协议
@@ -21,7 +21,7 @@
 | HUB-03 | DONE | HUB-01 | `crayon-capability-hub/router/**` | RouteInput/RouteDecision/candidate/route_reason 稳定契约 | `HB-003`; 确定性 snapshot |
 | HUB-04 | DONE | HUB-02,HUB-03 | `crayon-capability-hub/policy/**` | partner -> skill -> web -> human -> reject 默认策略及覆盖规则 | `HB-004`; trust/risk/health/preference 矩阵 |
 | HUB-05 | DONE | HUB-04,AGT-04,AGT-11 | `crayon-capability-hub/fallback/**` | fallback 重授权、重确认、幂等和未知副作用停止 | `HB-005`; 跨 route 不静默重放 |
-| HUB-06 | TODO | HUB-04,AGT-05 | `apps/desktop-cef/**/capability-route/**`,locales | route 预览、理由、偏好和临时覆盖 UI | `HB-006`; 数据外发/成本/风险可见 |
+| HUB-06 | DONE | HUB-04,AGT-05 | `apps/desktop-cef/**/capability-route/**`,locales | route 预览、理由、偏好和临时覆盖 UI | `HB-006`; 数据外发/成本/风险可见 |
 | HUB-07 | TODO | HUB-02,WFL-12 | `crayon-capability-hub/adapters/site_skill/**` | 个人 Site Skill registry adapter | `HB-007`; owner/Profile/health/版本隔离 |
 | HUB-08 | TODO | HUB-03,AGT-14 | `crayon-agent-gateway/tools/capability/**` | 入站 MCP/CLI 能力 search/describe/preview，经 CAAP 暴露 | `HB-008`; 不泄漏 token/endpoint/隐蔽工具 |
 | HUB-09 | TODO | HUB-01,PRV-10 | `crayon-partner-connector/api/**` | 与入站 MCP 分离的出站 Partner connector interface | `HB-009`; crate/dependency/session 隔离 |
@@ -146,3 +146,26 @@
 - 验证：`cargo test -p crayon-capability-hub` 44/44 通过（fallback 新增 9 项：clean 失败降级次选+清单完备断言、已提交可逆仍需全新重授权无静默重放、不可逆立即停、未知副作用无条件先于链位停止、HumanHandoff 判 HandOver、Reject/空链耗尽 Stop、executed 不匹配与未选中决策拒绝、真实 policy→resolve→apply→evaluate 端到端确定性、LCG 3000 步不变量——Reauthorize 目标必为链首能力 kind/安全分支外必停/渲染闭合）；clippy `-D warnings` 零告警；fmt 通过；workspace 全量无失败；`git diff --check` 通过。
 - Code Review：按标准八维复核。P0 0、P1 0、P2 1——清单目前是文档化常量，编译器不强制调用方逐项执行（Rust 无效果系统）；缓解：verdict 类型不含任何"已授权"语义、app-runtime 装配任务必须以 AGT-04 grant + AGT-05 confirm 的实际产出驱动下一步，HUB-16 总 Review 复核。
 - 未覆盖与风险：同 kind 不同 provider 的粒度（如两个 partner 包）待 partner manifest 落地后在 HUB-09+ 扩展；checkpoint/接管语义归 WFL。`HUB-05` 转为 `DONE`，解锁 `HUB-08`（另需 `AGT-14`）。
+## HUB-06 原子范围（route 预览与临时覆盖视图模型）
+
+- 状态：`IN_PROGRESS`；依赖 `HUB-04 DONE`、`AGT-05 VERIFIED`。
+- 路径说明：Roadmap `apps/desktop-cef/**/capability-route/**` 的目录尚不存在；按既有映射惯例落在 `browser/shared-ui/capability-route`（共享层视图模型），CEF 呈现归后续装配。
+- 单一目标：R2～R4 任务执行前的 route 预览视图模型——展示选定路线/路由理由/候选与排除清单/**数据外发标志**，用户可设置临时覆盖（偏好 kind、允许外发开关），覆盖仅对本次任务生效、不持久化；Proceed/Cancel 两步流，呈现内容变化必须重新 Present。无障碍经 locale label key 全覆盖（en/zh parity）。不含策略计算与实际路由执行。
+- 输入：HB-006（数据外发/成本/风险可见）、`HUB-04` PolicyDecision/PolicyDecision 字段口径（闭合 wire 名）、AGT-05 的视图模型/locale parity 模式。
+- 输出与允许修改：新增 `browser/shared-ui/capability-route/{CMakeLists.txt,include/crayon/browser_capability_route/capability_route.h,src/capability_route.cc,tests/capability_route_test.cc}`、`browser/shared-ui/locales/en-US.json` 与 `zh-CN.json` 各追加键、共享层根 CMake 若有子目录注册处同步。零第三方依赖；单线程 UI 约定同 AGT-05。
+- 禁止修改：policy/router 行为、agent-confirm 模块、CEF shell；模型不得引入网络/IO/线程；不得持久化任何覆盖或预览状态。
+- 边界：
+  - 预览字段全部为闭合 token/wire 名（kind/reason/trust 白名单校验）；候选/排除各 ≤16 条；id/version 走闭合字符集；**数据外发**以布尔标志逐候选呈现并在摘要中显式标注。
+  - 成本可见性：当前无 provider 成本数据源（HUB-09+ 提供），本任务不建模成本字段——在完成记录登记缺口，不发明占位语义。
+  - 临时覆盖仅存于模型内存且 Proceed/Cancel 后即失效；`prefer_kind=reject` 或未知 kind 稳定拒绝；覆盖不改变已呈现的预览内容本身，只随 Proceed 输出供运行时重新求值策略。
+  - Present 校验失败返回 false 且不改变既有状态；revision 每次 Present 单调递增供外壳检测上下文变化。
+- 验收与测试：HB-006 模型部分。矩阵：Present 校验矩阵、生命周期（None/Presented/Proceeded/Cancelled）、覆盖合法性矩阵与一次性语义、数据外发标注渲染、locale en/zh parity 键集合全等、风暴不变量（非法状态下 Proceed 永不成功/revision 单调）。命令：独立 configure/build/ctest、`git diff --check`。
+- 明确不做：策略重算（调用方拿 Proceed 输出回 HUB-04）、CEF 弹窗呈现与实机无障碍（QAR/BUX）、成本建模（HUB-09+）。
+### HUB-06 完成记录（2026-08-24）
+
+- 路径说明：按既有映射惯例落在新目录 `browser/shared-ui/capability-route`（header/impl/CMake/契约测试各 1），根 CMake 注册；CEF 呈现与实机无障碍归后续装配/QAR。
+- 实现：`CapabilityRouteModel` 视图模型——`Present(CapabilityRoutePreview)` 校验闭合词汇（kind 五类/reason 五态/trust 三态/排除原因两态白名单、id/version 闭合字符集有界、候选与排除各 ≤16、selected_id 与 selected_kind 一致性）后进入 Presented 态并单调递增 revision（外壳检测底层决策变化的围栏）；预览字段含逐候选 `sends_data_external` 标志，`Summary()` 确定性行格式渲染 selected/candidate(external|local)/excluded 行——**数据外发与风险可见**（HB-006）；临时覆盖 `ApplyOverride` 只在 Presented 态接受、拒绝 `reject` 偏好与未知 kind、随 Proceed 输出给运行时回 HUB-04 重求值或随 Cancel 丢弃、任何离开 Presented 的路径都清空覆盖且**不持久化**（一次性语义由测试锁定）；Proceed/Cancel 仅在 Presented 态成功。locale 新增 11 键 ×2（title/selected/reason/candidates/exclusions/data_external/override.temporary/prefer/allow_external/proceed/cancel，en/zh 各 60 键 parity 入契约测试）。零第三方依赖；单线程 UI 约定同 AGT-05。
+- 成本缺口登记：当前无 provider 成本数据源（HUB-09+ partner manifest 提供），本任务不建模成本字段、不发明占位语义。
+- 验证：独立 configure/build 零告警（MSVC /W4 /WX 与 -Wall -Wextra -Wpedantic -Werror 双口径）；`capability_route` 契约测试通过（Present 校验矩阵含 revision 不被失败污染、生命周期与一次性覆盖语义（Proceed 二次失败/Cancel 后覆盖不可取回）、外发标注渲染含 none-selected 行、locale en/zh parity 60=60 且必需键齐全、5000 步风暴不变量）；全目标编译后 ctest 共享层回归 **40/40 通过**（含新用例）；`git diff --check` 通过。
+- Code Review：P0 0、P1 0、P2 1——成本可见性缺数据源未建模（已登记，HUB-09+ 补齐时需同步扩展模型与 locale）；其余维度无发现。
+- 未覆盖与风险：策略重算由调用方持 Proceed 输出回 HUB-04 执行（本层不计算）；CEF 弹窗呈现/键盘读屏实机验证归 QAR/BUX。`HUB-06` 转为 `DONE`。

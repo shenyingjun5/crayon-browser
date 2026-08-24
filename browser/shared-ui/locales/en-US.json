@@ -47,5 +47,16 @@
   "agent.confirm.disclosure": "This may read page content",
   "agent.confirm.expires": "Expires",
   "agent.confirm.allow": "Allow once",
-  "agent.confirm.deny": "Deny"
+  "agent.confirm.deny": "Deny",
+  "capability.route.title": "Choose how to run this task",
+  "capability.route.selected": "Selected route",
+  "capability.route.reason": "Routing reason",
+  "capability.route.candidates": "Candidate routes",
+  "capability.route.exclusions": "Excluded routes",
+  "capability.route.data_external": "This route sends data outside your device",
+  "capability.route.override.temporary": "Override applies to this task only",
+  "capability.route.override.prefer": "Prefer route type",
+  "capability.route.override.allow_external": "Allow sending data externally",
+  "capability.route.proceed": "Continue",
+  "capability.route.cancel": "Cancel"
 }
