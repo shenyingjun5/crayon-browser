@@ -139,10 +139,17 @@ pub trait CastReadSource {
     fn get_state(&self) -> Result<CastStateSnapshot, CastReadError>;
 }
 
-fn valid_text(value: &str, max_len: usize) -> bool {
+pub(crate) fn valid_text(value: &str, max_len: usize) -> bool {
     !value.trim().is_empty()
         && value.len() <= max_len
         && !value.bytes().any(|byte| byte < 0x20 || byte == 0x7F)
+}
+
+/// Device ids are opaque tokens: stricter than display names, they never
+/// contain whitespace.  Both the read and control sides enforce this so
+/// a listed id is always a selectable id.
+pub(crate) fn valid_id(value: &str, max_len: usize) -> bool {
+    valid_text(value, max_len) && !value.bytes().any(|byte| byte.is_ascii_whitespace())
 }
 
 /// Validates and summarizes the receiver listing (R0 `cast.list_receivers`).
@@ -156,7 +163,7 @@ pub fn list_receivers(
     }
     let mut summaries = Vec::with_capacity(entries.len());
     for entry in entries {
-        if !valid_text(&entry.device_id, MAX_DEVICE_ID_LEN)
+        if !valid_id(&entry.device_id, MAX_DEVICE_ID_LEN)
             || !valid_text(&entry.name, MAX_DEVICE_NAME_LEN)
         {
             return Err(CastReadError::InvalidDeviceData);
@@ -179,7 +186,7 @@ pub fn list_receivers(
 pub fn get_state(source: &dyn CastReadSource) -> Result<CastStateSnapshot, CastReadError> {
     let mut snapshot = source.get_state()?;
     if let Some(receiver_id) = &snapshot.receiver_id {
-        if !valid_text(receiver_id, MAX_DEVICE_ID_LEN) {
+        if !valid_id(receiver_id, MAX_DEVICE_ID_LEN) {
             return Err(CastReadError::InvalidDeviceData);
         }
     }

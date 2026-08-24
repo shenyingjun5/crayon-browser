@@ -1,6 +1,6 @@
 # AGT CAAP / CLI / MCP Agent 访问 Roadmap
 
-- 状态：规划完成，尚未开工
+- 状态：`A0 权限内核完成（AGT-01..05/11）`；`AGT-08/AGT-10 DONE`（2026-08-24）、`AGT-12A VERIFIED`；`AGT-06/07 等 CNT-03`、`AGT-09 等 ACT-07/11`、`AGT-12 整体待 OS 端点切片`
 - 任务数：16
 - 目标：用自有 CAAP、入站 tool registry 和 capability guard，为 AI Agent 提供高性能读页，并把受控操作接到 `ACT` 的可验证语义动作运行时
 - 非目标：远程控制、原始 CDP/WebDriver、任意 JavaScript、Cookie/凭证、密码/支付、文件上传、任意文件/网络工具
@@ -28,7 +28,7 @@
 | AGT-07 | TODO | AGT-04,AGT-06,CNT-08 | `crayon-agent-gateway/tools/content/**`,`crayon-app-runtime/**` | R1 target/标题/选区/结构化页面/Markdown 读取工具 | `AG-006`; 跨 Profile/后台/过期/超量拒绝 | A1 |
 | AGT-08 | DONE | AGT-04,SDK-08 | `crayon-agent-gateway/tools/cast_read/**` | R0/R1 接收端能力和投屏状态读取，不返回 IP/URL/token | `AG-007`; adapter tests | A1 |
 | AGT-09 | TODO | AGT-05,CEF-07,ACT-07,ACT-11 | `crayon-agent-gateway/tools/navigation/**`,`crayon-app-runtime/**` | R2 打开/切换/关闭标签、导航、后退、刷新、滚动及人工接管结果 | `AG-008`; scheme/redirect/download/popup/cancel | A2 |
-| AGT-10 | TODO | AGT-05,SDK-12,MED-19 | `crayon-agent-gateway/tools/cast_control/**` | R3 选择设备、开始/暂停/seek/停止；沿用正常投屏门禁 | `AG-009`; 目标变化重确认；不控制外部镜像客户端 | A2 |
+| AGT-10 | DONE | AGT-05,SDK-12,MED-19 | `crayon-agent-gateway/tools/cast_control/**` | R3 选择设备、开始/暂停/seek/停止；沿用正常投屏门禁 | `AG-009`; 目标变化重确认；不控制外部镜像客户端 | A2 |
 | AGT-11 | VERIFIED | AGT-03,AGT-04 | `crayon-agent-gateway/receipt/**`,diagnostics | 有界脱敏 action receipt、TTL、用户预览/清除 | `AG-011`,`PV-010`; 无正文/query/secret | A0 |
 | AGT-12 | TODO | AGT-04,AGT-11,PRV-10,PLT-01 | `apps/desktop-cef/agent-transport/**`,`crayon-platform-api/**` | Windows named pipe/macOS UDS CAAP transport；当前用户 ACL、限流、单客户端、stop | `AG-012`; 恶意本机 client/replay/oversize | A1 |
 | AGT-13 | TODO | AGT-05,AGT-07,AGT-08,AGT-12 | `apps/agent-cli/**`,docs/tests | R0/R1 CLI Developer Preview；机器可读结果、版本、cancel | `AG-013`; 无交互不绕确认 | A1 |
@@ -216,6 +216,29 @@
 
 - AGT-04：`Grant::is_targeted()` + `scope_summary()` 闭合作用域描述（`grant:<capability>:any-target|tab:<id>|active-tab`，无页面数据）。原 P2 的 UI 歧义风险收敛为：AGT-05 确认 UI 验收必须按该摘要渲染目标范围（新增测试 scope_summary_distinguishes_targeted_and_untargeted）。
 - AGT-12A 的 P2（重放窗口滑动）维持：由 AGT-03 session 幂等键兜底，AGT-15 fuzz 复核窗口大小（理由见任务记录）。
+
+## AGT-10 原子范围（R3 投屏控制工具）
+
+- 状态：`DONE`（2026-08-24）；依赖 `AGT-05 VERIFIED`、`SDK-12 DONE`、`MED-19 DONE`。
+- 单一目标：`crayon-agent-gateway` 新增 `tools/cast_control.rs`：R3 五命令（select_receiver/start/pause/seek/stop）的网关侧模型——闭合命令 DTO、控制端口 trait、**确认上下文围栏**（执行必须携带用户确认时的上下文指纹，设备/媒体代际任一变化即拒绝并要求重新确认）与门禁结果透传；实际播放/DRM/广告/policy 门禁由 app-runtime 正常用例裁决，本层不复制。不控制外部镜像客户端会话。不含 transport、grant 签发接线与 UI。
+- 输入：AG-009（R3 确认且沿用播放/DRM/广告/policy；设备/媒体/route 中途变化重确认；外部镜像客户端不受控）、AGT-04 grant 四元组与 `scope_summary` 口径、AGT-05 确认视图模型与上下文指纹语义、`tools/cast_read.rs` 的闭合状态词汇。
+- 输出与允许修改：`crates/crayon-agent-gateway/src/tools/cast_control.rs`、`cast_control_tests.rs`、`src/tools/mod.rs` 仅加模块声明、本 Roadmap。零第三方新增；golden 用内联快照即可。
+- 禁止修改：registry/session/grant/receipt 行为、CAAP schema、cast-adapter/facade、`tools/cast_read.rs` 既有行为；不得引入网络/IO/线程/时钟；不得在工具层实现或绕过任何 DRM/广告/策略判定。
+- 边界：
+  - `CastCommand` 闭合五类；receiver_id 走闭合校验（非空有界无控制字符）；seek 仅 u64 毫秒。
+  - `execute_confirmed(port, ConfirmedCommand)` 是唯一执行入口——`ConfirmedCommand { command, confirmed_context }` 由调用方在用户 Confirm 后构造；当前上下文与确认上下文 `(session_state, receiver_id, media_generation)` 任一不等 → `ContextStale`（要求重新 Present+Confirm），不存在绕过路径。
+  - `external_client_handoff=true` 的上下文对一切命令稳定拒绝（ExternalClientNotControllable）；无活动会话时除 select_receiver 外全部拒绝（NoSession）。
+  - 门禁结果透传：端口返回的 `CoreError`（DRM/Policy/ReceiverIncompatible 等）原样进入 `GateRejected`，工具层不解释不改写。
+- 验收与测试：AG-009 模型部分。矩阵：五命令 wire 锁定、确认围栏三分支（receiver/media_generation/state 变化）、外部交接不可控、无会话拒绝、非法 receiver、门禁结果透传、错误映射 golden、LCG 不变量（任何执行路径要么上下文全等要么稳定拒绝）。命令：`cargo test -p crayon-agent-gateway`、clippy `-D warnings`、fmt、workspace 回归、`git diff --check`。
+- 明确不做：transport 接线（AGT-12）、CLI/MCP 映射（AGT-13/14）、grant 签发与确认 UI 装配（app-runtime）、receipt 记录入口接线。
+
+### AGT-10 完成记录（2026-08-24）
+
+- 实现：`crayon-agent-gateway` 新增 `tools/cast_control.rs`（约 200 行）：`CastCommand` 闭合五类（select_receiver/start/pause/seek/stop，wire 名锁定）；**确认围栏为唯一执行入口**——`execute_confirmed(port, ConfirmedCommand)` 要求携带用户确认时的 `CastContext { session_state, receiver_id, media_generation, external_client_handoff }` 完整快照，检查序固定为 命令形状 → 外部交接 → 会话存在性 → 上下文全等，任一不等即 `ContextStale` 强制重新 Present+Confirm，裸执行入口在类型层不存在；外部镜像客户端会话对全部五命令稳定拒绝 `ExternalClientNotControllable`；无活动会话时除 select_receiver（建立会话的合法起点）外拒绝 `NoSession`；receiver id 校验升级为共享的 `valid_id`（非空有界无控制字符且禁空白，读侧同步采用——列出的 id 必然可选）；正常播放/DRM/广告/policy 门禁裁决由端口实现方返回，工具层以 `GateRejected(CoreError)` 原样透传不改写不解释；`CastControlError` 闭合六态带稳定 `to_caap_error()` 映射。零第三方新增；全同步、无锁/IO/时钟。
+- 验证：`cargo test -p crayon-agent-gateway` 75/75 通过（cast_control 新增 8 项：五命令 wire 锁定、上下文全等时经端口执行并留痕、三分支变化各自触发 ContextStale 且零执行、外部交接五命令全拒、四命令无会话矩阵+select 从 Idle 合法、非法 receiver 在触达端口前拒绝、四种 CoreError 门禁裁决逐字透传、错误映射 golden）；clippy `-D warnings` 零告警；fmt 通过；workspace 全量无失败；`git diff --check` 通过。
+- Code Review：按标准八维复核。P0 0、P1 0、P2 0——R3 必经确认由类型系统保证（无裸 execute）；id 禁空白为读/控两侧一致契约，若真实发现栈产出带空白 id 将在读侧 fail closed（已在文档注释声明取舍）。
+- 未覆盖与风险：grant 签发、确认 UI 与 receipt 记录的端到端装配归 app-runtime 后续任务；ContextStale 后的重确认流由调用方驱动（AGT-05 模型已支持）。`AGT-10` 转为 `DONE`。
+
 
 ### AGT-05 原子范围（确认 UI 视图模型与本地化）
 
