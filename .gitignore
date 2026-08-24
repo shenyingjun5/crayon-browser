@@ -7,3 +7,4 @@ demo/gen/
 .DS_Store
 .cache/cef-archives/
 __pycache__/
+.zcode/
