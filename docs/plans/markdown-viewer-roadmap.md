@@ -16,7 +16,7 @@
 | ID | 状态 | 依赖 | 目标路径 | 单一交付 | 测试/验收 |
 |---|---|---|---|---|---|
 | MDV-01 | DONE | BUX-03 | `docs/current/markdown-viewer.md` | 契约冻结：`crayon://mdv` scheme/origin/CSP、入口与手势门禁、渲染语法范围、安全边界与渲染选型评审结论 | 契约 Review 通过；语法/CSP/入口矩阵冻结 |
-| MDV-02 | TODO | MDV-01 | `browser/shared-ui/markdown` | 平台中立确定性 Markdown 渲染引擎：MD→转义安全 HTML、golden 与注入矩阵；vendored 库接入或自研子集 | MD-002；独立 ctest、`-Werror` 零告警 |
+| MDV-02 | VERIFIED | MDV-01 | `browser/shared-ui/markdown` | 平台中立确定性 Markdown 渲染引擎：MD→转义安全 HTML、golden 与注入矩阵；vendored 库接入或自研子集 | MD-002；独立 ctest、`-Werror` 零告警 |
 | MDV-03 | TODO | MDV-01,MDV-02,BUX-03 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | 只读查看内置页（fixture 内容驱动）：scheme handler、源码/预览切换、严格 CSP、零网络 | MD-003、MD-004 只读部分；Windows Debug/Release |
 | MDV-04 | TODO | MDV-03,BUX-16,PLT-02 | `browser/shared-ui/mdv`,`browser/cef-shell` | 受控本地 `.md` 入口：文件对话框/拖放/omnibox 路径路由、路径/大小/UTF-8 校验、用户手势门禁 | MD-001、MD-003 |
 | MDV-05 | TODO | MDV-04 | `browser/shared-ui/mdv` | 分栏编辑与实时预览：编辑器状态机、dirty 跟踪、关闭/切换确认 | MD-004、MD-005 |
@@ -50,3 +50,10 @@
 - 选型证据：2026-08-24 抓取上游 README/CHANGELOG（MIT、CommonMark 0.31、扩展 flag 化、0.5.3 最新 release）；实际 vendor 时须固定 revision+内容 hash 并复核评审表（`MDV-02` 开工前置）。
 - Code Review：按需求/边界→正确性→架构→安全/隐私复核。P0 0、P1 0、P2 1——§9 外部修改冲突用 `(size, mtime)` 检测存在同秒写入的窗口（mtime 精度限制），V1 接受并在冲突提示中提供"另存为"退路；若后续需要强一致可加内容 hash 对比（归 `MDV-06` 复核）。
 - 未覆盖与风险：渲染引擎 vendor 与 golden 体系归 `MDV-02`；scheme handler 与内置页归 `MDV-03`；Windows 实机门禁归 `MDV-07`。`MDV-01` 转为 `DONE`，解锁 `MDV-02 READY`。
+
+### MDV-02 完成记录（2026-08-24）
+
+- 实现：新增 `browser/shared-ui/markdown`（header/impl/CMake/契约测试各 1），vendored md4c 0.5.3（含补齐的 `md4c-html.c/h`，同 tag `472c417`，VENDORED.md 已更新哈希）。渲染管线：输入归一（BOM 剥离、CRLF/CR→LF）→ 严格 UTF-8 校验（拒绝续字节首/超长/代理区/越界）→ 5 MiB 上限 → md4c 解析（`TABLES|STRIKETHROUGH|TASKLISTS|NOHTMLBLOCKS|NOHTMLSPANS`——**刻意不含 PERMISSIVEAUTOLINKS，裸链保持纯文本**；raw HTML 全转义）→ 输出后处理（`<img>`→`md-img-placeholder` 占位显示 alt+地址文本永不加载；`<a href>` scheme 白名单 http/https/mailto，其余降级为纯文本）→ 生成标签/属性白名单终检（27 标签 + 7 属性 + 布尔属性 disabled/checked），任何违规 fail-closed 返回 `kOutputPolicyViolation` 空输出。根 `CMakeLists.txt` 启用 C 语言（vendored C99 源）。
+- 验证：`cmake -S . -B .cache/build/mdv02` 零告警；`markdown_render` 1/1（6 组：golden 基础语法/表格/任务列表/代码块、链接与 autolink、注入矩阵（script/事件属性/javascript:/file:/相对路径/HTML 注释/ftp autolink 全转义或降级）、三次渲染逐字节确定性、BOM/CRLF/Unicode 归一、5MiB 与四类非法 UTF-8 拒绝）；共享层回归 41/41；workspace Rust 全绿；`git diff --check` 通过。
+- Code Review：P0 0、P1 0、P2 1——白名单终检的标签步进公式对非嵌套常规输出已验证，但 `<` 出现在属性值内（如 `title="a<b"`）时 ParseTag 会误判；md4c 生成属性值时对 `<` 转义为 `&lt;` 故当前不可达，若未来接入其他生成器需先保证该不变量。
+- 未覆盖与风险：`crayon://mdv` scheme handler 接线（MDV-03）、编辑器/保存语义（MDV-05/06）、Windows 实机（MDV-07）。`MDV-02` 转为 `VERIFIED`。

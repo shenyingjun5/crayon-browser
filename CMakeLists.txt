@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(crayon_browser VERSION 0.1.0 LANGUAGES CXX)
+project(crayon_browser VERSION 0.1.0 LANGUAGES C CXX)
 
 option(CRAYON_BUILD_TESTS "Build Crayon browser contract tests" OFF)
 option(CRAYON_ENABLE_CEF "Integrate an offline CEF Standard distribution" OFF)
@@ -63,6 +63,7 @@ add_subdirectory(browser/shared-ui/chrome)
 add_subdirectory(browser/shared-ui/features/cast)
 add_subdirectory(browser/shared-ui/agent-confirm)
 add_subdirectory(browser/shared-ui/capability-route)
+add_subdirectory(browser/shared-ui/markdown)
 add_subdirectory(tests/e2e/desktop/browser)
 add_subdirectory(browser/cef-shell/src/ipc)
 add_subdirectory(browser/cef-shell/src/browser/core_client)
