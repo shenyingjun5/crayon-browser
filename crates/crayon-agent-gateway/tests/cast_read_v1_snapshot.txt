@@ -1,0 +1,5 @@
+generation=12
+device-a|客厅电视|mp4=true,hls=false,dash=false,h264=false,hevc=false,av1=false,max_height=1080
+device-b|客厅电视|mp4=true,hls=true,dash=false,h264=false,hevc=false,av1=false,max_height=2160
+device-c\\x|会议室\|投屏|mp4=false,hls=false,dash=false,h264=false,hevc=false,av1=false,max_height=720
+state=playing|receiver=device-b|pos_ms=91500|dur_ms=3600000|generation=12

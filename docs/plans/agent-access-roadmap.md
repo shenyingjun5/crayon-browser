@@ -26,7 +26,7 @@
 | AGT-05 | VERIFIED | AGT-04,CEF-08 | `apps/desktop-cef/**/agent-confirm/**`,locales | 确认 UI：client、工具、route、目标、参数摘要、数据披露、到期和无障碍 | `AG-004`; UI integration | A0 |
 | AGT-06 | TODO | CNT-03,AGT-03 | `crayon-page-data/**`,`crayon-agent-gateway/page_stream/**` | generation-scoped 快照缓存、分页/流式/增量、索引、背压和性能 instrumentation | `AG-006`,`AG-015`; benchmark/soak | A1 |
 | AGT-07 | TODO | AGT-04,AGT-06,CNT-08 | `crayon-agent-gateway/tools/content/**`,`crayon-app-runtime/**` | R1 target/标题/选区/结构化页面/Markdown 读取工具 | `AG-006`; 跨 Profile/后台/过期/超量拒绝 | A1 |
-| AGT-08 | TODO | AGT-04,SDK-08 | `crayon-agent-gateway/tools/cast_read/**` | R0/R1 接收端能力和投屏状态读取，不返回 IP/URL/token | `AG-007`; adapter tests | A1 |
+| AGT-08 | DONE | AGT-04,SDK-08 | `crayon-agent-gateway/tools/cast_read/**` | R0/R1 接收端能力和投屏状态读取，不返回 IP/URL/token | `AG-007`; adapter tests | A1 |
 | AGT-09 | TODO | AGT-05,CEF-07,ACT-07,ACT-11 | `crayon-agent-gateway/tools/navigation/**`,`crayon-app-runtime/**` | R2 打开/切换/关闭标签、导航、后退、刷新、滚动及人工接管结果 | `AG-008`; scheme/redirect/download/popup/cancel | A2 |
 | AGT-10 | TODO | AGT-05,SDK-12,MED-19 | `crayon-agent-gateway/tools/cast_control/**` | R3 选择设备、开始/暂停/seek/停止；沿用正常投屏门禁 | `AG-009`; 目标变化重确认；不控制外部镜像客户端 | A2 |
 | AGT-11 | VERIFIED | AGT-03,AGT-04 | `crayon-agent-gateway/receipt/**`,diagnostics | 有界脱敏 action receipt、TTL、用户预览/清除 | `AG-011`,`PV-010`; 无正文/query/secret | A0 |
@@ -190,6 +190,27 @@
 - 验证：`cargo test -p crayon-agent-gateway` 60/60 通过（transport 12 项：往返/分片/背靠背/最大合法帧/超限/buffer fail-closed、单客户端矩阵、限流突发耗尽与恢复、重放有界窗口、strike 阈值断开、stop 幂等、错误 Display+CAAP golden、LCG 3000 步敌意流不变量——无 panic、strike 上界、pending 有界）；`cargo clippy -p crayon-agent-gateway --all-targets -- -D warnings` 通过；fmt、`git diff --check` 通过；基线 core lib 3/3、legacy-dev 58/58、workspace 全量无失败。
 - Code Review：P0 0、P1 0、P2 1（重放窗口 512 条滑出后旧 id 可再次通过 transport 层——已注明由 AGT-03 session 幂等键提供语义级去重兜底，且窗口大小在 AGT-15 fuzz 时应结合实际 chunk 速率复核）。
 - 未覆盖与风险：OS named pipe/UDS 端点绑定、真实 peer credential/ACL 实测（后续平台切片，Windows 真机归 PLT-W04 门禁）、与 session/grant 的运行时装配、MCP 映射（AGT-14）。`AGT-12A` 转为 `VERIFIED`；AGT-12 整体 DONE 待 OS 端点切片与实机门禁。
+
+## AGT-08 原子范围（R0/R1 投屏只读工具）
+
+- 状态：`DONE`（2026-08-24）；依赖 `AGT-04 VERIFIED`、`SDK-08 DONE`。
+- 单一目标：`crayon-agent-gateway` 新增 `tools/cast_read.rs`：`cast.list_receivers`（R0）与 `cast.get_state`（R0）的网关侧实现面——闭合脱敏 DTO、读取源端口 trait、边界校验与确定性快照；IP/媒体 URL/route token/session 材料在类型上不可表达。不含 transport、确认 UI 与 app-runtime 装配。
+- 输入：AG-007（不返回 IP/媒体 URL/token；同名设备；旧 route；无会话；使用 SDK 最新 generation）、AGT-02 冻结的 cast_read 工具声明、SDK-08 的 `ReceiverCapabilities`（domain 层，可直接复用）与 generation/TTL 语义。
+- 输出与允许修改：`crates/crayon-agent-gateway/src/tools/cast_read.rs`、`tools/cast_read_tests.rs`、`src/tools/mod.rs`（新建）、`lib.rs` 仅加模块声明、crate `tests/` 快照 golden、本 Roadmap。零第三方新增。
+- 禁止修改：registry/session/grant/receipt/transport 行为与其 golden、CAAP schema、cast-adapter/facade、其他 crate；不得引入网络/IO/线程/时钟；DTO 不得出现地址、URL、route/resource token、页面标题字段。
+- 边界：
+  - `ReceiverSummary { device_id, name, capabilities(复用 domain `ReceiverCapabilities`) }` 与 `CastStateSnapshot { state(闭合六态), receiver_id(可选), position_ms, duration_ms, generation }`；无会话返回 Idle 快照而非错误。
+  - 读取源以端口 trait 注入（生产由后续 app-runtime 实现，测试用 fixture）；工具层校验容量 ≤64、id/name 非空有界且无控制字符，违规稳定拒绝并映射闭合 `CaapError`。
+  - 快照为确定性行格式（name 中 `\`/`|` 转义），golden 锁定；generation 随快照透出供调用方做代际围栏。
+- 验收与测试：AG-007。矩阵：同名双设备并列、脱敏 golden 锁定（含负向断言无 ip=/url=/token= 形态）、容量与非法条目拒绝、无会话 Idle、generation 透出、错误映射 golden、LCG 不变量。命令：`cargo test -p crayon-agent-gateway`、clippy `-D warnings`、fmt、workspace 回归、`git diff --check`。
+- 明确不做：投屏控制（AGT-10）、transport 接线（AGT-12）、CLI/MCP 映射（AGT-13/14）、app-runtime 端口生产实现。
+
+### AGT-08 完成记录（2026-08-24）
+
+- 实现：`crayon-agent-gateway` 新增 `tools/cast_read.rs`（约 250 行）+ `tools/mod.rs`：`CastReadSource` 端口 trait 注入实时数据（生产实现归后续 app-runtime 装配，测试用 fixture），工具层零缓存；`list_receivers(source, generation)` 校验容量 ≤64、device_id/name 非空有界（≤128 字节、无控制字符）后产出 `ReceiverSummary { device_id, name, capabilities }`，capabilities 直接复用 domain `ReceiverCapabilities`（七字段闭合，含 SDK-08 定稿的保守合成语义——未评估即 false/0）；按 device_id 确定排序，与发现顺序无关；`get_state(source)` 返回 `CastStateSnapshot { state(闭合五态 idle/connecting/playing/paused/stopped), receiver_id(可选), position_ms, duration_ms, generation }`，无会话返回 Idle 快照而非错误。IP/媒体 URL/route/resource token/session 材料/页面标题在类型上不可表达；generation 随两个快照透出供调用方代际围栏。快照行格式确定性锁定（`\`/`|` 转义）；`CastReadError` 闭合三态带稳定 `to_caap_error()` 映射（SourceUnavailable→CapabilityDenied、InvalidDeviceData→InvalidMessage、CapacityExceeded→QueueFull）。零第三方新增；全同步、无锁/IO/时钟。
+- 验证：`cargo test -p crayon-agent-gateway` 67/67 通过（cast_read 新增 6 项：同名双设备并列且 id 序确定、golden 逐字节一致含转义用例并负向断言无 ip/http/token 形态、容量 65 拒绝+控制字符名拒绝+超长 id 拒绝、无会话 Idle 单行快照、generation 前后可区分供围栏、错误映射 golden）；clippy `-D warnings` 零告警；fmt 通过；workspace 全量无失败；`git diff --check` 通过。
+- Code Review：按标准八维复核。P0 0、P1 0、P2 0——端口 trait 使 gateway 不依赖 cast-adapter/facade（依赖方向合规）；脱敏由类型字段集保证而非运行时过滤。
+- 未覆盖与风险：端口的生产端实现与 SDK generation 的实时接线归后续 app-runtime 任务（AGT-07 同期装配）；同名设备仅以 opaque id 区分，UI 层需自行展示区分信息；transport/CLI/MCP 归 AGT-12..14。`AGT-08` 转为 `DONE`。
 
 ### Review P2 修复记录（2026-08-23）
 
