@@ -11,7 +11,7 @@
 |---|---|---|---|---|---|---|
 | PLT-01 | DONE | FND-09 | `crates/crayon-platform-api/**` | 定义安全存储、本地网络、生命周期、更新、当前用户本机 IPC 和外部客户端交接接口 | `CP-004`,`CP-W01`,`CP-M01`,`AG-012`; unit | V1 |
 | PLT-02 | DONE | PLT-01,FND-10 | `crates/crayon-platform-api/**`, `crates/crayon-platform-capabilities/**` | 定义 `secure_store`、`local_network`、`lifecycle`、`update`、`local_agent_ipc`、`external_client_handoff` 能力模型 | `CP-004`,`AG-012`; schema/golden | V1 |
-| PLT-W04 | TODO | PLT-02,CEF-12,SDK-08 | `platform/windows/**` | 实现 DPAPI、本地网络/防火墙、多网卡、睡眠唤醒、更新、当前用户 named pipe 与投屏客户端交接 | `CP-W01`,`AG-012`; Windows integration | V4W |
+| PLT-W04 | IN_PROGRESS | PLT-02,CEF-12,SDK-08 | `platform/windows/**` | 实现 DPAPI、本地网络/防火墙、多网卡、睡眠唤醒、更新、当前用户 named pipe 与投屏客户端交接（切片 W04a..d，见原子范围） | `CP-W01`,`AG-012`; Windows integration | V4W |
 | PLT-W05 | TODO | PLT-W04,CEF-15,SDK-14,PRV-12 | `apps/desktop-cef/**`, `platform/windows/**` | Windows 产品装配与 Direct/Relay/外部客户端交接验收 | `E2E-001..005`,`CP-W01`; Windows device | V4W |
 | PLT-M04 | TODO | PLT-02,CEF-01E,CEF-12,SDK-08 | `platform/macos/**` | 实现 Keychain、本地网络权限、生命周期、更新、当前用户 UDS 与投屏客户端交接 | `CP-M01`,`AG-012`; macOS integration | V4M |
 | PLT-M05 | TODO | PLT-M04,CEF-15,SDK-14,PRV-12 | `apps/desktop-cef/**`, `platform/macos/**` | macOS 产品装配、签名/公证与 Direct/Relay/外部客户端交接验收 | `E2E-001..005`,`CP-M01`; macOS device | V4M |
@@ -88,3 +88,34 @@
 - 失败基线：首轮 clippy `-D warnings` 命中 `needless_borrows_for_generic_args`（测试里 `to_value(&parsed)` 多余借用），修复后通过，证明门禁生效。
 - Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；P0/P1/P2 均为 `0`。能力模型只读、启动期收集一次的契约写入模块文档；与 FND-08 `PlatformCapabilities`（投屏/引擎面）无字段重叠。
 - 未覆盖与风险：真实平台探测填充归 `PLT-W04/PLT-M04`（真机门禁）；HarmonyOS 能力面归鸿蒙 Roadmap。`PLT-02` 转为 `DONE`，解锁 `PLT-W04`、`PLT-M04` 的接口依赖。
+## PLT-W04 原子范围（Windows 平台适配，按面切片）
+
+- 状态：`IN_PROGRESS`；依赖 `PLT-02 DONE`、`CEF-12 VERIFIED`、`SDK-08 DONE`。
+- 路径说明：Roadmap `platform/windows/**` 映射 `crates/crayon-platform-windows/**`（workspace 全部 Rust crate 位于 `crates/`，与 PLT-01/02 同惯例）。
+- 切片说明：六个平台面合计预计超过 1000 行 FFI 生产代码，按原子任务标准拆为四个可独立审查/回退的切片，全部完成后 `PLT-W04` 才能转 `DONE`（CP-W01 真机门禁）：
+  - **W04a（切片 1）**：crate 骨架 + DPAPI SecureStore + Windows 能力文档聚合。
+  - **W04b（切片 2）**：本地网络观察（接口枚举 + 变更事件）与电源/会话生命周期事件源。
+  - **W04c（切片 3）**：当前用户 named pipe 端点（AG-012 门禁的 OS 事实来源：peer SID 比对、per-user ACL）。
+  - **W04d（切片 4）**：更新流驱动与外部投屏客户端交接（download/launch，闭合结果）。
+
+### PLT-W04a 原子范围（切片 1：DPAPI SecureStore 与能力聚合）
+
+- 单一目标：新建 `crates/crayon-platform-windows`，交付实现 `SecureStore` trait 的 DPAPI 后端（`CryptProtectData/CryptUnprotectData` + 注入根目录下的有界文件持久化），并产出经验证的 Windows `PlatformAdapterCapabilities` 聚合文档；本切片不实现其余五个平台面（占位能力值必须如实反映未实现状态）。
+- 输入：PLT-01 `SecureStore`/`token` 契约、PLT-02 能力模型 schema v1 与 Windows 预期剖面 golden、CP-W01 的 DPAPI 面。
+- 输出与允许修改：`crates/crayon-platform-windows/**`（新 crate）、根 `Cargo.toml` workspace members、本 Roadmap。新增依赖仅 `windows-sys`（已在 Cargo.lock 传递存在；Microsoft 官方维护、MIT/Apache-2.0、按 feature 裁剪——§12 依赖检查记录于完成记录）。
+- 禁止修改：`crayon-platform-api` 接口、`crayon-platform-capabilities` schema/golden、其他 crate、CEF shell；不得在密文文件旁明文落盘任何 value 字节；诊断/错误不得携带 key 名或 value 内容。
+- 边界：
+  - workspace `unsafe_code=forbid` 不适用于本 crate（Win32 FFI 必需）；本 crate 自带 lints：unsafe 仅限单一 `ffi.rs`，`clippy::undocumented_unsafe_blocks = deny`，每个 unsafe 块带 SAFETY 注释。
+  - key 经 `validate_key`（闭合字符集 ≤64）后直接作文件名（`<key>.bin`），无路径穿越面；value ≤4096 经 `validate_value`；持久化为临时文件 + rename 原子写，临时写/rename 失败映射闭合错误且无半写文件。
+  - 错误映射 fail-closed：key/value 形状拒绝、DPAPI 保护失败 → `Unavailable`、解保护失败 → `Corrupted`、缺文件 → `Ok(None)`、删除幂等；IO 权限类 → `AccessDenied`，其余 IO → `Unavailable`。
+  - 能力聚合只描述真实已实现面：secure_store=dpapi/rotation=false；local_agent_ipc=NamedPipe+peer_credentials+per_user_acl（W04c 交付前以 `normalized()` 折叠语义如实声明）；update 面在 QAR-09 定义签名/分发前声明 unavailable；聚合必须通过 `validate()` 且匹配 PLT-02 Windows 预期剖面的字段形状。
+- 验收与测试：真实 DPAPI 往返（store→load 相等、overwrite、delete 幂等、NotFound、损坏密文 → Corrupted、非法 key/超限 value 拒绝、并发同 key 最后写胜）；临时根目录隔离，不依赖机器路径；能力聚合 roundtrip 匹配 golden 剖面字段值。命令：`cargo test -p crayon-platform-windows`、clippy `-D warnings`（本 crate 含自定义 lint 集）、`cargo fmt --all -- --check`、workspace 回归、fast/security、`git diff --check`。
+- 明确不做：本地网络/生命周期/named pipe/更新/交接的真实实现（W04b..d）、macOS 对应物（PLT-M04）、PRV-05 的跨平台 secure_store 门禁（等 W04+M04 齐）。
+
+### PLT-W04a 完成记录（2026-08-25，切片 1：DPAPI SecureStore 与能力聚合）
+
+- 实现：新 crate `crates/crayon-platform-windows`（Roadmap `platform/windows/**` 的 workspace 映射）。`src/ffi.rs` 为全 crate 唯一 unsafe 面：`CryptProtectData/CryptUnprotectData` 安全包装（当前用户 scope、无 UI、静态诊断描述串），out-blob 复制后按 DPAPI 所有权契约精确一次 `LocalFree`；每个 unsafe 块带 SAFETY 注释，crate 级 `clippy::undocumented_unsafe_blocks = deny`。`src/secure_store.rs` 的 `DpapiSecureStore` 实现 `SecureStore` trait：key 经闭合字符集校验后直接作文件名（无穿越面），value ≤4096，密文以临时文件 + rename 原子写落盘，读侧先按"密文必然大于明文"的上界拒绝超限文件再交给 OS 解密；错误映射 fail-closed（DPAPI 保护失败 `Unavailable`、解保护失败 `Corrupted`、缺文件 `Ok(None)`、删除幂等、IO 权限类 `AccessDenied`）。`src/capabilities.rs` 产出经 `validate()` 的 Windows 能力文档——**只声明已交付面**（W04a 仅 dpapi secure store），其余五面如实 unavailable/false，后续切片落地时逐面翻转。非 Windows 目标编译为空 crate，macOS CI 构建图保持绿色。
+- 依赖检查（§12）：新增直接依赖仅 `windows-sys 0.61`（Cargo.lock 中已作为传递依赖存在，未引入新供应链面）；Microsoft 官方仓库维护、MIT/Apache-2.0 双许可、按 feature 裁剪只启用 Foundation + Security_Cryptography。
+- 自动验证（Windows 11 x64 实机即验证环境）：`cargo test -p crayon-platform-windows` **9/9 通过**——真实 DPAPI 往返相等、落盘字节为密文（含多字节 UTF-8 明文不出现断言）、覆盖写最后写胜且无 `.tmp-*` 残留、删除幂等与缺文件 None、非 DPAPI 字节 → `Corrupted`、超限密文文件拒解析、形状违规在 IO 前拒绝且根目录零触碰；能力文档 schema 校验 + serde 往返 + `deny_unknown_fields` 拒绝未知字段。`cargo clippy --workspace --all-targets -- -D warnings` 零错误；`cargo fmt --all -- --check` 通过；workspace 回归 90 个测试二进制全绿无 FAILED；`scripts/check.ps1 fast` 与 `security` 全 passed；`git diff --check` 通过。
+- Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；P0/P1/P2 均为 `0`。密文上界拒绝防止任意磁盘字节喂给 DPAPI；临时文件写入失败即清理且不留半写状态；能力文档不虚报未实现面（PRV-05 门禁等 W04+M04 齐）。
+- 未覆盖与风险：跨用户隔离（他人 SID 解密必须失败）无法在本单用户机验证，归 CP-W01 设备矩阵；防病毒/策略禁用 DPAPI 的 `Unavailable` 路径仅有代码映射无真实触发；本地网络/生命周期/named pipe/更新/交接归 W04b..d。切片 1 完成，`PLT-W04` 维持 `IN_PROGRESS`。
