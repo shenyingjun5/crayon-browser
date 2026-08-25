@@ -18,7 +18,7 @@
 | MDV-01 | DONE | BUX-03 | `docs/current/markdown-viewer.md` | 契约冻结：`crayon://mdv` scheme/origin/CSP、入口与手势门禁、渲染语法范围、安全边界与渲染选型评审结论 | 契约 Review 通过；语法/CSP/入口矩阵冻结 |
 | MDV-02 | VERIFIED | MDV-01 | `browser/shared-ui/markdown` | 平台中立确定性 Markdown 渲染引擎：MD→转义安全 HTML、golden 与注入矩阵；vendored 库接入或自研子集 | MD-002；独立 ctest、`-Werror` 零告警 |
 | MDV-03 | VERIFIED | MDV-01,MDV-02,BUX-03 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | 只读查看内置页（fixture 内容驱动）：scheme handler、源码/预览切换、严格 CSP、零网络 | MD-003、MD-004 只读部分；Windows Debug/Release |
-| MDV-04 | TODO | MDV-03,BUX-16,PLT-02 | `browser/shared-ui/mdv`,`browser/cef-shell` | 受控本地 `.md` 入口：文件对话框/拖放/omnibox 路径路由、路径/大小/UTF-8 校验、用户手势门禁 | MD-001、MD-003 |
+| MDV-04 | VERIFIED | MDV-03,BUX-16,PLT-02 | `browser/shared-ui/mdv`,`browser/cef-shell` | 受控本地 `.md` 入口：文件对话框/拖放/omnibox 路径路由、路径/大小/UTF-8 校验、用户手势门禁 | MD-001、MD-003 |
 | MDV-05 | TODO | MDV-04 | `browser/shared-ui/mdv` | 分栏编辑与实时预览：编辑器状态机、dirty 跟踪、关闭/切换确认 | MD-004、MD-005 |
 | MDV-06 | TODO | MDV-05 | `browser/shared-ui/mdv`,`browser/cef-shell` | 保存语义：写回/另存为、原子写、外部修改冲突检测、失败显式报告 | MD-006 |
 | MDV-07 | TODO | MDV-01..06 | `docs/current`,`docs/plans` | Windows 实机收口与模块总 Review（macOS 对齐后置，不得用 Windows 证据完成 macOS） | MD-007；Review P0/P1=0 |
@@ -73,3 +73,19 @@
 - 验证：`cmake -S . -B .cache/build/mdv03` 零告警；`mdv_viewer` 1/1（7 组：视图切换、装载状态矩阵含引擎二次 UTF-8 校验、滑动去抖合并/新代际、陈旧渲染丢弃、关闭文档失效在途、CSP/资源路径 golden、5000 步风暴 revision 单调）；共享层回归 42/42；`git diff --check` 通过。
 - Code Review：P0 0、P1 0、P2 1——`LoadContent` 的 `utf8_valid` 调用方参数仅作预检语义（引擎无条件重验，测试已覆盖谎报场景）；参数本身冗余，MDV-04 接线时可移除以收窄接口。
 - 未覆盖与风险：CEF scheme handler 接线（`crayon://mdv` 内存资源 + CSP 下发 + 受控绑定注入，MDV-03 后续切片）、编辑/保存（MDV-05/06）、Windows 实机（MDV-07）。`MDV-03` 转为 `VERIFIED`（切片 1；handler 接线后补实机证据）。
+
+### MDV-04 原子范围（受控本地 .md 入口守卫，切片 1）
+
+- 状态：`VERIFIED`；依赖 `MDV-03 VERIFIED`、`BUX-16 VERIFIED`、`PLT-02 DONE`。
+- 路径说明：本切片交付共享层入口守卫模型；文件对话框/拖放的 CEF 接线归后续切片。
+- 单一目标：`browser/shared-ui/mdv` 新增入口守卫——三入口（菜单对话框/拖放/omnibox 路径）统一用户手势门禁 + §4 路径校验矩阵（后缀大小写不敏感 `.md`、控制字符、长度上限、`..` 穿越、存在性与常规文件经注入 stat 回调）+ §5 装载边界（5 MiB、UTF-8 严格 + BOM 剥离、CRLF→LF、空文件合法）。
+- 边界：页面来源（kPage）在任何入口稳定拒绝；路径校验全部在 Browser process 模型层完成；symlink/junction 完整解析防护归平台层 path_guard（PRV-04 口径），本模型以注入回调表达；不创建新文件。
+- 验收与测试：MD-001 模型部分、MD-003 装载边界。命令：独立 configure/build/ctest、共享层回归、`git diff --check`。
+- 明确不做：CEF 文件对话框/拖放接线（后续切片）、保存写回（MDV-06）、Windows 实机（MDV-07）。
+
+### MDV-04 完成记录（2026-08-25，入口守卫模型切片）
+
+- 实现：`browser/shared-ui/mdv` 新增 `mdv_entry_guard`（header/impl/契约测试）。三入口统一守卫：**手势门禁优先**（`EntrySource::kPage` 一票拒绝，先于一切检查——页面内容零触发路径）；§4 路径矩阵——`.md` 后缀大小写不敏感且要求非空词干（`.md`/`.markdown`/`.mdown` 拒绝）、控制字符（<0x20 与 DEL）拒绝、长度 ≤4096、`..` 段穿越拒绝（完整 symlink/junction 解析归平台 path_guard，经注入 stat 探针表达）、存在性与常规文件经注入探针（null 探针 fail-closed）；§5 装载边界——5 MiB 上限、严格 UTF-8（复用 MDV-02 校验器）、BOM 剥离一次、CRLF/CR→LF、空文件合法。`GateLocalLoad` 把入口校验 + 内容边界 + 归一化串成单次调用，与 MDV-03 `LoadContent` 构成端到端流（契约测试覆盖）。
+- 验证：`cmake -S . -B .cache/build/mdv04` 零告警；`mdv_entry_guard` 1/1（5 组：后缀矩阵、手势门禁优先、路径矩阵含穿越/控制字符/长度/探针、装载边界含 BOM/CRLF/空文件/二进制伪装、gate→viewer 端到端）；`mdv_viewer` 1/1；共享层回归 43/43；`git diff --check` 通过。
+- Code Review：P0 0、P1 0、P2 1——反斜杠在模型层按普通名字字符处理（Windows 分隔符归一由平台接线在调用前完成）；若平台接线遗漏归一，`..\\` 变体不会被本层拦截（已记录，MDV-04 接线切片验收项）。
+- 未覆盖与风险：CEF 文件对话框/拖放/omnibox 路由接线（MDV-04 后续切片）、平台 path_guard 完整解析（PLT-W04/M04）、Windows 实机（MDV-07）。`MDV-04` 转为 `VERIFIED`（模型切片）。
