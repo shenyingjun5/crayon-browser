@@ -13,7 +13,7 @@
 | PLT-02 | DONE | PLT-01,FND-10 | `crates/crayon-platform-api/**`, `crates/crayon-platform-capabilities/**` | 定义 `secure_store`、`local_network`、`lifecycle`、`update`、`local_agent_ipc`、`external_client_handoff` 能力模型 | `CP-004`,`AG-012`; schema/golden | V1 |
 | PLT-W04 | DONE | PLT-02,CEF-12,SDK-08 | `platform/windows/**` | 实现 DPAPI、本地网络/防火墙、多网卡、睡眠唤醒、更新、当前用户 named pipe 与投屏客户端交接（切片 W04a..d，见原子范围） | `CP-W01`,`AG-012`; Windows integration | V4W |
 | PLT-W05 | TODO | PLT-W04,CEF-15,SDK-14,PRV-12 | `apps/desktop-cef/**`, `platform/windows/**` | Windows 产品装配与 Direct/Relay/外部客户端交接验收 | `E2E-001..005`,`CP-W01`; Windows device | V4W |
-| PLT-M04 | TODO | PLT-02,CEF-01E,CEF-12,SDK-08 | `platform/macos/**` | 实现 Keychain、本地网络权限、生命周期、更新、当前用户 UDS 与投屏客户端交接 | `CP-M01`,`AG-012`; macOS integration | V4M |
+| PLT-M04 | IN_PROGRESS | PLT-02,CEF-01E,CEF-12,SDK-08 | `platform/macos/**` | 实现 Keychain、本地网络权限、生命周期、更新、当前用户 UDS 与投屏客户端交接 | `CP-M01`,`AG-012`; macOS integration | V4M |
 | PLT-M05 | TODO | PLT-M04,CEF-15,SDK-14,PRV-12 | `apps/desktop-cef/**`, `platform/macos/**` | macOS 产品装配、签名/公证与 Direct/Relay/外部客户端交接验收 | `E2E-001..005`,`CP-M01`; macOS device | V4M |
 | PLT-19 | TODO | PLT-W05,PLT-M05 | `docs/current/**`, `docs/plans/**`, `tests/**` | Windows/macOS 平台边界、生命周期和发布前独立 Review | 平台矩阵；Review P0/P1=0 | V5 |
 
@@ -150,3 +150,26 @@
 ## PLT-W04 完成结论（2026-08-25）
 
 四个切片全部落地并独立提交（W04a `ae4a089`、W04b `f29fa68`、W04c `bf4c522`、W04d 本提交）：六个契约面全部有真实 Windows 平台证据（DPAPI 往返/密文落盘断言、真实网卡枚举含 loopback 标志、named pipe 同用户端到端 SID 验收、更新状态机全函数性、交接闭合结果矩阵），能力文档六面如实声明且通过 schema 校验。`PLT-W04` 转 `DONE`，解锁 `PRV-05` 的 Windows 半边（macOS 半边仍待 `PLT-M04`）与后续装配链。
+
+## PLT-M04 原子范围（macOS 平台适配，按面切片）
+
+- 状态：`IN_PROGRESS`；依赖 `PLT-02 DONE`、`CEF-01E DONE`、`CEF-12 VERIFIED`、`SDK-08 DONE`。
+- 路径说明：Roadmap `platform/macos/**` 映射 `crates/crayon-platform-macos/**`（与 W04/PLT-01 惯例一致）。
+- 切片说明：镜像 W04 切法，全部完成后 `PLT-M04` 才能转 `DONE`（CP-M01 真机门禁）：
+  - **M04a（切片 1）**：crate 骨架（`#![cfg(target_os = "macos")]`）+ Keychain SecureStore（Security.framework 原生 FFI，零新依赖）+ macOS 能力聚合文档。
+  - **M04b（切片 2）**：本地网络接口观察（getifaddrs）与电源/会话生命周期事件源（IOKit/分布式通知）。
+  - **M04c（切片 3）**：当前用户 UDS 端点（peer credentials 经 getpeereid，AG-012 门禁）。
+  - **M04d（切片 4）**：更新流（QAR-09 签名/分发定义前如实声明 unavailable）与外部投屏客户端交接（`open` 下载/启动，闭合结果）。
+- 全局边界（镜像 W04）：unsafe 仅限单一 `ffi.rs` 且 `undocumented_unsafe_blocks = deny`；Keychain 只在 SecureStore 用户真实保存/读取机密时触碰（AGENTS.md 项目记忆 2026-08-23 决策），测试用独立 service 前缀并清理；错误闭合、不携带 key 名/value 内容；能力聚合只声明真实已实现面。
+- 验收与测试（每切片）：`cargo test -p crayon-platform-macos`、clippy `-D warnings`（自定义 lint 集）、fmt、workspace 回归、`git diff --check`。
+- 明确不做：Windows 对应物（W04 已完成）、PRV-05 跨平台门禁（等 W04+M04 齐，现已只差 M04）、真实更新分发（QAR-09）。
+
+### PLT-M04a 完成记录（2026-08-25，切片 1：Keychain SecureStore 与能力聚合）
+
+- 实现：新建 `crates/crayon-platform-macos`（`#![cfg(target_os = "macos")]`，非 macOS 目标为空 crate）。`ffi.rs` 为全 crate 唯一 unsafe 归宿（`undocumented_unsafe_blocks = deny`，每块带 SAFETY 注释）：Security.framework + CoreFoundation 原生 FFI（零新依赖），`sec_add/sec_copy/sec_delete/sec_delete_service_all` 泛型密码项操作，框架常量经 `ptr::addr_of!` 读值。`secure_store.rs`：`KeychainSecureStore` 实现 `SecureStore` trait——service 命名空间 `com.crayon.browser.secure-store`，store=幂等 delete+add（ACL 锚定本进程）、load 缺项返回 `Ok(None)`（契约语义）、delete 幂等；错误闭合映射（NotFound/AccessDenied/Unavailable），不携带 key 名或值内容；**Keychain 仅在用户动作真实触发存/读/删时触碰**（AGENTS.md 2026-08-23 决策）。`capabilities.rs`：M04a 真相文档——仅 secure_store=keychain/rotation=true，其余五面如实 unavailable，经 `normalized()` + `validate()`。
+- **两个 macOS 26 关键发现（调试过程沉淀）**：
+  1. `kCFTypeDictionary{Key,Value}CallBacks` extern static 不能声明为 ZST/小类型——`CFDictionaryCreateMutable` **按值拷贝**回调结构（~48 字节），声明过小会使拷贝读越界、retain/release 指针为垃圾，症状是条目**静默丢失 account 属性**且查询匹配任意条目；已改为 `[u8; 128]` 字节数组声明。
+  2. 本机 macOS 26 上 `kSecAttrAccount` 在 SecItemAdd/CopyMatching 查询中**必须为 CFString**——CFData 形式的 account 被静默丢弃（条目无 account、查询匹配任意条目）；key 为已校验闭合 token，UTF-8 无损，已在 `build_query` 注释固化。两个问题都曾表现为"存储成功但跨 key 互相覆盖"，经查询字典 dump + 条目属性比对定位。
+- 验证：`cargo test -p crayon-platform-macos` 7/7（能力文档真相/roundtrip/deny_unknown_fields；Keychain 往返矩阵含空值/覆盖/幂等删除、校验 fail-closed、多 key 独立、dyn 对象安全；测试自带 hermetic 清扫——按 key + service 整体两遍，防失败运行残留）；clippy `-D warnings` 零告警；fmt 通过；workspace 全量 0 失败；`git diff --check` 通过。
+- Code Review：P0 0、P1 0、P2 1——Keychain 测试触碰真实登录钥匙串（专用探针 key + 前后清扫），CI/他机运行会写入登录钥匙串；PRV-05 跨平台门禁任务应评估是否改用隔离 keychain（`SecKeychainCreate` 已废弃，或测试专用 service 前缀 + 定期清扫）。
+- 未覆盖与风险：本地网络/生命周期/UDS/交接/更新归 M04b..d；PRV-11 跨平台 secure_store 门禁等 M04 全切片完成。`PLT-M04` 保持 `IN_PROGRESS`（M04a 完成）。
