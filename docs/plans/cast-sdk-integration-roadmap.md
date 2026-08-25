@@ -1,6 +1,6 @@
 # SDK：Cast-SDK 集成 Roadmap
 
-状态：`FND-08 DONE`；`SDK-01..13 DONE`；`SDK-14` 已解锁（依赖全部满足）；`SDK-15/16` 为 Partner/TV Cast Manifest 的后续外部依赖任务。任务数 16。源码固定为 Cast-SDK `44c3a99871aa1e68cbda71eacefbb41d23a747a8`，通过 `third_party/cast-sdk` submodule 接入；不得依赖开发者本机源码路径。
+状态：`SDK-01..14 DONE`；`SDK-15/16` 为 Partner/TV Cast Manifest 的后续外部依赖任务（等已批准 Partner/TV 接收端，不在当前范围）；任务数 16。源码固定为 Cast-SDK `44c3a99871aa1e68cbda71eacefbb41d23a747a8`，通过 `third_party/cast-sdk` submodule 接入；不得依赖开发者本机源码路径。
 
 ## 边界
 
@@ -32,7 +32,7 @@
 | SDK-11 | SDK-09,SDK-10 | `cast-adapter/session` | listener、自然结束、receiver stop、route lost、替换 | CS-007；旧事件不能停止新会话 | S2 |
 | SDK-12 | SDK-07,SDK-08,SDK-10,SDK-11,MED-19 | `crayon-app-runtime/cast_usecase` | UI/runtime 与 SDK 事件编排；撤销 Direct/Relay；外部交接不创建 SDK session | Fake E2E V2；每个终态资源清理；PL-015 | S2 |
 | SDK-13 | DONE | SDK-12 | 真接收端 Harness | 自动发现、投屏码、能力、投送、控制、终态 | CS-010、E2E-001、E2E-002；记录接收端版本/网络 | S4 |
-| SDK-14 | SDK-02,SDK-12,SDK-13 | Review/升级说明 | API contract、source revision、错误映射、并发生命周期 Review | 全 CS；无 P0/P1；锁定 SDK gitlink/revision | S4 |
+| SDK-14 | DONE | SDK-02,SDK-12,SDK-13 | Review/升级说明 | API contract、source revision、错误映射、并发生命周期 Review | 全 CS；无 P0/P1；锁定 SDK gitlink/revision | S4 |
 | SDK-15 | SDK-14,HUB-16 | `docs/plans/**`、Cast-SDK API proposal | 对 Partner/TV signed manifest、能力协商、字幕/队列/结果回报做浏览器侧缺口分析；形成外部 Cast-SDK/receiver 独立 Roadmap/API 提案，不改外部仓库 | `CS-011`; 所有字段有 owner/trust/compat/失败语义；浏览器无临时协议 | X1 |
 | SDK-16 | SDK-15，且外部 API 已获批、发布并固定 revision | `crayon-cast-adapter/**`,`crayon-app-runtime/cast_usecase/**` | 仅通过正式 facade 消费 Partner/TV Cast Manifest 能力和事件 | `CS-012`; 签名/版本/能力/字幕/队列/结果；无 raw manifest/控制 URL/协议复制 | X1 |
 
@@ -167,3 +167,41 @@
 - 终态：stop ✓（AVTransport Stop 200），手机回接收端 MainActivity，日志 `detach-warm-idle reason=foreground-return-home`，无残留会话。
 - Code Review：P0 0、P1 0、P2 1——seek(暂停态) 的接收端拒绝行为需在产品 UI 层处理（置灰 seek 或提示），归 CEF-13/BUX 投屏 UI 装配任务跟踪；E2E-001/002 的浏览器 UI 驱动变体（页面点击播放→投屏）归 CEF-14 后续切片。
 - 未覆盖与风险：Relay 模式（需登录媒体 fixture，本轮为 Direct + sender 本地 HTTP）；长稳/多设备并发归 QAR；`--standalone` 模式（CI/debug 口径）而非 Desktop Host。`SDK-13` 转为 `DONE`，`SDK-14` 解锁。
+
+### SDK-14 完成记录（2026-08-25，按 code-review-standard v0.8）
+
+## 结论
+
+- 是否可以合并：已合并（聚合复核，逐任务证据链完整）
+- P0 / P1 / P2：0 / 0 / 1
+- 核心判断：源码锁定三处一致（submodule gitlink == `config/cast-sdk-source.toml` == `44c3a99871aa…`，tag `force-tcp-production-candidate-20260716-rc2-502-g44c3a998`；RG-008 passed）；错误映射在 adapter 边界收敛为 13 变体闭合 `CastError`，UPnP 原始错误码（如 701）不跨边界（符合 API contract §770）；并发生命周期沿用 SDK-05 契约（listener 订阅一次/Drop 幂等退订/shutdown join dispatch 线程后返回/回调锁外派发）+ adapter 会话 generation fencing（CS-006）。
+
+## 专项检查
+
+- API contract：facade 消费面与 `sender-sdk-api-contract.md` 一致；`resolve_device_by_cast_code` 的 InvalidInput 上下文重映射 `InvalidCastCode`（CS-003）有注释与测试；设备身份用 SDK 稳定 device key（16 hex，跨 IP 变化/同名冲突保持）。
+- 错误映射：`map_error`（kind → SenderErrorKind → CastError）+ `map_cast_code_error` 上下文重映射；真机证据：seek(暂停态) 的 701 以稳定 Control 错误浮出，未泄漏 UPnP XML 细节。
+- 并发生命周期：adapter 68/68 测试（含 service/delivery/capability/error 套件）；SDK-13 真机 stop 后无残留会话（detach-warm-idle）。
+- CS 覆盖：CS-001..010 证据链完整（Fake 套件 + SDK-13 真机）；CS-011/012 归 SDK-15/16（等已批准 Partner/TV 接收端，显式不在当前范围）。
+
+## 验证
+
+- `cargo test -p crayon-cast-adapter`：68/68（三套件）
+- `repo-guard` RG-008：passed（source lock + adapter dependency pinning）
+- SDK-13 真机 harness（小米 M2010J19SC）：发现/投屏码/图片/视频/pause/play/seek(播放中)/stop 全链路通过
+
+## 升级说明（revision 升级程序）
+
+1. 评审上游变更：diff 旧新 revision，重点 AVTransport 语义、错误码表、discovery 行为、线程模型。
+2. 更新 `config/cast-sdk-source.toml` 的 revision 与 submodule gitlink（同一提交），`cargo build -p crayon-cast-adapter` 过编译。
+3. 全量 `cargo test -p crayon-cast-adapter`（行为 golden 若有漂移，逐条评审后更新并同步 Roadmap）。
+4. 重跑 SDK-13 真机 harness（发现/投屏码/投送/控制/终态全序列，小米接收端 + 记录接收端版本）。
+5. `repo-guard` RG-008 通过；更新本 Roadmap 升级记录与 `docs/current/README.md` 的 source lock 事实句。
+
+## 发现
+
+- [P2] seek(暂停态) 的接收端拒绝（701）需要产品 UI 处理：置灰 seek 或稳定提示。位置：cast UI 装配（CEF-13/BUX 投屏视图）；场景：用户在暂停态拖动进度条；影响：用户看到控制失败但无可操作引导；证据：SDK-13 真机日志 `event=seek ignored reason=completed` + sender 701；修复方向：UI 层按接收端状态禁用 seek 入口。已登记，归投屏 UI 装配任务。
+
+## 未覆盖与剩余风险
+
+- CS-011/012（Partner/TV Manifest）等外部依赖；Relay 登录媒体链路、长稳/多设备并发归 QAR；`--standalone` harness 口径（非 Desktop Host）。
+- `SDK-14` 转为 `DONE`。SDK 线全部完成（SDK-15/16 为外部依赖任务）。
