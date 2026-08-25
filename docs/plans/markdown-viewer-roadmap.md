@@ -20,7 +20,7 @@
 | MDV-03 | VERIFIED | MDV-01,MDV-02,BUX-03 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | 只读查看内置页（fixture 内容驱动）：scheme handler、源码/预览切换、严格 CSP、零网络 | MD-003、MD-004 只读部分；Windows Debug/Release |
 | MDV-04 | VERIFIED | MDV-03,BUX-16,PLT-02 | `browser/shared-ui/mdv`,`browser/cef-shell` | 受控本地 `.md` 入口：文件对话框/拖放/omnibox 路径路由、路径/大小/UTF-8 校验、用户手势门禁 | MD-001、MD-003 |
 | MDV-05 | VERIFIED | MDV-04 | `browser/shared-ui/mdv` | 分栏编辑与实时预览：编辑器状态机、dirty 跟踪、关闭/切换确认 | MD-004、MD-005 |
-| MDV-06 | TODO | MDV-05 | `browser/shared-ui/mdv`,`browser/cef-shell` | 保存语义：写回/另存为、原子写、外部修改冲突检测、失败显式报告 | MD-006 |
+| MDV-06 | VERIFIED | MDV-05 | `browser/shared-ui/mdv`,`browser/cef-shell` | 保存语义：写回/另存为、原子写、外部修改冲突检测、失败显式报告 | MD-006 |
 | MDV-07 | TODO | MDV-01..06 | `docs/current`,`docs/plans` | Windows 实机收口与模块总 Review（macOS 对齐后置，不得用 Windows 证据完成 macOS） | MD-007；Review P0/P1=0 |
 
 ## 开发规则
@@ -105,3 +105,19 @@
 - 验证：`cmake -S . -B .cache/build/mdv05` 零告警；`mdv_edit` 1/1（6 组：编辑置 dirty 与去抖、clean 直通、阻塞三选全路径、SaveAndContinue 阻塞至保存成功、重复阻塞/无效选择拒绝、5000 步风暴状态闭合）；`mdv_viewer`/`mdv_entry_guard` 同步通过；共享层回归 44/44；`git diff --check` 通过。
 - Code Review：P0 0、P1 0、P2 1——`NotifySaveSucceeded` 无条件清 dirty；若未来出现"保存成功但内容又被编辑"的竞态窗口，需以内容指纹比对替代布尔清除（MDV-06 接线时评估）。
 - 未覆盖与风险：编辑器 UI 呈现与键盘接线（后续装配切片）、保存语义（MDV-06）、Windows 实机（MDV-07）。`MDV-05` 转为 `VERIFIED`。
+
+### MDV-06 原子范围（保存语义与外部修改冲突模型）
+
+- 状态：`IN_PROGRESS`；依赖 `MDV-05 VERIFIED`。
+- 路径说明：本切片交付共享层保存控制器（注入 IO 钩子，模型零真实 IO）；真实文件 IO 在 CEF shell 装配时注入。
+- 单一目标：`browser/shared-ui/mdv` 新增 `mdv_save`——写回（Ctrl+S）/另存为两条路径、原子写计划（同目录临时文件 → rename）、外部修改 `(size,mtime)` 冲突检测（写回路径保存前重 stat 比对加载基线，绝不静默覆盖）、失败显式报告（临时文件尽力清理，清理失败必须报告残留路径）。
+- 边界：另存为受 §4 矩阵约束（后缀/字符/长度/穿越）但允许覆盖已存在 `.md` 且不做冲突比对（用户显式选择新位置）；写回冲突闭合三选（覆盖我的/另存为/取消）由 MDV-05 确认流承载，本模型输出冲突判定；只读/盘满/权限失败映射闭合错误码；无半写文件。
+- 验收与测试：MD-006 全部（模型部分）。命令：独立 configure/build/ctest、共享层回归、`git diff --check`。
+- 明确不做：真实 IO 与对话框（装配切片）、Windows 实机（MDV-07）。
+
+### MDV-06 完成记录（2026-08-25）
+
+- 实现：`browser/shared-ui/mdv` 新增 `mdv_save`（header/impl/契约测试，注入 IO 钩子——模型零真实 IO）。`MdvSaveController`：写回路径保存前重 stat 与加载基线 `(size,mtime)` 比对，漂移即 `kFailedConflict`（绝不静默覆盖，MD-006）；文件消失同样 `kFailedStat` fail-closed；另存为走 §4 形状矩阵（后缀/长度/穿越/控制字符）但允许新建或覆盖已存在 `.md`、不做冲突比对（用户显式选择新位置）；原子写 = 同目录临时文件（`<target>.tmp-<pid>`）→ rename，任一步失败显式报错——临时写失败 `kFailedTempWrite`、rename 失败先尽力清理临时文件（成功 `kFailedRename`、清理失败 `kFailedResidual` 并报告残留路径）；保存成功后基线迁移至目标文件（`mtime_known=false`，下次保存前重 stat 恢复）。无半写状态：冲突/校验失败在写临时文件之前返回。
+- 验证：`cmake -S . -B .cache/build/mdv06` 零告警；`mdv_save` 1/1（4 组：写回 happy path 含基线迁移、外部修改冲突与恢复重试/文件消失、另存为矩阵含无基线写回 fail-closed、失败报告链含临时写失败/rename 失败清理/残留路径上报）；`mdv_viewer`/`mdv_entry_guard`/`mdv_edit` 同步通过；共享层回归 45/45；`git diff --check` 通过。
+- Code Review：P0 0、P1 0、P2 1——保存成功后 `mtime` 未知（记 0 + `mtime_known=false`），下次写回必然重 stat 比对真实值，行为正确但 `FileBaseline` 的字段语义依赖该约定；MDV-07 接线时若 stat 钩子能回读保存后 mtime，可直接填充消除歧义。
+- 未覆盖与风险：真实 IO 钩子实现与对话框接线（装配切片）、只读位置/盘满的真实平台错误码映射（装配时注入）、Windows 实机（MDV-07）。`MDV-06` 转为 `VERIFIED`。MDV 模型层（MDV-02..06）全部完成，仅剩 MDV-07 Windows 实机收口。
