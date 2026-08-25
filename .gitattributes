@@ -6,3 +6,7 @@
 /assets/brand/**/*.png binary
 /assets/brand/**/*.ico binary
 /assets/brand/**/*.icns binary
+
+# Frozen contract goldens are compared byte-exact by tests; CRLF conversion
+# on Windows checkouts (core.autocrlf=true) would break them.
+/crates/**/tests/*.txt text eol=lf

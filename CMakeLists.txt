@@ -22,6 +22,15 @@ if(MSVC AND CRAYON_ENABLE_CEF)
       "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
+# Product sources are UTF-8 (including CJK comments). Without /utf-8 MSVC
+# decodes them in the system code page (e.g. 936) and raises C4819, which
+# the per-module /WX settings promote to an error. Contract tests read
+# TMPDIR via getenv, which MSVC flags as deprecated (C4996).
+if(MSVC)
+  add_compile_options(/utf-8)
+  add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
+endif()
+
 set(CRAYON_ENGINE_API_BUILD_TESTS "${CRAYON_BUILD_TESTS}" CACHE BOOL
     "Build browser engine API contract tests" FORCE)
 if(CRAYON_BUILD_TESTS)

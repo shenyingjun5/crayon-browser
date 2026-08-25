@@ -7,8 +7,18 @@ use crayon_profile::{
 };
 use std::path::PathBuf;
 
+// The registry requires an absolute root; the literal differs by platform.
+#[cfg(windows)]
+fn absolute_root() -> PathBuf {
+    PathBuf::from(r"C:\profiles-root")
+}
+#[cfg(not(windows))]
+fn absolute_root() -> PathBuf {
+    PathBuf::from("/profiles-root")
+}
+
 fn registry() -> ProfileRegistry {
-    ProfileRegistry::new(PathBuf::from("/profiles-root")).expect("absolute root")
+    ProfileRegistry::new(absolute_root()).expect("absolute root")
 }
 
 fn fixed_directory(byte: u8) -> DirectoryId {
@@ -165,7 +175,7 @@ fn path_uses_directory_id_never_profile_id() {
         .expect("hex is ascii");
     assert_eq!(component, "07070707070707070707070707070707");
     assert!(!path.to_string_lossy().contains("display name"));
-    assert!(path.starts_with("/profiles-root"));
+    assert!(path.starts_with(absolute_root()));
 }
 
 #[test]

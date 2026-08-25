@@ -3,9 +3,12 @@
 //! refused and external files stay untouched).
 
 use crayon_profile::{
-    DirectoryId, PathGuard, PathGuardError, PersistentStore, PersistentStoreError, ProfileId,
-    ProfileRegistry, ProfileType, MAX_CLEANUP_PER_CALL,
+    DirectoryId, PathGuard, PathGuardError, PersistentStore, ProfileId, ProfileRegistry,
+    ProfileType, MAX_CLEANUP_PER_CALL,
 };
+// Only the symlink-escape tests (unix-only) reference this error variant.
+#[cfg(unix)]
+use crayon_profile::PersistentStoreError;
 use std::fs;
 use std::path::{Path, PathBuf};
 

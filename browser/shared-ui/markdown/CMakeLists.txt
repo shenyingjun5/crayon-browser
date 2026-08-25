@@ -18,12 +18,20 @@ set_target_properties(crayon-browser-markdown PROPERTIES
 )
 
 # Vendored md4c is C99; keep its warnings at the project level without
-# forcing C++ flags onto it.
+# forcing C++ flags onto it. Vendored upstream sources must not be edited,
+# so MSVC warning level/warnings-as-errors are relaxed per file instead.
 set_source_files_properties(
   ${PROJECT_SOURCE_DIR}/third_party/md4c/src/md4c.c
   ${PROJECT_SOURCE_DIR}/third_party/md4c/src/md4c-html.c
   ${PROJECT_SOURCE_DIR}/third_party/md4c/src/entity.c
   PROPERTIES LANGUAGE C)
+if(MSVC)
+  set_source_files_properties(
+    ${PROJECT_SOURCE_DIR}/third_party/md4c/src/md4c.c
+    ${PROJECT_SOURCE_DIR}/third_party/md4c/src/md4c-html.c
+    ${PROJECT_SOURCE_DIR}/third_party/md4c/src/entity.c
+    PROPERTIES COMPILE_OPTIONS "/W3;/WX-")
+endif()
 
 if(MSVC)
   target_compile_options(crayon-browser-markdown

@@ -35,8 +35,8 @@ std::vector<std::uint8_t> Bytes(const char* text) {
   return std::vector<std::uint8_t>(text, text + std::string(text).size());
 }
 
-std::vector<std::uint8_t> Secret(char fill) {
-  return std::vector<std::uint8_t>(kSecretBytes, static_cast<std::uint8_t>(fill));
+std::vector<std::uint8_t> Secret(std::uint8_t fill) {
+  return std::vector<std::uint8_t>(kSecretBytes, fill);
 }
 
 bool FrameCodecRoundTrip() {

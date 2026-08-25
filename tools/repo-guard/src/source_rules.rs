@@ -232,11 +232,21 @@ fn looks_like_secret_assignment(line: &str) -> bool {
         "access_token",
         "private_key",
     ];
-    names.iter().any(|name| line.contains(name))
-        && line.contains('=')
-        && (line.contains('\"') || line.contains('\''))
-        && !line.contains("env::")
-        && !line.contains("getenv")
+    if line.contains("env::") || line.contains("getenv") {
+        return false;
+    }
+    // The sensitive name must be followed on the same line by an assignment
+    // to a string literal: `password = "x"` or `const API_KEY: &str = "x"`.
+    // A denylist array entry like `{"password", "token"}` has no `=` after
+    // the name, and `password == "x"` compares rather than assigns.
+    names.iter().any(|name| {
+        line.match_indices(name).any(|(index, _)| {
+            line[index + name.len()..]
+                .split_once('=')
+                .map(|(_, value)| value.trim_start().starts_with(['"', '\'']))
+                .unwrap_or(false)
+        })
+    })
 }
 
 fn contains_identifier(line: &str, marker: &str) -> bool {

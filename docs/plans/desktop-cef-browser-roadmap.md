@@ -1,6 +1,6 @@
 # CEF：Desktop 浏览器壳 Roadmap
 
-状态：`CEF-01A..01E DONE`，`CEF-02W DONE`，`CEF-03 DONE`；Windows 正式 CEF bootstrap 多进程、sandbox、共享窗口/标签控制器与基础导航命令链均已完成并实机验证。`RNM-01..08 DONE` 已完成命名和本地路径迁移。macOS bootstrap 保持冻结且不再阻塞 Windows 主线，后续由 `CEF-02M` 恢复平台对齐。当前目标平台仍为 Windows、macOS；Linux 不在当前范围。每项以目标路径、测试 ID 和证据作为验收，不以单平台截图替代。
+状态：`CEF-01A..01E DONE`，`CEF-02W DONE`，`CEF-02M VERIFIED`，`CEF-03/04/05 DONE`，`CEF-06..14 VERIFIED`，`CEF-15 DONE`；Windows 正式 CEF bootstrap 多进程、sandbox、共享窗口/标签控制器、基础导航命令链与双平台总 Review 均已完成并实机验证。`RNM-01..08 DONE` 已完成命名和本地路径迁移。当前目标平台仍为 Windows、macOS；Linux 不在当前范围。每项以目标路径、测试 ID 和证据作为验收，不以单平台截图替代。
 
 ## 原子任务
 
@@ -25,7 +25,7 @@
 | CEF-12 | VERIFIED | CEF-10,CEF-11 | `src/browser/observation_gateway` | DOM/network observation 合并并发送 Core，generation fencing | PL-001、PL-002；导航迟到事件；背压/dropped | S2 |
 | CEF-13 | VERIFIED | CEF-08,CEF-12,MED-19 | `shared-ui/features/cast` | `Idle/Browsing/Eligible/Selecting/Planning/Casting` 与 `ExternalClientHandoff` 视图绑定 | 状态 UI contract；未播放禁用；交接需确认；错误不假成功 | S3 |
 | CEF-14 | VERIFIED | CEF-05,CEF-07,CEF-12,CEF-13 | `tests/e2e/desktop/browser` | Windows/macOS 本地 fixture E2E harness、截图/日志脱敏产物 | BR-001..BR-014 适用项；无公网 | S3 |
-| CEF-15 | IN_PROGRESS | CEF-14 | 文档/Review | Windows/macOS CEF 壳总 Review、性能/包体/启动基线，修 P0/P1 | desktop build + E2E + repo guard；V1 CEF 部分完成 | S3 |
+| CEF-15 | DONE | CEF-14 | 文档/Review | Windows/macOS CEF 壳总 Review、性能/包体/启动基线，修 P0/P1 | desktop build + E2E + repo guard；V1 CEF 部分完成 | S3 |
 
 ## CEF bootstrap 原子范围
 
@@ -447,3 +447,20 @@
 - **Windows 侧全部证据缺失**（构建/ctest/E2E/基线）：本机为 macOS arm64；Windows 机可用后按同一套命令复跑并补记，届时 CEF-15 转 DONE。已知 Windows 侧风险：CEF-05 提交的坏合并/API 漂移在 Windows 构建目录可能被缓存掩盖（macOS 侧全新 configure 曾必失败，修复见 `ef26113`），Windows 复验必须全新 configure。
 - 渲染级断言（截图/像素）、性能长稳采样归 QAR 真机矩阵；URL 驱动内容级 E2E（BR-001..014）待 shell omnibox 接线（CEF-14 后续切片）。
 - 签名/公证、分发打包归 PLT-M05/QAR 发布门禁。
+
+### CEF-15 完成记录（2026-08-25，Windows 11 x64 复验与 P0/P1 修复，CEF-15 转 DONE）
+
+- 前置修复（Windows 全新 configure 暴露的真实缺陷，按 macOS 记录要求全新 configure，未复用旧构建缓存）：
+  1. **P0 坏合并残留**：`browser/cef-shell/src/windows/app.cc` 的 `BrowserApp` 构造函数存在两段重复初始化列表（CEF-05 合入时遗留），MSVC 直接语法错误；删除孤儿重复段，保留带 `permission_store_` 的版本（与 `ef26113` macOS 侧语义一致）。证实 CEF-01E 记录中"CEF-05 的 Windows 实机证据需复核"的疑点成立，本记录即为复核结论。
+  2. **P1 系统级编码问题**：全部新模块（含 CJK 注释的无 BOM UTF-8 源文件）在代码页 936 的 Windows 上触发 C4819，被各模块 `/WX` 提升为错误。共同入口修复：根 `CMakeLists.txt` 对 MSVC 统一加 `/utf-8`；同处为测试的 `getenv("TMPDIR")` 用法加 `_CRT_SECURE_NO_WARNINGS`（C4996 deprecation，7 处测试共用同一模式）。
+  3. **P1 测试可移植性**：`ipc_channel_contract_test.cc` 的 `Secret(char)` 传入 `0x99` 超 signed char 范围（C4309），改为 `std::uint8_t` 参数；`crayon-profile` 测试用 `/profiles-root` 作绝对根（Windows 无盘符非绝对路径），加 `absolute_root()` 平台 helper；`path_guard.rs` 的 `PersistentStoreError` import 仅在 `#[cfg(unix)]` 用例使用，加 cfg 门控。
+  4. **P1 vendored 代码警告**：md4c（C99 上游源，禁止修改）在 `/W4 /WX` 下产生 C4310/C4244/C4200/C4201/C4127 等；在 `browser/shared-ui/markdown/CMakeLists.txt` 对三个 vendored 源文件按文件降为 `/W3 /WX-`，自有 `markdown_render.cc` 保持 `/W4 /WX`。
+  5. **P1 golden 换行符**：`core.autocrlf=true` 的 Windows 检出把 `crates/*/tests/*.txt` golden 转成 CRLF，导致 `crayon-agent-gateway` 两个 byte-exact golden 测试失败；`.gitattributes` 增加 `/crates/**/tests/*.txt text eol=lf` 并重新检出。
+  6. **P1 RG-004 误报（规则共同根因）**：`agent_confirm.cc` 的敏感参数名 denylist 数组（`{"password", ...}`）被 `looks_like_secret_assignment` 误判为硬编码凭证；规则细化为"敏感名后同行必须出现 `=` 且右值为字符串字面量"（`==` 比较与数组元素不再命中），`tools/repo-guard` 增加 denylist 不误报回归用例。
+- 验证（Windows 11 x64，VS2022/MSVC 19.44，全新 configure）：`cmake --preset windows-cef-debug`（CRAYON_CEF_ROOT 指向已校验离线根）成功；Debug/Release build 均 0 错误；两配置 `ctest` 均 **56/56 通过**（含 distribution/build graph/engine API/各共享层/CEF shell contract）。
+- Rust：`cargo test --workspace` 88 个测试二进制全绿；`cargo clippy --workspace --all-targets -- -D warnings` 0 错误；`cargo fmt --all -- --check` 通过；`cargo test -p repo-guard` 25/25（含新增回归）；基线 `cargo test -p crayon-browser-core --lib` 3/3、`--no-default-features --features legacy-dev --lib` 58/58。
+- 仓库门禁：`scripts/check.ps1 fast`（guard/format/brand-assets/formal-workspace/legacy-unit 全 passed）、`scripts/check.ps1 security`（guard/relay-unit/relay-security 全 passed）、`git diff --check` 通过。RG-003/RG-004 残余 warning 均位于遗留 `app/` 与 vendored md4c（规模提醒，非本次范围新增）。
+- Windows 实机（Debug 与 Release 各 3 次采样）：启动到完整 6 进程树（main + gpu-process + utility×2 + renderer×2）且主窗口就绪 0.39–0.66s；全部进程命令行无 `--no-sandbox`；运行期 TCP 连接 0（无非 loopback socket，无公网）；窗口标题为本地新标签页"蜡笔浏览器"；`CloseMainWindow` 退出后按完整路径复核进程残留 0。
+- 包体基线（Release）：目录总计 392 MB，其中官方 `libcef.dll` 263 MB；自有 `CrayonBrowser.exe` 3,177,472 bytes、`CrayonBrowser.dll` 847,360 bytes，自有代码增量可忽略。
+- Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核本次 Windows 修复集；最终 P0/P1/P2 均为 `0`。`/utf-8` 与 `_CRT_SECURE_NO_WARNINGS` 只作用于 MSVC 构建，不影响 macOS 工具链；repo-guard 规则细化有正反两向回归用例；golden eol 钉住后 macOS 侧不受影响（仓库内 blob 始终为 LF）。
+- 未覆盖与风险：CEF-14 的 Windows 侧 E2E harness（`run_smoke.py` 当前为 macOS LaunchServices/lsof 实现）仍未移植，本次实机证据由 PowerShell 进程/网络轮询承担，Windows 版 harness 归 CEF-14 后续切片；URL 驱动内容级 E2E（BR-001..014）待 shell omnibox 接线；窗口标题的"- Chromium"后缀与 Chromium 内建文案属 CEF-03 已记录的 Chrome runtime 硬边界，归后续 BUX/CEF 任务；签名/打包归 QAR-09。`CEF-15` 转 `DONE`，V1 CEF 部分完成。

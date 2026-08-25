@@ -23,7 +23,7 @@
 | BRD | [brand-assets-roadmap.md](brand-assets-roadmap.md) | 品牌图标母版、跨平台确定性资产与接入门禁 | `BRD-01..04 DONE` |
 | FND | [foundation-migration-roadmap.md](foundation-migration-roadmap.md) | Workspace、契约、质量入口与仓库基线 | 19 个原子任务 `DONE` |
 | MED | [media-policy-relay-roadmap.md](media-policy-relay-roadmap.md) | 媒体观察、策略、LAN Relay、外部客户端交接迁移 | `MED-01..19 DONE` |
-| CEF | [desktop-cef-browser-roadmap.md](desktop-cef-browser-roadmap.md) | Windows/macOS CEF 壳、共享 UI、媒体观察和 IPC | `CEF-02W/CEF-03 DONE`（Windows 窗口/标签/基础导航命令链已实机验收）；`CEF-01E VERIFIED`（macOS x64/arm64 构建证据已补，待 arm64 真机） |
+| CEF | [desktop-cef-browser-roadmap.md](desktop-cef-browser-roadmap.md) | Windows/macOS CEF 壳、共享 UI、媒体观察和 IPC | `CEF-01..15 全部完成`（`CEF-06..14` 模型层 VERIFIED，实机接线归后续装配/切片任务）；Windows 总 Review 证据已补齐 |
 | BUX | [browser-product-experience-roadmap.md](browser-product-experience-roadmap.md) | Chrome-inspired 蜡笔桌面浏览器 UI 与日用基础功能 | Windows 优先；`BUX-01..03 DONE` |
 | MDV | [markdown-viewer-roadmap.md](markdown-viewer-roadmap.md) | 本地 Markdown 查看/预览/分栏编辑内置页与受控文件入口 | `MDV-01 DONE`（契约 v1.0）；`MDV-02 READY` |
 | SDK | [cast-sdk-integration-roadmap.md](cast-sdk-integration-roadmap.md) | 固定源码 Cast-SDK facade、发现、连接和控制；后续 Partner Cast facade | `SDK-13 BLOCKED`（需真实接收端 Harness） |

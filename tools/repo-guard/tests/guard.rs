@@ -113,6 +113,17 @@ fn hardcoded_secret_and_user_path_fail_rg_004() {
 }
 
 #[test]
+fn sensitive_key_denylist_is_not_a_hardcoded_secret() {
+    let repo = TestRepo::new("denylist");
+    repo.write("Cargo.toml", &basic_manifest("denylist"));
+    repo.write(
+        "src/lib.rs",
+        "static const char* const kSensitive[] = {\"password\", \"passwd\", \"token\"};\n",
+    );
+    assert_eq!(status(&repo, "RG-004"), CheckStatus::Passed);
+}
+
+#[test]
 fn three_thousand_line_test_file_fails_rg_003() {
     let repo = TestRepo::new("large-test");
     repo.write("Cargo.toml", &basic_manifest("large-test"));
