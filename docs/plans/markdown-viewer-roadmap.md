@@ -17,7 +17,7 @@
 |---|---|---|---|---|---|
 | MDV-01 | DONE | BUX-03 | `docs/current/markdown-viewer.md` | 契约冻结：`crayon://mdv` scheme/origin/CSP、入口与手势门禁、渲染语法范围、安全边界与渲染选型评审结论 | 契约 Review 通过；语法/CSP/入口矩阵冻结 |
 | MDV-02 | VERIFIED | MDV-01 | `browser/shared-ui/markdown` | 平台中立确定性 Markdown 渲染引擎：MD→转义安全 HTML、golden 与注入矩阵；vendored 库接入或自研子集 | MD-002；独立 ctest、`-Werror` 零告警 |
-| MDV-03 | TODO | MDV-01,MDV-02,BUX-03 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | 只读查看内置页（fixture 内容驱动）：scheme handler、源码/预览切换、严格 CSP、零网络 | MD-003、MD-004 只读部分；Windows Debug/Release |
+| MDV-03 | VERIFIED | MDV-01,MDV-02,BUX-03 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | 只读查看内置页（fixture 内容驱动）：scheme handler、源码/预览切换、严格 CSP、零网络 | MD-003、MD-004 只读部分；Windows Debug/Release |
 | MDV-04 | TODO | MDV-03,BUX-16,PLT-02 | `browser/shared-ui/mdv`,`browser/cef-shell` | 受控本地 `.md` 入口：文件对话框/拖放/omnibox 路径路由、路径/大小/UTF-8 校验、用户手势门禁 | MD-001、MD-003 |
 | MDV-05 | TODO | MDV-04 | `browser/shared-ui/mdv` | 分栏编辑与实时预览：编辑器状态机、dirty 跟踪、关闭/切换确认 | MD-004、MD-005 |
 | MDV-06 | TODO | MDV-05 | `browser/shared-ui/mdv`,`browser/cef-shell` | 保存语义：写回/另存为、原子写、外部修改冲突检测、失败显式报告 | MD-006 |
@@ -57,3 +57,19 @@
 - 验证：`cmake -S . -B .cache/build/mdv02` 零告警；`markdown_render` 1/1（6 组：golden 基础语法/表格/任务列表/代码块、链接与 autolink、注入矩阵（script/事件属性/javascript:/file:/相对路径/HTML 注释/ftp autolink 全转义或降级）、三次渲染逐字节确定性、BOM/CRLF/Unicode 归一、5MiB 与四类非法 UTF-8 拒绝）；共享层回归 41/41；workspace Rust 全绿；`git diff --check` 通过。
 - Code Review：P0 0、P1 0、P2 1——白名单终检的标签步进公式对非嵌套常规输出已验证，但 `<` 出现在属性值内（如 `title="a<b"`）时 ParseTag 会误判；md4c 生成属性值时对 `<` 转义为 `&lt;` 故当前不可达，若未来接入其他生成器需先保证该不变量。
 - 未覆盖与风险：`crayon://mdv` scheme handler 接线（MDV-03）、编辑器/保存语义（MDV-05/06）、Windows 实机（MDV-07）。`MDV-02` 转为 `VERIFIED`。
+
+### MDV-03 原子范围（只读查看视图模型与 CSP 契约，切片 1）
+
+- 状态：`IN_PROGRESS`；依赖 `MDV-01 DONE`、`MDV-02 VERIFIED`、`BUX-03 DONE`。
+- 路径说明：本切片交付共享层视图模型与 CSP/资源契约常量；CEF scheme handler 接线与 Windows Debug/Release 实机归 MDV-03 后续切片（装配后统一实机验收）。
+- 单一目标：`browser/shared-ui/mdv`——只读查看器的视图状态机：源码/预览/分栏三态切换、渲染请求去抖（≤100ms 合并、注入时钟）、revision fencing（旧渲染结果不可落位）、内容装载状态（有界/UTF-8 校验结果绑定 MDV-02 状态码）、CSP 常量与零网络契约（golden）。
+- 边界：无持久化（最近文件/滚动位置仅内存）；无编辑/dirty（MDV-05）；渲染内容只消费 MDV-02 输出；CSP 字符串逐字节 golden 锁定；路径/文件名永不进入 URL（模型层无 URL 概念，仅内容 revision）。
+- 验收与测试：MD-003 模型部分（装载边界/空文件）、MD-004 只读部分（视图切换/去抖/旧结果丢弃）。命令：独立 configure/build/ctest、共享层回归、`git diff --check`。
+- 明确不做：CEF scheme handler（后续切片）、编辑与保存（MDV-05/06）、Windows 实机（MDV-07）。
+
+### MDV-03 完成记录（2026-08-25，视图模型切片）
+
+- 实现：新增 `browser/shared-ui/mdv`（header/impl/CMake/契约测试各 1，链接 MDV-02 渲染引擎）。`MdvViewerModel`：源码/预览/分栏三态切换（只读默认 Preview）；`LoadContent` 只收字节不收路径（路径永不进入模型/URL），装载状态闭合映射 MDV-02 结果（Loaded/TooLarge/InvalidUtf8/RenderPolicyViolation/Empty，空文件合法）；渲染请求滑动去抖（`kRenderDebounceMs=100`，窗口内合并复用 pending revision）；revision fencing——旧/陈旧渲染结果 `DeliverRender` 拒绝且 HTML 永不落位（MD-004），CloseDocument 推进 revision 使在途渲染变陈旧；CSP 常量逐字节 golden（MDV-01 §2 全封闭十二条）与 `/app.html|css|js` 内存资源路径常量；零持久化面。无 CEF 类型、无 IO。
+- 验证：`cmake -S . -B .cache/build/mdv03` 零告警；`mdv_viewer` 1/1（7 组：视图切换、装载状态矩阵含引擎二次 UTF-8 校验、滑动去抖合并/新代际、陈旧渲染丢弃、关闭文档失效在途、CSP/资源路径 golden、5000 步风暴 revision 单调）；共享层回归 42/42；`git diff --check` 通过。
+- Code Review：P0 0、P1 0、P2 1——`LoadContent` 的 `utf8_valid` 调用方参数仅作预检语义（引擎无条件重验，测试已覆盖谎报场景）；参数本身冗余，MDV-04 接线时可移除以收窄接口。
+- 未覆盖与风险：CEF scheme handler 接线（`crayon://mdv` 内存资源 + CSP 下发 + 受控绑定注入，MDV-03 后续切片）、编辑/保存（MDV-05/06）、Windows 实机（MDV-07）。`MDV-03` 转为 `VERIFIED`（切片 1；handler 接线后补实机证据）。
