@@ -1,6 +1,6 @@
 # SDK：Cast-SDK 集成 Roadmap
 
-状态：`FND-08 DONE`；`SDK-01..12 DONE`；`SDK-13 BLOCKED`（需真实接收端 Harness，当前环境无真机）；`SDK-14 BLOCKED`（依赖 SDK-13 的真机证据，同步阻塞）；`SDK-15/16` 为 Partner/TV Cast Manifest 的后续外部依赖任务。任务数 16。源码固定为 Cast-SDK `44c3a99871aa1e68cbda71eacefbb41d23a747a8`，通过 `third_party/cast-sdk` submodule 接入；不得依赖开发者本机源码路径。
+状态：`FND-08 DONE`；`SDK-01..13 DONE`；`SDK-14` 已解锁（依赖全部满足）；`SDK-15/16` 为 Partner/TV Cast Manifest 的后续外部依赖任务。任务数 16。源码固定为 Cast-SDK `44c3a99871aa1e68cbda71eacefbb41d23a747a8`，通过 `third_party/cast-sdk` submodule 接入；不得依赖开发者本机源码路径。
 
 ## 边界
 
@@ -31,7 +31,7 @@
 | SDK-10 | SDK-09 | `cast-adapter/control` | handle-bound play/pause/seek/volume/stop | CS-006；非法值、重复、旧 handle、超时 | S2 |
 | SDK-11 | SDK-09,SDK-10 | `cast-adapter/session` | listener、自然结束、receiver stop、route lost、替换 | CS-007；旧事件不能停止新会话 | S2 |
 | SDK-12 | SDK-07,SDK-08,SDK-10,SDK-11,MED-19 | `crayon-app-runtime/cast_usecase` | UI/runtime 与 SDK 事件编排；撤销 Direct/Relay；外部交接不创建 SDK session | Fake E2E V2；每个终态资源清理；PL-015 | S2 |
-| SDK-13 | SDK-12 | 真接收端 Harness | 自动发现、投屏码、能力、投送、控制、终态 | CS-010、E2E-001、E2E-002；记录接收端版本/网络 | S4 |
+| SDK-13 | DONE | SDK-12 | 真接收端 Harness | 自动发现、投屏码、能力、投送、控制、终态 | CS-010、E2E-001、E2E-002；记录接收端版本/网络 | S4 |
 | SDK-14 | SDK-02,SDK-12,SDK-13 | Review/升级说明 | API contract、source revision、错误映射、并发生命周期 Review | 全 CS；无 P0/P1；锁定 SDK gitlink/revision | S4 |
 | SDK-15 | SDK-14,HUB-16 | `docs/plans/**`、Cast-SDK API proposal | 对 Partner/TV signed manifest、能力协商、字幕/队列/结果回报做浏览器侧缺口分析；形成外部 Cast-SDK/receiver 独立 Roadmap/API 提案，不改外部仓库 | `CS-011`; 所有字段有 owner/trust/compat/失败语义；浏览器无临时协议 | X1 |
 | SDK-16 | SDK-15，且外部 API 已获批、发布并固定 revision | `crayon-cast-adapter/**`,`crayon-app-runtime/cast_usecase/**` | 仅通过正式 facade 消费 Partner/TV Cast Manifest 能力和事件 | `CS-012`; 签名/版本/能力/字幕/队列/结果；无 raw manifest/控制 URL/协议复制 | X1 |
@@ -156,3 +156,14 @@
 - callback 是否在锁外；session generation 是否贯穿所有控制。
 - Cast-SDK diagnostics 不得携带网页 URL、Cookie、relay secret。
 - SDK runtime 失败不能阻塞浏览器退出或 Profile 清理。
+
+### SDK-13 完成记录（2026-08-25，小米真机接收端）
+
+- 真机环境：小米 Redmi M2010J19SC（lime，Android 12），接收端 App `com.zknowai.labi.cast.receiver` versionName 1.1.0（versionCode 10100），Wi-Fi ZKNOWAI_5G（5GHz），wlan0 192.168.3.140/24；发送端为本机（192.168.3.155）从锁定 revision 构建的 `cast-sender-cli --standalone`（SDK submodule 零修改）。
+- CS-010 自动发现：`devices discover` 经 SSDP/mDNS 发现 `蜡笔投屏-LK`（uuid:c867cfc5-…@192.168.3.140，state=Ready），同网另发现多台第三方 DLNA 设备（小柚/当贝/投屏电视G3）与另两台蜡笔接收端（H8/SF），设备列表稳定。
+- 投屏码连接：接收端 UI 显示投屏码 `X71 GRP`；`decode_cast_code("X71 GRP")` → `192.168.3.140:2202`，`/device.xml` friendlyName 确认 `蜡笔投屏-LK`（Cast SDK）——与自动发现结果一致，双路径闭环。
+- 投送与能力：图片投送（JPEG，会话 `cast-a6a2…` phase=active/health=healthy/receiverConnection=connected，手机前台 PlaybackActivity）；视频投送（ffmpeg 生成 30s H.264+AAC mp4，会话 active/playing）。
+- 控制：pause ✓、play ✓、seek(播放中) ✓（接收端日志 `positionMs=12000 state=BUFFERING`）；**seek(暂停态) 被接收端拒绝**（`event=seek ignored reason=completed`/READY 态，sender 正确上报稳定错误 701）——记录为接收端 v1.1.0 行为，非 sender 缺陷。
+- 终态：stop ✓（AVTransport Stop 200），手机回接收端 MainActivity，日志 `detach-warm-idle reason=foreground-return-home`，无残留会话。
+- Code Review：P0 0、P1 0、P2 1——seek(暂停态) 的接收端拒绝行为需在产品 UI 层处理（置灰 seek 或提示），归 CEF-13/BUX 投屏 UI 装配任务跟踪；E2E-001/002 的浏览器 UI 驱动变体（页面点击播放→投屏）归 CEF-14 后续切片。
+- 未覆盖与风险：Relay 模式（需登录媒体 fixture，本轮为 Direct + sender 本地 HTTP）；长稳/多设备并发归 QAR；`--standalone` 模式（CI/debug 口径）而非 Desktop Host。`SDK-13` 转为 `DONE`，`SDK-14` 解锁。
