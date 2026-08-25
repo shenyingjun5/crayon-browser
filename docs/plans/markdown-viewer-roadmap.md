@@ -19,7 +19,7 @@
 | MDV-02 | VERIFIED | MDV-01 | `browser/shared-ui/markdown` | 平台中立确定性 Markdown 渲染引擎：MD→转义安全 HTML、golden 与注入矩阵；vendored 库接入或自研子集 | MD-002；独立 ctest、`-Werror` 零告警 |
 | MDV-03 | VERIFIED | MDV-01,MDV-02,BUX-03 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | 只读查看内置页（fixture 内容驱动）：scheme handler、源码/预览切换、严格 CSP、零网络 | MD-003、MD-004 只读部分；Windows Debug/Release |
 | MDV-04 | VERIFIED | MDV-03,BUX-16,PLT-02 | `browser/shared-ui/mdv`,`browser/cef-shell` | 受控本地 `.md` 入口：文件对话框/拖放/omnibox 路径路由、路径/大小/UTF-8 校验、用户手势门禁 | MD-001、MD-003 |
-| MDV-05 | TODO | MDV-04 | `browser/shared-ui/mdv` | 分栏编辑与实时预览：编辑器状态机、dirty 跟踪、关闭/切换确认 | MD-004、MD-005 |
+| MDV-05 | VERIFIED | MDV-04 | `browser/shared-ui/mdv` | 分栏编辑与实时预览：编辑器状态机、dirty 跟踪、关闭/切换确认 | MD-004、MD-005 |
 | MDV-06 | TODO | MDV-05 | `browser/shared-ui/mdv`,`browser/cef-shell` | 保存语义：写回/另存为、原子写、外部修改冲突检测、失败显式报告 | MD-006 |
 | MDV-07 | TODO | MDV-01..06 | `docs/current`,`docs/plans` | Windows 实机收口与模块总 Review（macOS 对齐后置，不得用 Windows 证据完成 macOS） | MD-007；Review P0/P1=0 |
 
@@ -89,3 +89,19 @@
 - 验证：`cmake -S . -B .cache/build/mdv04` 零告警；`mdv_entry_guard` 1/1（5 组：后缀矩阵、手势门禁优先、路径矩阵含穿越/控制字符/长度/探针、装载边界含 BOM/CRLF/空文件/二进制伪装、gate→viewer 端到端）；`mdv_viewer` 1/1；共享层回归 43/43；`git diff --check` 通过。
 - Code Review：P0 0、P1 0、P2 1——反斜杠在模型层按普通名字字符处理（Windows 分隔符归一由平台接线在调用前完成）；若平台接线遗漏归一，`..\\` 变体不会被本层拦截（已记录，MDV-04 接线切片验收项）。
 - 未覆盖与风险：CEF 文件对话框/拖放/omnibox 路由接线（MDV-04 后续切片）、平台 path_guard 完整解析（PLT-W04/M04）、Windows 实机（MDV-07）。`MDV-04` 转为 `VERIFIED`（模型切片）。
+
+### MDV-05 原子范围（分栏编辑与 dirty 确认模型）
+
+- 状态：`IN_PROGRESS`；依赖 `MDV-04 VERIFIED`。
+- 路径说明：本切片交付共享层编辑状态机；编辑器 UI 呈现归后续接线切片。
+- 单一目标：`browser/shared-ui/mdv` 新增编辑模型——分栏模式下编辑产生内存 dirty 状态（绝不自动写盘）、编辑触发渲染去抖（复用 MDV-03 revision fencing）、dirty 下关闭/切换/导航的三选确认（保存并继续/放弃/取消，取消不丢内容、放弃不写盘）、加载新文件/关闭文档时 dirty 拦截。
+- 边界：编辑只改内存缓冲；确认流为闭合状态机（无第四选项）；放弃/确认后 dirty 清除；保存动作本身归 MDV-06，本模型仅暴露"请求保存"钩子位。
+- 验收与测试：MD-004 编辑部分、MD-005 全部。命令：独立 configure/build/ctest、共享层回归、`git diff --check`。
+- 明确不做：写盘（MDV-06）、CEF 编辑器呈现、Windows 实机（MDV-07）。
+
+### MDV-05 完成记录（2026-08-25）
+
+- 实现：`browser/shared-ui/mdv` 新增 `mdv_edit`（header/impl/契约测试）。`MdvEditModel` 叠加在 MDV-03 viewer 之上：编辑只写内存缓冲并置 dirty（**绝不自动写盘**），渲染调度复用 viewer 的滑动去抖 + revision fencing；确认 pending 期间编辑拒绝；`BeginBlockingTransition`——clean 直接放行（返回 false）、dirty 打开三选确认；`ResolveTransition` 闭合三选——Cancel 保留内容关对话框、Discard 丢弃缓冲不写盘、SaveAndContinue 保持阻塞直到 MDV-06 的 `NotifySaveSucceeded()`（原子写成功钩子）清除 dirty 并放行；`LoadDocument` 在阻塞期守卫拒绝。无 IO、无 CEF 类型。
+- 验证：`cmake -S . -B .cache/build/mdv05` 零告警；`mdv_edit` 1/1（6 组：编辑置 dirty 与去抖、clean 直通、阻塞三选全路径、SaveAndContinue 阻塞至保存成功、重复阻塞/无效选择拒绝、5000 步风暴状态闭合）；`mdv_viewer`/`mdv_entry_guard` 同步通过；共享层回归 44/44；`git diff --check` 通过。
+- Code Review：P0 0、P1 0、P2 1——`NotifySaveSucceeded` 无条件清 dirty；若未来出现"保存成功但内容又被编辑"的竞态窗口，需以内容指纹比对替代布尔清除（MDV-06 接线时评估）。
+- 未覆盖与风险：编辑器 UI 呈现与键盘接线（后续装配切片）、保存语义（MDV-06）、Windows 实机（MDV-07）。`MDV-05` 转为 `VERIFIED`。
