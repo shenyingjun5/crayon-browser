@@ -27,12 +27,12 @@ pub fn windows_adapter_capabilities() -> PlatformAdapterCapabilities {
             rotation: false,
         },
         LocalNetworkCapabilities {
-            observation: SupportLevel::Unavailable,
-            change_events: false,
+            observation: SupportLevel::Available,
+            change_events: true,
         },
         LifecycleCapabilities {
-            power_events: false,
-            lock_events: false,
+            power_events: true,
+            lock_events: true,
         },
         UpdateCapabilities {
             service: SupportLevel::Unavailable,

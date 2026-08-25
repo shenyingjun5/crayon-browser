@@ -119,3 +119,14 @@
 - 自动验证（Windows 11 x64 实机即验证环境）：`cargo test -p crayon-platform-windows` **9/9 通过**——真实 DPAPI 往返相等、落盘字节为密文（含多字节 UTF-8 明文不出现断言）、覆盖写最后写胜且无 `.tmp-*` 残留、删除幂等与缺文件 None、非 DPAPI 字节 → `Corrupted`、超限密文文件拒解析、形状违规在 IO 前拒绝且根目录零触碰；能力文档 schema 校验 + serde 往返 + `deny_unknown_fields` 拒绝未知字段。`cargo clippy --workspace --all-targets -- -D warnings` 零错误；`cargo fmt --all -- --check` 通过；workspace 回归 90 个测试二进制全绿无 FAILED；`scripts/check.ps1 fast` 与 `security` 全 passed；`git diff --check` 通过。
 - Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；P0/P1/P2 均为 `0`。密文上界拒绝防止任意磁盘字节喂给 DPAPI；临时文件写入失败即清理且不留半写状态；能力文档不虚报未实现面（PRV-05 门禁等 W04+M04 齐）。
 - 未覆盖与风险：跨用户隔离（他人 SID 解密必须失败）无法在本单用户机验证，归 CP-W01 设备矩阵；防病毒/策略禁用 DPAPI 的 `Unavailable` 路径仅有代码映射无真实触发；本地网络/生命周期/named pipe/更新/交接归 W04b..d。切片 1 完成，`PLT-W04` 维持 `IN_PROGRESS`。
+
+### PLT-W04b 完成记录（2026-08-25，切片 2：本地网络观察与电源/会话生命周期）
+
+- 实现：
+  - `src/event_relay.rs`（crate 内共享基础设施）：有界事件中继——OS 回调线程 push 进容量 64 的队列（满载 shed 最旧并计 dropped），专职 worker 线程在**不持锁状态下**批量交付给 `Box<dyn FnMut + Send>` 监听器；代数令牌防止"回调执行期间替换监听器"竞态覆盖新监听器；close 幂等、Drop join worker、毒互斥 fail-closed 丢弃事件。
+  - `src/local_network.rs`：`WindowsNetworkMonitor` 实现 `LocalNetworkMonitor` trait。枚举走 `GetAdaptersAddresses`（对齐分配缓冲、溢出几何增长上限 5 次、>64 报 TooManyInterfaces），名称取 OS GUID 去花括号（闭合字符集合规），只输出 up/loopback 能力标志，无任何地址；变更事件注册 `NotifyIpInterfaceChange(AF_UNSPEC)` + AF_INET/AF_INET6 两条 `NotifyRouteChange2`，MibAdd/Delete 映射 InterfaceUp/Down（参数抖动不上报）、路由变化映射 DefaultRouteChanged，事件名以 `if-<index>` 确定性 token 表达；回调上下文用 Box 稳定地址，Drop 先逐个 `CancelMibChangeNotify2` 再释放 sink。
+  - `src/lifecycle.rs`：`WindowsLifecycleMonitor` 实现 `PowerLifecycleMonitor` trait。专职 pump 线程持有 message-only 隐藏窗口，`WM_POWERBROADCAST`（PBT_APMSUSPEND→Suspending、PBT_APMRESUME(AUTOMATIC|SUSPEND)→Resumed）、`WM_WTSSESSION_CHANGE`（LOCK/UNLOCK→ScreenLocked/Unlocked）、`WM_ENDSESSION`→SessionEnding 经中继交付；WTS 注册失败/类冲突处理 fail-closed，构造经 5s 有界握手，Drop 以 PostThreadMessage(WM_QUIT) + join 收敛且无孤儿线程/窗口。
+- 过程披露：并行测试暴露 `RegisterClassW` 同名类二次注册返回 0 的真问题，按 `ERROR_CLASS_ALREADY_EXISTS` 容忍复用后修复；`HANDLE` 裸指针不可 Send 用 newtype 包装（取消语义与线程无关）；适配器列表缓冲改对齐分配避免 Vec<u8> 强转结构体指针的对齐 UB。
+- 自动验证（Windows 11 x64 实机）：`cargo test -p crayon-platform-windows` **18/18 通过**——新增：真实枚举非空且含 loopback 标志、两次枚举名称集合稳定、监听器注册/替换/注销往返无崩溃、pump 构造与干净退出（两测试并行验证类复用路径）、relay 五组确定性测试（顺序交付、满载 shed 最旧且恰余 capacity、替换生效旧监听器零触发、注销停发、close 幂等迟到 push 丢弃）。clippy `-D warnings` 零错误（含 undocumented_unsafe_blocks deny）；fmt 通过；workspace 回归 90 个二进制全绿；`scripts/check.ps1 fast/security` 全 passed；`git diff --check` 通过。
+- Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；P0/P1/P2 均为 `0`。锁外交付满足 §9；能力文档如实翻转 local_network/lifecycle 为 available（update/named pipe/handoff 仍 unavailable）。
+- 未覆盖与风险：真实休眠/唤醒与锁屏事件的端到端观测需人工在控制台操作，归 CP-W01 设备矩阵（本切片验证到"注册成功、结构收敛、退出无残留"）；接口 token 与 OS 索引的映射是确定性的但不含友好名（契约禁止携带可辨识信息）；`if-<index>` 在路由风暴下的事件洪流由容量 64 + dropped 计数兜底。切片 2 完成，`PLT-W04` 维持 `IN_PROGRESS`。

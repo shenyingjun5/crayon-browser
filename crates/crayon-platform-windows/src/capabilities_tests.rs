@@ -1,24 +1,28 @@
 //! Contract tests for the Windows adapter capability document.
 
 use super::*;
+use crayon_platform_capabilities::{AgentIpcTransport, SupportLevel};
 
 #[test]
-fn document_is_schema_valid_and_truthful_for_w04a() {
+fn document_is_schema_valid_and_truthful_for_w04b() {
     let doc = super::windows_adapter_capabilities();
     doc.validate().expect("schema valid");
     assert_eq!(doc.schema(), 1);
-    // W04a truth: only DPAPI secure storage is delivered.
+    // Delivered slices: dpapi store (W04a), local network and lifecycle
+    // (W04b).  Everything else stays unavailable until its slice lands.
     assert_eq!(
         doc.secure_store.backend,
         crayon_platform_capabilities::SecureStoreBackend::Dpapi
     );
     assert!(!doc.secure_store.rotation);
+    assert_eq!(doc.local_network.observation, SupportLevel::Available);
+    assert!(doc.local_network.change_events);
+    assert!(doc.lifecycle.power_events && doc.lifecycle.lock_events);
+    assert_eq!(doc.update.service, SupportLevel::Unavailable);
     assert_eq!(
-        doc.local_network.observation,
-        crayon_platform_capabilities::SupportLevel::Unavailable
+        doc.local_agent_ipc.transport,
+        AgentIpcTransport::Unavailable
     );
-    assert!(!doc.lifecycle.power_events && !doc.lifecycle.lock_events);
-    assert!(!doc.local_agent_ipc.peer_credentials);
     assert!(!doc.external_client_handoff.download);
 }
 
