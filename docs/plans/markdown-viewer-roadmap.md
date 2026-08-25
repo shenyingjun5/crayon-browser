@@ -1,6 +1,6 @@
 # MDV：本地 Markdown 查看器 Roadmap
 
-状态：`MDV-01 DONE`（契约已冻结为 `docs/current/markdown-viewer.md` v1.0），`MDV-02 READY`，`MDV-03..07 TODO`。本 Roadmap 承接“浏览器内查看本地 Markdown 文档、渲染预览与分栏编辑”的产品增量（PRD v0.8 §4.1）：`crayon://mdv` 内置查看页复用 `crayon://newtab` 的自定义 scheme、内存资源与严格 CSP 模式；本地 `.md` 只经用户手势的受控入口打开，保存走原子写。MDV 是纯用户能力，不进入 CAAP tool registry；Agent 侧任意文件访问禁令不变。排期属于 V1（Windows 优先、BUX 主线之后）。
+状态：`MDV-01 DONE`（契约已冻结为 `docs/current/markdown-viewer.md` v1.0），`MDV-02..06 VERIFIED`（模型层切片），接线切片 `MDV-08..10 TODO`，`MDV-07 TODO`（收口）。本 Roadmap 承接“浏览器内查看本地 Markdown 文档、渲染预览与分栏编辑”的产品增量（PRD v0.8 §4.1）：`crayon://mdv` 内置查看页复用 `crayon://newtab` 的自定义 scheme、内存资源与严格 CSP 模式；本地 `.md` 只经用户手势的受控入口打开，保存走原子写。MDV 是纯用户能力，不进入 CAAP tool registry；Agent 侧任意文件访问禁令不变。排期属于 V1（Windows 优先、BUX 主线之后）。
 
 ## 产品设计结论
 
@@ -21,7 +21,20 @@
 | MDV-04 | VERIFIED | MDV-03,BUX-16,PLT-02 | `browser/shared-ui/mdv`,`browser/cef-shell` | 受控本地 `.md` 入口：文件对话框/拖放/omnibox 路径路由、路径/大小/UTF-8 校验、用户手势门禁 | MD-001、MD-003 |
 | MDV-05 | VERIFIED | MDV-04 | `browser/shared-ui/mdv` | 分栏编辑与实时预览：编辑器状态机、dirty 跟踪、关闭/切换确认 | MD-004、MD-005 |
 | MDV-06 | VERIFIED | MDV-05 | `browser/shared-ui/mdv`,`browser/cef-shell` | 保存语义：写回/另存为、原子写、外部修改冲突检测、失败显式报告 | MD-006 |
-| MDV-07 | TODO | MDV-01..06 | `docs/current`,`docs/plans` | Windows 实机收口与模块总 Review（macOS 对齐后置，不得用 Windows 证据完成 macOS） | MD-007；Review P0/P1=0 |
+| MDV-08 | TODO | MDV-02,MDV-03,BUX-03 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | `crayon://mdv` scheme handler 与只读查看接线：scheme 注册、内存资源路由、CSP 下发、viewer 模型绑定与源码/预览切换呈现 | MD-003；Windows Debug/Release 实机 |
+| MDV-09 | TODO | MDV-04,MDV-08,BUX-16 | `browser/cef-shell/src/browser/mdv` | 受控文件入口接线：菜单打开对话框（`.md` 过滤）、拖放、omnibox 本地路径路由三入口接手势门禁与入口守卫，平台分隔符归一 | MD-001；手势外零触发路径；Windows 实机 |
+| MDV-10 | TODO | MDV-05,MDV-06,MDV-08,MDV-09 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | 编辑与保存接线：分栏编辑 UI 呈现、dirty 三选确认对话框、真实文件 IO 钩子注入保存控制器（原子写）、外部修改冲突提示 | MD-005、MD-006；Windows 实机含只读位置失败报告 |
+| MDV-07 | TODO | MDV-01..06,MDV-08..10 | `docs/current`,`docs/plans` | Windows 实机收口与模块总 Review（macOS 对齐后置，不得用 Windows 证据完成 macOS） | MD-007；Review P0/P1=0 |
+
+## 接线切片说明（MDV-08..10）
+
+MDV-02..06 按"模型层零 IO / 零 CEF 类型"交付后，产品仍不可见：scheme handler、三入口、编辑器呈现与真实文件 IO 均无实现。按仓库模型层/装配层切片惯例（CEF-06..14 → 装配、BUX 同构），补齐三个接线任务，每个都是可独立审查、可独立回退的原子任务：
+
+- **共同边界**：CEF adapter 只在 `browser/cef-shell/src/browser/mdv/`（新增目录），共享层 `browser/shared-ui/mdv/**` 继续禁止 CEF/Win32/AppKit 类型；内置页资源只从编译期/内存提供，CSP 逐字使用 MDV-03 锁定的常量；所有可见文案进共享 locale 资源；新增生产文件每切片 ≤6 个。
+- **MDV-08 明确不做**：任何文件访问、编辑、保存；页面内不能出现可触发打开的控件（kPage 来源在守卫层已一票拒绝）。
+- **MDV-09 明确不做**：任意路径访问或目录枚举；拖放/对话框之外的新入口；路径校验逻辑改动（矩阵已在 MDV-04 冻结，接线只做 Windows 反斜杠归一与手势门禁传递）。
+- **MDV-10 明确不做**：自动保存、静默覆盖、最近文件列表持久化（V1 不落盘）；密码/支付类内容语义判断；导出 PDF。
+- 真实平台门禁：各切片自带 Windows Debug/Release build+ctest+实机 smoke；跨切片总验收归 MDV-07。
 
 ## 开发规则
 

@@ -25,7 +25,7 @@
 | MED | [media-policy-relay-roadmap.md](media-policy-relay-roadmap.md) | 媒体观察、策略、LAN Relay、外部客户端交接迁移 | `MED-01..19 DONE` |
 | CEF | [desktop-cef-browser-roadmap.md](desktop-cef-browser-roadmap.md) | Windows/macOS CEF 壳、共享 UI、媒体观察和 IPC | `CEF-01..15 全部完成`（`CEF-06..14` 模型层 VERIFIED，实机接线归后续装配/切片任务）；Windows 总 Review 证据已补齐 |
 | BUX | [browser-product-experience-roadmap.md](browser-product-experience-roadmap.md) | Chrome-inspired 蜡笔桌面浏览器 UI 与日用基础功能 | Windows 优先；`BUX-01..03 DONE` |
-| MDV | [markdown-viewer-roadmap.md](markdown-viewer-roadmap.md) | 本地 Markdown 查看/预览/分栏编辑内置页与受控文件入口 | `MDV-01 DONE`（契约 v1.0）；`MDV-02 READY` |
+| MDV | [markdown-viewer-roadmap.md](markdown-viewer-roadmap.md) | 本地 Markdown 查看/预览/分栏编辑内置页与受控文件入口 | `MDV-01..06 DONE/VERIFIED`（模型层）；接线切片 `MDV-08..10 TODO`，收口 `MDV-07 TODO` |
 | SDK | [cast-sdk-integration-roadmap.md](cast-sdk-integration-roadmap.md) | 固定源码 Cast-SDK facade、发现、连接和控制；后续 Partner Cast facade | `SDK-13 BLOCKED`（需真实接收端 Harness） |
 | PLT | [desktop-platform-adapters-roadmap.md](desktop-platform-adapters-roadmap.md) | Windows/macOS 存储、网络、生命周期、更新和客户端交接 | `PLT-01` |
 | PRV | [privacy-security-roadmap.md](privacy-security-roadmap.md) | Profile、隐私、安全、日志和删除语义 | `PRV-01` |
@@ -38,7 +38,7 @@
 | QAR | [quality-release-roadmap.md](quality-release-roadmap.md) | Windows/macOS 构建、真实设备、性能、长稳和发布门禁 | `QAR-01` |
 | RNM | [naming-migration-roadmap.md](naming-migration-roadmap.md) | `get-video` → `crayon-browser` 仓库、包、README、GitHub 与本地路径迁移 | `RNM-01..08 DONE` |
 
-当前共 234 个活跃任务，193 个唯一当前测试用例。新增 `RNM-01..08` 命名迁移任务与 `MDV-01..07` 本地 Markdown 查看器任务（PRD v0.8）；`CEF-02` 已按 Windows 首发/macOS 后置拆为 `CEF-02W/02M`；Linux、浏览器 WebRTC/采集/编码等已删除范围不计入活跃总数。
+当前共 237 个活跃任务，193 个唯一当前测试用例。新增 `RNM-01..08` 命名迁移任务、`MDV-01..07` 本地 Markdown 查看器任务与 `MDV-08..10` 接线切片（PRD v0.8）；`CEF-02` 已按 Windows 首发/macOS 后置拆为 `CEF-02W/02M`；Linux、浏览器 WebRTC/采集/编码等已删除范围不计入活跃总数。
 
 ## 4. 当前领取队列
 
@@ -50,7 +50,7 @@
 | 4 | `AGT-01` | TODO | 依赖满足后冻结 CAAP v1；不提前开放 CLI/MCP transport |
 | 5 | `CNT-01` | TODO | 等浏览器/投屏/隐私门禁后开始正式 page-data/Markdown |
 | 6 | `ACT-01` | TODO | 等 `CNT-03/AGT-01`；不提前发明第二页面数据面 |
-| 7 | `MDV-01` | READY | 本地 Markdown 查看器契约冻结（依赖 `BUX-03 DONE` 已满足）；`MDV-04` 起等 `BUX-16`，属 V1 期内增量 |
+| 7 | `MDV-08` | TODO | `crayon://mdv` scheme handler 与只读查看接线（依赖 `MDV-02/03 VERIFIED`、BUX-03 模式已满足）；随后按 09→10→07 顺序收口，属 V1 期内增量 |
 | 8 | 后续任务 | TODO | WFL/HUB 严格按语义动作、权限和隐私依赖领取 |
 
 `CNT-01` 必须等 `CEF-15`、`BUX-18`、`SDK-14`、`MED-19`、`PRV-08` 完成后才能进入 `READY`。`CNT-11` 必须等 `CNT-10`、`AGT-16`、`PRV-13` 完成且模型/provider ADR 获批；不得提前接真实 provider。
