@@ -109,3 +109,52 @@ unsafe fn take_blob(blob: CRYPT_INTEGER_BLOB) -> Vec<u8> {
     }
     bytes
 }
+
+// ---------------------------------------------------------------------------
+// SID helpers
+
+use windows_sys::Win32::Security::{CopySid, EqualSid, GetLengthSid};
+
+/// Returns the byte length of a valid SID, or 0.
+///
+/// # Safety
+/// `sid` must point at a readable SID.
+pub(crate) unsafe fn get_length_sid(sid: windows_sys::Win32::Security::PSID) -> usize {
+    // SAFETY: caller guarantees SID validity.
+    unsafe { GetLengthSid(sid) as usize }
+}
+
+/// Copies a SID into a caller-provided buffer.
+///
+/// # Safety
+/// `destination` must be writable for `length` bytes and u32-aligned.
+pub(crate) unsafe fn copy_sid(
+    destination: windows_sys::Win32::Security::PSID,
+    length: usize,
+    source: windows_sys::Win32::Security::PSID,
+) -> i32 {
+    // SAFETY: caller guarantees buffer size/alignment and source validity.
+    unsafe { CopySid(length as u32, destination, source) }
+}
+
+/// Compares two SIDs for equality.
+///
+/// # Safety
+/// Both arguments must reference valid SIDs.
+pub(crate) unsafe fn equal_sid(
+    left: windows_sys::Win32::Security::PSID,
+    right: windows_sys::Win32::Security::PSID,
+) -> i32 {
+    // SAFETY: caller guarantees both SIDs are valid.
+    unsafe { EqualSid(left, right) }
+}
+
+/// Releases an OS-allocated local memory block.
+///
+/// # Safety
+/// `handle` must originate from an OS allocation using local-memory
+/// ownership (DPAPI blobs, converted security descriptors).
+pub(crate) unsafe fn local_free(handle: *mut core::ffi::c_void) {
+    // SAFETY: single free of an OS-owned allocation.
+    unsafe { LocalFree(handle.cast()) };
+}

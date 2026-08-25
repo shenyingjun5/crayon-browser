@@ -16,5 +16,6 @@ pub mod capabilities;
 mod event_relay;
 pub mod ffi;
 pub mod lifecycle;
+pub mod local_agent_ipc;
 pub mod local_network;
 pub mod secure_store;

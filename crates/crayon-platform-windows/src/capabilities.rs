@@ -39,9 +39,9 @@ pub fn windows_adapter_capabilities() -> PlatformAdapterCapabilities {
             signed_packages: false,
         },
         LocalAgentIpcCapabilities {
-            transport: crayon_platform_capabilities::AgentIpcTransport::Unavailable,
-            peer_credentials: false,
-            per_user_acl: false,
+            transport: crayon_platform_capabilities::AgentIpcTransport::NamedPipe,
+            peer_credentials: true,
+            per_user_acl: true,
         },
         ExternalClientHandoffCapabilities {
             download: false,
