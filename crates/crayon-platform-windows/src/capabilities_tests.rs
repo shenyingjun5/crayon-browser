@@ -4,13 +4,12 @@ use super::*;
 use crayon_platform_capabilities::{AgentIpcTransport, SupportLevel};
 
 #[test]
-fn document_is_schema_valid_and_truthful_for_w04c() {
+fn document_is_schema_valid_and_truthful_for_w04_complete() {
     let doc = super::windows_adapter_capabilities();
     doc.validate().expect("schema valid");
     assert_eq!(doc.schema(), 1);
-    // Delivered slices: dpapi store (W04a), local network and lifecycle
-    // (W04b), named-pipe agent IPC (W04c).  Update and client handoff
-    // stay unavailable until W04d lands.
+    // All four slices delivered; signed packages remain false until
+    // QAR-09 defines the signing pipeline.
     assert_eq!(
         doc.secure_store.backend,
         crayon_platform_capabilities::SecureStoreBackend::Dpapi
@@ -19,11 +18,12 @@ fn document_is_schema_valid_and_truthful_for_w04c() {
     assert_eq!(doc.local_network.observation, SupportLevel::Available);
     assert!(doc.local_network.change_events);
     assert!(doc.lifecycle.power_events && doc.lifecycle.lock_events);
-    assert_eq!(doc.update.service, SupportLevel::Unavailable);
+    assert_eq!(doc.update.service, SupportLevel::Available);
     assert_eq!(doc.local_agent_ipc.transport, AgentIpcTransport::NamedPipe);
     assert!(doc.local_agent_ipc.peer_credentials);
     assert!(doc.local_agent_ipc.per_user_acl);
-    assert!(!doc.external_client_handoff.download);
+    assert!(doc.external_client_handoff.download);
+    assert!(doc.external_client_handoff.launch);
 }
 
 #[test]

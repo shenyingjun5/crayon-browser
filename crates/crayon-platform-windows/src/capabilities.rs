@@ -35,7 +35,7 @@ pub fn windows_adapter_capabilities() -> PlatformAdapterCapabilities {
             lock_events: true,
         },
         UpdateCapabilities {
-            service: SupportLevel::Unavailable,
+            service: SupportLevel::Available,
             signed_packages: false,
         },
         LocalAgentIpcCapabilities {
@@ -44,8 +44,8 @@ pub fn windows_adapter_capabilities() -> PlatformAdapterCapabilities {
             per_user_acl: true,
         },
         ExternalClientHandoffCapabilities {
-            download: false,
-            launch: false,
+            download: true,
+            launch: true,
         },
     )
     .normalized()

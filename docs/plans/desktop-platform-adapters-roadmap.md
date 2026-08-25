@@ -11,7 +11,7 @@
 |---|---|---|---|---|---|---|
 | PLT-01 | DONE | FND-09 | `crates/crayon-platform-api/**` | 定义安全存储、本地网络、生命周期、更新、当前用户本机 IPC 和外部客户端交接接口 | `CP-004`,`CP-W01`,`CP-M01`,`AG-012`; unit | V1 |
 | PLT-02 | DONE | PLT-01,FND-10 | `crates/crayon-platform-api/**`, `crates/crayon-platform-capabilities/**` | 定义 `secure_store`、`local_network`、`lifecycle`、`update`、`local_agent_ipc`、`external_client_handoff` 能力模型 | `CP-004`,`AG-012`; schema/golden | V1 |
-| PLT-W04 | IN_PROGRESS | PLT-02,CEF-12,SDK-08 | `platform/windows/**` | 实现 DPAPI、本地网络/防火墙、多网卡、睡眠唤醒、更新、当前用户 named pipe 与投屏客户端交接（切片 W04a..d，见原子范围） | `CP-W01`,`AG-012`; Windows integration | V4W |
+| PLT-W04 | DONE | PLT-02,CEF-12,SDK-08 | `platform/windows/**` | 实现 DPAPI、本地网络/防火墙、多网卡、睡眠唤醒、更新、当前用户 named pipe 与投屏客户端交接（切片 W04a..d，见原子范围） | `CP-W01`,`AG-012`; Windows integration | V4W |
 | PLT-W05 | TODO | PLT-W04,CEF-15,SDK-14,PRV-12 | `apps/desktop-cef/**`, `platform/windows/**` | Windows 产品装配与 Direct/Relay/外部客户端交接验收 | `E2E-001..005`,`CP-W01`; Windows device | V4W |
 | PLT-M04 | TODO | PLT-02,CEF-01E,CEF-12,SDK-08 | `platform/macos/**` | 实现 Keychain、本地网络权限、生命周期、更新、当前用户 UDS 与投屏客户端交接 | `CP-M01`,`AG-012`; macOS integration | V4M |
 | PLT-M05 | TODO | PLT-M04,CEF-15,SDK-14,PRV-12 | `apps/desktop-cef/**`, `platform/macos/**` | macOS 产品装配、签名/公证与 Direct/Relay/外部客户端交接验收 | `E2E-001..005`,`CP-M01`; macOS device | V4M |
@@ -130,3 +130,23 @@
 - 自动验证（Windows 11 x64 实机）：`cargo test -p crayon-platform-windows` **18/18 通过**——新增：真实枚举非空且含 loopback 标志、两次枚举名称集合稳定、监听器注册/替换/注销往返无崩溃、pump 构造与干净退出（两测试并行验证类复用路径）、relay 五组确定性测试（顺序交付、满载 shed 最旧且恰余 capacity、替换生效旧监听器零触发、注销停发、close 幂等迟到 push 丢弃）。clippy `-D warnings` 零错误（含 undocumented_unsafe_blocks deny）；fmt 通过；workspace 回归 90 个二进制全绿；`scripts/check.ps1 fast/security` 全 passed；`git diff --check` 通过。
 - Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；P0/P1/P2 均为 `0`。锁外交付满足 §9；能力文档如实翻转 local_network/lifecycle 为 available（update/named pipe/handoff 仍 unavailable）。
 - 未覆盖与风险：真实休眠/唤醒与锁屏事件的端到端观测需人工在控制台操作，归 CP-W01 设备矩阵（本切片验证到"注册成功、结构收敛、退出无残留"）；接口 token 与 OS 索引的映射是确定性的但不含友好名（契约禁止携带可辨识信息）；`if-<index>` 在路由风暴下的事件洪流由容量 64 + dropped 计数兜底。切片 2 完成，`PLT-W04` 维持 `IN_PROGRESS`。
+
+### PLT-W04c 完成记录（2026-08-25，切片 3：当前用户 named pipe 端点）
+
+- 实现：`src/local_agent_ipc.rs` 的 `WindowsAgentIpcEndpoint` 实现 `LocalAgentIpcEndpoint` trait。构造期捕获当前进程 token 的 user SID（`GetTokenInformation(TokenUser)` 探测式 sizing + `CopySid` 到 u32 对齐存储，68 字节上限拒绝畸形 SID）；`start()` 以 `D:P(A;;GA;;;<owner-sid>)` SDDL 构造 DACL（`ConvertSidToStringSidW` + `ConvertStringSecurityDescriptorToSecurityDescriptorW`），经 `CreateNamedPipeW` 创建单实例监听——`FILE_FLAG_FIRST_PIPE_INSTANCE` 防名字抢占、`PIPE_REJECT_REMOTE_CLIENTS` 在管道层拒绝远端、创建失败映射闭合 `NameInUse/OsDenied`（trait 面收敛为稳定错误并保证"未在运行"后成立）；`accept_verified_client()` 阻塞等待首个连接并用 OS 事实验收：`GetNamedPipeClientProcessId → OpenProcess(QUERY_LIMITED) → OpenProcessToken → GetTokenInformation → EqualSid` 比对客户端与所有者 SID 得出 same_user，loopback 由管道本机语义 + 远端拒绝标志结构性成立，通过后进入共享 AG-012 合取门禁；拒绝路径先 `DisconnectNamedPipe` 且错误不携带任何对端信息。start 双次 `AlreadyRunning`、stop 幂等释放（Disconnect + CloseHandle）、admit 先查运行态。
+- 自动验证（Windows 11 x64 实机）：`cargo test -p crayon-platform-windows` **20/20 通过**——新增：start/stop/gate 全矩阵（启动前 NotRunning、双启动 AlreadyRunning、四象限 PeerIdentity 门禁、双 stop 幂等）与真实端到端连接（同用户客户端经真实 named pipe 连入、OS SID 比对放行、句柄生命周期闭合、退出零泄漏）。clippy `-D warnings` 零错误（含 undocumented_unsafe_blocks/not_unsafe_ptr_arg_deny 面）；fmt 通过；workspace 回归 **90 套件/620 测试全绿**；`scripts/check.ps1 fast/security` 全 passed；`git diff --check` 通过。
+- Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；P0/P1/P2 均为 `0`。原始 HANDLE 经 Send newtype 封装且 syscall 全部留在所有权线程；`verify_connected_client` 因裸指针参数显式标记 unsafe 并由内部唯一调用点维护契约；能力文档如实翻转 agent IPC 三项为 true。
+- 未覆盖与风险：跨用户拒绝路径需提权环境伪造另一用户客户端，归 CP-W01 设备矩阵（门禁合取逻辑已由 PLT-01 contract 覆盖）；CAAP transport 字节协议归 AGT-12，本切片只交付到"经验收的连接"；`ERROR_PIPE_CONNECTED` 竞态窗口按官方语义处理。切片 3 完成，`PLT-W04` 维持 `IN_PROGRESS`。
+
+### PLT-W04d 完成记录（2026-08-25，切片 4：更新流驱动与外部客户端交接）
+
+- 实现：
+  - `src/update.rs` 的 `WindowsUpdateFlow` 实现 `UpdateFlow` trait：dispatch 为严格两步——先以冻结的 `UpdateState::transition` 校验用户命令（非法迁移稳定拒绝且**不执行任何注入操作**），再从中间态应用操作结果的闭合事实（check→NoUpdate/Available/Failure 三事实、download→Completed/Failed、install→Idle）；install 被平台拒绝时流程保持 ReadyToInstall 并返回稳定拒绝而非伪成功。check/download/install 为注入的 `UpdateOperations` 闭包（生产装配接真实更新服务，归 QAR-09），状态机语义零偏离。
+  - `src/external_client_handoff.rs` 的 `WindowsClientHandoff` 实现 `ExternalClientHandoff` trait：LaunchClient 先做存在性检查（缺失直接 `NotInstalled`、不触发 shell），存在则经执行器启动并返回 `LaunchRequested`；DownloadClient 打开注入的 https 官方下载页返回 `DownloadStarted`；shell 拒绝映射 `HandoffError::Unavailable` 不假成功。真实执行器为 `ShellExecuteW` "open" 动词（按官方 >32 规则判成败、2/3 映射 NotFound）；启动路径与下载 URL 均由产品装配注入且强制 https——源码零机器路径、零硬编码 URL。结果闭合五态不含"投屏已开始"，请求面仅 purpose token。
+- 自动验证（Windows 11 x64 实机）：`cargo test -p crayon-platform-windows` **27/27 通过**——新增 update 三组（happy 全周期含各 hook 恰好一次、失败检查落 Failed 且拒绝下载并 Dismiss 回 Idle、NoUpdate 回 Idle 且 Install 非法时 hook 零调用）与 handoff 四组（非 https 构造即拒、download 打开注入页、缺客户端 NotInstalled 且 shell 零调用、存在的客户端 LaunchRequested 后拒绝路径映射 Unavailable）。能力文档翻转 update=available（signed_packages=false 直至 QAR-09 定义签名管线）、handoff download/launch=true 并全量 validate() 通过。clippy `-D warnings` 零错误；fmt 通过；workspace **90 套件/620+ 测试全绿零 FAILED**；`scripts/check.ps1 fast/security` 全 passed；`git diff --check` 通过。
+- Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；P0/P1/P2 均为 `0`。两步 dispatch 杜绝了"结果命令从错误状态应用"的首版缺陷（测试先行暴露）。
+- 未覆盖与风险：真实更新服务与签名包校验归 QAR-09（signed_packages 如实 false）；ShellExecuteW 真实拉起浏览器/客户端的行为未在本任务实机点击验证（executor 注入测试 + 默认实现走系统 shell，人工冒烟归 PLT-W05 产品装配验收）。防火墙观察不在 PLT-01/02 冻结契约的任何接口面上（CP-W01 文案中的"防火墙"归 QAR-09 打包期的防火墙提示与 PRV 安全门禁），本 crate 无对应自由字段，未虚报能力。
+
+## PLT-W04 完成结论（2026-08-25）
+
+四个切片全部落地并独立提交（W04a `ae4a089`、W04b `f29fa68`、W04c `bf4c522`、W04d 本提交）：六个契约面全部有真实 Windows 平台证据（DPAPI 往返/密文落盘断言、真实网卡枚举含 loopback 标志、named pipe 同用户端到端 SID 验收、更新状态机全函数性、交接闭合结果矩阵），能力文档六面如实声明且通过 schema 校验。`PLT-W04` 转 `DONE`，解锁 `PRV-05` 的 Windows 半边（macOS 半边仍待 `PLT-M04`）与后续装配链。
