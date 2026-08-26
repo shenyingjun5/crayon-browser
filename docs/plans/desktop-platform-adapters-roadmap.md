@@ -13,7 +13,7 @@
 | PLT-02 | DONE | PLT-01,FND-10 | `crates/crayon-platform-api/**`, `crates/crayon-platform-capabilities/**` | 定义 `secure_store`、`local_network`、`lifecycle`、`update`、`local_agent_ipc`、`external_client_handoff` 能力模型 | `CP-004`,`AG-012`; schema/golden | V1 |
 | PLT-W04 | DONE | PLT-02,CEF-12,SDK-08 | `platform/windows/**` | 实现 DPAPI、本地网络/防火墙、多网卡、睡眠唤醒、更新、当前用户 named pipe 与投屏客户端交接（切片 W04a..d，见原子范围） | `CP-W01`,`AG-012`; Windows integration | V4W |
 | PLT-W05 | TODO | PLT-W04,CEF-15,SDK-14,PRV-12 | `apps/desktop-cef/**`, `platform/windows/**` | Windows 产品装配与 Direct/Relay/外部客户端交接验收 | `E2E-001..005`,`CP-W01`; Windows device | V4W |
-| PLT-M04 | IN_PROGRESS | PLT-02,CEF-01E,CEF-12,SDK-08 | `platform/macos/**` | 实现 Keychain、本地网络权限、生命周期、更新、当前用户 UDS 与投屏客户端交接 | `CP-M01`,`AG-012`; macOS integration | V4M |
+| PLT-M04 | DONE | PLT-02,CEF-01E,CEF-12,SDK-08 | `platform/macos/**` | 实现 Keychain、本地网络权限、生命周期、更新、当前用户 UDS 与投屏客户端交接 | `CP-M01`,`AG-012`; macOS integration | V4M |
 | PLT-M05 | TODO | PLT-M04,CEF-15,SDK-14,PRV-12 | `apps/desktop-cef/**`, `platform/macos/**` | macOS 产品装配、签名/公证与 Direct/Relay/外部客户端交接验收 | `E2E-001..005`,`CP-M01`; macOS device | V4M |
 | PLT-19 | TODO | PLT-W05,PLT-M05 | `docs/current/**`, `docs/plans/**`, `tests/**` | Windows/macOS 平台边界、生命周期和发布前独立 Review | 平台矩阵；Review P0/P1=0 | V5 |
 
@@ -153,7 +153,7 @@
 
 ## PLT-M04 原子范围（macOS 平台适配，按面切片）
 
-- 状态：`IN_PROGRESS`；依赖 `PLT-02 DONE`、`CEF-01E DONE`、`CEF-12 VERIFIED`、`SDK-08 DONE`。
+- 状态：`DONE`（全部四切片完成，2026-08-26）；依赖 `PLT-02 DONE`、`CEF-01E DONE`、`CEF-12 VERIFIED`、`SDK-08 DONE`。
 - 路径说明：Roadmap `platform/macos/**` 映射 `crates/crayon-platform-macos/**`（与 W04/PLT-01 惯例一致）。
 - 切片说明：镜像 W04 切法，全部完成后 `PLT-M04` 才能转 `DONE`（CP-M01 真机门禁）：
   - **M04a（切片 1）**：crate 骨架（`#![cfg(target_os = "macos")]`）+ Keychain SecureStore（Security.framework 原生 FFI，零新依赖）+ macOS 能力聚合文档。
@@ -195,3 +195,10 @@
 - 验证：`cargo test -p crayon-platform-macos` 26/26（新增 7 项：purpose 矩阵、socket 路径格式、start/stop 幂等含 socket 文件清理、无效 purpose 拒绝、uid 当前进程、peer 门禁矩阵、**真实 UDS bind/connect/accept 链路**——客户端从同进程连接并验证 accept 路径）；clippy `-D warnings` 零告警；workspace 全量 0 失败；`git diff --check` 通过。
 - Code Review：P0 0、P1 0、P2 1——`accept_and_check` 返回 peer_uid 但不比对（比对逻辑归 AGT-12 transport 的握手层）；当前设计让 transport 层持有 uid 比对策略，灵活性更好但需在 AGT-12 验收时确认比对不被遗漏。
 - 未覆盖与风险：真实跨进程 peer 测试（不同 uid 拒绝）归 PLT-M05 真机；CAAP 握手协议归 AGT-12。`PLT-M04` 保持 `IN_PROGRESS`（M04c 完成）。
+
+### PLT-M04d 完成记录（2026-08-26，切片 4：更新流驱动与外部客户端交接）
+
+- 实现：`update.rs`——`MacUpdateFlow` 纯状态转换驱动（零 side effects，caller 驱动操作并上报命令，全部经 PLT-01 冻结的 `UpdateState::transition`）；`external_client_handoff.rs`——`MacClientHandoff` 实现 PLT-01 `ExternalClientHandoff` trait：注入 `LaunchTarget`（Executable/Url）+ `OpenExecutor`，perform 精确执行确认的请求（launch → LaunchRequested / download → DownloadStarted），executor 失败 → `HandoffError::Unavailable`；**结果集无"投屏中"变体**（类型上不可表达）。`capabilities.rs` 更新为 M04d 真相——全部六面交付（update=Available/signed_packages=false 待 QAR-09、UDS+peer_credentials+per_user_acl、handoff download+launch）。
+- 验证：`cargo test -p crayon-platform-macos` 34/34（新增 8 项：交接 launch/download/executor 失败、更新 happy path/check 失败/download 失败/failed 重启/非法迁移拒绝）；clippy `-D warnings` 零告警；fmt 通过；`git diff --check` 通过。
+- Code Review：P0 0、P1 0、P2 1——`keychain_multiple_keys_independent` 在 workspace 并行测试时偶发失败（钥匙串缓存竞态），单 crate `--test-threads=1` 稳定通过；PRV-11 跨平台门禁应加 `--test-threads=1` 或评估钥匙串隔离。
+- 未覆盖与风险：真实更新服务归 QAR-09（signed_packages=false 如实声明）；签名/公证归 PLT-M05。`PLT-M04` 转为 `DONE`（全部四切片完成；CP-M01 真机门禁归 PLT-M05 产品装配）。

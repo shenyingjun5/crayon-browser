@@ -4,7 +4,7 @@ use super::*;
 use crayon_platform_capabilities::SupportLevel;
 
 #[test]
-fn document_is_schema_valid_and_truthful_for_m04b() {
+fn document_is_schema_valid_and_truthful_for_m04d() {
     let doc = super::macos_adapter_capabilities();
     doc.validate().expect("schema valid");
     assert_eq!(doc.schema(), 1);
@@ -22,15 +22,16 @@ fn document_is_schema_valid_and_truthful_for_m04b() {
     );
     assert!(doc.local_network.change_events);
     assert!(doc.lifecycle.power_events && doc.lifecycle.lock_events);
-    assert_eq!(doc.update.service, SupportLevel::Unavailable);
+
+    assert_eq!(doc.update.service, SupportLevel::Available);
     assert_eq!(
         doc.local_agent_ipc.transport,
-        crayon_platform_capabilities::AgentIpcTransport::Unavailable
+        crayon_platform_capabilities::AgentIpcTransport::UnixDomainSocket
     );
-    assert!(!doc.local_agent_ipc.peer_credentials);
-    assert!(!doc.local_agent_ipc.per_user_acl);
-    assert!(!doc.external_client_handoff.download);
-    assert!(!doc.external_client_handoff.launch);
+    assert!(doc.local_agent_ipc.peer_credentials);
+    assert!(doc.local_agent_ipc.per_user_acl);
+    assert!(doc.external_client_handoff.download);
+    assert!(doc.external_client_handoff.launch);
 }
 
 #[test]
