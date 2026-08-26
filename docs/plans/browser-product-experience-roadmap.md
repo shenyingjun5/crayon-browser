@@ -31,7 +31,7 @@
 | BUX-14 | DONE | CEF-05,BUX-05,BUX-13 | `browser/shared-ui/site-controls` | 站点权限、安全信息、证书错误、popup 与外部协议确认 UI | UX-013；origin/Profile/TTL/取消/伪造/危险 scheme |
 | BUX-15 | VERIFIED | CEF-04,PRV-01..04,BUX-06 | `browser/shared-ui/profiles`,`browser/session` | Profile picker、普通/无痕窗口、启动会话与崩溃恢复编排 | UX-014；清理失败、无痕不恢复、旧 session、跨 Profile |
 | BUX-16 | VERIFIED | BUX-05,BUX-11,PLT-02 | `browser/shared-ui/context-menu` | 上下文菜单、拖放、剪贴板与受控本地文件入口 | UX-015；上下文最小化、路径/scheme、取消/外部动作 |
-| BUX-17 | TODO | BUX-13,PRV-05,PRV-11 | `browser/autofill/address`,`browser/shared-ui/autofill` | 仅地址/联系信息的本地保存确认、匹配、编辑和删除；明确排除密码/支付 | UX-017；PII redaction、无痕、Agent 不可见、跨 Profile |
+| BUX-17 | DONE | BUX-13,PRV-05,PRV-11 | `browser/autofill/address`,`browser/shared-ui/autofill` | 仅地址/联系信息的本地保存确认、匹配、编辑和删除；明确排除密码/支付 | UX-017；PII redaction、无痕、Agent 不可见、跨 Profile |
 | BUX-18 | TODO | BUX-01..17,CEF-14,PRV-12 | `tests/e2e/desktop/browser-ux`,`docs/current` | Windows/macOS 浏览器体验、性能、包体、隐私与品牌总 Review | UX-001..018；Debug/Release、P0/P1=0、未覆盖真机明确 |
 
 ## 开发规则
@@ -360,3 +360,27 @@
 
 - BUX-12：`FindBarController::SetCaseSensitive(bool)` 查找栏打开时切换大小写并重置 cursor/match 计数，关闭态拒绝；契约测试补切换与隐藏态拒绝断言。原 P2（只能在 StartFind 设置）关闭。
 - BUX-15/16 的 P2 维持延期（持久化 schema 归 engine adapter、拖放归 CEF shell 装配，归属已在完成记录注明）。
+
+## BUX-17 原子范围（本地地址自动填充：模型与视图）
+
+- 状态：`IN_PROGRESS`；依赖 `BUX-13 DONE`、`PRV-05 DONE`、`PRV-11 DONE`。
+- 路径说明：新增共享层两模块——核心领域 `browser/autofill/address`（记录校验、脱敏摘要、字段匹配、Profile 隔离内存存储）与视图模型 `browser/shared-ui/autofill`（保存确认、字段建议、编辑/删除流）。磁盘持久化与加密落盘经 PLT SecureStore 的接线归后续平台装配任务，本任务存储为进程内模型（接口已按可替换设计）。
+- 单一目标：仅地址/联系信息（姓名/组织/街道/城市/省州/邮编/国家地区/电话/邮箱九类字段闭合）的本地自动填充能力——用户可见的保存确认、确定性字段匹配建议、有界编辑与删除；**密码、支付卡、证件号在类型上不可表达**；无痕窗口既不建议也不保存；Agent/页面数据面无任何读取路径（不进 CAAP registry）。
+- 输入：UX-017、红线（地址填充仅在 BUX-17/PRV 安全边界内）、PRV-08 脱敏口径、AGT-02 永久禁止清单（address 模块 id 不得命中）、BUX-13 的共享层模块模式。
+- 禁止修改：其他 BUX 模块行为、CAAP schema、CEF shell、既有 locale 键（只增不改）；不得引入网络/IO/线程。
+- 边界：
+  - 字段全部有界 ≤256 字节、控制字符拒绝；record id 由 store 分配的闭合 token；容量 ≤64 条，满载稳定拒绝。
+  - `RedactedSummary()` 只输出"字段名(长度)"形态，任何 PII 内容不进日志/诊断面（PV 口径）；匹配为确定序（前缀命中优先、id 升序兜底），单次建议 ≤6 条。
+  - 无痕：保存确认拒绝 Present、建议列表恒空且不读 store。
+  - 编辑提交需过同套校验；删除需显式确认步；清空立即生效并计数。
+- 验收与测试：UX-017。矩阵：记录校验边界、脱敏摘要零 PII、匹配确定序与上界、store CRUD/容量/隔离（不同 profile_scope 互不可见）、无痕双拒、编辑/删除生命周期、locale en/zh parity、LCG 不变量。命令：独立 configure/build/ctest（-Werror 双口径）、共享层回归 ctest、`git diff --check`。
+- 明确不做：表单启发式识别（页面侧字段映射归引擎适配后续任务）、加密持久化接线、密码/支付（永久排除）、导入导出、Agent 暴露。
+
+### BUX-17 完成记录（2026-08-26）
+
+- 实现：新增两模块。核心领域 `browser/autofill/address`：`AddressRecord` 九类闭合字段（姓名/组织/街道×2/城市/省州/邮编/国家地区/电话/邮箱，全部 ≤256 字节、控制字符拒绝、至少一个身份字段）；`AddressBookStore` Profile 隔离内存存储（scope 外不可见、store 分配 `addr-<n>` 闭合 id、容量 ≤64 满载稳定拒绝、CRUD 齐全、确定序列表）；`MatchRecordIds` 确定性匹配（ASCII 不区分大小写、前缀命中>子串命中>全部、id 升序兜底、≤6 条）；`RedactedSummary()` 只输出 `field(len)` 形态——**PII 内容在类型上不可能进入日志/诊断面**；密码/支付/证件字段不存在于词汇表。视图模型 `browser/shared-ui/autofill`：`SaveAddressPromptModel`（用户可见保存确认，无痕直接拒绝 Present）、`AddressSuggestionModel`（无痕恒空且不读 store）、`AddressEditorModel`（新建草稿逐字段校验+Commit 终检；已有记录编辑保 id；删除走 BeginDelete→ConfirmDelete 两步显式确认）。locale 新增 20 键 ×2（en/zh 各 94 键 parity 入契约测试）。零第三方依赖；单线程 UI 约定同既有模块。
+- Agent/页面数据面不可见：本模块不注册任何 CAAP 工具、不暴露任何读取接口，与 AGT 永久禁止清单无交集。
+- 驱动性修复（非本任务范围，已声明）：并行会话遗留的 `browser/shared-ui/mdv/tests/mdv_page_test.cc` 缺字段初始化器（`status_saved`/`confirm_text`/`label_save`/`label_discard`/`label_cancel` 五个 zh 字符串）导致 `-Werror` 全量编译失败、阻塞共享层回归，按 locale 既有值补齐。
+- 验证：独立 configure/build 双口径零告警（MSVC /W4 /WX 与 -Wall -Wextra -Wpedantic -Werror）；`address_book` 与 `autofill_ui` 契约测试通过（校验边界矩阵、脱敏零 PII 断言含中文多字节、匹配排序/大小写/上限、store CRUD+容量+双 scope 隔离、保存确认三态、无痕双拒、建议越权 Pick 拒绝、编辑/删除生命周期、locale parity 94=94、3000 步风暴不变量——容量上界/建议 id 必可解析）；全目标编译后共享层 ctest **48/48 通过**；`git diff --check` 通过。
+- Code Review：按标准八维复核。P0 0、P1 0、P2 1——匹配为字节级 ASCII 大小写折叠，非拉丁文字不做 Unicode case fold（中文/日文场景不受影响），如需强折叠归后续增强。
+- 未覆盖与风险：磁盘持久化与 SecureStore 加密接线归平台装配任务；表单字段启发式识别（页面侧映射）归引擎适配后续任务；CEF 弹窗呈现实机验证归 QAR。`BUX-17` 转为 `DONE`，解锁 `BUX-18`。

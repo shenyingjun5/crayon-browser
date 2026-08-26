@@ -46,6 +46,11 @@ crayon::browser_mdv::MdvPageStrings SampleStrings() {
       "文件不是有效的 UTF-8 编码",
       "内容触发渲染安全策略，已拒绝显示",
       "不是可打开的 Markdown 文档",
+      "已保存",
+      "当前文档有未保存的修改，是否继续？",
+      "保存并继续",
+      "放弃更改",
+      "取消",
   };
 }
 
