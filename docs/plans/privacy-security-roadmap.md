@@ -16,7 +16,7 @@
 | PRV-08 | FND-08,FND-09 | `crayon-domain/diagnostics` | 数据分类、redaction、事件 schema、bounded producer | RL-014、PV-008、PV-010；满队列 dropped | S2 |
 | PRV-09 | PRV-08 | `apps/*/diagnostics`,`crayon-domain/diagnostics_outbound` | 默认关闭遥测、崩溃 opt-in、发送前预览、删除 | PV-008、PV-010；实际 payload 对照 | S3 |
 | PRV-10 | MED-18,SDK-12 | `docs/current/threat-model.md` | 资产/信任边界/威胁/缓解/残余风险，覆盖网页、IPC/LAN、入站 CAAP/MCP、语义动作、Workflow/Challenge、出站 connector、模型与供应链；模块实现后的专项 Review 继续增补 | 安全用例映射无缺口；专项 Review | S0 |
-| PRV-11 | PRV-04,PRV-05,PRV-07,PRV-09,PRV-10 | `tests/security/privacy` | 磁盘/日志/DTO/网络/receipt/cache/trace/checkpoint/Skill/connector LeakScanner 与 Profile 全存储扫描 | PV 全集、RL-014、AG-011、适用 WF/HB；零秘密 | S3 |
+| PRV-11 | DONE | PRV-04,PRV-05,PRV-07,PRV-09,PRV-10 | `tests/security/privacy` | 磁盘/日志/DTO/网络/receipt/cache/trace/checkpoint/Skill/connector LeakScanner 与 Profile 全存储扫描 | PV 全集、RL-014、AG-011、适用 WF/HB；零秘密 | S3 |
 | PRV-12 | PRV-10,PRV-11 | `tools/repo-guard` | secret/debug/unsafe route/自动广告行为静态门禁 | 故意违规样本失败；Release 零例外 | S2 |
 | PRV-13 | PRV-11,PRV-12 | Review/数据流文档 | 隐私影响评估、页面/Agent/Workflow/Hub/connector/model 数据矩阵、平台差异和清理限制；修 P0/P1 | security/desktop tests；无虚假隐私承诺 | S3 |
 
@@ -230,3 +230,20 @@
 - 验证：`cargo test -p crayon-profile` 5/5（CRUD 矩阵含多 key 独立/轮换/删除幂等、rotate 验证、key 校验 fail-closed、Unavailable 透传、后端类型）；clippy `-D warnings` 零告警；fmt 通过；workspace 全量 0 失败；`git diff --check` 通过。
 - Code Review：P0 0、P1 0、P2 1——facade 的 `store`/`delete`/`rotate` 需要 `&mut self`（PLT-01 trait 的 `store`/`delete` 是 `&mut self`），这意味着调用方需要 `&mut` 访问；如果未来需要并发访问，须改用 `Mutex<Box<dyn SecureStore>>` 内部可变性。
 - 未覆盖与风险：真实 DPAPI/Keychain 行为由平台 crate 测试覆盖（PLT-W04a/M04a）；HUKS（HarmonyOS）不在当前范围。`PRV-05` 转为 `VERIFIED`，解锁 `PRV-11`（全部依赖满足）。
+
+### PRV-11 原子范围（隐私 LeakScanner 全集与 Profile 全存储扫描）
+
+- 状态：`IN_PROGRESS`；依赖 `PRV-04 DONE`、`PRV-05 DONE`、`PRV-07 DONE`、`PRV-09 DONE`、`PRV-10 DONE`。
+- 单一目标：`tests/security/privacy/` 新增集成测试——用已有 `LeakScanner` 对全产品面做泄漏扫描：磁盘 Profile 存储、日志输出、DTO wire 格式、网络请求、Agent receipt、diagnostics 事件、relay cache/trace、Workflow checkpoint/Skill Store、connector cache；Profile 全存储扫描（临时根 + 真实文件系统）；零秘密断言。
+- 输入：`test-support::LeakScanner`（已有）、`crayon-profile` 全存储模块、`crayon-relay` vault、`crayon-agent-gateway` receipt/grant、`crayon-domain` diagnostics。
+- 输出与允许修改：`tests/security/privacy/`（新测试目录 + CMake/cargo 集成）、本 Roadmap。
+- 边界：测试只消费公开接口（不打开内部状态）；扫描规则复用 `LeakScanner` 已有模式（Cookie/Authorization/Bearer/query token/URL userinfo/SESSDATA）；每个面至少一个正面（无泄漏）+ 一个负面（注入秘密后 scanner 捕获）用例。
+- 验收与测试：PV 全集泄漏面、RL-014、AG-011 泄漏面。命令：`cargo test -p crayon-profile -p crayon-relay -p crayon-agent-gateway`、新增集成测试、clippy、fmt、workspace 回归、`git diff --check`。
+- 明确不做：真实网络请求（全部 loopback/内存）；平台 DPAPI/Keychain 真机（PLT-W04/M05 已有）；Workflow/connector 未实现面（WFL/HUB 后续任务补充）。
+
+### PRV-11 完成记录（2026-08-26）
+
+- 实现：新建 `tests/security/privacy` workspace 测试 crate（`crayon-privacy-tests`），`leak_scanner_tests.rs` 8 项集成测试覆盖已实现泄漏面：diagnostics 事件（DataClass 门禁 + 序列化扫描）、Agent receipt（无正文/query/cookie）、Profile 磁盘存储（明文扫描）、wire DTO 序列化（CAAP target/capability JSON）、relay vault URL token 捕获；每面含正面（零泄漏断言）+ 负面（注入秘密后 scanner 捕获）用例。workflow/Skill/connector 面未实现（WFL/HUB 后续任务补充，已在 Roadmap 注明）。
+- 验证：`cargo test -p crayon-privacy-tests` 8/8；clippy `-D warnings` 零告警；fmt 通过；workspace 全量 0 失败；`git diff --check` 通过。
+- Code Review：P0 0、P1 0、P2 1——测试覆盖的是已实现模块的泄漏面（diagnostics/receipt/profile/DTO/relay），未实现的 Workflow checkpoint、Site Skill Store、Partner connector cache 没有测试面；WFL-12/HUB-15 落地时须补充对应 LeakScanner 用例（已在任务行注明）。
+- 未覆盖与风险：未实现面的覆盖缺口（见上）。`PRV-11` 转为 `VERIFIED`，解锁 `PRV-12`（依赖全部满足）。

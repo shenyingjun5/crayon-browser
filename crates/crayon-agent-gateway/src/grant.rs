@@ -487,3 +487,10 @@ fn targets_match(grant_target: Option<&AgentTarget>, requested: Option<&AgentTar
 #[cfg(test)]
 #[path = "grant_tests.rs"]
 mod tests;
+
+/// Creates a `GrantId` from a raw value.  Only for integration tests
+/// and diagnostics; production code should use `GrantManager::issue`.
+#[must_use]
+pub fn grant_id_for_testing(value: u64) -> GrantId {
+    GrantId(value)
+}
