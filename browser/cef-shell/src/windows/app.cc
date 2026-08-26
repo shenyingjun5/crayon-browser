@@ -6,6 +6,7 @@
 #include <string_view>
 #include <utility>
 
+#include "browser/mdv/cef_mdv_editing.h"
 #include "browser/mdv/cef_mdv_entries.h"
 #include "browser/mdv/cef_mdv_handler.h"
 #include "browser/new_tab/cef_new_tab_handler.h"
@@ -80,6 +81,11 @@ browser_mdv::MdvPageStrings LoadMdvStrings(HINSTANCE resource_module) {
       LoadUtf8String(resource_module, IDS_CRAYON_MDV_STATUS_INVALID_UTF8),
       LoadUtf8String(resource_module, IDS_CRAYON_MDV_STATUS_RENDER_POLICY),
       LoadUtf8String(resource_module, IDS_CRAYON_MDV_STATUS_NOT_MARKDOWN),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_STATUS_SAVED),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_CONFIRM_TEXT),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_LABEL_SAVE),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_LABEL_DISCARD),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_LABEL_CANCEL),
   };
 }
 
@@ -125,6 +131,8 @@ BrowserApp::BrowserApp(HINSTANCE resource_module, std::wstring product_name)
           mdv::BuildFixtureSnapshot())),
       mdv_entries_(std::make_shared<mdv::MdvEntryController>(
           mdv_runtime_, mdv_strings_)),
+      mdv_editing_(std::make_shared<mdv::MdvEditController>(mdv_runtime_,
+                                                            mdv_strings_)),
       permission_store_(std::make_unique<permission::PermissionStore>()),
       tab_controller_(new window::TabController(
           browser_new_tab::kNewTabUrl,
@@ -167,13 +175,37 @@ void BrowserApp::OnContextInitialized() {
     return;
   }
   tab_controller_->SetLocalEntryCommandHandler(
-      [entries = mdv_entries_](CefRefPtr<CefBrowser> browser, int command_id) {
-        return entries->HandleChromeCommand(browser, command_id);
+      [entries = mdv_entries_, editing = mdv_editing_](
+          CefRefPtr<CefBrowser> browser, int command_id) {
+        if (entries->HandleChromeCommand(browser, command_id)) {
+          return true;
+        }
+        return editing->HandleSaveCommand(browser, command_id);
+      });
+  mdv_entries_->SetDocumentLoadedCallback(
+      [editing = mdv_editing_](CefRefPtr<CefBrowser> browser,
+                               const std::string& path,
+                               const std::string& normalized,
+                               std::uint64_t size, std::uint64_t mtime) {
+        editing->OnDocumentLoaded(browser, path, normalized, size, mtime);
       });
   tab_controller_->SetNavigationInterceptor(
-      [entries = mdv_entries_](CefRefPtr<CefBrowser> browser,
-                               const CefString& url, bool user_gesture) {
+      [editing = mdv_editing_, entries = mdv_entries_](
+          CefRefPtr<CefBrowser> browser, const CefString& url,
+          bool user_gesture) {
+        if (editing->InterceptWhileDirty(browser, url.ToString(),
+                                         user_gesture)) {
+          return true;
+        }
         return entries->InterceptNavigation(browser, url, user_gesture);
+      });
+  tab_controller_->SetPageQueryHandler(
+      [editing = mdv_editing_](
+          CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
+          std::uint64_t query_id, const CefString& request, bool persistent,
+          CefRefPtr<CefMessageRouterBrowserSide::Callback> callback) {
+        return editing->OnPageQuery(browser, frame, query_id, request,
+                                    persistent, std::move(callback));
       });
   if (!tab_controller_->CreateMainWindow()) {
     shell_runtime_->Shutdown();
@@ -204,7 +236,12 @@ bool BrowserApp::mdv_strings_valid() const {
          !mdv_strings_.status_too_large.empty() &&
          !mdv_strings_.status_invalid_utf8.empty() &&
          !mdv_strings_.status_render_policy.empty() &&
-         !mdv_strings_.status_not_markdown.empty();
+         !mdv_strings_.status_not_markdown.empty() &&
+         !mdv_strings_.status_saved.empty() &&
+         !mdv_strings_.confirm_text.empty() &&
+         !mdv_strings_.label_save.empty() &&
+         !mdv_strings_.label_discard.empty() &&
+         !mdv_strings_.label_cancel.empty();
 }
 
 CefRefPtr<CefClient> BrowserApp::GetDefaultClient() {

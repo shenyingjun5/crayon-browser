@@ -1,6 +1,7 @@
 #ifndef CRAYON_BROWSER_CEF_SHELL_SRC_BROWSER_WINDOW_TAB_CONTROLLER_H_
 #define CRAYON_BROWSER_CEF_SHELL_SRC_BROWSER_WINDOW_TAB_CONTROLLER_H_
 
+#include <cstdint>
 #include <functional>
 #include <map>
 #include <memory>
@@ -13,6 +14,7 @@
 #include "browser/window/tab_model.h"
 #include "include/cef_client.h"
 #include "include/cef_command_handler.h"
+#include "include/wrapper/cef_message_router.h"
 
 namespace crayon::browser::cef_shell::window {
 
@@ -56,6 +58,10 @@ class WindowClient final : public CefClient,
   void OnGotFocus(CefRefPtr<CefBrowser> browser) override;
   bool OnChromeCommand(CefRefPtr<CefBrowser> browser, int command_id,
                        cef_window_open_disposition_t disposition) override;
+  bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
+                                CefRefPtr<CefFrame> frame,
+                                CefProcessId source_process,
+                                CefRefPtr<CefProcessMessage> message) override;
 
   // Permission handlers: default-deny unless explicitly allowed by the store.
   CefRefPtr<CefPermissionHandler> GetPermissionHandler() override {
@@ -69,6 +75,11 @@ class WindowClient final : public CefClient,
   TabController* controller_;
   CefRefPtr<permission::CefPermissionHandlerAdapter> permission_handler_;
   CefRefPtr<permission::CefDownloadHandlerAdapter> download_handler_;
+
+  /// Lazily creates the page router on the CEF UI thread (the client is
+  /// constructed before CefInitialize).
+  CefMessageRouterBrowserSide* EnsurePageRouter();
+  CefRefPtr<CefMessageRouterBrowserSide> page_router_;
 
   IMPLEMENT_REFCOUNTING(WindowClient);
   DISALLOW_COPY_AND_ASSIGN(WindowClient);
@@ -129,6 +140,18 @@ class TabController final : public CefBaseRefCounted {
   void SetLocalEntryCommandHandler(LocalEntryCommandHandler handler);
   void SetNavigationInterceptor(NavigationInterceptor interceptor);
 
+  // MDV-10 page-query delegate (crayon://mdv editing binding).  The
+  // WindowClient owns the browser-side message router and forwards
+  // queries to this delegate.
+  using PageQueryHandler = std::function<bool(
+      CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, int64_t, const CefString&,
+      bool, CefRefPtr<CefMessageRouterBrowserSide::Callback>)>;
+  void SetPageQueryHandler(PageQueryHandler handler);
+  bool HandlePageQuery(
+      CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
+      int64_t query_id, const CefString& request, bool persistent,
+      CefRefPtr<CefMessageRouterBrowserSide::Callback> callback);
+
   /// Consults the local-entry command handler (true = swallowed).
   bool HandleLocalEntryCommand(CefRefPtr<CefBrowser> browser, int command_id);
   /// Consults the navigation interceptor (true = cancelled).
@@ -159,6 +182,7 @@ class TabController final : public CefBaseRefCounted {
   ChromeCommandCallback chrome_command_callback_;
   LocalEntryCommandHandler local_entry_command_handler_;
   NavigationInterceptor navigation_interceptor_;
+  PageQueryHandler page_query_handler_;
   BrowsersClosedCallback browsers_closed_callback_;
   TabModel model_;
   permission::PermissionStore* permission_store_;

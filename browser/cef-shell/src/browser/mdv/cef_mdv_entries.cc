@@ -89,6 +89,11 @@ std::string EntryFailureText(crayon::browser_mdv::EntryError error,
 
 }  // namespace
 
+void MdvEntryController::SetDocumentLoadedCallback(
+    DocumentLoadedCallback callback) {
+  document_loaded_callback_ = std::move(callback);
+}
+
 MdvEntryController::MdvEntryController(std::shared_ptr<MdvRuntimeState> state,
                                        MdvPageStrings strings)
     : state_(std::move(state)), strings_(std::move(strings)) {}
@@ -171,28 +176,47 @@ void MdvEntryController::LoadAndShow(CefRefPtr<CefBrowser> browser,
   std::string normalized;
   const auto gate =
       GateLocalLoad(path_utf8, source, bytes, StatProbeFilesystem, &normalized);
-  if (gate.ok()) {
-    crayon::browser_markdown::RenderStatus status =
-        crayon::browser_markdown::RenderStatus::kOk;
-    const std::string html =
-        crayon::browser_markdown::RenderMarkdownToSafeHtml(normalized, &status);
-    if (status == crayon::browser_markdown::RenderStatus::kOk) {
-      snapshot.load_status = normalized.empty()
-                                 ? crayon::browser_mdv::MdvLoadStatus::kEmpty
-                                 : crayon::browser_mdv::MdvLoadStatus::kLoaded;
-      snapshot.has_document = true;
-      snapshot.source_text = normalized;
-      snapshot.rendered_html = html;
-      state_->SetSnapshot(std::move(snapshot));
-    } else {
-      snapshot.load_status =
-          crayon::browser_mdv::MdvLoadStatus::kRenderPolicyViolation;
-      snapshot.error_text = strings_.status_render_policy;
-      state_->SetSnapshot(std::move(snapshot));
-    }
-  } else {
+  if (!gate.ok()) {
     snapshot.error_text = EntryFailureText(gate.entry, gate, strings_);
     state_->SetSnapshot(std::move(snapshot));
+    if (browser) {
+      const std::string viewer_url = std::string(kMdvScheme) + "://" +
+                                     std::string(kMdvHost) + kResourceAppHtml;
+      browser->GetMainFrame()->LoadURL(viewer_url);
+    }
+    return;
+  }
+  crayon::browser_markdown::RenderStatus status =
+      crayon::browser_markdown::RenderStatus::kOk;
+  const std::string html =
+      crayon::browser_markdown::RenderMarkdownToSafeHtml(normalized, &status);
+  if (status != crayon::browser_markdown::RenderStatus::kOk) {
+    snapshot.load_status =
+        crayon::browser_mdv::MdvLoadStatus::kRenderPolicyViolation;
+    snapshot.error_text = strings_.status_render_policy;
+    state_->SetSnapshot(std::move(snapshot));
+    if (browser) {
+      const std::string viewer_url = std::string(kMdvScheme) + "://" +
+                                     std::string(kMdvHost) + kResourceAppHtml;
+      browser->GetMainFrame()->LoadURL(viewer_url);
+    }
+    return;
+  }
+  // MDV-10: the editing controller owns the loaded-document state
+  // (models, baseline, snapshot push); the entry controller navigates.
+  if (document_loaded_callback_) {
+    std::error_code stat_error;
+    const auto entry = std::filesystem::u8path(path_utf8);
+    const auto file_size = std::filesystem::file_size(entry, stat_error);
+    const auto write_time =
+        stat_error ? std::filesystem::file_time_type::min()
+                   : std::filesystem::last_write_time(entry, stat_error);
+    document_loaded_callback_(
+        browser, path_utf8, normalized,
+        stat_error ? 0 : static_cast<std::uint64_t>(file_size),
+        stat_error ? 0
+                   : static_cast<std::uint64_t>(
+                         write_time.time_since_epoch().count()));
   }
   if (browser) {
     const std::string viewer_url = std::string(kMdvScheme) + "://" +

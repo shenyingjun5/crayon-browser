@@ -23,7 +23,7 @@
 | MDV-06 | VERIFIED | MDV-05 | `browser/shared-ui/mdv`,`browser/cef-shell` | 保存语义：写回/另存为、原子写、外部修改冲突检测、失败显式报告 | MD-006 |
 | MDV-08 | DONE | MDV-02,MDV-03,BUX-03 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | `crayon://mdv` scheme handler 与只读查看接线：scheme 注册、内存资源路由、CSP 下发、viewer 模型绑定与源码/预览切换呈现 | MD-003；Windows Debug/Release 实机 |
 | MDV-09 | DONE | MDV-04,MDV-08,BUX-16 | `browser/cef-shell/src/browser/mdv` | 受控文件入口接线：菜单打开对话框（`.md` 过滤）、拖放、omnibox 本地路径路由三入口接手势门禁与入口守卫，平台分隔符归一 | MD-001；手势外零触发路径；Windows 实机 |
-| MDV-10 | TODO | MDV-05,MDV-06,MDV-08,MDV-09 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | 编辑与保存接线：分栏编辑 UI 呈现、dirty 三选确认对话框、真实文件 IO 钩子注入保存控制器（原子写）、外部修改冲突提示 | MD-005、MD-006；Windows 实机含只读位置失败报告 |
+| MDV-10 | VERIFIED | MDV-05,MDV-06,MDV-08,MDV-09 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | 编辑与保存接线：分栏编辑 UI 呈现、dirty 三选确认对话框、真实文件 IO 钩子注入保存控制器（原子写）、外部修改冲突提示 | MD-005、MD-006；Windows 实机含只读位置失败报告 |
 | MDV-07 | TODO | MDV-01..06,MDV-08..10 | `docs/current`,`docs/plans` | Windows 实机收口与模块总 Review（macOS 对齐后置，不得用 Windows 证据完成 macOS） | MD-007；Review P0/P1=0 |
 
 ## 接线切片说明（MDV-08..10）
@@ -176,3 +176,23 @@ MDV-02..06 按"模型层零 IO / 零 CEF 类型"交付后，产品仍不可见�
 - Windows 实机（Debug，测试文件 D:\crayon-mdv-test）：① omnibox 提交 `file:///D:/crayon-mdv-test/notes.md` → 拦截成功，查看器渲染"测试笔记"（标题/加粗/列表），URL 变为 `crayon://mdv/app.html`（路径不入 URL）；② Ctrl+O 打开对话框——标题"蜡笔文档"、过滤器 "MD File (*.md)"、目录记忆与仅 .md 列表，选择 `second.md` → 查看器渲染"第二个文件"内容（对话框选择→守卫→渲染全链路）；③ `file:///...readme.txt` → 不拦截，按默认行为显示原始文本页；④ Alt+F4 退出后同路径进程残留 0。
 - Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；P0/P1/P2 均为 `0`。页面发起导航（user_gesture=false）结构性不可入守卫；对话框回调经 shared_ptr 保活；句柄/回调所有权清晰（controller 由 app 持 shared_ptr，CEF 回调持引用）。
 - 未覆盖与风险：E2 拖放无法可靠自动化，其代码路径与 E3 完全相同（drop 产生 user-gestured file:// 导航），人工拖放验证归 MDV-07 收口清单；无 scheme 纯文本路径的 omnibox 判定按范围归 BUX 自有 omnibox 任务（Chrome runtime 将其判为搜索，本切片只覆盖 file:// 形式）；跨用户/权限失败的真实平台错误码映射在只读位置场景归 MDV-10 保存路径验证。`MDV-09` 转为 `DONE`，解锁 `MDV-10`。
+
+## MDV-10 原子范围（分栏编辑与真实保存接线）
+
+- 单一目标：查看器源码面板变为可编辑（source/split 态 `<textarea>`），编辑经 CefMessageRouter 受控绑定（唯一 query 名，仅 `crayon://mdv` origin）流入 Browser process 的 `MdvEditModel`（dirty/去抖/revision fencing 全走既有模型）；Ctrl+S 拦截为写回保存，`MdvSaveController` 注入真实文件 IO 钩子（`std::filesystem` stat/写临时/rename/清理，原子写）；dirty 下导航/打开新文件经 OnBeforeBrowse 拦截进入页内三选确认（保存并继续/放弃/取消），外部修改冲突进页内三选（覆盖我的/另存为/取消，另存为走 SAVE_DIALOG）；保存结果以页内状态条反馈，只读位置/盘满失败显式报告。
+- 输入：MDV-05 `MdvEditModel`、MDV-06 `MdvSaveController`（函数指针 IO 钩子）、MDV-08 页面渲染器、MDV-09 入口控制器与运行时快照、CEF `wrapper/cef_message_router.h`。
+- 输出与允许修改：共享层 `mdv_page`（源码面板 textarea 化、确认浮层、脏标记、/app.js 扩展——查询节流、确认按钮、预览应用函数、beforeunload 兜底）与 `mdv_page_test` 扩展；CEF 层新增 `browser/cef-shell/src/browser/mdv/cef_mdv_editing.h/.cc`（编辑/保存控制器 + 真实 IO 钩子）；`window/tab_controller.h/.cc` 增加消息路由窄挂点（`SetPageQueryDelegate` + `OnProcessMessageReceived` 转发，镜像既有惯例）；`new_tab` 渲染进程 App 增加消息路由 renderer 侧装配（crayon scheme 页共用渲染进程 App，装配性修改）；Windows `app.cc/.h` 装配；`mdv_handler_contract` 扩展。
+- 禁止修改：MDV-05/06 模型语义与既有测试；入口守卫（MDV-04）与路由/CSP（MDV-08）；消息路由 query 名仅绑定 `crayon://mdv` origin（OnContextCreated 校验 URL），web 页面不可见该绑定；不得自动保存、不得静默覆盖、不得持久化路径。
+- 边界：编辑文本单向流入（页面→Browser），预览单向流出（ExecuteJavaScript 应用），无任意 JS 暴露；保存前 collect 当前缓冲，冲突按 (size,mtime) 判定；dirty 关闭标签由 beforeunload 兜底（Chrome 原生两键），完整三选确认覆盖导航与打开新文件场景，关闭标签的页内三选受 Chrome runtime 边界限制如实记录；另存为仅从冲突三选与写回失败恢复路径触达（V1 无独立菜单项）。
+- 验收与测试：mdv_page 扩展（textarea/浮层/脏标记渲染、查询节流脚本无内联处理器）；editing 契约/行为测试（真实 IO 钩子：写回 happy/冲突/只读失败/残留清理，决策矩阵经模型）；handler contract 扩展（editing 文件存在、消息路由绑定 origin 校验）；Windows Debug/Release build+ctest；实机：打开文件→分栏编辑→预览实时更新→Ctrl+S 写回→外部修改冲突提示→只读位置失败报告→退出零残留。
+- 明确不做：自动保存、最近文件持久化、关闭标签的页内三选（Chrome runtime 边界，beforeunload 兜底）、导出 PDF、macOS 实机（MDV-07）。
+
+### MDV-10 完成记录（2026-08-26，分栏编辑与真实保存接线）
+
+- 实现：
+  - **页面 v2**（`mdv_page`）：源码面板 textarea 化（source/split 态可编辑），快照新增 `dirty/save_ok/confirm_visible`；页内三选确认浮层（保存并继续/放弃/取消，文案全走字符串资源 IDS 220..224）；`/app.js` v2——编辑输入 ~80ms 节流后经受控 `mdvQuery` 绑定发送、`window.mdvPush` 接收 Browser 推送（预览 HTML/脏标记/确认浮层/横幅）、确认按钮 decision 查询、beforeunload 脏兜底；无内联事件属性、零网络。
+  - **受控绑定**：`CefMessageRouter` 双侧接线——渲染侧挂入 crayon scheme 页共用进程 App（OnWebKitInitialized/OnContextCreated/Released/OnProcessMessageReceived）；浏览器侧 WindowClient 持有 router（**UI 线程惰性创建**——首版在 CefInitialize 前创建触发 `Check failed: CefCurrentlyOn(TID_UI)` 启动即崩，已修复并记录），`OnBeforeBrowse`/`OnRenderProcessTerminated`/`OnProcessMessageReceived` 转发；TabController 增 `SetPageQueryHandler`/`HandlePageQuery` 窄挂点（镜像既有惯例）。query 名 `mdvQuery` 仅对 `crayon://mdv/` origin 帧服务，其余 origin 查询直接 Failure 拒绝。
+  - **编辑/保存控制器**（`cef_mdv_editing`）：编辑突发经 `MdvEditModel.ApplyEdit`（确认挂起时拒绝）→ MDV-02 渲染 → DeliverRender 门控 → 快照更新；Ctrl+S 拦截 `IDC_SAVE_PAGE`（35004）为写回保存，`MdvSaveController` 注入真实 `std::filesystem` IO 钩子（stat/写临时/rename/清理，临时名带序号+时钟防撞）；dirty 导航拦截（OnBeforeBrowse 前置，查看器自身 reload 除外）进入页内三选，SaveAndContinue 保存成功后自动续航 pending URL，Discard 直接续航；外部修改冲突进入冲突浮层——覆盖我的（save-as 语义跳过漂移检查）/另存为（SAVE_DIALOG + §4 矩阵）/取消；保存结果经 `ExecuteJavaScript` mdvPush 反馈（成功绿条/失败红条，残留临时路径必须上报）。
+- 过程披露（构建期修复）：StatusBanner 签名扩展漏改调用点；`JSON_PARSER_RFC`/`VTYPE_DICTIONARY` 常量名对齐；`CefMessageRouterBrowserSide::Create(config)` 无 handler 参数（`AddHandler` 后置）；router Handler 基类非引用计数（去掉误用的 IMPLEMENT_REFCOUNTING）；`OnQuery` query_id 为 `int64_t`；`std::istreambuf_iterator` most-vexing-parse；`MdvRuntimeState` 实现误落匿名命名空间；`CefValue::SetDictionary(CefDictionaryValue::Create())` 用法。
+- 自动验证：Windows Debug/Release build 零错误、两配置 ctest 均 **58/58**（`mdv_page` 扩展通过；`mdv_handler_contract` 扩展 editing 文件存在性 + MDV-06 模型驱动 + ExecuteJavaScript 推送）；clang-format 零违规；`scripts/check.ps1 fast/security` 全 passed；`git diff --check` 通过。启动崩溃修复后实机验证：应用正常启动、file:// 打开文档、分栏视图（左源码右预览）渲染正确、退出零残留。
+- **未覆盖与阻塞（如实记录）**：交互式编辑输入、Ctrl+S 落盘、冲突浮层与三选确认的**实机键入验证被桌面环境阻塞**——冒烟期间另一应用（ChatGPT，pid 5472）反复抢占前台，SetForegroundWindow/ALT 解锁/SendKeys 均无法稳定落地按键（原始错误：`frontmost_pid_mismatch`；多次输入未达页面）。已验证到"文件打开→分栏渲染→零残留"为止；编辑/保存/确认链路的模型层行为由 MDV-05/06 单测与本次契约测试覆盖，端到端键入验证待桌面空闲后人工补验（MDV-07 收口清单首项）。状态维持 `VERIFIED`，不转 `DONE`。

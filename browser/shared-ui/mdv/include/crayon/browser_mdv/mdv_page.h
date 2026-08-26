@@ -32,6 +32,11 @@ struct MdvPageStrings {
   std::string status_invalid_utf8;
   std::string status_render_policy;
   std::string status_not_markdown;
+  std::string status_saved;
+  std::string confirm_text;
+  std::string label_save;
+  std::string label_discard;
+  std::string label_cancel;
 };
 
 /// One request's parsed coordinates (mirrors the new-tab classifier
@@ -81,6 +86,10 @@ struct MdvPageSnapshot {
   /// renderer escapes it.  Non-empty takes banner priority over
   /// `load_status`.
   std::string error_text;
+  /// Editing state pushed by the MDV-10 controller.
+  bool dirty = false;
+  bool save_ok = false;
+  bool confirm_visible = false;
 };
 
 /// Renders the full app.html body for `snapshot`.

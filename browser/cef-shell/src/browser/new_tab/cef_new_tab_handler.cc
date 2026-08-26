@@ -10,6 +10,7 @@
 #include "include/cef_resource_handler.h"
 #include "include/cef_response.h"
 #include "include/wrapper/cef_helpers.h"
+#include "include/wrapper/cef_message_router.h"
 
 namespace crayon::browser::cef_shell::new_tab {
 namespace {

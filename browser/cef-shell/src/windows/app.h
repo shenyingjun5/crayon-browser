@@ -8,6 +8,7 @@
 
 #include "browser/permission/permission_store.h"
 #include "browser/window/tab_controller.h"
+#include "browser/mdv/cef_mdv_editing.h"
 #include "browser/mdv/cef_mdv_entries.h"
 #include "crayon/browser_mdv/mdv_page.h"
 #include "crayon/browser_new_tab/new_tab_page.h"
@@ -54,6 +55,7 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   const browser_mdv::MdvPageStrings mdv_strings_;
   const std::shared_ptr<mdv::MdvRuntimeState> mdv_runtime_;
   const std::shared_ptr<mdv::MdvEntryController> mdv_entries_;
+  const std::shared_ptr<mdv::MdvEditController> mdv_editing_;
   std::unique_ptr<permission::PermissionStore> permission_store_;
   CefRefPtr<window::TabController> tab_controller_;
   const std::shared_ptr<WindowsShellRuntime> shell_runtime_;

@@ -61,11 +61,13 @@ std::string ViewButton(const std::string& label, const char* view,
   return button.str();
 }
 
-std::string StatusBanner(const std::string& error_text, MdvLoadStatus status,
-                         const MdvPageStrings& strings) {
+std::string StatusBanner(const std::string& error_text,
+                         const MdvPageStrings& strings, bool save_ok,
+                         MdvLoadStatus status) {
   if (!error_text.empty()) {
+    const char* cls = save_ok ? "md-status md-ok" : "md-status";
     std::ostringstream override_banner;
-    override_banner << "<p class=\"md-status\" role=\"alert\">"
+    override_banner << "<p class=\"" << cls << "\" role=\"alert\">"
                     << EscapeHtml(error_text) << "</p>";
     return override_banner.str();
   }
@@ -119,7 +121,9 @@ std::string RenderMdvDocument(const MdvPageSnapshot& snapshot,
                               const MdvPageStrings& strings) {
   std::ostringstream document;
   document << "<!doctype html><html lang=\"" << EscapeHtml(strings.language)
-           << "\" data-app=\"mdv\"><head><meta charset=\"utf-8\">"
+           << "\" data-app=\"mdv\" data-dirty=\""
+           << (snapshot.dirty ? "true" : "false")
+           << "\"><head><meta charset=\"utf-8\">"
               "<meta name=\"viewport\" content=\"width=device-width,"
               "initial-scale=1\"><title>"
            << EscapeHtml(strings.document_title)
@@ -133,7 +137,8 @@ std::string RenderMdvDocument(const MdvPageSnapshot& snapshot,
            << ViewButton(strings.view_preview, "preview", snapshot.view_mode)
            << ViewButton(strings.view_split, "split", snapshot.view_mode)
            << "</nav>";
-  document << StatusBanner(snapshot.error_text, snapshot.load_status, strings);
+  document << StatusBanner(snapshot.error_text, strings, snapshot.save_ok,
+                           snapshot.load_status);
   if (!snapshot.has_document) {
     document << "<main class=\"md-empty\"><p>"
              << EscapeHtml(strings.status_empty) << "</p></main></body></html>";
@@ -171,15 +176,28 @@ std::string RenderMdvStylesheet() {
          "0 14px;}"
       << "body[data-view=preview] .md-source-pane{display:none;}"
       << "body[data-view=source] .md-preview-pane{display:none;}"
+      << ".md-source-pane textarea{width:100%;height:100%;border:none;"
+         "outline:none;resize:none;background:transparent;color:inherit;"
+         "font:13px/1.6 ui-monospace,monospace;}"
       << ".md-source-pane pre{white-space:pre-wrap;word-break:break-word;}"
+      << ".view-bar .md-dirty{display:none;width:8px;height:8px;"
+         "border-radius:50%;background:darkorange;align-self:center;}"
+      << "body[data-dirty=true] .md-dirty{display:inline-block;}"
+      << ".md-status.md-ok{color:seagreen;}"
+      << ".md-confirm{display:none;position:fixed;inset:auto 0 0 0;margin:auto;"
+         "max-width:420px;padding:16px;border:1px solid canvasText;"
+         "background:canvas;z-index:10;}"
+      << ".md-confirm[data-show=true]{display:block;}"
+      << ".md-confirm button{margin-right:8px;padding:4px 12px;}"
       << ".md-status{color:crimson;padding:4px 14px;margin:0;}"
       << "@media(prefers-color-scheme:dark){a{color:#9ecbff;}}";
   return css.str();
 }
 
 std::string RenderMdvScript() {
-  // In-memory script: switches the body data-view attribute on click.
-  // No inline handlers (CSP), no network access, no storage.
+  // In-memory script: view switching, edit-burst queries over the
+  // controlled mdvQuery binding, confirm-dialog decisions and the
+  // beforeunload dirty guard.  No inline handlers (CSP), no network.
   std::ostringstream js;
   js << "'use strict';"
      << "(function(){"
@@ -195,6 +213,47 @@ std::string RenderMdvScript() {
      << "}"
      << "event.currentTarget.setAttribute('data-active','true');"
      << "});}"
+     << "var source=document.getElementById('md-source');"
+     << "var preview=document.getElementById('md-preview');"
+     << "var confirmBox=document.getElementById('md-confirm');"
+     << "function apply(state){"
+     << "if(!state){return;}"
+     << "if(typeof "
+        "state.preview==='string'&&preview){preview.innerHTML=state.preview;}"
+     << "if(typeof "
+        "state.dirty==='boolean'){body.setAttribute('data-dirty',state.dirty?'"
+        "true':'false');}"
+     << "if(confirmBox&&typeof "
+        "state.confirm==='boolean'){confirmBox.setAttribute('data-show',state."
+        "confirm?'true':'false');}"
+     << "if(typeof state.banner==='string'){var "
+        "b=document.querySelector('.md-status');if(!b){b=document."
+        "createElement('p');b.className='md-status';b.setAttribute('role','"
+        "alert');(document.querySelector('.view-bar')||body).after(b);}b."
+        "textContent=state.banner;}"
+     << "}"
+     << "window.mdvPush=apply;"
+     << "function sendQuery(payload){"
+     << "if(typeof window.mdvQuery!=='function'){return;}"
+     << "window.mdvQuery(JSON.stringify(payload),function(response){try{apply("
+        "JSON.parse(response));}catch(e){}},function(){});"
+     << "}"
+     << "var throttleUntil=0;"
+     << "if(source){source.addEventListener('input',function(){"
+     << "var now=Date.now();if(now<throttleUntil){return;}throttleUntil=now+80;"
+     << "sendQuery({type:'edit',text:source.value});"
+     << "});}"
+     << "if(confirmBox){confirmBox.addEventListener('click',function(event){"
+     << "var "
+        "d=event.target&&event.target.getAttribute?event.target.getAttribute('"
+        "data-decision'):null;"
+     << "if(!d){return;}"
+     << "sendQuery({type:'decision',value:d});"
+     << "});}"
+     << "window.addEventListener('beforeunload',function(e){"
+     << "if(body.getAttribute('data-dirty')==='true'){e.preventDefault();e."
+        "returnValue='';}"
+     << "});"
      << "})();";
   return js.str();
 }

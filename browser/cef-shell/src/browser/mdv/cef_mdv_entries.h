@@ -1,6 +1,8 @@
 #ifndef CRAYON_BROWSER_CEF_SHELL_SRC_BROWSER_MDV_CEF_MDV_ENTRIES_H_
 #define CRAYON_BROWSER_CEF_SHELL_SRC_BROWSER_MDV_CEF_MDV_ENTRIES_H_
 
+#include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 
@@ -46,9 +48,18 @@ class MdvEntryController
   void LoadAndShow(CefRefPtr<CefBrowser> browser, const std::string& path_utf8,
                    EntrySource source);
 
+  /// MDV-10: invoked after a successful gated load so the editing
+  /// controller can arm its models (path, normalized bytes, size,
+  /// mtime).  The entry controller still owns navigation.
+  using DocumentLoadedCallback =
+      std::function<void(CefRefPtr<CefBrowser>, const std::string&,
+                         const std::string&, std::uint64_t, std::uint64_t)>;
+  void SetDocumentLoadedCallback(DocumentLoadedCallback callback);
+
  private:
   const std::shared_ptr<MdvRuntimeState> state_;
   const MdvPageStrings strings_;
+  DocumentLoadedCallback document_loaded_callback_;
 };
 
 /// Converts a `file://` URL to a local path (percent-decoded, Windows

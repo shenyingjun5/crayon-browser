@@ -19,6 +19,28 @@ double ZoomLevelForFactor(double factor) {
 
 }  // namespace
 
+namespace {
+
+/// Forwards router queries to the shell-assembly delegate (MDV-10).
+class PageQueryRouterHandler final
+    : public CefMessageRouterBrowserSide::Handler {
+ public:
+  explicit PageQueryRouterHandler(TabController* controller)
+      : controller_(controller) {}
+
+  bool OnQuery(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
+               int64_t query_id, const CefString& request, bool persistent,
+               CefRefPtr<Callback> callback) override {
+    return controller_->HandlePageQuery(browser, frame, query_id, request,
+                                        persistent, std::move(callback));
+  }
+
+ private:
+  TabController* controller_;
+};
+
+}  // namespace
+
 WindowClient::WindowClient(TabController* controller,
                            permission::PermissionStore* permission_store)
     : controller_(controller) {
@@ -75,7 +97,29 @@ void WindowClient::OnRenderProcessTerminated(CefRefPtr<CefBrowser> browser,
   static_cast<void>(status);
   static_cast<void>(error_code);
   static_cast<void>(error_string);
+  EnsurePageRouter()->OnRenderProcessTerminated(browser);
   controller_->OnRenderProcessGone(browser);
+}
+
+bool WindowClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
+                                            CefRefPtr<CefFrame> frame,
+                                            CefProcessId source_process,
+                                            CefRefPtr<CefProcessMessage> message) {
+  CEF_REQUIRE_UI_THREAD();
+  return EnsurePageRouter()->OnProcessMessageReceived(browser, frame,
+                                                      source_process,
+                                                      message);
+}
+
+CefMessageRouterBrowserSide* WindowClient::EnsurePageRouter() {
+  CEF_REQUIRE_UI_THREAD();
+  if (!page_router_) {
+    CefMessageRouterConfig router_config;
+    router_config.js_query_function = "mdvQuery";
+    page_router_ = CefMessageRouterBrowserSide::Create(router_config);
+    page_router_->AddHandler(new PageQueryRouterHandler(controller_), true);
+  }
+  return page_router_.get();
 }
 
 bool WindowClient::OnBeforeBrowse(CefRefPtr<CefBrowser> browser,
@@ -84,6 +128,9 @@ bool WindowClient::OnBeforeBrowse(CefRefPtr<CefBrowser> browser,
                                   bool user_gesture, bool is_redirect) {
   CEF_REQUIRE_UI_THREAD();
   static_cast<void>(is_redirect);
+  if (request) {
+    EnsurePageRouter()->OnBeforeBrowse(browser, frame);
+  }
   if (request && controller_->InterceptNavigation(browser, request->GetURL(),
                                                   user_gesture)) {
     return true;
@@ -142,6 +189,21 @@ void TabController::SetNavigationInterceptor(
     NavigationInterceptor interceptor) {
   CEF_REQUIRE_UI_THREAD();
   navigation_interceptor_ = std::move(interceptor);
+}
+
+void TabController::SetPageQueryHandler(PageQueryHandler handler) {
+  CEF_REQUIRE_UI_THREAD();
+  page_query_handler_ = std::move(handler);
+}
+
+bool TabController::HandlePageQuery(
+    CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int64_t query_id,
+    const CefString& request, bool persistent,
+    CefRefPtr<CefMessageRouterBrowserSide::Callback> callback) {
+  CEF_REQUIRE_UI_THREAD();
+  return page_query_handler_ && page_query_handler_(browser, frame, query_id,
+                                                    request, persistent,
+                                                    std::move(callback));
 }
 
 bool TabController::HandleLocalEntryCommand(CefRefPtr<CefBrowser> browser,
