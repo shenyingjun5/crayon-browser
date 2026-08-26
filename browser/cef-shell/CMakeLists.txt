@@ -29,6 +29,8 @@ if(OS_WINDOWS)
       src/browser/context/profile_context_factory.h
       src/browser/context/profile_id_validator.cc
       src/browser/context/profile_id_validator.h
+      src/browser/mdv/cef_mdv_entries.cc
+      src/browser/mdv/cef_mdv_entries.h
       src/browser/mdv/cef_mdv_handler.cc
       src/browser/mdv/cef_mdv_handler.h
       src/browser/new_tab/cef_new_tab_handler.cc

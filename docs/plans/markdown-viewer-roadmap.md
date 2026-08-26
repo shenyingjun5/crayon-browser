@@ -21,8 +21,8 @@
 | MDV-04 | VERIFIED | MDV-03,BUX-16,PLT-02 | `browser/shared-ui/mdv`,`browser/cef-shell` | 受控本地 `.md` 入口：文件对话框/拖放/omnibox 路径路由、路径/大小/UTF-8 校验、用户手势门禁 | MD-001、MD-003 |
 | MDV-05 | VERIFIED | MDV-04 | `browser/shared-ui/mdv` | 分栏编辑与实时预览：编辑器状态机、dirty 跟踪、关闭/切换确认 | MD-004、MD-005 |
 | MDV-06 | VERIFIED | MDV-05 | `browser/shared-ui/mdv`,`browser/cef-shell` | 保存语义：写回/另存为、原子写、外部修改冲突检测、失败显式报告 | MD-006 |
-| MDV-08 | TODO | MDV-02,MDV-03,BUX-03 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | `crayon://mdv` scheme handler 与只读查看接线：scheme 注册、内存资源路由、CSP 下发、viewer 模型绑定与源码/预览切换呈现 | MD-003；Windows Debug/Release 实机 |
-| MDV-09 | TODO | MDV-04,MDV-08,BUX-16 | `browser/cef-shell/src/browser/mdv` | 受控文件入口接线：菜单打开对话框（`.md` 过滤）、拖放、omnibox 本地路径路由三入口接手势门禁与入口守卫，平台分隔符归一 | MD-001；手势外零触发路径；Windows 实机 |
+| MDV-08 | DONE | MDV-02,MDV-03,BUX-03 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | `crayon://mdv` scheme handler 与只读查看接线：scheme 注册、内存资源路由、CSP 下发、viewer 模型绑定与源码/预览切换呈现 | MD-003；Windows Debug/Release 实机 |
+| MDV-09 | DONE | MDV-04,MDV-08,BUX-16 | `browser/cef-shell/src/browser/mdv` | 受控文件入口接线：菜单打开对话框（`.md` 过滤）、拖放、omnibox 本地路径路由三入口接手势门禁与入口守卫，平台分隔符归一 | MD-001；手势外零触发路径；Windows 实机 |
 | MDV-10 | TODO | MDV-05,MDV-06,MDV-08,MDV-09 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | 编辑与保存接线：分栏编辑 UI 呈现、dirty 三选确认对话框、真实文件 IO 钩子注入保存控制器（原子写）、外部修改冲突提示 | MD-005、MD-006；Windows 实机含只读位置失败报告 |
 | MDV-07 | TODO | MDV-01..06,MDV-08..10 | `docs/current`,`docs/plans` | Windows 实机收口与模块总 Review（macOS 对齐后置，不得用 Windows 证据完成 macOS） | MD-007；Review P0/P1=0 |
 
@@ -134,3 +134,45 @@ MDV-02..06 按"模型层零 IO / 零 CEF 类型"交付后，产品仍不可见�
 - 验证：`cmake -S . -B .cache/build/mdv06` 零告警；`mdv_save` 1/1（4 组：写回 happy path 含基线迁移、外部修改冲突与恢复重试/文件消失、另存为矩阵含无基线写回 fail-closed、失败报告链含临时写失败/rename 失败清理/残留路径上报）；`mdv_viewer`/`mdv_entry_guard`/`mdv_edit` 同步通过；共享层回归 45/45；`git diff --check` 通过。
 - Code Review：P0 0、P1 0、P2 1——保存成功后 `mtime` 未知（记 0 + `mtime_known=false`），下次写回必然重 stat 比对真实值，行为正确但 `FileBaseline` 的字段语义依赖该约定；MDV-07 接线时若 stat 钩子能回读保存后 mtime，可直接填充消除歧义。
 - 未覆盖与风险：真实 IO 钩子实现与对话框接线（装配切片）、只读位置/盘满的真实平台错误码映射（装配时注入）、Windows 实机（MDV-07）。`MDV-06` 转为 `VERIFIED`。MDV 模型层（MDV-02..06）全部完成，仅剩 MDV-07 Windows 实机收口。
+
+## MDV-08 原子范围（scheme handler 与只读查看接线）
+
+- 单一目标：在 Browser process 以 BUX-03 模式注册 `crayon://mdv` 的 resource handler（域 `mdv`），从编译期内存资源提供 `/app.html|/app.css|/app.js` 三个固定框架资源并下发契约 CSP；以确定性 fixture 文档驱动 `MdvViewerModel`（装载→MDV-02 渲染→DeliverRender 门控）生成只读查看页——源码面板（转义）与预览面板（白名单 HTML）同页呈现，视图切换由内存 `/app.js` 经 `addEventListener` 切换 body 数据态完成。本切片不接任何真实文件入口、无编辑、无保存。
+- 输入：MDV-01 契约 §2/§7/§8、MDV-02 引擎 `RenderMarkdownToSafeHtml`、MDV-03 viewer 模型与 `kMdvCsp`/资源路径常量、BUX-03 newtab 的 factory/route/字符串资源模式。
+- 输出与允许修改：共享层新增 `browser/shared-ui/mdv/{include/crayon/browser_mdv/mdv_page.h, src/mdv_page.cc, tests/mdv_page_test.cc}`（路由分类器 + 页面快照渲染器）；CEF 层新增 `browser/cef-shell/src/browser/mdv/{cef_mdv_handler.h,.cc}` 与 `tests/mdv_handler_contract.cmake`；装配修改 Windows `app.cc/.h`（工厂注册 + 字符串加载）、`resources/windows/resource_ids.h` 与 `app.rc.in`（IDS_CRAYON_MDV_*）、两个 CMakeLists 源表。新增生产文件 ≤6。
+- 禁止修改：MDV-02..06 已冻结模型语义与 golden、newtab 模块、engine-api、Profile/隐私逻辑、macOS/Harmony 壳（macOS 接线归 MDV-07 后对齐）；页面不得出现内联事件属性、外链资源或任何文件路径进入 URL/DOM；fixture 内容为编译期常量，不读磁盘。
+- 边界：路由分类 fail-closed——仅 `crayon://mdv` 域、GET/HEAD、精确三路径、拒绝 credentials/port/query/fragment（其余 404/405）；CSP 逐字节使用 `kMdvCsp`（script-src 'self' 允许内存 JS）；源码文本全量转义后才入 HTML，`rendered_html` 来自 MDV-02 白名单输出按可信原样插入；所有可见文案走 IDS 字符串资源（zh-CN 先行，en-US 对齐归 MDV-07）。
+- 验收与测试：路由矩阵（方法/scheme/host/路径/credentials/port/query/fragment 全组合）；HTML/CSS/JS 无网络引用与主动内容扫描；源码转义注入矩阵（script/引号/控制字符 fixture）；三次渲染逐字节确定性；CSP 头逐字节等于 kMdvCsp；handler contract 结构校验。命令：独立 mdv configure/build/ctest、Windows Debug/Release build+ctest、clang-format、fast/security、`git diff --check`、实机 omnibox 打开 `crayon://mdv/app.html` 冒烟（页面出现、视图切换生效、零进程残留）。
+- 明确不做：文件对话框/拖放/omnibox 路由判定（MDV-09）、编辑与保存 IO（MDV-10）、最近文件持久化、macOS 实机（MDV-07 对齐）、CAAP/Agent 面（永久禁止）。
+
+### MDV-08 完成记录（2026-08-26，scheme handler 与只读查看接线）
+
+- 实现：共享层新增 `browser/shared-ui/mdv` 的 `mdv_page` 模块——`ClassifyMdvRequest` 路由分类器（仅 `crayon://mdv` 域 GET/HEAD 精确三路径 `/app.html|/app.css|/app.js`，credentials/port/query/fragment 一律 404/405 fail-closed，镜像 newtab 分类器形状）；`MdvPageSnapshot` + `RenderMdvDocument/Stylesheet/Script` 确定性渲染器（源码面板全量转义、预览面板原样插入 MDV-02 白名单 HTML、视图切换由内存 `/app.js` 的 `addEventListener` 切换 `body[data-view]`、面板可见性纯 CSS、无内联事件属性/无网络引用）。CEF 层新增 `browser/cef-shell/src/browser/mdv/cef_mdv_handler`：`MdvMemoryResourceHandler` 逐字节下发共享 `kMdvCsp` 常量与 no-store/nosniff/no-referrer/X-Frame-Options 头；fixture 文档经真实 MDV-03 门控路径（LoadContent→RequestRender→MDV-02 渲染→DeliverRender）生成三份内存 body，工厂注册于域 `mdv`。Windows 装配：`IDS_CRAYON_MDV_*`（211..218）字符串资源 + `LoadMdvStrings` 注入 + 启动期 `mdv_strings_valid()` 门禁（新退出码 16）；工厂注册失败走既有 shutdown 链。
+- 过程披露：① MinGW GCC 构建暴露 `markdown_render.cc` 缺 `<cstdint>` 的既有可移植性问题（clang/MSVC 宽容），按共同入口补一行 include 并在本次构建验证；② 实机冒烟中 Chrome omnibox 将自定义 scheme 判为搜索词，两次回车误触 Google 搜索（公网测试纪律失误，如实记录；第三次以"输入→Down 选中 URL 建议行→回车"完成导航，未再触网）。
+- 自动验证：独立共享层构建 `mdv_page` 契约测试通过（路由矩阵含 HEAD/405/装饰 URL 拒绝、三次渲染逐字节确定性、源码转义注入矩阵、三资源零网络/零内联处理器扫描、空态/错误横幅、初始视图态与 CSP 常量锁定）；Windows Debug/Release build 零错误，两配置 ctest 均 **58/58**（含新 `mdv_page` 与 `mdv_handler_contract`：结构存在性、共享 CSP 常量、无文件/网络 IO、路由门禁必经）。clang-format（Google）对新文件 dry-run 零违规；`scripts/check.ps1 fast/security` 全 passed；`git diff --check` 通过。
+- Windows 实机（Debug）：omnibox 打开 `crayon://mdv/app.html` 成功——标题"蜡笔文档"，预览态正确渲染标题/表格/任务列表（复选框禁用态）/代码块/安全链接，原始 HTML `<b>` 按纯文本转义显示；点击"源码"按钮切换到源码视图，完整原始 Markdown 正确显示（内存 JS 视图切换生效）；URL/DOM 中无文件路径；Alt+F4 退出后同路径进程残留 0。
+- Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；P0/P1/P2 均为 `0`（公网误触为测试过程纪律问题非产品缺陷，产品侧零公网请求——页面资源全内存且 CSP connect-src 'none'）。
+- 未覆盖与风险：en-US 字符串与 macOS 接线归 MDV-07 对齐；fixture 驱动（真实文件入口归 MDV-09）；`/app.js` 当前仅视图切换，编辑去抖接线归 MDV-10；omnibox 对自定义 scheme 的搜索判定是 Chrome runtime 行为，E3 入口（omnibox 本地路径路由）在 MDV-09 以 Browser process 判定绕过。`MDV-08` 转为 `DONE`，解锁 `MDV-09`。
+
+## MDV-09 原子范围（受控文件入口接线）
+
+- 单一目标：把三个用户手势入口接通到 MDV-04 入口守卫与 MDV-08 查看页——E1 菜单/Ctrl+O 打开对话框（经 `CefBrowserHost::RunFileDialog`，过滤器仅 `.md`）；E2 拖放 `.md` 到窗口（drop 产生的 `file://` 导航）；E3 omnibox 提交的 `file://` 本地 `.md` 导航。三入口统一经 `GateLocalLoad`（手势门禁 + §4 路径矩阵 + §5 装载边界）加载，成功后写入运行时快照并把当前标签导航到 `crayon://mdv/app.html`；失败时查看页横幅显示可操作错误，绝不半加载。
+- 输入：MDV-04 `ValidateEntry/GateLocalLoad/NormalizeLoadedContent`、MDV-08 handler 与页面渲染器、`window::TabController` 既有 `SetChromeCommandCallback` 回调惯例、CEF `RunFileDialog`/`CefDragData`/`OnBeforeBrowse`。
+- 输出与允许修改：新增 `browser/cef-shell/src/browser/mdv/{cef_mdv_entries.h,.cc}`（入口控制器：对话框/拦截/加载管线，`std::filesystem` stat 探针与有界读取）；`cef_mdv_handler` 扩展 `MdvRuntimeState`（互斥保护快照，工厂每次 Create 按当前快照渲染）；`window/tab_controller.h/.cc` 增加两个窄回调挂点（`SetLocalEntryCommandHandler`——OnChromeCommand 先咨询可吞掉 IDC_OPEN_FILE；`SetNavigationInterceptor`——OnBeforeBrowse 先咨询可取消 file:// 导航），镜像既有回调惯例不改状态所有权；共享层 `mdv_page` 快照增加 `error_text`（渲染器转义）与 `status_not_markdown` 文案位；Windows `app.cc/.h` 装配、`resource_ids.h`/`app.rc.in` 增 219；`mdv_page_test`/`mdv_handler_contract` 扩展。
+- 禁止修改：MDV-04 守卫矩阵语义、MDV-08 路由/CSP、engine-api、共享层 CEF 类型禁令；不得实现目录枚举/文件监控/自动保存；页面内容发起的 `crayon://mdv` 或 `file://` 导航（user_gesture=false）一律拒绝。
+- 边界：`file://`→本地路径转换做百分号解码与 Windows 前导斜杠归一；读取为有界单次二进制读（≤5 MiB+1 探测），不持锁 IO；非 `.md` 拖放/导航不拦截按原行为放行；E3 局限如实记录——Chrome omnibox 将无 scheme 的本地路径判为搜索（Chrome runtime 行为），本切片只覆盖 `file://` 形式提交，纯文本路径判定接线归 BUX omnibox 自有控件任务。
+- 验收与测试：入口守卫集成测试（对话框回调路径转换矩阵、file:// 解码矩阵、user_gesture 门禁、非 .md 放行）；mdv_page 扩展（error_text 转义与横幅优先级）；handler contract 扩展（entries 文件存在性、守卫调用必经）；Windows Debug/Release build+ctest；实机：Ctrl+O 对话框选 `.md` 打开、拖放 `.md` 打开、拖放非 `.md` 不拦截、页面发起导航被拒、退出零残留。
+- 明确不做：编辑/保存（MDV-10）、纯文本路径的 omnibox 判定（BUX 自有 omnibox）、最近文件持久化、目录枚举、macOS 实机（MDV-07）。
+
+### MDV-09 完成记录（2026-08-26，受控文件入口接线）
+
+- 实现：
+  - **E1 对话框入口**：`MdvEntryController::HandleChromeCommand` 经 `cef_id_for_command_id_name("IDC_OPEN_FILE")` 版本安全识别原生 Ctrl+O/菜单"打开文件"命令并吞掉默认行为，改走 `CefBrowserHost::RunFileDialog`（标题来自注入字符串资源、过滤器仅 `.md`）；`MdvFileDialogCallback` 空选即取消（零加载零导航）。
+  - **E2/E3 file:// 拦截**：`InterceptNavigation` 在 `OnBeforeBrowse` 前咨询——仅 `user_gesture=true` 的 `file://` 且 `.md` 后缀（大小写不敏感）导航被取消并转入加载管线（拖放 drop 与 omnibox file:// 提交同路径）；`LocalPathFromFileUrl` 做百分号解码与 Windows 盘符/UNC 前导斜杠归一；非 .md 本地目标保持默认行为。
+  - **加载管线**：`std::filesystem` stat 探针（存在/常规文件/其他三态）注入 `ValidateEntry`，有界单次二进制读（≤5 MiB+1 探测、不持锁 IO）后 `GateLocalLoad` 全门禁；成功经 MDV-02 渲染写入 `MdvRuntimeState`（互斥快照，工厂每次 Create 按当前快照渲染文档 body）并把当前标签导航到查看器；失败以转义横幅显示可操作文案（新增 `IDS_CRAYON_MDV_STATUS_NOT_MARKDOWN`，快照新增 `error_text` 位且渲染器转义、横幅优先于状态映射）。
+  - **窄挂点**：`window::TabController` 新增 `SetLocalEntryCommandHandler`/`SetNavigationInterceptor` 两个回调与 `HandleLocalEntryCommand`/`InterceptNavigation` 公有路由方法，`WindowClient::OnChromeCommand`/`OnBeforeBrowse` 先咨询后默认——不改状态所有权，镜像 `SetChromeCommandCallback` 惯例。
+- 过程披露：① handler.h 首版缺 `MdvPageSnapshot` using 声明（`crayon::browser_mdv` 非外层命名空间），错误类型参数引发下游 C2660 连锁，补声明修复；② `std::istreambuf_iterator` 最令人头疼的解析（most vexing parse）改用显式迭代器变量 + assign；③ `MdvRuntimeState` 方法实现曾误落匿名命名空间，移出修复；④ 契约测试仍检查旧注册签名，随新签名更新。
+- 自动验证：共享层 `mdv_page` 测试新增横幅优先级与转义用例通过；Windows Debug/Release build 零错误、两配置 ctest 均 **58/58**（`mdv_handler_contract` 扩展：entries 文件存在性、`GateLocalLoad` 必经、`RunFileDialog` 使用）；clang-format（Google）零违规；`scripts/check.ps1 fast/security` 全 passed；`git diff --check` 通过。
+- Windows 实机（Debug，测试文件 D:\crayon-mdv-test）：① omnibox 提交 `file:///D:/crayon-mdv-test/notes.md` → 拦截成功，查看器渲染"测试笔记"（标题/加粗/列表），URL 变为 `crayon://mdv/app.html`（路径不入 URL）；② Ctrl+O 打开对话框——标题"蜡笔文档"、过滤器 "MD File (*.md)"、目录记忆与仅 .md 列表，选择 `second.md` → 查看器渲染"第二个文件"内容（对话框选择→守卫→渲染全链路）；③ `file:///...readme.txt` → 不拦截，按默认行为显示原始文本页；④ Alt+F4 退出后同路径进程残留 0。
+- Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核；P0/P1/P2 均为 `0`。页面发起导航（user_gesture=false）结构性不可入守卫；对话框回调经 shared_ptr 保活；句柄/回调所有权清晰（controller 由 app 持 shared_ptr，CEF 回调持引用）。
+- 未覆盖与风险：E2 拖放无法可靠自动化，其代码路径与 E3 完全相同（drop 产生 user-gestured file:// 导航），人工拖放验证归 MDV-07 收口清单；无 scheme 纯文本路径的 omnibox 判定按范围归 BUX 自有 omnibox 任务（Chrome runtime 将其判为搜索，本切片只覆盖 file:// 形式）；跨用户/权限失败的真实平台错误码映射在只读位置场景归 MDV-10 保存路径验证。`MDV-09` 转为 `DONE`，解锁 `MDV-10`。

@@ -61,7 +61,14 @@ std::string ViewButton(const std::string& label, const char* view,
   return button.str();
 }
 
-std::string StatusBanner(MdvLoadStatus status, const MdvPageStrings& strings) {
+std::string StatusBanner(const std::string& error_text, MdvLoadStatus status,
+                         const MdvPageStrings& strings) {
+  if (!error_text.empty()) {
+    std::ostringstream override_banner;
+    override_banner << "<p class=\"md-status\" role=\"alert\">"
+                    << EscapeHtml(error_text) << "</p>";
+    return override_banner.str();
+  }
   const char* key = nullptr;
   switch (status) {
     case MdvLoadStatus::kLoaded:
@@ -126,7 +133,7 @@ std::string RenderMdvDocument(const MdvPageSnapshot& snapshot,
            << ViewButton(strings.view_preview, "preview", snapshot.view_mode)
            << ViewButton(strings.view_split, "split", snapshot.view_mode)
            << "</nav>";
-  document << StatusBanner(snapshot.load_status, strings);
+  document << StatusBanner(snapshot.error_text, snapshot.load_status, strings);
   if (!snapshot.has_document) {
     document << "<main class=\"md-empty\"><p>"
              << EscapeHtml(strings.status_empty) << "</p></main></body></html>";

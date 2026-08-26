@@ -6,6 +6,7 @@
 #include <string_view>
 #include <utility>
 
+#include "browser/mdv/cef_mdv_entries.h"
 #include "browser/mdv/cef_mdv_handler.h"
 #include "browser/new_tab/cef_new_tab_handler.h"
 #include "include/cef_browser.h"
@@ -78,6 +79,7 @@ browser_mdv::MdvPageStrings LoadMdvStrings(HINSTANCE resource_module) {
       LoadUtf8String(resource_module, IDS_CRAYON_MDV_STATUS_TOO_LARGE),
       LoadUtf8String(resource_module, IDS_CRAYON_MDV_STATUS_INVALID_UTF8),
       LoadUtf8String(resource_module, IDS_CRAYON_MDV_STATUS_RENDER_POLICY),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_STATUS_NOT_MARKDOWN),
   };
 }
 
@@ -119,6 +121,10 @@ BrowserApp::BrowserApp(HINSTANCE resource_module, std::wstring product_name)
       window_icons_(std::make_shared<WindowsWindowIcons>(resource_module)),
       new_tab_strings_(LoadNewTabStrings(resource_module)),
       mdv_strings_(LoadMdvStrings(resource_module)),
+      mdv_runtime_(std::make_shared<mdv::MdvRuntimeState>(
+          mdv::BuildFixtureSnapshot())),
+      mdv_entries_(std::make_shared<mdv::MdvEntryController>(
+          mdv_runtime_, mdv_strings_)),
       permission_store_(std::make_unique<permission::PermissionStore>()),
       tab_controller_(new window::TabController(
           browser_new_tab::kNewTabUrl,
@@ -155,11 +161,20 @@ void BrowserApp::OnContextInitialized() {
     CefQuitMessageLoop();
     return;
   }
-  if (!mdv::RegisterMdvSchemeHandlerFactory(mdv_strings_)) {
+  if (!mdv::RegisterMdvSchemeHandlerFactory(mdv_strings_, mdv_runtime_)) {
     shell_runtime_->Shutdown();
     CefQuitMessageLoop();
     return;
   }
+  tab_controller_->SetLocalEntryCommandHandler(
+      [entries = mdv_entries_](CefRefPtr<CefBrowser> browser, int command_id) {
+        return entries->HandleChromeCommand(browser, command_id);
+      });
+  tab_controller_->SetNavigationInterceptor(
+      [entries = mdv_entries_](CefRefPtr<CefBrowser> browser,
+                               const CefString& url, bool user_gesture) {
+        return entries->InterceptNavigation(browser, url, user_gesture);
+      });
   if (!tab_controller_->CreateMainWindow()) {
     shell_runtime_->Shutdown();
     CefQuitMessageLoop();
@@ -188,7 +203,8 @@ bool BrowserApp::mdv_strings_valid() const {
          !mdv_strings_.status_empty.empty() &&
          !mdv_strings_.status_too_large.empty() &&
          !mdv_strings_.status_invalid_utf8.empty() &&
-         !mdv_strings_.status_render_policy.empty();
+         !mdv_strings_.status_render_policy.empty() &&
+         !mdv_strings_.status_not_markdown.empty();
 }
 
 CefRefPtr<CefClient> BrowserApp::GetDefaultClient() {

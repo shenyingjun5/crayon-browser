@@ -31,6 +31,7 @@ struct MdvPageStrings {
   std::string status_too_large;
   std::string status_invalid_utf8;
   std::string status_render_policy;
+  std::string status_not_markdown;
 };
 
 /// One request's parsed coordinates (mirrors the new-tab classifier
@@ -76,6 +77,10 @@ struct MdvPageSnapshot {
   /// Trusted MDV-02 whitelist HTML; inserted verbatim into the preview
   /// pane (never re-escaped).
   std::string rendered_html;
+  /// Entry-failure text from the load gate (already localized); the
+  /// renderer escapes it.  Non-empty takes banner priority over
+  /// `load_status`.
+  std::string error_text;
 };
 
 /// Renders the full app.html body for `snapshot`.

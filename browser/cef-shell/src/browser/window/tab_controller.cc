@@ -83,9 +83,11 @@ bool WindowClient::OnBeforeBrowse(CefRefPtr<CefBrowser> browser,
                                   CefRefPtr<CefRequest> request,
                                   bool user_gesture, bool is_redirect) {
   CEF_REQUIRE_UI_THREAD();
-  static_cast<void>(browser);
-  static_cast<void>(user_gesture);
   static_cast<void>(is_redirect);
+  if (request && controller_->InterceptNavigation(browser, request->GetURL(),
+                                                  user_gesture)) {
+    return true;
+  }
   return request && controller_->RedirectBuiltInNewTab(
                         frame, request->GetURL().ToString());
 }
@@ -99,17 +101,18 @@ bool WindowClient::OnChromeCommand(CefRefPtr<CefBrowser> browser,
                                    int command_id,
                                    cef_window_open_disposition_t disposition) {
   CEF_REQUIRE_UI_THREAD();
-  static_cast<void>(browser);
   static_cast<void>(disposition);
+  if (controller_->HandleLocalEntryCommand(browser, command_id)) {
+    return true;
+  }
   controller_->OnChromeCommand(command_id);
   return false;
 }
 
-TabController::TabController(
-    std::string initial_url,
-    BrowserCreatedCallback browser_created_callback,
-    std::optional<std::string> new_tab_url,
-    permission::PermissionStore* permission_store)
+TabController::TabController(std::string initial_url,
+                             BrowserCreatedCallback browser_created_callback,
+                             std::optional<std::string> new_tab_url,
+                             permission::PermissionStore* permission_store)
     : initial_url_(std::move(initial_url)),
       browser_created_callback_(std::move(browser_created_callback)),
       new_tab_url_(std::move(new_tab_url)),
@@ -129,8 +132,34 @@ void TabController::SetChromeCommandCallback(ChromeCommandCallback callback) {
   chrome_command_callback_ = std::move(callback);
 }
 
-void TabController::SetBrowsersClosedCallback(
-    BrowsersClosedCallback callback) {
+void TabController::SetLocalEntryCommandHandler(
+    LocalEntryCommandHandler handler) {
+  CEF_REQUIRE_UI_THREAD();
+  local_entry_command_handler_ = std::move(handler);
+}
+
+void TabController::SetNavigationInterceptor(
+    NavigationInterceptor interceptor) {
+  CEF_REQUIRE_UI_THREAD();
+  navigation_interceptor_ = std::move(interceptor);
+}
+
+bool TabController::HandleLocalEntryCommand(CefRefPtr<CefBrowser> browser,
+                                            int command_id) {
+  CEF_REQUIRE_UI_THREAD();
+  return local_entry_command_handler_ &&
+         local_entry_command_handler_(browser, command_id);
+}
+
+bool TabController::InterceptNavigation(CefRefPtr<CefBrowser> browser,
+                                        const CefString& url,
+                                        bool user_gesture) {
+  CEF_REQUIRE_UI_THREAD();
+  return navigation_interceptor_ &&
+         navigation_interceptor_(browser, url, user_gesture);
+}
+
+void TabController::SetBrowsersClosedCallback(BrowsersClosedCallback callback) {
   CEF_REQUIRE_UI_THREAD();
   browsers_closed_callback_ = std::move(callback);
 }

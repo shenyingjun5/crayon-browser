@@ -118,6 +118,22 @@ class TabController final : public CefBaseRefCounted {
     return permission_store_;
   }
   void SetChromeCommandCallback(ChromeCommandCallback callback);
+
+  // MDV-09 local-entry hooks: consulted by WindowClient before the
+  // default behavior; a true return swallows the command/navigation.
+  // Both optional, owned by the shell assembly.
+  using LocalEntryCommandHandler =
+      std::function<bool(CefRefPtr<CefBrowser> browser, int command_id)>;
+  using NavigationInterceptor = std::function<bool(
+      CefRefPtr<CefBrowser> browser, const CefString& url, bool user_gesture)>;
+  void SetLocalEntryCommandHandler(LocalEntryCommandHandler handler);
+  void SetNavigationInterceptor(NavigationInterceptor interceptor);
+
+  /// Consults the local-entry command handler (true = swallowed).
+  bool HandleLocalEntryCommand(CefRefPtr<CefBrowser> browser, int command_id);
+  /// Consults the navigation interceptor (true = cancelled).
+  bool InterceptNavigation(CefRefPtr<CefBrowser> browser, const CefString& url,
+                           bool user_gesture);
   void SetBrowsersClosedCallback(BrowsersClosedCallback callback);
 
   // Normalized callbacks from WindowClient.
@@ -141,6 +157,8 @@ class TabController final : public CefBaseRefCounted {
   const BrowserCreatedCallback browser_created_callback_;
   const std::optional<std::string> new_tab_url_;
   ChromeCommandCallback chrome_command_callback_;
+  LocalEntryCommandHandler local_entry_command_handler_;
+  NavigationInterceptor navigation_interceptor_;
   BrowsersClosedCallback browsers_closed_callback_;
   TabModel model_;
   permission::PermissionStore* permission_store_;

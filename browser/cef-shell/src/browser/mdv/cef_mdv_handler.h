@@ -1,19 +1,46 @@
 #ifndef CRAYON_BROWSER_CEF_SHELL_SRC_BROWSER_MDV_CEF_MDV_HANDLER_H_
 #define CRAYON_BROWSER_CEF_SHELL_SRC_BROWSER_MDV_CEF_MDV_HANDLER_H_
 
+#include <memory>
+
 #include "crayon/browser_mdv/mdv_page.h"
 #include "include/cef_scheme.h"
 
 namespace crayon::browser::cef_shell::mdv {
 
+using crayon::browser_mdv::MdvPageSnapshot;
 using crayon::browser_mdv::MdvPageStrings;
 
-// Registers the crayon://mdv scheme handler factory (domain "mdv") with
-// bodies rendered once from the compile-time fixture document through the
-// shared MDV-03 viewer model and MDV-02 engine.  `strings` come from the
-// platform string resources.  Must be called on the CEF UI thread during
-// OnContextInitialized, after the new-tab factory.
-bool RegisterMdvSchemeHandlerFactory(MdvPageStrings strings);
+/// Thread-safe store of the page snapshot the factory renders per
+/// request.  The Browser-process entry controller swaps snapshots after
+/// a gated load; the IO thread reads them.
+class MdvRuntimeState {
+ public:
+  explicit MdvRuntimeState(MdvPageSnapshot initial);
+  ~MdvRuntimeState();
+  MdvRuntimeState(const MdvRuntimeState&) = delete;
+  MdvRuntimeState& operator=(const MdvRuntimeState&) = delete;
+
+  void SetSnapshot(MdvPageSnapshot snapshot);
+  [[nodiscard]] MdvPageSnapshot snapshot() const;
+
+ private:
+  struct Impl;
+  std::unique_ptr<Impl> impl_;
+};
+
+// Registers the crayon://mdv scheme handler factory (domain "mdv").
+// The document body is rendered per request from `state` (initially the
+// compile-time fixture through the MDV-03 gating path); stylesheet and
+// script are fixed.  `strings` come from the platform string resources.
+// Must be called on the CEF UI thread during OnContextInitialized,
+// after the new-tab factory.
+bool RegisterMdvSchemeHandlerFactory(
+    MdvPageStrings strings, const std::shared_ptr<MdvRuntimeState>& state);
+
+/// Builds the read-only fixture snapshot through the real MDV-03
+/// load/render gating path (used as the initial runtime state).
+MdvPageSnapshot BuildFixtureSnapshot();
 
 }  // namespace crayon::browser::cef_shell::mdv
 

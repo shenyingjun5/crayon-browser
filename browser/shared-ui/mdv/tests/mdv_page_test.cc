@@ -45,6 +45,7 @@ crayon::browser_mdv::MdvPageStrings SampleStrings() {
       "文件超过大小上限",
       "文件不是有效的 UTF-8 编码",
       "内容触发渲染安全策略，已拒绝显示",
+      "不是可打开的 Markdown 文档",
   };
 }
 
@@ -156,6 +157,22 @@ void TestNoNetworkOrInlineHandlers() {
   CHECK(document.find("href=\"/app.css\"") != std::string::npos);
 }
 
+void TestEntryErrorBannerTakesPriority() {
+  MdvPageSnapshot snapshot;
+  snapshot.load_status = MdvLoadStatus::kLoaded;
+  snapshot.error_text = "不是可打开的 Markdown 文档";
+  const std::string document =
+      crayon::browser_mdv::RenderMdvDocument(snapshot, SampleStrings());
+  CHECK(document.find("不是可打开的 Markdown 文档") != std::string::npos);
+  // The override is escaped like any other text surface.
+  MdvPageSnapshot hostile;
+  hostile.error_text = "<img src=x>";
+  const std::string escaped =
+      crayon::browser_mdv::RenderMdvDocument(hostile, SampleStrings());
+  CHECK(escaped.find("<img src=x>") == std::string::npos);
+  CHECK(escaped.find("&lt;img src=x&gt;") != std::string::npos);
+}
+
 void TestEmptyAndErrorSurfaces() {
   MdvPageSnapshot empty;
   empty.load_status = MdvLoadStatus::kEmpty;
@@ -192,6 +209,7 @@ int main() {
   TestDeterministicOutput();
   TestSourceIsEscapedAndPreviewVerbatim();
   TestNoNetworkOrInlineHandlers();
+  TestEntryErrorBannerTakesPriority();
   TestEmptyAndErrorSurfaces();
   TestInitialViewStateAndCspConstantUnchanged();
   if (g_failures != 0) {

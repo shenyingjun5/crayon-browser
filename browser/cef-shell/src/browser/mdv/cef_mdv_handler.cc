@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <mutex>
 #include <string>
 #include <utility>
 
@@ -115,9 +116,11 @@ class MdvMemoryResourceHandler final : public CefResourceHandler {
 
 class MdvSchemeHandlerFactory final : public CefSchemeHandlerFactory {
  public:
-  MdvSchemeHandlerFactory(std::string document, std::string stylesheet,
-                          std::string script)
-      : document_(std::move(document)),
+  MdvSchemeHandlerFactory(MdvPageStrings strings,
+                          std::shared_ptr<const MdvRuntimeState> state,
+                          std::string stylesheet, std::string script)
+      : strings_(std::move(strings)),
+        state_(std::move(state)),
         stylesheet_(std::move(stylesheet)),
         script_(std::move(script)) {}
 
@@ -155,7 +158,7 @@ class MdvSchemeHandlerFactory final : public CefSchemeHandlerFactory {
       case crayon::browser_mdv::MdvResourceKind::kDocument:
         mime_type = kHtmlMimeType;
         if (route.include_body) {
-          body = document_;
+          body = RenderMdvDocument(state_->snapshot(), strings_);
         }
         break;
       case crayon::browser_mdv::MdvResourceKind::kStylesheet:
@@ -194,7 +197,8 @@ class MdvSchemeHandlerFactory final : public CefSchemeHandlerFactory {
     }
   }
 
-  const std::string document_;
+  const MdvPageStrings strings_;
+  const std::shared_ptr<const MdvRuntimeState> state_;
   const std::string stylesheet_;
   const std::string script_;
 
@@ -204,7 +208,7 @@ class MdvSchemeHandlerFactory final : public CefSchemeHandlerFactory {
 
 /// Builds the read-only page snapshot from the fixture through the real
 /// MDV-03 load/render gating path.
-MdvPageSnapshot BuildFixtureSnapshot() {
+MdvPageSnapshot BuildFixtureSnapshotImpl() {
   MdvPageSnapshot snapshot;
   snapshot.view_mode = crayon::browser_mdv::MdvViewMode::kPreview;
   snapshot.has_document = true;
@@ -231,11 +235,35 @@ MdvPageSnapshot BuildFixtureSnapshot() {
 
 }  // namespace
 
-bool RegisterMdvSchemeHandlerFactory(MdvPageStrings strings) {
-  const auto snapshot = BuildFixtureSnapshot();
+struct MdvRuntimeState::Impl {
+  mutable std::mutex mutex;
+  MdvPageSnapshot snapshot;
+};
+
+MdvRuntimeState::MdvRuntimeState(MdvPageSnapshot initial)
+    : impl_(std::make_unique<Impl>()) {
+  impl_->snapshot = std::move(initial);
+}
+
+MdvRuntimeState::~MdvRuntimeState() = default;
+
+void MdvRuntimeState::SetSnapshot(MdvPageSnapshot snapshot) {
+  const std::lock_guard<std::mutex> lock(impl_->mutex);
+  impl_->snapshot = std::move(snapshot);
+}
+
+MdvPageSnapshot MdvRuntimeState::snapshot() const {
+  const std::lock_guard<std::mutex> lock(impl_->mutex);
+  return impl_->snapshot;
+}
+
+MdvPageSnapshot BuildFixtureSnapshot() { return BuildFixtureSnapshotImpl(); }
+
+bool RegisterMdvSchemeHandlerFactory(
+    MdvPageStrings strings, const std::shared_ptr<MdvRuntimeState>& state) {
   return CefRegisterSchemeHandlerFactory(
       kMdvScheme, kMdvHost,
-      new MdvSchemeHandlerFactory(RenderMdvDocument(snapshot, strings),
+      new MdvSchemeHandlerFactory(std::move(strings), state,
                                   crayon::browser_mdv::RenderMdvStylesheet(),
                                   crayon::browser_mdv::RenderMdvScript()));
 }
