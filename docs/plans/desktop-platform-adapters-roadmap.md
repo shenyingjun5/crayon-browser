@@ -173,3 +173,10 @@
 - 验证：`cargo test -p crayon-platform-macos` 7/7（能力文档真相/roundtrip/deny_unknown_fields；Keychain 往返矩阵含空值/覆盖/幂等删除、校验 fail-closed、多 key 独立、dyn 对象安全；测试自带 hermetic 清扫——按 key + service 整体两遍，防失败运行残留）；clippy `-D warnings` 零告警；fmt 通过；workspace 全量 0 失败；`git diff --check` 通过。
 - Code Review：P0 0、P1 0、P2 1——Keychain 测试触碰真实登录钥匙串（专用探针 key + 前后清扫），CI/他机运行会写入登录钥匙串；PRV-05 跨平台门禁任务应评估是否改用隔离 keychain（`SecKeychainCreate` 已废弃，或测试专用 service 前缀 + 定期清扫）。
 - 未覆盖与风险：本地网络/生命周期/UDS/交接/更新归 M04b..d；PRV-11 跨平台 secure_store 门禁等 M04 全切片完成。`PLT-M04` 保持 `IN_PROGRESS`（M04a 完成）。
+
+### PLT-M04b 完成记录（2026-08-26，切片 2：本地网络观察与电源/会话生命周期）
+
+- 实现：`event_relay.rs`（从 W04 镜像的有界 OS 事件中继——64 容量、溢出丢弃最旧并计数、锁外派发、generation fencing）。`local_network.rs`：`MacNetworkMonitor`——`interfaces()` 经 `getifaddrs` 枚举（名字验证、去重、≤64 有界、loopback/up 标志、无地址泄漏）；变更事件经 PF_ROUTE raw socket 专用线程读取，`RTM_IFINFO` 映射 InterfaceUp/Down（ifm_flags IFF_UP）、`RTM_ADD/DELETE` 无目标或全零目标映射 `DefaultRouteChanged`（CP-004）；wakeup pipe + poll 优雅退出；socket 打开失败降级为仅枚举模式。`lifecycle.rs`：`MacLifecycleMonitor`——IOKit `IORegisterForSystemPower` 专用 run loop 线程（Suspending/Resumed + IOAllowPowerChange 确认）+ 分布式通知（ScreenLocked/ScreenUnlocked）；`SessionEnding` 无可靠公开 macOS 通知源，v1 不交付（Suspending 已覆盖 CP-004 终止语义），已如实文档化。`capabilities.rs` 更新为 M04b 真相：local_network=RequiresPermission/change_events=true、lifecycle power_events+lock_events=true。
+- 验证：`cargo test -p crayon-platform-macos` 19/19（新增 12 项：relay 4 项从 W04 镜像、枚举真实性/稳定性/listener 往返、路由消息映射矩阵含合成 RTM_IFINFO/RTM_ADD/未知类型、IO 消息映射矩阵、分布式通知名映射、IOKit 注册 + run loop 线程启动/停止不崩溃）；clippy `-D warnings` 零告警（含全部 SAFETY 注释）；fmt 通过；workspace 全量 0 失败；`git diff --check` 通过。
+- Code Review：P0 0、P1 0、P2 1——路由 socket 线程在 Drop 中经 wakeup pipe 唤醒后 join，但如果内核路由消息突发超过 2048 字节单次读取，截断处理是 break（丢弃剩余）而非继续解析；实际内核消息 ≤2048 字节（单个消息远小于此），风险极低。
+- 未覆盖与风险：真实 sleep/wake/锁屏事件投递需人工或 QAR harness（本切片验证注册/清理/映射逻辑）；`RequiresPermission` 能力值对应 CP-M01 的本地网络权限提示（multicast 发现面），getifaddrs 枚举本身无需权限。`PLT-M04` 保持 `IN_PROGRESS`（M04b 完成）。

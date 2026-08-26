@@ -17,9 +17,10 @@ mod tests;
 
 /// Builds the current macOS adapter capability document.
 ///
-/// Truth per slice: M04a lands Keychain secure storage only; local
-/// network, lifecycle, update, UDS IPC and client handoff stay
-/// unavailable until slices M04b..d deliver them.
+/// Truth per slice: M04a lands Keychain secure storage, M04b delivers
+/// local-network observation (requires_permission per CP-M01) and
+/// power/lock lifecycle events; update, UDS IPC and client handoff
+/// stay unavailable until M04c..d deliver them.
 #[must_use]
 pub fn macos_adapter_capabilities() -> PlatformAdapterCapabilities {
     PlatformAdapterCapabilities::new(
@@ -28,12 +29,12 @@ pub fn macos_adapter_capabilities() -> PlatformAdapterCapabilities {
             rotation: true,
         },
         LocalNetworkCapabilities {
-            observation: SupportLevel::Unavailable,
-            change_events: false,
+            observation: SupportLevel::RequiresPermission,
+            change_events: true,
         },
         LifecycleCapabilities {
-            power_events: false,
-            lock_events: false,
+            power_events: true,
+            lock_events: true,
         },
         UpdateCapabilities {
             service: SupportLevel::Unavailable,

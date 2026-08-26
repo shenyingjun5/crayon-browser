@@ -36,6 +36,8 @@ extern "C" {
     ) -> *mut c_void;
     fn CFDictionarySetValue(dict: *mut c_void, key: *const c_void, value: *const c_void);
     fn CFRelease(cf: *const c_void);
+    fn CFRunLoopRun();
+    fn CFStringGetCString(s: *const c_void, buf: *mut u8, size: isize, encoding: u32) -> u8;
 
     // Declared as byte arrays with storage: CFDictionaryCreateMutable
     // COPYIES the callback structs by value (~48 bytes each).  A ZST or
@@ -110,10 +112,10 @@ fn cf_boolean_true() -> *const c_void {
 }
 
 /// RAII wrapper over a `CFStringRef`.
-struct CfString(*const c_void);
+pub(crate) struct CfString(*const c_void);
 
 impl CfString {
-    fn new(value: &str) -> Option<Self> {
+    pub(crate) fn new(value: &str) -> Option<Self> {
         let c = std::ffi::CString::new(value).ok()?;
         // SAFETY: c_str is a valid NUL-terminated buffer for the call;
         // the framework copies it and hands us a +1 reference.
@@ -131,7 +133,7 @@ impl CfString {
         }
     }
 
-    fn as_ref(&self) -> *const c_void {
+    pub(crate) fn as_ref(&self) -> *const c_void {
         self.0
     }
 }
@@ -317,4 +319,238 @@ pub(crate) fn sec_delete_service_all(service: &str) -> i32 {
     query.set_string(attr_service(), &service_cf);
     // SAFETY: query is a valid dictionary.
     unsafe { SecItemDelete(query.as_query()) }
+}
+
+// --- M04b: interface enumeration (getifaddrs) ---
+
+pub(crate) const IFF_UP: u32 = 0x1;
+pub(crate) const IFF_LOOPBACK: u32 = 0x2;
+
+#[repr(C)]
+pub(crate) struct IfAddrs {
+    pub(crate) ifa_next: *const IfAddrs,
+    pub(crate) ifa_name: *const u8, // NUL-terminated C string
+    pub(crate) ifa_flags: u32,
+    pub(crate) _rest: [u8; 0], // sockaddr chain we never read
+}
+
+extern "C" {
+    pub(crate) fn getifaddrs(ifap: *mut *const IfAddrs) -> i32;
+    pub(crate) fn freeifaddrs(ifa: *const IfAddrs);
+}
+
+// --- M04b: route socket (PF_ROUTE) for change events ---
+
+pub(crate) const SOCK_RAW: i32 = 3;
+pub(crate) const PF_ROUTE: i32 = 17;
+pub(crate) const RTM_IFINFO: u8 = 0x12;
+pub(crate) const RTM_ADD: u8 = 0x1;
+pub(crate) const RTM_DELETE: u8 = 0x2;
+pub(crate) const RTA_DST: i32 = 0x1;
+
+/// `struct rt_msghdr` layout (macOS): msglen, version, type, index,
+/// flags, addrs, pid, seq, errno, use.
+#[repr(C)]
+pub(crate) struct RtMsghdr {
+    pub(crate) rtm_msglen: u16,
+    pub(crate) rtm_version: u8,
+    pub(crate) rtm_type: u8,
+    pub(crate) rtm_index: u16,
+    pub(crate) rtm_flags: i32,
+    pub(crate) rtm_addrs: i32,
+    pub(crate) rtm_pid: i32,
+    pub(crate) rtm_seq: i32,
+    pub(crate) rtm_errno: i32,
+    pub(crate) rtm_use: i32,
+}
+
+/// `struct if_msghdr` that follows `rt_msghdr` for RTM_IFINFO.
+#[repr(C)]
+pub(crate) struct IfMsghdr {
+    pub(crate) ifm_addrs: i32,
+    pub(crate) ifm_flags: i32,
+    pub(crate) ifm_index: u16,
+    pub(crate) _pad: [u8; 2],
+}
+
+extern "C" {
+    pub(crate) fn socket(domain: i32, kind: i32, protocol: i32) -> i32;
+    pub(crate) fn close(fd: i32) -> i32;
+    pub(crate) fn read(fd: i32, buf: *mut u8, count: usize) -> isize;
+    pub(crate) fn write(fd: i32, buf: *const u8, count: usize) -> isize;
+    pub(crate) fn pipe(fds: *mut i32) -> i32;
+    pub(crate) fn poll(fds: *mut PollFd, count: u64, timeout: i32) -> i32;
+}
+
+#[repr(C)]
+pub(crate) struct PollFd {
+    pub(crate) fd: i32,
+    pub(crate) events: i16,
+    pub(crate) revents: i16,
+}
+
+pub(crate) const POLLIN: i16 = 0x0001;
+
+// --- M04b: IOKit power notifications ---
+
+// IOKit framework symbols are weak-linked on some targets; the
+// `#[link]` attribute on the extern block handles the framework
+// dependency.  The IOKit functions are declared in their own block
+// with the IOKit framework link.
+
+pub(crate) const K_IO_MESSAGE_SYSTEM_WILL_SLEEP: u32 = 0xe000_0201;
+pub(crate) const K_IO_MESSAGE_SYSTEM_HAS_POWERED_ON: u32 = 0xe000_0300;
+
+pub(crate) type IoServiceInterestCallback = extern "C" fn(
+    refcon: *mut c_void,
+    service: *const c_void,
+    message_type: u32,
+    argument: *const c_void,
+);
+
+#[link(name = "IOKit", kind = "framework")]
+extern "C" {
+    fn IORegisterForSystemPower(
+        refcon: *mut c_void,
+        notification_port_ref: *mut *mut c_void,
+        callback: IoServiceInterestCallback,
+        notification: *mut *mut c_void,
+    ) -> *const c_void;
+    fn IOAllowPowerChange(connection: *const c_void, cookie: usize);
+    fn IONotificationPortGetRunLoopSource(port: *mut c_void) -> *const c_void;
+}
+
+extern "C" {
+    fn CFRunLoopGetCurrent() -> *const c_void;
+    fn CFRunLoopAddSource(run_loop: *const c_void, source: *const c_void, mode: *const c_void);
+    fn CFRunLoopStop(run_loop: *const c_void);
+    static kCFRunLoopDefaultMode: *const c_void;
+}
+
+// --- M04b: distributed notifications (screen lock/unlock) ---
+
+extern "C" {
+    fn CFNotificationCenterGetDistributedCenter() -> *const c_void;
+    fn CFNotificationCenterAddObserver(
+        center: *const c_void,
+        observer: *const c_void,
+        callback: extern "C" fn(
+            center: *const c_void,
+            observer: *const c_void,
+            name: *const c_void,
+            object: *const c_void,
+            user_info: *const c_void,
+        ),
+        name: *const c_void,
+        object: *const c_void,
+        suspension_behavior: u32,
+    );
+    fn CFNotificationCenterRemoveEveryObserver(center: *const c_void, observer: *const c_void);
+}
+
+/// Runs `f` with the distributed notification center reference.
+pub(crate) fn with_distributed_center<R>(f: impl FnOnce(*const c_void) -> R) -> R {
+    // SAFETY: the distributed center is a process-wide singleton with
+    // static lifetime.
+    unsafe { f(CFNotificationCenterGetDistributedCenter()) }
+}
+
+/// Runs `f` with the default run loop of the calling thread.
+pub(crate) fn with_current_run_loop<R>(f: impl FnOnce(*const c_void) -> R) -> R {
+    // SAFETY: returns the caller thread's run loop (created on demand).
+    unsafe { f(CFRunLoopGetCurrent()) }
+}
+
+/// Adds `mode` (a static framework constant address) to the run loop.
+pub(crate) fn cf_run_loop_add_source(
+    run_loop: *const c_void,
+    source: *const c_void,
+    mode: *const c_void,
+) {
+    // SAFETY: all three references are valid framework objects.
+    unsafe { CFRunLoopAddSource(run_loop, source, mode) };
+}
+
+pub(crate) fn cf_run_loop_stop(run_loop: *const c_void) {
+    // SAFETY: valid run loop reference owned by the monitor thread.
+    unsafe { CFRunLoopStop(run_loop) };
+}
+
+pub(crate) fn k_cf_run_loop_default_mode() -> *const c_void {
+    sec_global(std::ptr::addr_of!(kCFRunLoopDefaultMode))
+}
+
+/// Registers the system-power callback; returns
+/// `(root_power_connection, notification_port)`.
+pub(crate) fn io_register_for_system_power(
+    refcon: *mut c_void,
+    callback: IoServiceInterestCallback,
+) -> (*const c_void, *mut c_void) {
+    let mut port: *mut c_void = std::ptr::null_mut();
+    let mut notification: *mut c_void = std::ptr::null_mut();
+    // SAFETY: refcon points at a pinned heap allocation; port and
+    // notification receive framework-owned references.
+    let root = unsafe { IORegisterForSystemPower(refcon, &mut port, callback, &mut notification) };
+    (root, port)
+}
+
+pub(crate) fn io_notification_run_loop_source(port: *mut c_void) -> *const c_void {
+    // SAFETY: valid notification port from IORegisterForSystemPower.
+    unsafe { IONotificationPortGetRunLoopSource(port) }
+}
+
+pub(crate) fn io_allow_power_change(connection: *const c_void, cookie: usize) {
+    // SAFETY: connection is the root power connection from registration.
+    unsafe { IOAllowPowerChange(connection, cookie) };
+}
+
+pub(crate) fn cf_notification_add_observer(
+    center: *const c_void,
+    observer: *const c_void,
+    callback: extern "C" fn(
+        center: *const c_void,
+        observer: *const c_void,
+        name: *const c_void,
+        object: *const c_void,
+        user_info: *const c_void,
+    ),
+    name: *const c_void,
+) {
+    // SAFETY: center is the distributed center singleton; observer is
+    // a pinned context; name is a valid CFString.  Suspension behavior
+    // 0 = deliver immediately when posted.
+    unsafe {
+        CFNotificationCenterAddObserver(center, observer, callback, name, std::ptr::null(), 0);
+    }
+}
+
+pub(crate) fn cf_notification_remove_every_observer(
+    center: *const c_void,
+    observer: *const c_void,
+) {
+    // SAFETY: center singleton; observer matches registration.
+    unsafe { CFNotificationCenterRemoveEveryObserver(center, observer) };
+}
+
+pub(crate) fn cf_run_loop_run() {
+    // SAFETY: runs the calling thread's run loop.
+    unsafe {
+        CFRunLoopRun();
+    }
+}
+
+/// Reads a `CFStringRef` into a Rust String (empty when unreadable).
+pub(crate) fn describe_cf_name(name: *const c_void) -> Option<String> {
+    // SAFETY: name is a valid CFStringRef from the notification; buf
+    // is a valid output buffer.
+    unsafe {
+        let len = CFDataGetLength(name) * 4 + 1;
+        let mut buf = vec![0u8; len as usize];
+        if CFStringGetCString(name, buf.as_mut_ptr(), len, K_CF_STRING_ENCODING_UTF8) != 0 {
+            let end = buf.iter().position(|b| *b == 0).unwrap_or(buf.len());
+            Some(String::from_utf8_lossy(&buf[..end]).to_string())
+        } else {
+            None
+        }
+    }
 }

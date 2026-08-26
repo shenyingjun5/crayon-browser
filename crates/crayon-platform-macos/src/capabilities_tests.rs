@@ -4,7 +4,7 @@ use super::*;
 use crayon_platform_capabilities::SupportLevel;
 
 #[test]
-fn document_is_schema_valid_and_truthful_for_m04a() {
+fn document_is_schema_valid_and_truthful_for_m04b() {
     let doc = super::macos_adapter_capabilities();
     doc.validate().expect("schema valid");
     assert_eq!(doc.schema(), 1);
@@ -15,10 +15,13 @@ fn document_is_schema_valid_and_truthful_for_m04a() {
         crayon_platform_capabilities::SecureStoreBackend::Keychain
     );
     assert!(doc.secure_store.rotation);
-    // Everything else stays unavailable until M04b..d land.
-    assert_eq!(doc.local_network.observation, SupportLevel::Unavailable);
-    assert!(!doc.local_network.change_events);
-    assert!(!doc.lifecycle.power_events && !doc.lifecycle.lock_events);
+    // M04b delivered local network and lifecycle.
+    assert_eq!(
+        doc.local_network.observation,
+        crayon_platform_capabilities::SupportLevel::RequiresPermission
+    );
+    assert!(doc.local_network.change_events);
+    assert!(doc.lifecycle.power_events && doc.lifecycle.lock_events);
     assert_eq!(doc.update.service, SupportLevel::Unavailable);
     assert_eq!(
         doc.local_agent_ipc.transport,

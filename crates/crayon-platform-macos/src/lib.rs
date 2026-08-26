@@ -15,5 +15,8 @@
 #![cfg(target_os = "macos")]
 
 pub mod capabilities;
+pub mod event_relay;
 pub mod ffi;
+pub mod lifecycle;
+pub mod local_network;
 pub mod secure_store;
