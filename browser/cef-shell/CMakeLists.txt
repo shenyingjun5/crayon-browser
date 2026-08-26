@@ -29,6 +29,8 @@ if(OS_WINDOWS)
       src/browser/context/profile_context_factory.h
       src/browser/context/profile_id_validator.cc
       src/browser/context/profile_id_validator.h
+      src/browser/mdv/cef_mdv_handler.cc
+      src/browser/mdv/cef_mdv_handler.h
       src/browser/new_tab/cef_new_tab_handler.cc
       src/browser/new_tab/cef_new_tab_handler.h
       src/browser/permission/cef_download_handler.cc
@@ -64,8 +66,9 @@ if(OS_WINDOWS)
   add_dependencies(${CRAYON_BROWSER_TARGET} libcef_dll_wrapper)
   target_link_libraries(
     ${CRAYON_BROWSER_TARGET}
-    PRIVATE crayon::browser-new-tab crayon::browser-shared-shell crayon_libcef
-            libcef_dll_wrapper ${CEF_STANDARD_LIBS})
+    PRIVATE crayon::browser-mdv crayon::browser-new-tab
+            crayon::browser-shared-shell crayon_libcef libcef_dll_wrapper
+            ${CEF_STANDARD_LIBS})
   set_target_properties(${CRAYON_BROWSER_TARGET}
                         PROPERTIES OUTPUT_NAME "CrayonBrowser")
   COPY_SINGLE_FILE(
@@ -327,6 +330,14 @@ if(CRAYON_BUILD_TESTS)
                        PROPERTIES LABELS "cef;shell;window;contract")
   set_tests_properties(new_tab_adapter_contract
                        PROPERTIES LABELS "cef;shell;new-tab;contract")
+
+  add_test(
+    NAME mdv_handler_contract
+    COMMAND "${CMAKE_COMMAND}"
+            "-DCRAYON_CEF_SHELL_SOURCE=${CMAKE_CURRENT_SOURCE_DIR}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/mdv_handler_contract.cmake")
+  set_tests_properties(mdv_handler_contract
+                       PROPERTIES LABELS "cef;shell;mdv;contract")
 
   add_executable(crayon_profile_id_validator_test
                  tests/profile_id_validator_test.cc

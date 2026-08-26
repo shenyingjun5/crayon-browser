@@ -6,6 +6,7 @@
 #include <string_view>
 #include <utility>
 
+#include "browser/mdv/cef_mdv_handler.h"
 #include "browser/new_tab/cef_new_tab_handler.h"
 #include "include/cef_browser.h"
 #include "include/wrapper/cef_helpers.h"
@@ -66,6 +67,20 @@ browser_new_tab::NewTabPageStrings LoadNewTabStrings(
   };
 }
 
+browser_mdv::MdvPageStrings LoadMdvStrings(HINSTANCE resource_module) {
+  return browser_mdv::MdvPageStrings{
+      "zh-CN",
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TITLE),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_VIEW_SOURCE),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_VIEW_PREVIEW),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_VIEW_SPLIT),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_STATUS_EMPTY),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_STATUS_TOO_LARGE),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_STATUS_INVALID_UTF8),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_STATUS_RENDER_POLICY),
+  };
+}
+
 }  // namespace
 
 WindowsWindowIcons::WindowsWindowIcons(HINSTANCE resource_module)
@@ -103,6 +118,7 @@ BrowserApp::BrowserApp(HINSTANCE resource_module, std::wstring product_name)
     : product_name_(std::move(product_name)),
       window_icons_(std::make_shared<WindowsWindowIcons>(resource_module)),
       new_tab_strings_(LoadNewTabStrings(resource_module)),
+      mdv_strings_(LoadMdvStrings(resource_module)),
       permission_store_(std::make_unique<permission::PermissionStore>()),
       tab_controller_(new window::TabController(
           browser_new_tab::kNewTabUrl,
@@ -139,6 +155,11 @@ void BrowserApp::OnContextInitialized() {
     CefQuitMessageLoop();
     return;
   }
+  if (!mdv::RegisterMdvSchemeHandlerFactory(mdv_strings_)) {
+    shell_runtime_->Shutdown();
+    CefQuitMessageLoop();
+    return;
+  }
   if (!tab_controller_->CreateMainWindow()) {
     shell_runtime_->Shutdown();
     CefQuitMessageLoop();
@@ -156,6 +177,18 @@ bool BrowserApp::new_tab_strings_valid() const {
          !new_tab_strings_.shortcuts_heading.empty() &&
          !new_tab_strings_.empty_shortcuts.empty() &&
          !new_tab_strings_.config_error.empty();
+}
+
+bool BrowserApp::mdv_strings_valid() const {
+  return !mdv_strings_.language.empty() &&
+         !mdv_strings_.document_title.empty() &&
+         !mdv_strings_.view_source.empty() &&
+         !mdv_strings_.view_preview.empty() &&
+         !mdv_strings_.view_split.empty() &&
+         !mdv_strings_.status_empty.empty() &&
+         !mdv_strings_.status_too_large.empty() &&
+         !mdv_strings_.status_invalid_utf8.empty() &&
+         !mdv_strings_.status_render_policy.empty();
 }
 
 CefRefPtr<CefClient> BrowserApp::GetDefaultClient() {

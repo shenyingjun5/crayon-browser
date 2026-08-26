@@ -23,6 +23,7 @@ enum class ExitCode : int {
   kProductNameMissing = 13,
   kBrandIconMissing = 14,
   kNewTabStringsMissing = 15,
+  kMdvStringsMissing = 16,
   kCefInitializeFailed = 20,
 };
 
@@ -84,6 +85,9 @@ int RunBrowserProcess(HINSTANCE bootstrap_instance, void *sandbox_info) {
   }
   if (!app->new_tab_strings_valid()) {
     return static_cast<int>(ExitCode::kNewTabStringsMissing);
+  }
+  if (!app->mdv_strings_valid()) {
+    return static_cast<int>(ExitCode::kMdvStringsMissing);
   }
   if (!CefInitialize(main_args, settings, app, sandbox_info)) {
     const int cef_exit_code = CefGetExitCode();
