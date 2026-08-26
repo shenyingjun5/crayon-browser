@@ -306,7 +306,7 @@ pub(crate) fn sec_delete(service: &str, account: &[u8]) -> i32 {
 }
 
 /// Deletes every generic-password item of `service` regardless of
-/// account.  Used by tests as a hermetic sweep.
+/// account.
 #[cfg(test)]
 pub(crate) fn sec_delete_service_all(service: &str) -> i32 {
     let Some(service_cf) = CfString::new(service) else {

@@ -19,6 +19,12 @@ mod tests;
 /// Service namespace for all viewer secure-store items.
 const SERVICE: &str = "com.crayon.browser.secure-store";
 
+/// Creates a store with a specific service namespace.
+#[cfg(test)]
+pub(crate) fn new_with_service(service: &'static str) -> KeychainSecureStore {
+    KeychainSecureStore { service }
+}
+
 /// Maps a raw Security status to the closed error set.
 fn map_status(status: i32) -> SecureStoreError {
     match status {
@@ -33,13 +39,22 @@ fn map_status(status: i32) -> SecureStoreError {
 
 /// Keychain secure store.  All operations are synchronous and touch
 /// the login keychain only when invoked.
-#[derive(Default)]
-pub struct KeychainSecureStore;
+/// Keychain secure store.  All operations are synchronous and touch
+/// the login keychain only when invoked.
+pub struct KeychainSecureStore {
+    service: &'static str,
+}
+
+impl Default for KeychainSecureStore {
+    fn default() -> Self {
+        Self { service: SERVICE }
+    }
+}
 
 impl KeychainSecureStore {
     #[must_use]
     pub fn new() -> Self {
-        Self
+        Self::default()
     }
 }
 
@@ -50,11 +65,11 @@ impl SecureStore for KeychainSecureStore {
         // Idempotent clear first: SecItemUpdate would need the same
         // query anyway, and delete+add keeps the ACL anchored to this
         // process.
-        let delete_status = ffi::sec_delete(SERVICE, key.as_bytes());
+        let delete_status = ffi::sec_delete(self.service, key.as_bytes());
         if delete_status != ffi::ERR_SEC_SUCCESS && delete_status != ffi::ERR_SEC_ITEM_NOT_FOUND {
             return Err(map_status(delete_status));
         }
-        let status = ffi::sec_add(SERVICE, key.as_bytes(), value);
+        let status = ffi::sec_add(self.service, key.as_bytes(), value);
         if status == ffi::ERR_SEC_SUCCESS {
             Ok(())
         } else {
@@ -64,7 +79,7 @@ impl SecureStore for KeychainSecureStore {
 
     fn load(&self, key: &str) -> Result<Option<Vec<u8>>, SecureStoreError> {
         validate_key(key)?;
-        let (status, data) = ffi::sec_copy(SERVICE, key.as_bytes());
+        let (status, data) = ffi::sec_copy(self.service, key.as_bytes());
         if status == ffi::ERR_SEC_SUCCESS {
             Ok(data.map(|d| d.bytes().to_vec()))
         } else if status == ffi::ERR_SEC_ITEM_NOT_FOUND {
@@ -76,7 +91,7 @@ impl SecureStore for KeychainSecureStore {
 
     fn delete(&mut self, key: &str) -> Result<(), SecureStoreError> {
         validate_key(key)?;
-        let status = ffi::sec_delete(SERVICE, key.as_bytes());
+        let status = ffi::sec_delete(self.service, key.as_bytes());
         if status == ffi::ERR_SEC_SUCCESS || status == ffi::ERR_SEC_ITEM_NOT_FOUND {
             Ok(())
         } else {

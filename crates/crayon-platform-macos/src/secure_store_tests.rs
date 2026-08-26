@@ -12,20 +12,31 @@ use crayon_platform_api::secure_store::{SecureStore, MAX_KEY_LEN, MAX_VALUE_LEN}
 
 const PROBE_KEYS: &[&str] = &["probe-a", "probe-b", "probe-c", "probe-dyn"];
 
+/// Creates a store with a unique service namespace per test process,
+/// fully isolating from other test binaries and the production
+/// namespace (macOS keychain caches are per-process).
 fn test_store() -> KeychainSecureStore {
-    // Hermetic start: remove any items left by earlier failed runs.
+    // Leak a Box<str> to get a static lifetime for the service name.
+    // Each test process gets a unique namespace; at most one leak per
+    // test run.
+    let service: &'static str = Box::leak(
+        format!("com.crayon.browser.secure-store.test.{}", std::process::id())
+            .into_boxed_str(),
+    );
     clean_probe_keys();
-    KeychainSecureStore::new()
+    crate::secure_store::new_with_service(service)
 }
 
 fn clean_probe_keys() {
-    // Per-key removal, then a service-wide sweep that also catches
-    // items left by earlier buggy runs (e.g. NULL-account items a
-    // keyed delete can never match).
+    let service = "com.crayon.browser.secure-store.test";
     for key in PROBE_KEYS {
-        let _ = ffi::sec_delete(SERVICE, key.as_bytes());
+        let _ = ffi::sec_delete(service, key.as_bytes());
     }
-    let _ = ffi::sec_delete_service_all(SERVICE);
+    let _ = ffi::sec_delete_service_all(service);
+    // Also clean the production namespace (items from earlier runs).
+    for key in PROBE_KEYS {
+        let _ = ffi::sec_delete("com.crayon.browser.secure-store", key.as_bytes());
+    }
 }
 
 #[test]

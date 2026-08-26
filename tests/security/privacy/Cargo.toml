@@ -10,7 +10,6 @@ publish = false
 workspace = true
 
 [dependencies]
-test-support = { path = "../../../test-support" }
 crayon-domain = { path = "../../../crates/crayon-domain" }
 crayon-profile = { path = "../../../crates/crayon-profile" }
 crayon-agent-gateway = { path = "../../../crates/crayon-agent-gateway" }

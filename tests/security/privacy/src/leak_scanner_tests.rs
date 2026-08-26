@@ -5,16 +5,19 @@
 //! Positive cases assert zero findings (no leaks); negative cases
 //! inject a known secret and assert the scanner captures it.
 
-
 #[test]
 fn diagnostics_events_contain_no_secrets() {
     let mut producer = crayon_domain::DiagnosticProducer::new(16);
-    let event = crayon_domain::DiagnosticEvent::new(crayon_domain::DataClass::Operational, "cast_started", 1000)
-        .expect("valid event")
-        .with_attribute("device", "test-receiver")
-        .expect("attr")
-        .with_attribute("duration_ms", "5000")
-        .expect("attr");
+    let event = crayon_domain::DiagnosticEvent::new(
+        crayon_domain::DataClass::Operational,
+        "cast_started",
+        1000,
+    )
+    .expect("valid event")
+    .with_attribute("device", "test-receiver")
+    .expect("attr")
+    .with_attribute("duration_ms", "5000")
+    .expect("attr");
     assert!(producer.enqueue(event));
 
     let drained: Vec<crayon_domain::DiagnosticEvent> = producer.drain().collect();
@@ -32,9 +35,14 @@ fn diagnostics_events_contain_no_secrets() {
 #[test]
 fn diagnostics_user_content_class_is_forbidden() {
     // crayon_domain::DataClass::UserContent must not enter diagnostics.
-    let result = crayon_domain::DiagnosticEvent::new(crayon_domain::DataClass::UserContent, "page_text", 1000);
+    let result = crayon_domain::DiagnosticEvent::new(
+        crayon_domain::DataClass::UserContent,
+        "page_text",
+        1000,
+    );
     assert!(result.is_err(), "UserContent must be rejected");
-    let result = crayon_domain::DiagnosticEvent::new(crayon_domain::DataClass::Secret, "token_value", 1000);
+    let result =
+        crayon_domain::DiagnosticEvent::new(crayon_domain::DataClass::Secret, "token_value", 1000);
     assert!(result.is_err(), "Secret must be rejected");
 }
 
@@ -70,13 +78,11 @@ fn agent_receipt_contains_no_body_or_query() {
 fn injected_secret_in_receipt_is_caught() {
     // Negative test: if a secret somehow entered the receipt surface,
     // the scanner must catch it.
-    let findings = test_support::leak_scanner::LeakScanner::scan_text(
-        "SESSDATA=injected_secret_12345", &[],
-    );
+    let findings =
+        test_support::leak_scanner::LeakScanner::scan_text("SESSDATA=injected_secret_12345", &[]);
     assert!(!findings.is_empty(), "scanner must catch SESSDATA");
-    let findings = test_support::leak_scanner::LeakScanner::scan_text(
-        "Bearer injected_token_abc123", &[],
-    );
+    let findings =
+        test_support::leak_scanner::LeakScanner::scan_text("Bearer injected_token_abc123", &[]);
     assert!(!findings.is_empty(), "scanner must catch Bearer token");
 }
 

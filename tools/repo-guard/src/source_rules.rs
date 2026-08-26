@@ -11,6 +11,9 @@ pub fn inspect(root: &Path, files: &[PathBuf]) -> Vec<CheckResult> {
     let mut isolation = Vec::new();
     let mut size = Vec::new();
     let mut hardcoding = Vec::new();
+    let mut debug_entries = Vec::new();
+    let mut unsafe_routes = Vec::new();
+    let mut auto_ad = Vec::new();
 
     for relative in files {
         if !is_source(relative) {
@@ -25,6 +28,9 @@ pub fn inspect(root: &Path, files: &[PathBuf]) -> Vec<CheckResult> {
         if !test_file && is_product_source(relative) {
             inspect_production_isolation(relative, &text, &mut isolation);
             inspect_hardcoding(relative, &text, &mut hardcoding);
+            inspect_debug_entries(relative, &text, &mut debug_entries);
+            inspect_unsafe_routes(relative, &text, &mut unsafe_routes);
+            inspect_auto_ad_behavior(relative, &text, &mut auto_ad);
         }
     }
 
@@ -43,6 +49,21 @@ pub fn inspect(root: &Path, files: &[PathBuf]) -> Vec<CheckResult> {
             "RG-004",
             "credentials and machine-specific paths fail; configurable literals warn",
             hardcoding,
+        ),
+        CheckResult::applicable(
+            "RG-004A",
+            "debug entry points are not present in production source",
+            debug_entries,
+        ),
+        CheckResult::applicable(
+            "RG-004B",
+            "unsafe routes are not present in production source",
+            unsafe_routes,
+        ),
+        CheckResult::applicable(
+            "RG-004C",
+            "auto ad behavior is not present in production source",
+            auto_ad,
         ),
     ]
 }
@@ -218,6 +239,101 @@ fn inspect_hardcoding(path: &Path, text: &str, findings: &mut Vec<Finding>) {
                 "network address, port, or timeout literal should come from typed configuration"
                     .to_owned(),
             ));
+        }
+    }
+}
+
+/// Debug entry points must not appear in production source.
+/// Covers debug assertions, devtools flags and remote-debugging hooks.
+fn inspect_debug_entries(path: &Path, text: &str, findings: &mut Vec<Finding>) {
+    for (index, line) in text.lines().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("//") || trimmed.starts_with('#') {
+            continue;
+        }
+        let lower = line.to_ascii_lowercase();
+        if lower.contains("debug_assert!")
+            || lower.contains("devtools")
+            || lower.contains("remote_debugging")
+            || lower.contains("chrome_devtools")
+        {
+            findings.push(finding(
+                Severity::Error,
+                path,
+                Some(index + 1),
+                "debug entry point in production source".to_owned(),
+            ));
+        }
+    }
+}
+
+/// Unsafe route patterns must not appear in production source.
+/// Covers legacy extraction, open proxy and player/probe endpoints.
+fn inspect_unsafe_routes(path: &Path, text: &str, findings: &mut Vec<Finding>) {
+    // The legacy extraction and relay paths (src/main.rs, src/relay/)
+    // are allowed under the `legacy-dev` feature; they are not
+    // production surfaces.
+    let display = path.to_string_lossy();
+    if display == "src/main.rs" || display.starts_with("src/relay/") {
+        return;
+    }
+    let patterns = [
+        "/api/extract",
+        "/api/proxy",
+        "/proxy?",
+        "/player?",
+        "/probe?",
+        "/api/v1/extract",
+    ];
+    for (index, line) in text.lines().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("//") || trimmed.starts_with('#') {
+            continue;
+        }
+        for pattern in &patterns {
+            if line.contains(pattern) {
+                findings.push(finding(
+                    Severity::Error,
+                    path,
+                    Some(index + 1),
+                    format!("unsafe route pattern `{pattern}` in production source"),
+                ));
+            }
+        }
+    }
+}
+
+/// Automatic ad behavior (auto-play, ad skip, ad block) must not
+/// appear in production source.
+fn inspect_auto_ad_behavior(path: &Path, text: &str, findings: &mut Vec<Finding>) {
+    // Only match actual auto-ad behavior assignments/calls, not
+    // protection-against-autoplay code (e.g. BR-005 gate).
+    let patterns = [
+        "autoplay = true",
+        "set_autoplay(true)",
+        "trigger_autoplay",
+        "skip_ad()",
+        "skip_ads()",
+        "auto_skip_ad",
+        "ad_skip()",
+        "enable_ad_block",
+        "enable_adblock",
+    ];
+    for (index, line) in text.lines().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("//") || trimmed.starts_with('#') {
+            continue;
+        }
+        let lower = line.to_ascii_lowercase();
+        for pattern in &patterns {
+            if lower.contains(pattern) {
+                findings.push(finding(
+                    Severity::Error,
+                    path,
+                    Some(index + 1),
+                    format!("auto ad behavior pattern `{pattern}` in production source"),
+                ));
+            }
         }
     }
 }

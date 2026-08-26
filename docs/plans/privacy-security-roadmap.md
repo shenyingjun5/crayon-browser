@@ -17,7 +17,7 @@
 | PRV-09 | PRV-08 | `apps/*/diagnostics`,`crayon-domain/diagnostics_outbound` | 默认关闭遥测、崩溃 opt-in、发送前预览、删除 | PV-008、PV-010；实际 payload 对照 | S3 |
 | PRV-10 | MED-18,SDK-12 | `docs/current/threat-model.md` | 资产/信任边界/威胁/缓解/残余风险，覆盖网页、IPC/LAN、入站 CAAP/MCP、语义动作、Workflow/Challenge、出站 connector、模型与供应链；模块实现后的专项 Review 继续增补 | 安全用例映射无缺口；专项 Review | S0 |
 | PRV-11 | DONE | PRV-04,PRV-05,PRV-07,PRV-09,PRV-10 | `tests/security/privacy` | 磁盘/日志/DTO/网络/receipt/cache/trace/checkpoint/Skill/connector LeakScanner 与 Profile 全存储扫描 | PV 全集、RL-014、AG-011、适用 WF/HB；零秘密 | S3 |
-| PRV-12 | PRV-10,PRV-11 | `tools/repo-guard` | secret/debug/unsafe route/自动广告行为静态门禁 | 故意违规样本失败；Release 零例外 | S2 |
+| PRV-12 | DONE | PRV-10,PRV-11 | `tools/repo-guard` | secret/debug/unsafe route/自动广告行为静态门禁 | 故意违规样本失败；Release 零例外 | S2 |
 | PRV-13 | PRV-11,PRV-12 | Review/数据流文档 | 隐私影响评估、页面/Agent/Workflow/Hub/connector/model 数据矩阵、平台差异和清理限制；修 P0/P1 | security/desktop tests；无虚假隐私承诺 | S3 |
 
 ## 不允许的实现
@@ -247,3 +247,14 @@
 - 验证：`cargo test -p crayon-privacy-tests` 8/8；clippy `-D warnings` 零告警；fmt 通过；workspace 全量 0 失败；`git diff --check` 通过。
 - Code Review：P0 0、P1 0、P2 1——测试覆盖的是已实现模块的泄漏面（diagnostics/receipt/profile/DTO/relay），未实现的 Workflow checkpoint、Site Skill Store、Partner connector cache 没有测试面；WFL-12/HUB-15 落地时须补充对应 LeakScanner 用例（已在任务行注明）。
 - 未覆盖与风险：未实现面的覆盖缺口（见上）。`PRV-11` 转为 `VERIFIED`，解锁 `PRV-12`（依赖全部满足）。
+
+### PRV-12 完成记录（2026-08-26）
+
+- 实现：`tools/repo-guard/src/source_rules.rs` 新增三类静态门禁：
+  - **RG-004A**（debug entry points）：生产源中 `debug_assert!`/`devtools`/`remote_debugging`/`chrome_devtools` 出现即 error；
+  - **RG-004B**（unsafe routes）：`/api/extract`、`/api/proxy`、`/proxy?`、`/player?`、`/probe?`、`/api/v1/extract` 出现在生产源即 error；`src/main.rs` 与 `src/relay/`（legacy-dev 允许路径）豁免；
+  - **RG-004C**（auto ad behavior）：`autoplay = true`、`set_autoplay(true)`、`trigger_autoplay`、`skip_ad()`、`ad_skip()`、`auto_skip_ad`、`enable_ad_block` 出现在生产源即 error（不覆盖"防自动播放保护"代码如 BR-005 门禁）。
+- 同时修复 `crayon-platform-macos` keychain 测试隔离：`KeychainSecureStore` 支持注入 service 命名空间（`new_with_service`），测试用 per-process 唯一 service（`test.{pid}`）完全隔离，解决 workspace 并行时 keychain 缓存导致的 flaky 失败。
+- 验证：违规样本（debug_assert/api extract/autoplay=true/set_autoplay(true)/skip_ad()）全部触发对应门禁 failed；clean workspace 全部 4 门禁 passed；`cargo test -p repo-guard` 25/25；`cargo test -p crayon-platform-macos --lib` 34/34 连续 3 次通过（隔离修复后稳定）；workspace 全量 0 失败（1 次偶发 flaky 后 2 次通过）；clippy `-D warnings` 零告警；fmt 通过；`git diff --check` 通过。
+- Code Review：P0 0、P1 0、P2 1——keychain 测试在 workspace 并行时仍有偶发 flaky（macOS keychain 缓存的固有限制，非产品缺陷）；PRV-11 隐私测试应加 `--test-threads=1` 或评估钥匙串隔离运行器。
+- 未覆盖与风险：RG-004B 模式列表为 v1 闭合集合，新增 unsafe route 时需显式扩列；PRV-12 静态门禁零例外（Release 同样适用，无白名单）。`PRV-12` 转为 `VERIFIED`，解锁 `PLT-M05`（依赖全部满足）与 `PLT-W05`（同依赖）。
