@@ -25,6 +25,7 @@
 | MDV-09 | DONE | MDV-04,MDV-08,BUX-16 | `browser/cef-shell/src/browser/mdv` | 受控文件入口接线：菜单打开对话框（`.md` 过滤）、拖放、omnibox 本地路径路由三入口接手势门禁与入口守卫，平台分隔符归一 | MD-001；手势外零触发路径；Windows 实机 |
 | MDV-10 | VERIFIED | MDV-05,MDV-06,MDV-08,MDV-09 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | 编辑与保存接线：分栏编辑 UI 呈现、dirty 三选确认对话框、真实文件 IO 钩子注入保存控制器（原子写）、外部修改冲突提示 | MD-005、MD-006；Windows 实机含只读位置失败报告 |
 | MDV-07 | VERIFIED | MDV-01..06,MDV-08..10 | `docs/current`,`docs/plans` | Windows 实机收口与模块总 Review（macOS 对齐后置，不得用 Windows 证据完成 macOS） | MD-007；Review P0/P1=0 |
+| MDV-11 | VERIFIED | MDV-08..10 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv`,`docs/current` | 编辑回归修复（textarea 化被覆盖丢失）+ 拖放打开 + 右键上下文菜单入口（E4）+ 分栏间隔条可拖动 | MD-001..006 回归 + 新交互实机验证 |
 
 ## 接线切片说明（MDV-08..10）
 
@@ -214,3 +215,9 @@ MDV-02..06 按"模型层零 IO / 零 CEF 类型"交付后，产品仍不可见�
   - 可维护性：新增生产文件均低于规模提醒线；vendored md4c 锁定 0.5.3 未改动。
   - 结论：P0/P1/P2 均为 `0`；唯一未覆盖项即上述人工键入补验，不构成合并阻塞（模型层已覆盖），但构成 `DONE` 门禁。
 - 状态：`VERIFIED`。人工补验清单四项通过后转 `DONE`（届时仅更新本记录，无需新提交门禁）。
+
+## MDV-11 原子范围（编辑回归修复 + 拖放/右键入口 + 可拖间隔条）
+
+- 单一目标：修复 MDV-10 页面渲染回归（textarea 化在后续补丁覆盖中丢失，`RenderMdvDocument` 回退为 `<pre>` 只读源码面板），恢复源码面板可编辑；编辑查询响应携带预览负载（左栏键入右栏即时更新）；E2 拖放 `.md` 文件进窗口（`CefDragHandler::OnDragEnter` 经窄挂点接入口守卫）；E4 右键上下文菜单"在文档查看器中打开"（`.md` 的 file:// 页面或链接上追加菜单项，`MENU_ID_USER_FIRST`）；分栏间隔条左右拖动调宽（纯前端）。契约 `docs/current/markdown-viewer.md` §3 增 E4、§8 增 textarea/间隔条语义。
+- 输出与允许修改：共享层 `mdv_page`（面板 markup 恢复 textarea、浮层、间隔条样式/脚本）与 `mdv_page_test`（textarea/间隔条/浮层断言）；`window/tab_controller` 增加 `CefDragHandler`/`CefContextMenuHandler` 两个窄挂点（镜像既有惯例）；`cef_mdv_entries` 增加拖放/菜单处理；`cef_mdv_editing` 编辑响应携带预览负载；装配（app、资源 IDS 225、locale 双语 key `mdv.label_open_in_viewer`，75/75 parity）。
+- 验证：双配置 ctest **58/58**（含新断言）；clang-format、fast/security、`git diff --check` 通过；实机打开验证文档成功（用户现场进行交互验证：左栏编辑/拖放/间隔条/右键菜单）。`MDV-11` 转 `VERIFIED`，交互验证通过后与 MDV-07/10 一并转 `DONE`。

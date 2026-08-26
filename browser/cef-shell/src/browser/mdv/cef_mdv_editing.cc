@@ -175,7 +175,16 @@ bool MdvEditController::OnPageQuery(
     const std::string text = dict->GetString("text").ToString();
     if (edit_.ApplyEdit(text, NowMs())) {
       RenderAndStore();
-      callback->Success("{}");
+      // Ship the fresh preview/dirty back so the page can apply it
+      // without a round trip through the shell.
+      CefRefPtr<CefValue> reply = CefValue::Create();
+      reply->SetDictionary(CefDictionaryValue::Create());
+      CefRefPtr<CefDictionaryValue> reply_dict = reply->GetDictionary();
+      const auto snapshot = state_->snapshot();
+      reply_dict->SetString("preview", snapshot.rendered_html);
+      reply_dict->SetBool("dirty", snapshot.dirty);
+      reply_dict->SetBool("confirm", snapshot.confirm_visible);
+      callback->Success(CefWriteJSON(reply, JSON_WRITER_DEFAULT));
       return true;
     }
     callback->Success("{}");

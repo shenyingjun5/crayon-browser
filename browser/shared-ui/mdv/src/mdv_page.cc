@@ -144,17 +144,32 @@ std::string RenderMdvDocument(const MdvPageSnapshot& snapshot,
              << EscapeHtml(strings.status_empty) << "</p></main></body></html>";
     return document.str();
   }
-  // Source pane: fully escaped raw markdown.  Preview pane: trusted
-  // MDV-02 whitelist HTML inserted verbatim.
+  // Source pane: fully escaped editable textarea.  Preview pane:
+  // trusted MDV-02 whitelist HTML inserted verbatim.
   document << "<div class=\"md-panes\"><section class=\"md-source-pane\" "
               "aria-label=\""
-           << EscapeHtml(strings.view_source) << "\"><pre><code>"
+           << EscapeHtml(strings.view_source)
+           << "\"><textarea id=\"md-source\" spellcheck=\"false\">"
            << EscapeHtml(snapshot.source_text)
-           << "</code></pre></section><section class=\"md-preview-pane\" "
-              "aria-label=\""
-           << EscapeHtml(strings.view_preview) << "\"><article>"
-           << snapshot.rendered_html
+           << "</textarea></section><div id=\"md-divider\" class=\"md-"
+              "divider\" aria-hidden=\"true\"></div>"
+              "<section class=\"md-preview-pane\" aria-label=\""
+           << EscapeHtml(strings.view_preview)
+           << "\"><article id=\"md-preview\">" << snapshot.rendered_html
            << "</article></section></div>"
+              "<div id=\"md-confirm\" class=\"md-confirm\" data-show=\""
+           << (snapshot.confirm_visible ? "true" : "false")
+           << "\" role=\"dialog\"><p>" << EscapeHtml(strings.confirm_text)
+           << "</p>"
+              "<button type=\"button\" data-decision=\"save\">"
+           << EscapeHtml(strings.label_save)
+           << "</button>"
+              "<button type=\"button\" data-decision=\"discard\">"
+           << EscapeHtml(strings.label_discard)
+           << "</button>"
+              "<button type=\"button\" data-decision=\"cancel\">"
+           << EscapeHtml(strings.label_cancel)
+           << "</button></div>"
               "<script src=\"/app.js\"></script></body></html>";
   return document.str();
 }
@@ -174,6 +189,9 @@ std::string RenderMdvStylesheet() {
       << ".md-panes{display:flex;height:calc(100vh - 42px);}"
       << ".md-source-pane,.md-preview-pane{flex:1;overflow:auto;padding:"
          "0 14px;}"
+      << ".md-divider{width:6px;cursor:col-resize;background:canvasText;"
+         "opacity:.08;flex:0 0 auto;}"
+      << ".md-divider:hover,.md-divider[data-dragging]{opacity:.25;}"
       << "body[data-view=preview] .md-source-pane{display:none;}"
       << "body[data-view=source] .md-preview-pane{display:none;}"
       << ".md-source-pane textarea{width:100%;height:100%;border:none;"

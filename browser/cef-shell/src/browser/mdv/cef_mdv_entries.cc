@@ -89,6 +89,12 @@ std::string EntryFailureText(crayon::browser_mdv::EntryError error,
 
 }  // namespace
 
+namespace {
+
+constexpr int kMdvOpenInViewerId = MENU_ID_USER_FIRST;
+
+}  // namespace
+
 void MdvEntryController::SetDocumentLoadedCallback(
     DocumentLoadedCallback callback) {
   document_loaded_callback_ = std::move(callback);
@@ -162,6 +168,71 @@ bool MdvEntryController::InterceptNavigation(CefRefPtr<CefBrowser> browser,
     return false;  // non-markdown local targets keep default behavior
   }
   LoadAndShow(browser, path_utf8, EntrySource::kUserCommand);
+  return true;
+}
+
+bool MdvEntryController::HandleDragEnter(
+    CefRefPtr<CefBrowser> browser, CefRefPtr<CefDragData> dragData,
+    CefDragHandler::DragOperationsMask mask) {
+  CEF_REQUIRE_UI_THREAD();
+  static_cast<void>(mask);
+  if (!dragData) {
+    return false;
+  }
+  std::vector<CefString> file_names;
+  dragData->GetFileNames(file_names);
+  if (file_names.size() != 1) {
+    return false;
+  }
+  std::string path;
+  const std::string dropped = file_names[0].ToString();
+  if (!LocalPathFromFileUrl(dropped, &path)) {
+    path = dropped;
+  }
+  if (!crayon::browser_mdv::HasMarkdownSuffix(path)) {
+    return false;
+  }
+  // OS drop gesture: single .md file goes through the gate.
+  LoadAndShow(browser, path, EntrySource::kUserCommand);
+  return true;
+}
+
+bool MdvEntryController::HandleContextMenuAugment(
+    CefRefPtr<CefBrowser> browser, CefRefPtr<CefContextMenuParams> params,
+    CefRefPtr<CefMenuModel> model) {
+  CEF_REQUIRE_UI_THREAD();
+  context_menu_target_path_.clear();
+  if (!browser || !params || !model) {
+    return false;
+  }
+  std::string candidate;
+  // Prefer the link target; fall back to the current page URL.
+  const std::string link = params->GetLinkUrl().ToString();
+  const std::string frame = params->GetFrameUrl().ToString();
+  if (!link.empty()) {
+    LocalPathFromFileUrl(link, &candidate);
+  }
+  if (candidate.empty() && !frame.empty()) {
+    LocalPathFromFileUrl(frame, &candidate);
+  }
+  if (candidate.empty() || !crayon::browser_mdv::HasMarkdownSuffix(candidate)) {
+    return false;
+  }
+  context_menu_target_path_ = candidate;
+  model->AddSeparator();
+  model->AddItem(kMdvOpenInViewerId, strings_.label_open_in_viewer);
+  return true;
+}
+
+bool MdvEntryController::HandleContextMenuCommand(CefRefPtr<CefBrowser> browser,
+                                                  int command_id) {
+  CEF_REQUIRE_UI_THREAD();
+  if (command_id != kMdvOpenInViewerId || context_menu_target_path_.empty()) {
+    return false;
+  }
+  const std::string path = context_menu_target_path_;
+  context_menu_target_path_.clear();
+  LoadAndShow(browser, path, EntrySource::kUserCommand);
   return true;
 }
 

@@ -86,6 +86,7 @@ browser_mdv::MdvPageStrings LoadMdvStrings(HINSTANCE resource_module) {
       LoadUtf8String(resource_module, IDS_CRAYON_MDV_LABEL_SAVE),
       LoadUtf8String(resource_module, IDS_CRAYON_MDV_LABEL_DISCARD),
       LoadUtf8String(resource_module, IDS_CRAYON_MDV_LABEL_CANCEL),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_LABEL_OPEN_IN_VIEWER),
   };
 }
 
@@ -199,6 +200,22 @@ void BrowserApp::OnContextInitialized() {
         }
         return entries->InterceptNavigation(browser, url, user_gesture);
       });
+  tab_controller_->SetLocalEntryDragHandler(
+      [entries = mdv_entries_](CefRefPtr<CefBrowser> browser,
+                               CefRefPtr<CefDragData> dragData,
+                               CefDragHandler::DragOperationsMask mask) {
+        return entries->HandleDragEnter(browser, dragData, mask);
+      });
+  tab_controller_->SetContextMenuAugmenter(
+      [entries = mdv_entries_](CefRefPtr<CefBrowser> browser,
+                               CefRefPtr<CefContextMenuParams> params,
+                               CefRefPtr<CefMenuModel> model) {
+        return entries->HandleContextMenuAugment(browser, params, model);
+      });
+  tab_controller_->SetContextMenuCommandHandler(
+      [entries = mdv_entries_](CefRefPtr<CefBrowser> browser, int command_id) {
+        return entries->HandleContextMenuCommand(browser, command_id);
+      });
   tab_controller_->SetPageQueryHandler(
       [editing = mdv_editing_](
           CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
@@ -241,7 +258,8 @@ bool BrowserApp::mdv_strings_valid() const {
          !mdv_strings_.confirm_text.empty() &&
          !mdv_strings_.label_save.empty() &&
          !mdv_strings_.label_discard.empty() &&
-         !mdv_strings_.label_cancel.empty();
+         !mdv_strings_.label_cancel.empty() &&
+         !mdv_strings_.label_open_in_viewer.empty();
 }
 
 CefRefPtr<CefClient> BrowserApp::GetDefaultClient() {

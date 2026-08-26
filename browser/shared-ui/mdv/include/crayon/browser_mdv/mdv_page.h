@@ -37,6 +37,7 @@ struct MdvPageStrings {
   std::string label_save;
   std::string label_discard;
   std::string label_cancel;
+  std::string label_open_in_viewer;
 };
 
 /// One request's parsed coordinates (mirrors the new-tab classifier

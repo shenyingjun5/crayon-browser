@@ -178,6 +178,33 @@ void TestEntryErrorBannerTakesPriority() {
   CHECK(escaped.find("&lt;img src=x&gt;") != std::string::npos);
 }
 
+void TestEditableSourceDividerAndConfirmOverlay() {
+  MdvPageSnapshot snapshot;
+  snapshot.has_document = true;
+  snapshot.source_text = "# 源码";
+  snapshot.confirm_visible = true;
+  const std::string document =
+      crayon::browser_mdv::RenderMdvDocument(snapshot, SampleStrings());
+  // Editable source pane: textarea, not a read-only <pre>.
+  CHECK(document.find("<textarea id=\"md-source\"") != std::string::npos);
+  CHECK(document.find("<pre><code>") == std::string::npos);
+  // Resizable divider present.
+  CHECK(document.find("id=\"md-divider\"") != std::string::npos);
+  // Confirm overlay with three closed choices and localized labels.
+  CHECK(document.find("id=\"md-confirm\"") != std::string::npos);
+  CHECK(document.find("data-show=\"true\"") != std::string::npos);
+  CHECK(document.find(SampleStrings().label_save) != std::string::npos);
+  CHECK(document.find(SampleStrings().label_discard) != std::string::npos);
+  CHECK(document.find(SampleStrings().label_cancel) != std::string::npos);
+
+  MdvPageSnapshot hidden;
+  hidden.has_document = true;
+  hidden.confirm_visible = false;
+  const std::string collapsed =
+      crayon::browser_mdv::RenderMdvDocument(hidden, SampleStrings());
+  CHECK(collapsed.find("data-show=\"false\"") != std::string::npos);
+}
+
 void TestEmptyAndErrorSurfaces() {
   MdvPageSnapshot empty;
   empty.load_status = MdvLoadStatus::kEmpty;
@@ -215,6 +242,7 @@ int main() {
   TestSourceIsEscapedAndPreviewVerbatim();
   TestNoNetworkOrInlineHandlers();
   TestEntryErrorBannerTakesPriority();
+  TestEditableSourceDividerAndConfirmOverlay();
   TestEmptyAndErrorSurfaces();
   TestInitialViewStateAndCspConstantUnchanged();
   if (g_failures != 0) {
