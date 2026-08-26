@@ -58,5 +58,19 @@
   "capability.route.override.prefer": "偏好路线类型",
   "capability.route.override.allow_external": "允许向外发送数据",
   "capability.route.proceed": "继续",
-  "capability.route.cancel": "取消"
+  "capability.route.cancel": "取消",
+  "mdv.title": "蜡笔文档",
+  "mdv.view_source": "源码",
+  "mdv.view_preview": "预览",
+  "mdv.view_split": "分栏",
+  "mdv.status_empty": "尚未打开文档",
+  "mdv.status_too_large": "文件超过大小上限（5 MiB）",
+  "mdv.status_invalid_utf8": "文件不是有效的 UTF-8 编码",
+  "mdv.status_render_policy": "内容触发渲染安全策略，已拒绝显示",
+  "mdv.status_not_markdown": "不是可打开的 Markdown 文档",
+  "mdv.status_saved": "已保存",
+  "mdv.confirm_text": "当前文档有未保存的修改，是否继续？",
+  "mdv.label_save": "保存并继续",
+  "mdv.label_discard": "放弃更改",
+  "mdv.label_cancel": "取消"
 }

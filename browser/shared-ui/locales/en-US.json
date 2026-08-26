@@ -58,5 +58,19 @@
   "capability.route.override.prefer": "Prefer route type",
   "capability.route.override.allow_external": "Allow sending data externally",
   "capability.route.proceed": "Continue",
-  "capability.route.cancel": "Cancel"
+  "capability.route.cancel": "Cancel",
+  "mdv.title": "Crayon Documents",
+  "mdv.view_source": "Source",
+  "mdv.view_preview": "Preview",
+  "mdv.view_split": "Split",
+  "mdv.status_empty": "No document open",
+  "mdv.status_too_large": "File exceeds the size limit (5 MiB)",
+  "mdv.status_invalid_utf8": "File is not valid UTF-8",
+  "mdv.status_render_policy": "Content triggered the render safety policy and was rejected",
+  "mdv.status_not_markdown": "Not an openable Markdown document",
+  "mdv.status_saved": "Saved",
+  "mdv.confirm_text": "This document has unsaved changes. Continue?",
+  "mdv.label_save": "Save and continue",
+  "mdv.label_discard": "Discard changes",
+  "mdv.label_cancel": "Cancel"
 }

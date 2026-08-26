@@ -24,7 +24,7 @@
 | MDV-08 | DONE | MDV-02,MDV-03,BUX-03 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | `crayon://mdv` scheme handler 与只读查看接线：scheme 注册、内存资源路由、CSP 下发、viewer 模型绑定与源码/预览切换呈现 | MD-003；Windows Debug/Release 实机 |
 | MDV-09 | DONE | MDV-04,MDV-08,BUX-16 | `browser/cef-shell/src/browser/mdv` | 受控文件入口接线：菜单打开对话框（`.md` 过滤）、拖放、omnibox 本地路径路由三入口接手势门禁与入口守卫，平台分隔符归一 | MD-001；手势外零触发路径；Windows 实机 |
 | MDV-10 | VERIFIED | MDV-05,MDV-06,MDV-08,MDV-09 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | 编辑与保存接线：分栏编辑 UI 呈现、dirty 三选确认对话框、真实文件 IO 钩子注入保存控制器（原子写）、外部修改冲突提示 | MD-005、MD-006；Windows 实机含只读位置失败报告 |
-| MDV-07 | TODO | MDV-01..06,MDV-08..10 | `docs/current`,`docs/plans` | Windows 实机收口与模块总 Review（macOS 对齐后置，不得用 Windows 证据完成 macOS） | MD-007；Review P0/P1=0 |
+| MDV-07 | VERIFIED | MDV-01..06,MDV-08..10 | `docs/current`,`docs/plans` | Windows 实机收口与模块总 Review（macOS 对齐后置，不得用 Windows 证据完成 macOS） | MD-007；Review P0/P1=0 |
 
 ## 接线切片说明（MDV-08..10）
 
@@ -196,3 +196,21 @@ MDV-02..06 按"模型层零 IO / 零 CEF 类型"交付后，产品仍不可见�
 - 过程披露（构建期修复）：StatusBanner 签名扩展漏改调用点；`JSON_PARSER_RFC`/`VTYPE_DICTIONARY` 常量名对齐；`CefMessageRouterBrowserSide::Create(config)` 无 handler 参数（`AddHandler` 后置）；router Handler 基类非引用计数（去掉误用的 IMPLEMENT_REFCOUNTING）；`OnQuery` query_id 为 `int64_t`；`std::istreambuf_iterator` most-vexing-parse；`MdvRuntimeState` 实现误落匿名命名空间；`CefValue::SetDictionary(CefDictionaryValue::Create())` 用法。
 - 自动验证：Windows Debug/Release build 零错误、两配置 ctest 均 **58/58**（`mdv_page` 扩展通过；`mdv_handler_contract` 扩展 editing 文件存在性 + MDV-06 模型驱动 + ExecuteJavaScript 推送）；clang-format 零违规；`scripts/check.ps1 fast/security` 全 passed；`git diff --check` 通过。启动崩溃修复后实机验证：应用正常启动、file:// 打开文档、分栏视图（左源码右预览）渲染正确、退出零残留。
 - **未覆盖与阻塞（如实记录）**：交互式编辑输入、Ctrl+S 落盘、冲突浮层与三选确认的**实机键入验证被桌面环境阻塞**——冒烟期间另一应用（ChatGPT，pid 5472）反复抢占前台，SetForegroundWindow/ALT 解锁/SendKeys 均无法稳定落地按键（原始错误：`frontmost_pid_mismatch`；多次输入未达页面）。已验证到"文件打开→分栏渲染→零残留"为止；编辑/保存/确认链路的模型层行为由 MDV-05/06 单测与本次契约测试覆盖，端到端键入验证待桌面空闲后人工补验（MDV-07 收口清单首项）。状态维持 `VERIFIED`，不转 `DONE`。
+
+### MDV-07 完成记录（2026-08-26，Windows 实机收口与模块总 Review）
+
+- en-US 对齐：`browser/shared-ui/locales/{zh-CN,en-US}.json` 各新增 14 个 `mdv.*` key（标题/三视图/六状态/确认三键），两文件 74/74 key 集全等，`chrome_contract` locale parity 契约（含 MED-19 mirror 禁令）通过。运行时 Windows 端继续消费 IDS 字符串资源（zh-CN），locale JSON 是 parity 锚点；按用户偏好切换语言的机制归 BUX-13 偏好设置线，不在本模块偷跑。
+- 实机复验（Windows 11 x64，Debug）：file:// 入口打开 `final.md` → 查看器渲染正确；分栏视图（左源码右预览）正确；退出零残留。双配置 ctest **58/58**；`scripts/check.ps1 fast/security` 全 passed；`git diff --check` 通过。
+- **交互式键入冒烟受环境阻塞（如实记录）**：冒烟期间桌面另一应用（ChatGPT）反复抢占前台，SetForegroundWindow/ALT 前台锁解锁/SendKeys/剪贴板粘贴共 6 次尝试均未能将键入稳定送达页面 textarea（原始错误 `frontmost_pid_mismatch`；中文 IME 还曾把 URL 转为全角致导航失败，后改剪贴板粘贴绕过）。已验证到"打开→渲染→分栏→零残留"为止。
+- **人工补验清单（约 2 分钟，桌面空闲时执行）**：① 打开任一 `.md` → 分栏 → 在左栏键入文字 → 右栏预览 ≤100ms 更新且出现脏点；② Ctrl+S → 磁盘文件内容更新且出现"已保存"绿条；③ 外部修改文件后再 Ctrl+S → 冲突浮层三选可用；④ dirty 状态下 omnibox 导航 → 确认浮层出现且取消不丢内容。上述链路的模型层行为已由 MDV-05/06 单测与 mdv_page/editing 契约测试覆盖，端到端键入是唯一缺口。
+- 模块总 Review（按 `docs/current/code-review-standard.md` v0.8，范围 MDV-01..10 全部生产代码与测试）：
+  - 需求/边界：契约 13 章逐项映射落地（§2 scheme/CSP=MDV-08、§3/4/5 入口=MDV-09、§6/7 渲染=MDV-02、§8 视图/编辑=MDV-03/05/10、§9 保存=MDV-06/10、§10 无持久化=各模型零 IO 面）；明确不做清单无越界（无 Agent 面、无目录枚举、无自动保存、无最近文件落盘）。
+  - 正确性：渲染确定性 golden、路径矩阵、装载边界、revision fencing、原子写、冲突 (size,mtime) 均有契约测试；发现并修复的问题全部有回归用例（坏合并、编码、golden CRLF、RG-004 误报、两步迁移、启动崩溃等，见各任务记录）。
+  - 架构/API：依赖方向零违规——共享层 `browser/shared-ui/{markdown,mdv}` 无 CEF/Win32/AppKit 类型（契约扫描持续强制），CEF adapter 只在 `cef-shell/src/browser/mdv`；window/ 与 new_tab 仅新增窄回调/装配性挂点（镜像既有惯例）。
+  - 并发/生命周期：MdvRuntimeState 互斥快照（UI 写/IO 读）、事件中继锁外交付、router UI 线程惰性创建；退出零残留多次复验。
+  - 安全/隐私：CSP 全封闭逐字节 golden、源码全量转义、白名单 HTML 原样插入、链接 scheme 白名单、图片永不加载、路径永不入 URL/DOM、query 绑定 origin 门禁、页面内容零触发路径（kPage 一票拒绝）、错误/诊断不携带路径与内容。
+  - 性能：渲染去抖 ≤100ms 合并、5 MiB 装载上界、有界读取、事件中继容量 64 + dropped 计数；热路径无日志。
+  - 测试：模型层 6 套契约 + 页面/编辑/入口/handler 契约，双配置 58/58；golden 与注入矩阵覆盖注入面。
+  - 可维护性：新增生产文件均低于规模提醒线；vendored md4c 锁定 0.5.3 未改动。
+  - 结论：P0/P1/P2 均为 `0`；唯一未覆盖项即上述人工键入补验，不构成合并阻塞（模型层已覆盖），但构成 `DONE` 门禁。
+- 状态：`VERIFIED`。人工补验清单四项通过后转 `DONE`（届时仅更新本记录，无需新提交门禁）。
