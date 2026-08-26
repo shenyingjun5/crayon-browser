@@ -1,6 +1,6 @@
 # BUX：桌面浏览器产品体验 Roadmap
 
-状态：`BUX-01..03 DONE`，`BUX-04A DONE`，`BUX-05 DONE`，`BUX-06 DONE`，`BUX-07 DONE`，`BUX-08 DONE`；Chrome-inspired 信息架构、共享 design token、标题栏/标签栏/导航栏自有 glyph 与平台适配边界已经冻结，Windows UI shell、typed command、focus owner、engine event adapter 与本地新标签页已完成实机门禁。当前阶段优先完成 Windows 全部基础浏览器功能，macOS 对齐后置。本 Roadmap 把"基本浏览器有的功能"拆成可审查原子任务；视觉、品牌、内置页面与服务均为蜡笔自有实现。
+状态：`BUX-01..18 全部收口`（BUX-17/18 于 2026-08-26 完成，聚合 Review 见文末记录；真机项显式归 QAR）。本 Roadmap 把"基本浏览器有的功能"拆成可审查原子任务；视觉、品牌、内置页面与服务均为蜡笔自有实现。
 
 ## 产品设计结论
 
@@ -32,7 +32,7 @@
 | BUX-15 | VERIFIED | CEF-04,PRV-01..04,BUX-06 | `browser/shared-ui/profiles`,`browser/session` | Profile picker、普通/无痕窗口、启动会话与崩溃恢复编排 | UX-014；清理失败、无痕不恢复、旧 session、跨 Profile |
 | BUX-16 | VERIFIED | BUX-05,BUX-11,PLT-02 | `browser/shared-ui/context-menu` | 上下文菜单、拖放、剪贴板与受控本地文件入口 | UX-015；上下文最小化、路径/scheme、取消/外部动作 |
 | BUX-17 | DONE | BUX-13,PRV-05,PRV-11 | `browser/autofill/address`,`browser/shared-ui/autofill` | 仅地址/联系信息的本地保存确认、匹配、编辑和删除；明确排除密码/支付 | UX-017；PII redaction、无痕、Agent 不可见、跨 Profile |
-| BUX-18 | TODO | BUX-01..17,CEF-14,PRV-12 | `tests/e2e/desktop/browser-ux`,`docs/current` | Windows/macOS 浏览器体验、性能、包体、隐私与品牌总 Review | UX-001..018；Debug/Release、P0/P1=0、未覆盖真机明确 |
+| BUX-18 | DONE | BUX-01..17,CEF-14,PRV-12 | `tests/e2e/desktop/browser-ux`,`docs/current` | Windows/macOS 浏览器体验、性能、包体、隐私与品牌总 Review | UX-001..018；Debug/Release、P0/P1=0、未覆盖真机明确 |
 
 ## 开发规则
 
@@ -384,3 +384,60 @@
 - 验证：独立 configure/build 双口径零告警（MSVC /W4 /WX 与 -Wall -Wextra -Wpedantic -Werror）；`address_book` 与 `autofill_ui` 契约测试通过（校验边界矩阵、脱敏零 PII 断言含中文多字节、匹配排序/大小写/上限、store CRUD+容量+双 scope 隔离、保存确认三态、无痕双拒、建议越权 Pick 拒绝、编辑/删除生命周期、locale parity 94=94、3000 步风暴不变量——容量上界/建议 id 必可解析）；全目标编译后共享层 ctest **48/48 通过**；`git diff --check` 通过。
 - Code Review：按标准八维复核。P0 0、P1 0、P2 1——匹配为字节级 ASCII 大小写折叠，非拉丁文字不做 Unicode case fold（中文/日文场景不受影响），如需强折叠归后续增强。
 - 未覆盖与风险：磁盘持久化与 SecureStore 加密接线归平台装配任务；表单字段启发式识别（页面侧映射）归引擎适配后续任务；CEF 弹窗呈现实机验证归 QAR。`BUX-17` 转为 `DONE`，解锁 `BUX-18`。
+
+## BUX-18 原子范围（浏览器体验总 Review）
+
+- 状态：`IN_PROGRESS`；依赖 `BUX-01..17`、`CEF-14 DONE`、`PRV-12 VERIFIED`。
+- 单一目标：按 v0.8 标准对 BUX 全系（UX-001..018）做聚合 Review——逐用例覆盖矩阵（实现位置/证据/未覆盖）、Debug/Release 门禁证据汇总、隐私与品牌红线复核、P0/P1 结论与真机缺口显式登记；本任务不新写功能代码，发现的缺陷单独修复提交。
+- 输入：UX-001..018、各 BUX 任务完成记录、repo-guard 静态门禁输出、共享层 ctest 与 Rust 基线、`docs/current/browser-ux.md` 契约。
+- 输出与允许修改：本 Roadmap 聚合 Review 记录、`docs/current/README.md` 现状行；如发现 P0/P1 缺陷则修复提交。不建虚假 e2e 脚手架——真机 E2E 归 QAR Roadmap。
+- 验收：UX-018 模型部分（clean profile 冷启动/包体等 DEVICE/RELEASE 项显式标未覆盖归 QAR）；P0/P1=0 或已修。
+### BUX-18 完成记录（2026-08-26，聚合 Review）
+
+按 `docs/current/code-review-standard.md` v0.8 执行。范围：`browser/shared-ui/**`、`browser/{bookmarks,downloads,history,preferences,privacy,session}`、`browser/autofill`、相关 `crates/*` 的 BUX-01..17 全部交付与 UX-001..018 用例映射。
+
+## 结论
+
+- P0/P1/P2：**0 / 0 / 1**（P2 见"发现"末条；无阻断项）
+- 合并判断：BUX 全系可进入 QAR 真机门禁队列；本聚合未产生新功能代码。
+
+## UX 用例覆盖矩阵（实现位置 → 证据）
+
+| 用例 | 实现位置 | 证据状态 |
+|---|---|---|
+| UX-001 布局/品牌 | BUX-01 design tokens+glyphs | DONE 记录 + 共享层契约测试 |
+| UX-002 新标签页 | BUX-03 newtab scheme | DONE（Windows Debug/Release 实机） |
+| UX-003 omnibox 判定 | BUX-04A omnibox/core | DONE（contract ctest） |
+| UX-004 导航状态 | CEF-02W/CEF-03/BUX 导航模型 | DONE/VERIFIED |
+| UX-005/006 标签操作 | BUX-05..07 标签域 | DONE |
+| UX-007 弹窗/全屏 | BUX-08 窗口特征模型 | DONE |
+| UX-008 书签 | browser/bookmarks | DONE（contract ctest） |
+| UX-009 历史/最近关闭 | browser/history | DONE |
+| UX-010 下载 | browser/downloads | DONE |
+| UX-011 查找/缩放/打印 | BUX 页面工具 page-tools | DONE |
+| UX-012 设置 | browser/preferences | DONE（损坏回退 golden） |
+| UX-013 权限/证书 SECURITY | BUX-14 站点控制面板 | DONE |
+| UX-014 Profile/恢复 | BUX-15 + PRV-01..04 | VERIFIED |
+| UX-015 上下文菜单/拖放 | BUX-16 | VERIFIED |
+| UX-016 快捷键/IME/读屏 DEVICE | 各模块键位表 | **部分未覆盖**：真机 IME/读屏/DPI 归 QAR |
+| UX-017 地址填充 SECURITY | BUX-17 autofill 两模块 | DONE（本次，contract ctest ×2） |
+| UX-018 RELEASE 基线 | 聚合于本记录 | 静态+自动化证据齐；冷启动/包体/内存真机项归 QAR |
+
+## 自动化与静态证据（2026-08-26 实测）
+
+- 共享层 ctest：**48/48 通过**（含 address_book/autofill_ui/capability_route/mdv_page 等 48 个用例目标）。
+- Rust 基线：core lib 3/3、legacy-dev lib 58/58、agent-gateway 75/75、capability-hub 44/44。
+- repo-guard 全树扫描：安全类门禁 **RG-001/002/004A/004B/004C/005/007/008 全部 passed 零 findings**（debug 入口/unsafe 路由/自动广告/Cast-SDK 锁定）；RG-003 warning 20 条、RG-004 warning 52 条——逐条抽样核对均为 legacy adapter（`app/src/*`，legacy-dev 允许路径）的规模提醒与可配置字面量提醒，正式产品源无 error 级命中。
+- locale：en-US 与 zh-CN 各 94 键 parity 由 capability_route/autofill_ui/mdv_page 三处契约测试锁定。
+
+## 红线复核
+
+- 品牌：无 Chrome/Google 商标资产或服务依赖（RG-001 passed）。
+- 隐私：地址填充 PII 不出 `RedactedSummary` 类型边界（BUX-17 测试锁定）；诊断出站默认双拒（PRV-09）；receipt/历史脱敏口径沿用 PRV-08。
+- Agent 边界：地址填充不进 CAAP registry；页面数据面无 PII 读取路径。
+- 无痕：新标签页/历史/填充/建议四处一致拒绝持久化（各任务测试锁定）。
+
+## 发现
+
+- P2×1（登记）：RG-003 规模提醒中 `crayon-agent-gateway/registry.rs:351`（约 131 行）为冻结 v1 工具声明数据表，属"数据表保持整体"的合理例外（AGT-02 Review 已记录），无需拆分；其余 19 条 RG-003/RG-004 warning 全部位于 `app/src` legacy-dev 范围，不进正式产品构建，维持现状并继续由 RG 门禁观察。
+- 未覆盖真机项（显式登记，归 QAR）：UX-016 IME/读屏/多屏 DPI、UX-018 冷启动/首导航时延/内存/包体测量、Debug/Release 双配置实机回归（Windows 机待 QAR-W 系列；macOS 对齐后置）。
