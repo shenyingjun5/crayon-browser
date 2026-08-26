@@ -10,7 +10,7 @@
 | PRV-02 | PRV-01 | `crayon-profile/ephemeral` | 临时 context、最后窗口关闭、清理清单与结果 | PV-001、PV-002、PV-003；每类存储 fixture | S3 |
 | PRV-03 | PRV-01 | `crayon-profile/persistent` | 常用空间创建/隔离/销毁事务 | PV-004、PV-005；部分失败/重试 | S3 |
 | PRV-04 | PRV-02,PRV-03 | `crayon-profile/path_guard` | 绝对根验证、symlink/junction/reparse 防护、启动补偿清理 | PV-006；逃逸目标零修改 | S2 |
-| PRV-05 | PLT-W04,PLT-M04 | `crayon-profile/secure_store` | Windows/macOS 安全存储接口、key ID、轮换/删除/不可用状态 | PV-007；明文扫描；错误映射 | S4 |
+| PRV-05 | DONE | PLT-W04,PLT-M04 | `crayon-profile/secure_store` | Windows/macOS 安全存储接口、key ID、轮换/删除/不可用状态 | PV-007；明文扫描；错误映射 | S4 |
 | PRV-06 | CEF-05,FND-11 | `browser/privacy/standard` | 第三方 Cookie、存储分区、Referer、HTTPS、权限默认 | PV-008、PV-009；兼容 fixture | S3 |
 | PRV-07 | PRV-06 | `browser/privacy/strict` | 高熵 API 统一降精度/限制，能力/兼容开关 | PV-009；熵/兼容；无每 Profile 随机身份 | S3 |
 | PRV-08 | FND-08,FND-09 | `crayon-domain/diagnostics` | 数据分类、redaction、事件 schema、bounded producer | RL-014、PV-008、PV-010；满队列 dropped | S2 |
@@ -212,3 +212,21 @@
 - 验证：`cargo test -p crayon-domain --lib` 15 项通过（outbound 新增 9 项：默认双拒零驻留、单通道 opt-in、关闭即清空且重开不恢复、预览=发送逐字节一致含两次读取、容量 261 入 256 留丢 5 计数且最老优先序保持、删除立即生效计数、空/超长 body 拒绝、可构造类渲染确定性+类门禁纵深防御说明、LCG 3000 步不变量——禁用通道零出站/队列上界/四计数单调）；clippy `-p crayon-domain -p crayon-agent-gateway --all-targets -D warnings` 零告警；fmt 通过；基线 core lib 3/3、legacy-dev lib 58/58、workspace 全量无失败；`git diff --check` 通过。
 - Code Review：按标准八维复核。P0 0、P1 0、P2 1——`drain_channel` 在取出后、发送前若调用方丢弃 draft 即删除（隐私安全方向），但"取消预览恢复原记录"语义不存在；V1 接受（删除优于误发），UI 若需恢复须在 drain 前自行快照。
 - 未覆盖与风险：网络发送端点、上传触发时机与崩溃捕获接线归后续平台任务；设置开关 UI 归 BUX；PRV-11 将对本模块做全存储泄漏扫描。`PRV-09` 转为 `DONE`，解锁 `PRV-11`（另需 `PRV-05`——等 PLT-W04/M04 真机门禁）。
+
+### PRV-05 原子范围（跨平台安全存储门面）
+
+- 状态：`IN_PROGRESS`；依赖 `PLT-W04 DONE`、`PLT-M04 DONE`。
+- 单一目标：`crayon-profile` 新增 `secure_store.rs`——跨平台 `SecureStoreFacade` trait + 工厂函数，将 PLT-01 `SecureStore` 的平台实现（Windows DPAPI / macOS Keychain）收敛为统一接口；key ID 闭合校验、轮换（store 即覆盖）、删除幂等、不可用状态闭合映射；明文扫描断言（value 不以明文落盘由平台层保证，本层只暴露闭合错误）。
+- 输入：PLT-01 `SecureStore` trait、PLT-W04a `DpapiSecureStore`、PLT-M04a `KeychainSecureStore`、PV-007。
+- 输出与允许修改：`crates/crayon-profile/src/secure_store.rs`、`secure_store_tests.rs`、`lib.rs` re-export、`Cargo.toml`（新增 `crayon-platform-api` 依赖）、本 Roadmap。
+- 禁止修改：平台 crate、PLT-01 接口、其他 crate；不得在密文旁明文落盘 value 字节。
+- 边界：facade 不复制平台实现——通过 trait object `Box<dyn SecureStore>` 注入平台后端；key 经 PLT-01 `validate_key`；错误透传 PLT-01 闭合枚举；轮换 = store 即覆盖（平台层保证原子性）；不可用状态 = `SecureStoreError::Unavailable` 透传。
+- 验收与测试：PV-007 模型部分（真机 DPAPI/Keychain 归 PLT-W04/M04 已验证）。测试：trait object 注入 fake 后端的全 CRUD 矩阵、轮换、删除幂等、不可用透传、key 校验拒绝。命令：`cargo test -p crayon-profile`、clippy、fmt、workspace 回归、`git diff --check`。
+- 明确不做：真实 DPAPI/Keychain 调用（平台 crate 已有）、加密算法、HUKS（HarmonyOS 不在当前范围）。
+
+### PRV-05 完成记录（2026-08-26）
+
+- 实现：`crayon-profile` 新增 `secure_store.rs`——`SecureStoreFacade`（`Box<dyn SecureStore + Send>` 注入平台后端）+ `platform_backend()` 编译期后端类型。门面方法：store（key/value 校验后透传）、load（缺项 Ok(None)）、delete（幂等）、rotate（store + roundtrip 验证 defense-in-depth）、validate_key_shape（不触碰后端）。crayon-profile 新增 `crayon-platform-api` path 依赖（PLT-01 trait + 常量）。
+- 验证：`cargo test -p crayon-profile` 5/5（CRUD 矩阵含多 key 独立/轮换/删除幂等、rotate 验证、key 校验 fail-closed、Unavailable 透传、后端类型）；clippy `-D warnings` 零告警；fmt 通过；workspace 全量 0 失败；`git diff --check` 通过。
+- Code Review：P0 0、P1 0、P2 1——facade 的 `store`/`delete`/`rotate` 需要 `&mut self`（PLT-01 trait 的 `store`/`delete` 是 `&mut self`），这意味着调用方需要 `&mut` 访问；如果未来需要并发访问，须改用 `Mutex<Box<dyn SecureStore>>` 内部可变性。
+- 未覆盖与风险：真实 DPAPI/Keychain 行为由平台 crate 测试覆盖（PLT-W04a/M04a）；HUKS（HarmonyOS）不在当前范围。`PRV-05` 转为 `VERIFIED`，解锁 `PRV-11`（全部依赖满足）。

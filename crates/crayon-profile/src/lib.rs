@@ -9,6 +9,7 @@ mod ephemeral;
 mod model;
 mod path_guard;
 mod persistent;
+mod secure_store;
 
 pub use ephemeral::{
     CleanupCategory, CleanupExecutor, CleanupOutcome, CleanupReport, EphemeralError,
@@ -20,3 +21,4 @@ pub use model::{
 };
 pub use path_guard::{PathGuard, PathGuardError, MAX_CLEANUP_PER_CALL, STAGING_SUFFIX};
 pub use persistent::{DestroyOutcome, PersistentStore, PersistentStoreError};
+pub use secure_store::{platform_backend, SecureStoreBackendKind, SecureStoreFacade};

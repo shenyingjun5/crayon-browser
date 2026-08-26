@@ -11,5 +11,6 @@ workspace = true
 
 [dependencies]
 crayon-domain = { path = "../crayon-domain" }
+crayon-platform-api = { path = "../crayon-platform-api" }
 getrandom = "0.3"
 serde = { version = "1", features = ["derive"] }
