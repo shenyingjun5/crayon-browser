@@ -27,10 +27,10 @@ file(READ "${CRAYON_CEF_SHELL_SOURCE}/CMakeLists.txt" cmake_source)
 file(READ "${macos_resource_root}/Info.plist.in" main_plist)
 file(READ "${macos_resource_root}/helper-Info.plist.in" helper_plist)
 
-string(REGEX MATCHALL "about:blank" initial_urls "${app_source}")
+string(REGEX MATCHALL "crayon://newtab" initial_urls "${app_source}")
 list(LENGTH initial_urls initial_url_count)
 if(NOT initial_url_count EQUAL 1)
-  message(FATAL_ERROR "macOS shell must contain exactly one about:blank URL")
+  message(FATAL_ERROR "macOS shell must contain exactly one crayon://newtab URL")
 endif()
 
 foreach(required_main_token

@@ -27,6 +27,8 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   // design and cookies at rest use the in-memory mock key.
   void OnBeforeCommandLineProcessing(const CefString& process_type,
                                      CefRefPtr<CefCommandLine> command_line) override;
+  void OnRegisterCustomSchemes(
+      CefRawPtr<CefSchemeRegistrar> registrar) override;
   void OnContextInitialized() override;
   // Chrome-style windows created by the Chrome UI (new tab/window, popups)
   // must run through our client so callbacks stay normalized.

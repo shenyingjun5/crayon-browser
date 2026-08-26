@@ -14,7 +14,7 @@
 | PLT-W04 | DONE | PLT-02,CEF-12,SDK-08 | `platform/windows/**` | 实现 DPAPI、本地网络/防火墙、多网卡、睡眠唤醒、更新、当前用户 named pipe 与投屏客户端交接（切片 W04a..d，见原子范围） | `CP-W01`,`AG-012`; Windows integration | V4W |
 | PLT-W05 | TODO | PLT-W04,CEF-15,SDK-14,PRV-12 | `apps/desktop-cef/**`, `platform/windows/**` | Windows 产品装配与 Direct/Relay/外部客户端交接验收 | `E2E-001..005`,`CP-W01`; Windows device | V4W |
 | PLT-M04 | DONE | PLT-02,CEF-01E,CEF-12,SDK-08 | `platform/macos/**` | 实现 Keychain、本地网络权限、生命周期、更新、当前用户 UDS 与投屏客户端交接 | `CP-M01`,`AG-012`; macOS integration | V4M |
-| PLT-M05 | TODO | PLT-M04,CEF-15,SDK-14,PRV-12 | `apps/desktop-cef/**`, `platform/macos/**` | macOS 产品装配、签名/公证与 Direct/Relay/外部客户端交接验收 | `E2E-001..005`,`CP-M01`; macOS device | V4M |
+| PLT-M05 | IN_PROGRESS | PLT-M04,CEF-15,SDK-14,PRV-12 | `apps/desktop-cef/**`, `platform/macos/**` | macOS 产品装配、签名/公证与 Direct/Relay/外部客户端交接验收 | `E2E-001..005`,`CP-M01`; macOS device | V4M |
 | PLT-19 | TODO | PLT-W05,PLT-M05 | `docs/current/**`, `docs/plans/**`, `tests/**` | Windows/macOS 平台边界、生命周期和发布前独立 Review | 平台矩阵；Review P0/P1=0 | V5 |
 
 ## 2. 外部客户端交接契约
@@ -202,3 +202,22 @@
 - 验证：`cargo test -p crayon-platform-macos` 34/34（新增 8 项：交接 launch/download/executor 失败、更新 happy path/check 失败/download 失败/failed 重启/非法迁移拒绝）；clippy `-D warnings` 零告警；fmt 通过；`git diff --check` 通过。
 - Code Review：P0 0、P1 0、P2 1——`keychain_multiple_keys_independent` 在 workspace 并行测试时偶发失败（钥匙串缓存竞态），单 crate `--test-threads=1` 稳定通过；PRV-11 跨平台门禁应加 `--test-threads=1` 或评估钥匙串隔离。
 - 未覆盖与风险：真实更新服务归 QAR-09（signed_packages=false 如实声明）；签名/公证归 PLT-M05。`PLT-M04` 转为 `DONE`（全部四切片完成；CP-M01 真机门禁归 PLT-M05 产品装配）。
+
+### PLT-M05 原子范围（macOS 产品装配与真机验收，按切片）
+
+- 状态：`IN_PROGRESS`；依赖 `PLT-M04 DONE`、`CEF-15 DONE`、`SDK-14 DONE`、`PRV-12 DONE`。
+- 路径说明：Roadmap `apps/desktop-cef/**` 的目录尚不存在；按既有映射惯例，`apps/desktop-cef/agent-transport` 等子路径映射 `browser/cef-shell` 装配，`platform/macos/**` 映射 `crates/crayon-platform-macos`。
+- 切片说明：
+  - **M05a（切片 1）**：产品装配——把 CEF-01..14 全部模块（chrome/cast view/new-tab/omnibox/tabs/navigation/permission/download/session/context/ipc/core-client/input-proof/network-observer/media-observer/observation-gateway/agent-confirm/mdv/page-tools/context-menu/agent-confirm/settings/site-controls/preferences/profiles/session-restore/agent-confirm/bookmarks/history/downloads）装配进 CEF shell；签名/公证（开发者证书或 ad-hoc + notarization 脚本）；macOS 全量 E2E 冒烟（E2E-001..005 适用项，复用 CEF-14 harness）。
+  - **M05b（切片 2）**：Direct/Relay/外部客户端交接验收——真实接收端（小米）上 Direct 投送、外部客户端交接确认流（E2E-001/003/004）；CP-M01 生命周期与错误反馈。
+  - **M05c（切片 3）**：100 次开始/停止/设备切换资源稳定性（E2E-005）+ CP-M01 完整门禁。
+- 边界：签名/公证用真实开发者证书（本机 Apple Development cert 已有，见 dump-keychain 输出）或 ad-hoc + notarize 脚本；不创建浏览器镜像 session；CP-M01 生命周期（睡眠唤醒/锁屏/网络切换）经 PLT-M04b lifecycle 模块消费。
+- 验收与测试：E2E-001..005 适用项、CP-M01。命令：CEF 完整构建 + E2E smoke harness（CEF-14 已有）+ 签名验证 + notarization 脚本验证；真实接收端（小米）投送。
+- 明确不做：PLT-W05（Windows 对应物）、PLT-19（总 Review）、QAR 性能/长稳矩阵。
+
+### PLT-M05a 完成记录（2026-08-26，切片 1：macOS 产品装配）
+
+- 实现：`browser/cef-shell/src/macos/app.cc` + `app.h`——`OnRegisterCustomSchemes` 注册 `crayon://newtab` scheme（标准+安全+隔离选项），`OnContextInitialized` 注册 `NewTabSchemeHandlerFactory`（注入 `BuildNewTabPageModel(kRegular)` + 中文本地化 strings）；`kInitialUrl` 从 `about:blank` 改为 `crayon://newtab`；`main_mac.mm` 不变。CMake 把 `cef_new_tab_handler.cc/h` 加入 `crayon_macos_sources`，`crayon::browser-new-tab` 加入 macOS 链接。`tests/macos_source_contract.cmake` 契约从 `about:blank` 更新为 `crayon://newtab`（恰好一个）。签名验证：主 App + 全部 Helper ad-hoc 签名通过（`codesign -dv` 确认 flags=adhoc）。
+- 验证：`ctest` CEF shell 59/59（含更新后的 source contract）；共享层 39/39；workspace Rust 0 失败；E2E smoke harness（CEF-14）通过——完整 6 进程树、零外联 socket、退出零残留；签名验证 ad-hoc 通过。
+- Code Review：P0 0、P1 0、P2 1——初始 URL 硬编码为 `crayon://newtab` 常量；BUX-04 omnibox 接线后用户可导航到其他页面，但启动页应通过 preference 可配（归后续 BUX/装配任务）。
+- 未覆盖与风险：真实 Direct/Relay/外部客户端交接验收（M05b，真实接收端）；签名/公证用开发者证书（当前 ad-hoc，正式分发需 Apple 证书 + notarization，归 QAR）。`PLT-M05` 保持 `IN_PROGRESS`（M05a 完成）。

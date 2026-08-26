@@ -186,6 +186,8 @@ if(OS_MAC)
       src/browser/permission/permission_store.h
       src/browser/permission/site_origin.cc
       src/browser/permission/site_origin.h
+      src/browser/new_tab/cef_new_tab_handler.cc
+      src/browser/new_tab/cef_new_tab_handler.h
       src/browser/window/tab_controller.cc
       src/browser/window/tab_model.cc
       src/macos/app.cc
@@ -210,7 +212,8 @@ if(OS_MAC)
                              PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   add_dependencies(${CRAYON_BROWSER_TARGET} libcef_dll_wrapper)
   target_link_libraries(${CRAYON_BROWSER_TARGET}
-                        PRIVATE libcef_dll_wrapper ${CEF_STANDARD_LIBS})
+                        PRIVATE libcef_dll_wrapper ${CEF_STANDARD_LIBS}
+                                crayon::browser-new-tab)
   set_target_properties(
     ${CRAYON_BROWSER_TARGET}
     PROPERTIES OUTPUT_NAME "${CRAYON_MACOS_EXECUTABLE}"
