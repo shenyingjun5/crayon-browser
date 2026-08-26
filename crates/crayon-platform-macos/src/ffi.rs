@@ -391,6 +391,24 @@ pub(crate) struct PollFd {
 
 pub(crate) const POLLIN: i16 = 0x0001;
 
+// --- M04c: UDS peer credentials + socket operations ---
+
+extern "C" {
+    pub(crate) fn getpeereid(fd: i32, uid: *mut u64, gid: *mut u64) -> i32;
+    pub(crate) fn accept(fd: i32, addr: *const c_void, len: *const u32) -> i32;
+    pub(crate) fn bind(fd: i32, addr: *const c_void, len: usize) -> i32;
+    pub(crate) fn listen(fd: i32, backlog: i32) -> i32;
+    #[cfg(test)]
+    pub(crate) fn connect(fd: i32, addr: *const c_void, len: usize) -> i32;
+    pub(crate) fn getuid() -> u64;
+}
+
+/// Returns the current process's real uid.
+pub(crate) fn current_uid() -> u64 {
+    // SAFETY: getuid is always safe.
+    unsafe { getuid() }
+}
+
 // --- M04b: IOKit power notifications ---
 
 // IOKit framework symbols are weak-linked on some targets; the

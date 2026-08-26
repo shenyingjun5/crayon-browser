@@ -19,6 +19,8 @@ pub enum LocalAgentIpcError {
     HandshakeFailed,
     /// The endpoint is already running.
     AlreadyRunning,
+    /// A caller-supplied token violates the closed charset.
+    InvalidToken,
 }
 
 impl Display for LocalAgentIpcError {
@@ -28,6 +30,7 @@ impl Display for LocalAgentIpcError {
             Self::PeerRejected => "local agent peer rejected before handshake",
             Self::HandshakeFailed => "local agent handshake failed",
             Self::AlreadyRunning => "local agent endpoint already running",
+            Self::InvalidToken => "local agent endpoint token rejected",
         };
         formatter.write_str(message)
     }

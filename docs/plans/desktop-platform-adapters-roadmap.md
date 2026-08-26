@@ -180,3 +180,18 @@
 - 验证：`cargo test -p crayon-platform-macos` 19/19（新增 12 项：relay 4 项从 W04 镜像、枚举真实性/稳定性/listener 往返、路由消息映射矩阵含合成 RTM_IFINFO/RTM_ADD/未知类型、IO 消息映射矩阵、分布式通知名映射、IOKit 注册 + run loop 线程启动/停止不崩溃）；clippy `-D warnings` 零告警（含全部 SAFETY 注释）；fmt 通过；workspace 全量 0 失败；`git diff --check` 通过。
 - Code Review：P0 0、P1 0、P2 1——路由 socket 线程在 Drop 中经 wakeup pipe 唤醒后 join，但如果内核路由消息突发超过 2048 字节单次读取，截断处理是 break（丢弃剩余）而非继续解析；实际内核消息 ≤2048 字节（单个消息远小于此），风险极低。
 - 未覆盖与风险：真实 sleep/wake/锁屏事件投递需人工或 QAR harness（本切片验证注册/清理/映射逻辑）；`RequiresPermission` 能力值对应 CP-M01 的本地网络权限提示（multicast 发现面），getifaddrs 枚举本身无需权限。`PLT-M04` 保持 `IN_PROGRESS`（M04b 完成）。
+
+### PLT-M04c 原子范围（当前用户 UDS 端点，切片 3）
+
+- 状态：`IN_PROGRESS`；依赖 `PLT-M04b VERIFIED`。
+- 单一目标：`browser/shared-ui` 同级新增 `local_agent_ipc.rs`——macOS Unix Domain Socket 端点，实现 PLT-01 `LocalAgentIpcEndpoint` trait：当前用户 ACL（peer credentials 经 getpeereid）、AG-012 门禁（same_user ∧ loopback 才进入握手）、幂等 start/stop、socket 文件清理。
+- 边界：UDS 路径 `/tmp/crayon-agent-<purpose>.sock`（purpose 闭合 token 校验）；bind 失败（已有端点）→ `AlreadyRunning`；`getpeereid` 比对 uid；stop 后 unlink socket 文件；无 remote/wildcard bind。
+- 验收与测试：AG-012 模型部分（真机 peer 测试归 PLT-M05）。命令：`cargo test -p crayon-platform-macos`、clippy、fmt、workspace 回归、`git diff --check`。
+- 明确不做：CAAP 握手协议（AGT-12）、Windows named pipe（W04c 已完成）、Windows 实机。
+
+### PLT-M04c 完成记录（2026-08-26，切片 3：当前用户 UDS 端点）
+
+- 实现：`local_agent_ipc.rs`——`MacUdsEndpoint` 实现 PLT-01 `LocalAgentIpcEndpoint` trait：UDS 绑定 `/tmp/crayon-agent-<purpose>.sock`（purpose 闭合 token ≤64）；`getpeereid` 验证 peer uid（AG-012 门禁的 OS 事实来源）；start 前清理 stale socket 文件；stop unlink + 幂等；`admit_peer` 默认实现（same_user ∧ loopback）由 trait 继承。ffi 新增 `getpeereid`/`accept`/`bind`/`listen`/`connect`/`getuid` 原生声明。`LocalAgentIpcError` 新增 `InvalidToken` 变体（crayon-platform-api 变更，向后兼容新增）。
+- 验证：`cargo test -p crayon-platform-macos` 26/26（新增 7 项：purpose 矩阵、socket 路径格式、start/stop 幂等含 socket 文件清理、无效 purpose 拒绝、uid 当前进程、peer 门禁矩阵、**真实 UDS bind/connect/accept 链路**——客户端从同进程连接并验证 accept 路径）；clippy `-D warnings` 零告警；workspace 全量 0 失败；`git diff --check` 通过。
+- Code Review：P0 0、P1 0、P2 1——`accept_and_check` 返回 peer_uid 但不比对（比对逻辑归 AGT-12 transport 的握手层）；当前设计让 transport 层持有 uid 比对策略，灵活性更好但需在 AGT-12 验收时确认比对不被遗漏。
+- 未覆盖与风险：真实跨进程 peer 测试（不同 uid 拒绝）归 PLT-M05 真机；CAAP 握手协议归 AGT-12。`PLT-M04` 保持 `IN_PROGRESS`（M04c 完成）。
