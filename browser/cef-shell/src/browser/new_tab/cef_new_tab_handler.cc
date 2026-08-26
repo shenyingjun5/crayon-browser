@@ -172,16 +172,50 @@ class NewTabSchemeHandlerFactory final : public CefSchemeHandlerFactory {
   DISALLOW_COPY_AND_ASSIGN(NewTabSchemeHandlerFactory);
 };
 
-class NewTabProcessApp final : public CefApp {
+/// Renderer-side message router shared by all crayon:// pages (MDV-10
+/// uses the "mdvQuery" binding; the browser side gates it to the mdv
+/// origin).  Lost once in a patch overwrite and restored with a
+/// contract assertion (mdv_handler_contract.cmake).
+class NewTabProcessApp final : public CefApp, public CefRenderProcessHandler {
  public:
-  NewTabProcessApp() = default;
+  NewTabProcessApp() {
+    CefMessageRouterConfig config;
+    config.js_query_function = "mdvQuery";
+    router_ = CefMessageRouterRendererSide::Create(config);
+  }
 
   void OnRegisterCustomSchemes(
       CefRawPtr<CefSchemeRegistrar> registrar) override {
     RegisterCrayonCustomSchemes(registrar);
   }
 
+  CefRefPtr<CefRenderProcessHandler> GetRenderProcessHandler() override {
+    return this;
+  }
+
+  void OnContextCreated(CefRefPtr<CefBrowser> browser,
+                        CefRefPtr<CefFrame> frame,
+                        CefRefPtr<CefV8Context> context) override {
+    router_->OnContextCreated(browser, frame, context);
+  }
+
+  void OnContextReleased(CefRefPtr<CefBrowser> browser,
+                         CefRefPtr<CefFrame> frame,
+                         CefRefPtr<CefV8Context> context) override {
+    router_->OnContextReleased(browser, frame, context);
+  }
+
+  bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
+                                CefRefPtr<CefFrame> frame,
+                                CefProcessId source_process,
+                                CefRefPtr<CefProcessMessage> message) override {
+    return router_->OnProcessMessageReceived(browser, frame, source_process,
+                                             message);
+  }
+
  private:
+  CefRefPtr<CefMessageRouterRendererSide> router_;
+
   IMPLEMENT_REFCOUNTING(NewTabProcessApp);
   DISALLOW_COPY_AND_ASSIGN(NewTabProcessApp);
 };

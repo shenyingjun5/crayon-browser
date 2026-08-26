@@ -164,6 +164,20 @@ bool WindowClient::OnContextMenuCommand(CefRefPtr<CefBrowser> browser,
   return controller_->HandleContextMenuCommand(browser, command_id);
 }
 
+bool WindowClient::OnKeyEvent(CefRefPtr<CefBrowser> browser,
+                              const CefKeyEvent& event,
+                              CefEventHandle os_event) {
+  CEF_REQUIRE_UI_THREAD();
+  static_cast<void>(os_event);
+  // Ctrl+S: intercept before any accelerator/page handling.
+  if (event.type == KEYEVENT_KEYUP &&
+      (event.modifiers & EVENTFLAG_CONTROL_DOWN) &&
+      (event.windows_key_code == 'S' || event.windows_key_code == 's')) {
+    return controller_->HandleSaveKey(browser);
+  }
+  return false;
+}
+
 void WindowClient::OnGotFocus(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
   controller_->OnBrowserFocused(browser);
@@ -219,6 +233,16 @@ void TabController::SetNavigationInterceptor(
 void TabController::SetPageQueryHandler(PageQueryHandler handler) {
   CEF_REQUIRE_UI_THREAD();
   page_query_handler_ = std::move(handler);
+}
+
+void TabController::SetSaveCommandHandler(SaveCommandHandler handler) {
+  CEF_REQUIRE_UI_THREAD();
+  save_command_handler_ = std::move(handler);
+}
+
+bool TabController::HandleSaveKey(CefRefPtr<CefBrowser> browser) {
+  CEF_REQUIRE_UI_THREAD();
+  return save_command_handler_ && save_command_handler_(browser);
 }
 
 void TabController::SetLocalEntryDragHandler(LocalEntryDragHandler handler) {

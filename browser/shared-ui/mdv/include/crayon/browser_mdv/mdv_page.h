@@ -87,6 +87,8 @@ struct MdvPageSnapshot {
   /// renderer escapes it.  Non-empty takes banner priority over
   /// `load_status`.
   std::string error_text;
+  /// Display name of the open document (base name only, never a path).
+  std::string document_name;
   /// Editing state pushed by the MDV-10 controller.
   bool dirty = false;
   bool save_ok = false;

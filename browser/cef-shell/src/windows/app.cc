@@ -216,6 +216,10 @@ void BrowserApp::OnContextInitialized() {
       [entries = mdv_entries_](CefRefPtr<CefBrowser> browser, int command_id) {
         return entries->HandleContextMenuCommand(browser, command_id);
       });
+  tab_controller_->SetSaveCommandHandler(
+      [editing = mdv_editing_](CefRefPtr<CefBrowser> browser) {
+        return editing->SaveWriteBack(browser);
+      });
   tab_controller_->SetPageQueryHandler(
       [editing = mdv_editing_](
           CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,

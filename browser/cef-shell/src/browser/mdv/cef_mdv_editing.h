@@ -47,6 +47,11 @@ class MdvEditController
   /// Ctrl+S: runs the write-back save from the edit buffer.
   bool HandleSaveCommand(CefRefPtr<CefBrowser> browser, int command_id);
 
+  /// Direct save entry (keyboard interception): saves the edit buffer to
+  /// the loaded file when a document is open; returns whether the
+  /// keystroke was consumed (always true while a document is open).
+  bool SaveWriteBack(CefRefPtr<CefBrowser> browser);
+
  private:
   class SaveDialogCallback;
   friend class SaveDialogCallback;
@@ -67,6 +72,7 @@ class MdvEditController
   crayon::browser_mdv_save::MdvSaveController save_;
   std::string current_path_;
   std::string pending_url_;
+  int host_browser_id_ = -1;
   bool conflict_pending_ = false;
 };
 

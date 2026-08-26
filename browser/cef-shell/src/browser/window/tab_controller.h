@@ -16,6 +16,7 @@
 #include "include/cef_command_handler.h"
 #include "include/cef_context_menu_handler.h"
 #include "include/cef_drag_handler.h"
+#include "include/cef_keyboard_handler.h"
 #include "include/wrapper/cef_message_router.h"
 
 namespace crayon::browser::cef_shell::window {
@@ -33,7 +34,8 @@ class WindowClient final : public CefClient,
                            public CefFocusHandler,
                            public CefCommandHandler,
                            public CefDragHandler,
-                           public CefContextMenuHandler {
+                           public CefContextMenuHandler,
+                           public CefKeyboardHandler {
  public:
   WindowClient(TabController* controller,
                permission::PermissionStore* permission_store);
@@ -48,6 +50,7 @@ class WindowClient final : public CefClient,
   CefRefPtr<CefContextMenuHandler> GetContextMenuHandler() override {
     return this;
   }
+  CefRefPtr<CefKeyboardHandler> GetKeyboardHandler() override { return this; }
 
   void OnAfterCreated(CefRefPtr<CefBrowser> browser) override;
   bool DoClose(CefRefPtr<CefBrowser> browser) override;
@@ -77,6 +80,8 @@ class WindowClient final : public CefClient,
                             CefRefPtr<CefFrame> frame,
                             CefRefPtr<CefContextMenuParams> params,
                             int command_id, EventFlags event_flags) override;
+  bool OnKeyEvent(CefRefPtr<CefBrowser> browser, const CefKeyEvent& event,
+                  CefEventHandle os_event) override;
   bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
                                 CefRefPtr<CefFrame> frame,
                                 CefProcessId source_process,
@@ -181,6 +186,12 @@ class TabController final : public CefBaseRefCounted {
   void SetContextMenuAugmenter(ContextMenuAugmenter augmenter);
   void SetContextMenuCommandHandler(ContextMenuCommandHandler handler);
 
+  // MDV-11: Ctrl+S save hook (browser-level keyboard interception; the
+  // accelerator table does not reliably surface Ctrl+S in this runtime).
+  using SaveCommandHandler = std::function<bool(CefRefPtr<CefBrowser>)>;
+  void SetSaveCommandHandler(SaveCommandHandler handler);
+  bool HandleSaveKey(CefRefPtr<CefBrowser> browser);
+
   bool HandleLocalEntryDrag(CefRefPtr<CefBrowser> browser,
                             CefRefPtr<CefDragData> dragData,
                             CefDragHandler::DragOperationsMask mask);
@@ -227,6 +238,7 @@ class TabController final : public CefBaseRefCounted {
   LocalEntryDragHandler local_entry_drag_handler_;
   ContextMenuAugmenter context_menu_augmenter_;
   ContextMenuCommandHandler context_menu_command_handler_;
+  SaveCommandHandler save_command_handler_;
   BrowsersClosedCallback browsers_closed_callback_;
   TabModel model_;
   permission::PermissionStore* permission_store_;

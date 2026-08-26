@@ -205,6 +205,28 @@ void TestEditableSourceDividerAndConfirmOverlay() {
   CHECK(collapsed.find("data-show=\"false\"") != std::string::npos);
 }
 
+void TestDocumentNameInTitleAndScrollLinkage() {
+  MdvPageSnapshot snapshot;
+  snapshot.has_document = true;
+  snapshot.document_name = "verify.md";
+  const std::string document =
+      crayon::browser_mdv::RenderMdvDocument(snapshot, SampleStrings());
+  CHECK(document.find("verify.md - 蜡笔文档") != std::string::npos);
+
+  MdvPageSnapshot unnamed;
+  unnamed.has_document = true;
+  const std::string fallback =
+      crayon::browser_mdv::RenderMdvDocument(unnamed, SampleStrings());
+  CHECK(fallback.find("<title>蜡笔文档</title>") != std::string::npos);
+
+  // Split scroll linkage: one-way proportional sync present in the page
+  // script (md4c produces no source maps; V1 is ratio-based).
+  const std::string script = crayon::browser_mdv::RenderMdvScript();
+  CHECK(script.find("previewPane.scrollTop") != std::string::npos);
+  CHECK(script.find("scrollHeight") != std::string::npos);
+  CHECK(script.find("md-divider") != std::string::npos);
+}
+
 void TestEmptyAndErrorSurfaces() {
   MdvPageSnapshot empty;
   empty.load_status = MdvLoadStatus::kEmpty;
@@ -243,6 +265,7 @@ int main() {
   TestNoNetworkOrInlineHandlers();
   TestEntryErrorBannerTakesPriority();
   TestEditableSourceDividerAndConfirmOverlay();
+  TestDocumentNameInTitleAndScrollLinkage();
   TestEmptyAndErrorSurfaces();
   TestInitialViewStateAndCspConstantUnchanged();
   if (g_failures != 0) {

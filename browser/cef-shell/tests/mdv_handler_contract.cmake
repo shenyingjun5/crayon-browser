@@ -75,4 +75,16 @@ if(hit EQUAL -1)
   message(FATAL_ERROR "handler must route through ClassifyMdvRequest")
 endif()
 
+# The renderer process app must carry the mdvQuery binding; losing it
+# silently disables all editing (MDV-11 regression class).
+file(READ "${CRAYON_CEF_SHELL_SOURCE}/src/browser/new_tab/cef_new_tab_handler.cc" process_app_text)
+string(FIND "${process_app_text}" "CefMessageRouterRendererSide" hit)
+if(hit EQUAL -1)
+  message(FATAL_ERROR "renderer process app lost the message router (mdvQuery binding)")
+endif()
+string(FIND "${process_app_text}" "CefRenderProcessHandler" hit)
+if(hit EQUAL -1)
+  message(FATAL_ERROR "renderer process app lost CefRenderProcessHandler")
+endif()
+
 message(STATUS "mdv_handler_contract: OK")
