@@ -14,6 +14,9 @@
 #include "browser/window/tab_model.h"
 #include "include/cef_client.h"
 #include "include/cef_command_handler.h"
+#include "include/cef_context_menu_handler.h"
+#include "include/cef_drag_handler.h"
+#include "include/cef_keyboard_handler.h"
 #include "include/wrapper/cef_message_router.h"
 
 namespace crayon::browser::cef_shell::window {
@@ -29,7 +32,10 @@ class WindowClient final : public CefClient,
                            public CefLoadHandler,
                            public CefRequestHandler,
                            public CefFocusHandler,
-                           public CefCommandHandler {
+                           public CefCommandHandler,
+                           public CefDragHandler,
+                           public CefContextMenuHandler,
+                           public CefKeyboardHandler {
  public:
   WindowClient(TabController* controller,
                permission::PermissionStore* permission_store);
@@ -40,6 +46,11 @@ class WindowClient final : public CefClient,
   CefRefPtr<CefRequestHandler> GetRequestHandler() override { return this; }
   CefRefPtr<CefFocusHandler> GetFocusHandler() override { return this; }
   CefRefPtr<CefCommandHandler> GetCommandHandler() override { return this; }
+  CefRefPtr<CefDragHandler> GetDragHandler() override { return this; }
+  CefRefPtr<CefContextMenuHandler> GetContextMenuHandler() override {
+    return this;
+  }
+  CefRefPtr<CefKeyboardHandler> GetKeyboardHandler() override { return this; }
 
   void OnAfterCreated(CefRefPtr<CefBrowser> browser) override;
   bool DoClose(CefRefPtr<CefBrowser> browser) override;
@@ -58,6 +69,19 @@ class WindowClient final : public CefClient,
   void OnGotFocus(CefRefPtr<CefBrowser> browser) override;
   bool OnChromeCommand(CefRefPtr<CefBrowser> browser, int command_id,
                        cef_window_open_disposition_t disposition) override;
+  bool OnDragEnter(CefRefPtr<CefBrowser> browser,
+                   CefRefPtr<CefDragData> dragData,
+                   DragOperationsMask mask) override;
+  void OnBeforeContextMenu(CefRefPtr<CefBrowser> browser,
+                           CefRefPtr<CefFrame> frame,
+                           CefRefPtr<CefContextMenuParams> params,
+                           CefRefPtr<CefMenuModel> model) override;
+  bool OnContextMenuCommand(CefRefPtr<CefBrowser> browser,
+                            CefRefPtr<CefFrame> frame,
+                            CefRefPtr<CefContextMenuParams> params,
+                            int command_id, EventFlags event_flags) override;
+  bool OnKeyEvent(CefRefPtr<CefBrowser> browser, const CefKeyEvent& event,
+                  CefEventHandle os_event) override;
   bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
                                 CefRefPtr<CefFrame> frame,
                                 CefProcessId source_process,
@@ -147,6 +171,34 @@ class TabController final : public CefBaseRefCounted {
       CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, int64_t, const CefString&,
       bool, CefRefPtr<CefMessageRouterBrowserSide::Callback>)>;
   void SetPageQueryHandler(PageQueryHandler handler);
+
+  // MDV-11: local-entry drag and context-menu delegates (consulted
+  // before default behavior; true = handled).  Optional.
+  using LocalEntryDragHandler =
+      std::function<bool(CefRefPtr<CefBrowser>, CefRefPtr<CefDragData>,
+                         CefDragHandler::DragOperationsMask)>;
+  using ContextMenuAugmenter =
+      std::function<bool(CefRefPtr<CefBrowser>, CefRefPtr<CefContextMenuParams>,
+                         CefRefPtr<CefMenuModel>)>;
+  using ContextMenuCommandHandler =
+      std::function<bool(CefRefPtr<CefBrowser>, int)>;
+  void SetLocalEntryDragHandler(LocalEntryDragHandler handler);
+  void SetContextMenuAugmenter(ContextMenuAugmenter augmenter);
+  void SetContextMenuCommandHandler(ContextMenuCommandHandler handler);
+
+  // MDV-11: Ctrl+S save hook (browser-level keyboard interception; the
+  // accelerator table does not reliably surface Ctrl+S in this runtime).
+  using SaveCommandHandler = std::function<bool(CefRefPtr<CefBrowser>)>;
+  void SetSaveCommandHandler(SaveCommandHandler handler);
+  bool HandleSaveKey(CefRefPtr<CefBrowser> browser);
+
+  bool HandleLocalEntryDrag(CefRefPtr<CefBrowser> browser,
+                            CefRefPtr<CefDragData> dragData,
+                            CefDragHandler::DragOperationsMask mask);
+  bool HandleContextMenuAugment(CefRefPtr<CefBrowser> browser,
+                                CefRefPtr<CefContextMenuParams> params,
+                                CefRefPtr<CefMenuModel> model);
+  bool HandleContextMenuCommand(CefRefPtr<CefBrowser> browser, int command_id);
   bool HandlePageQuery(
       CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
       int64_t query_id, const CefString& request, bool persistent,
@@ -183,6 +235,10 @@ class TabController final : public CefBaseRefCounted {
   LocalEntryCommandHandler local_entry_command_handler_;
   NavigationInterceptor navigation_interceptor_;
   PageQueryHandler page_query_handler_;
+  LocalEntryDragHandler local_entry_drag_handler_;
+  ContextMenuAugmenter context_menu_augmenter_;
+  ContextMenuCommandHandler context_menu_command_handler_;
+  SaveCommandHandler save_command_handler_;
   BrowsersClosedCallback browsers_closed_callback_;
   TabModel model_;
   permission::PermissionStore* permission_store_;

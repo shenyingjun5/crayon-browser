@@ -37,6 +37,20 @@ struct MdvPageStrings {
   std::string label_save;
   std::string label_discard;
   std::string label_cancel;
+  std::string label_open_in_viewer;
+  std::string toolbar_title;
+  std::string tool_bold;
+  std::string tool_italic;
+  std::string tool_strike;
+  std::string tool_inline_code;
+  std::string tool_bullet_list;
+  std::string tool_ordered_list;
+  std::string tool_task_list;
+  std::string tool_quote;
+  std::string tool_code_block;
+  std::string tool_table;
+  std::string tool_link;
+  std::string tool_divider;
 };
 
 /// One request's parsed coordinates (mirrors the new-tab classifier
@@ -86,6 +100,8 @@ struct MdvPageSnapshot {
   /// renderer escapes it.  Non-empty takes banner priority over
   /// `load_status`.
   std::string error_text;
+  /// Display name of the open document (base name only, never a path).
+  std::string document_name;
   /// Editing state pushed by the MDV-10 controller.
   bool dirty = false;
   bool save_ok = false;

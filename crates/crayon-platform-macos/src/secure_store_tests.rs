@@ -20,8 +20,11 @@ fn test_store() -> KeychainSecureStore {
     // Each test process gets a unique namespace; at most one leak per
     // test run.
     let service: &'static str = Box::leak(
-        format!("com.crayon.browser.secure-store.test.{}", std::process::id())
-            .into_boxed_str(),
+        format!(
+            "com.crayon.browser.secure-store.test.{}",
+            std::process::id()
+        )
+        .into_boxed_str(),
     );
     clean_probe_keys();
     crate::secure_store::new_with_service(service)

@@ -101,14 +101,12 @@ void WindowClient::OnRenderProcessTerminated(CefRefPtr<CefBrowser> browser,
   controller_->OnRenderProcessGone(browser);
 }
 
-bool WindowClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
-                                            CefRefPtr<CefFrame> frame,
-                                            CefProcessId source_process,
-                                            CefRefPtr<CefProcessMessage> message) {
+bool WindowClient::OnProcessMessageReceived(
+    CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
+    CefProcessId source_process, CefRefPtr<CefProcessMessage> message) {
   CEF_REQUIRE_UI_THREAD();
   return EnsurePageRouter()->OnProcessMessageReceived(browser, frame,
-                                                      source_process,
-                                                      message);
+                                                      source_process, message);
 }
 
 CefMessageRouterBrowserSide* WindowClient::EnsurePageRouter() {
@@ -137,6 +135,47 @@ bool WindowClient::OnBeforeBrowse(CefRefPtr<CefBrowser> browser,
   }
   return request && controller_->RedirectBuiltInNewTab(
                         frame, request->GetURL().ToString());
+}
+
+bool WindowClient::OnDragEnter(CefRefPtr<CefBrowser> browser,
+                               CefRefPtr<CefDragData> dragData,
+                               DragOperationsMask mask) {
+  CEF_REQUIRE_UI_THREAD();
+  return controller_->HandleLocalEntryDrag(browser, dragData, mask);
+}
+
+void WindowClient::OnBeforeContextMenu(CefRefPtr<CefBrowser> browser,
+                                       CefRefPtr<CefFrame> frame,
+                                       CefRefPtr<CefContextMenuParams> params,
+                                       CefRefPtr<CefMenuModel> model) {
+  CEF_REQUIRE_UI_THREAD();
+  controller_->HandleContextMenuAugment(browser, params, model);
+}
+
+bool WindowClient::OnContextMenuCommand(CefRefPtr<CefBrowser> browser,
+                                        CefRefPtr<CefFrame> frame,
+                                        CefRefPtr<CefContextMenuParams> params,
+                                        int command_id,
+                                        EventFlags event_flags) {
+  CEF_REQUIRE_UI_THREAD();
+  static_cast<void>(frame);
+  static_cast<void>(params);
+  static_cast<void>(event_flags);
+  return controller_->HandleContextMenuCommand(browser, command_id);
+}
+
+bool WindowClient::OnKeyEvent(CefRefPtr<CefBrowser> browser,
+                              const CefKeyEvent& event,
+                              CefEventHandle os_event) {
+  CEF_REQUIRE_UI_THREAD();
+  static_cast<void>(os_event);
+  // Ctrl+S: intercept before any accelerator/page handling.
+  if (event.type == KEYEVENT_KEYUP &&
+      (event.modifiers & EVENTFLAG_CONTROL_DOWN) &&
+      (event.windows_key_code == 'S' || event.windows_key_code == 's')) {
+    return controller_->HandleSaveKey(browser);
+  }
+  return false;
 }
 
 void WindowClient::OnGotFocus(CefRefPtr<CefBrowser> browser) {
@@ -196,14 +235,63 @@ void TabController::SetPageQueryHandler(PageQueryHandler handler) {
   page_query_handler_ = std::move(handler);
 }
 
+void TabController::SetSaveCommandHandler(SaveCommandHandler handler) {
+  CEF_REQUIRE_UI_THREAD();
+  save_command_handler_ = std::move(handler);
+}
+
+bool TabController::HandleSaveKey(CefRefPtr<CefBrowser> browser) {
+  CEF_REQUIRE_UI_THREAD();
+  return save_command_handler_ && save_command_handler_(browser);
+}
+
+void TabController::SetLocalEntryDragHandler(LocalEntryDragHandler handler) {
+  CEF_REQUIRE_UI_THREAD();
+  local_entry_drag_handler_ = std::move(handler);
+}
+
+void TabController::SetContextMenuAugmenter(ContextMenuAugmenter augmenter) {
+  CEF_REQUIRE_UI_THREAD();
+  context_menu_augmenter_ = std::move(augmenter);
+}
+
+void TabController::SetContextMenuCommandHandler(
+    ContextMenuCommandHandler handler) {
+  CEF_REQUIRE_UI_THREAD();
+  context_menu_command_handler_ = std::move(handler);
+}
+
+bool TabController::HandleLocalEntryDrag(
+    CefRefPtr<CefBrowser> browser, CefRefPtr<CefDragData> dragData,
+    CefDragHandler::DragOperationsMask mask) {
+  CEF_REQUIRE_UI_THREAD();
+  return local_entry_drag_handler_ &&
+         local_entry_drag_handler_(browser, dragData, mask);
+}
+
+bool TabController::HandleContextMenuAugment(
+    CefRefPtr<CefBrowser> browser, CefRefPtr<CefContextMenuParams> params,
+    CefRefPtr<CefMenuModel> model) {
+  CEF_REQUIRE_UI_THREAD();
+  return context_menu_augmenter_ &&
+         context_menu_augmenter_(browser, params, model);
+}
+
+bool TabController::HandleContextMenuCommand(CefRefPtr<CefBrowser> browser,
+                                             int command_id) {
+  CEF_REQUIRE_UI_THREAD();
+  return context_menu_command_handler_ &&
+         context_menu_command_handler_(browser, command_id);
+}
+
 bool TabController::HandlePageQuery(
     CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int64_t query_id,
     const CefString& request, bool persistent,
     CefRefPtr<CefMessageRouterBrowserSide::Callback> callback) {
   CEF_REQUIRE_UI_THREAD();
-  return page_query_handler_ && page_query_handler_(browser, frame, query_id,
-                                                    request, persistent,
-                                                    std::move(callback));
+  return page_query_handler_ &&
+         page_query_handler_(browser, frame, query_id, request, persistent,
+                             std::move(callback));
 }
 
 bool TabController::HandleLocalEntryCommand(CefRefPtr<CefBrowser> browser,

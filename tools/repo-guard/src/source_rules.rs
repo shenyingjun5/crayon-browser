@@ -273,7 +273,9 @@ fn inspect_unsafe_routes(path: &Path, text: &str, findings: &mut Vec<Finding>) {
     // The legacy extraction and relay paths (src/main.rs, src/relay/)
     // are allowed under the `legacy-dev` feature; they are not
     // production surfaces.
-    let display = path.to_string_lossy();
+    // Windows reports `\` separators; normalise before matching the
+    // legacy-dev exemption paths.
+    let display = path.to_string_lossy().replace('\\', "/");
     if display == "src/main.rs" || display.starts_with("src/relay/") {
         return;
     }

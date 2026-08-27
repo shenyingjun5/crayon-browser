@@ -94,6 +94,15 @@ int HookRemove(const std::string& path) {
   return error ? 1 : 0;
 }
 
+/// Base name (no directories) of a local path; empty when no document.
+std::string DocumentBaseName(const std::string& path_utf8) {
+  if (path_utf8.empty()) {
+    return {};
+  }
+  const auto pos = path_utf8.find_last_of("\\/");
+  return pos == std::string::npos ? path_utf8 : path_utf8.substr(pos + 1);
+}
+
 std::string SaveFailureText(SaveState state, const MdvPageStrings& strings,
                             const std::string& residual) {
   switch (state) {
@@ -127,11 +136,15 @@ MdvEditController::MdvEditController(std::shared_ptr<MdvRuntimeState> state,
 
 void MdvEditController::OnDocumentLoaded(CefRefPtr<CefBrowser> browser,
                                          const std::string& path_utf8,
+
                                          const std::string& normalized_text,
                                          std::uint64_t size,
                                          std::uint64_t mtime) {
   CEF_REQUIRE_UI_THREAD();
   current_path_ = path_utf8;
+  if (browser) {
+    host_browser_id_ = browser->GetIdentifier();
+  }
   pending_url_.clear();
   conflict_pending_ = false;
   viewer_.LoadContent(normalized_text, /*utf8_valid=*/true, NowMs());
@@ -175,7 +188,16 @@ bool MdvEditController::OnPageQuery(
     const std::string text = dict->GetString("text").ToString();
     if (edit_.ApplyEdit(text, NowMs())) {
       RenderAndStore();
-      callback->Success("{}");
+      // Ship the fresh preview/dirty back so the page can apply it
+      // without a round trip through the shell.
+      CefRefPtr<CefValue> reply = CefValue::Create();
+      reply->SetDictionary(CefDictionaryValue::Create());
+      CefRefPtr<CefDictionaryValue> reply_dict = reply->GetDictionary();
+      const auto snapshot = state_->snapshot();
+      reply_dict->SetString("preview", snapshot.rendered_html);
+      reply_dict->SetBool("dirty", snapshot.dirty);
+      reply_dict->SetBool("confirm", snapshot.confirm_visible);
+      callback->Success(CefWriteJSON(reply, JSON_WRITER_DEFAULT));
       return true;
     }
     callback->Success("{}");
@@ -195,6 +217,12 @@ bool MdvEditController::InterceptWhileDirty(CefRefPtr<CefBrowser> browser,
                                             bool user_gesture) {
   CEF_REQUIRE_UI_THREAD();
   if (!user_gesture || !edit_.dirty()) {
+    return false;
+  }
+  // Dirty confirmation only guards the tab hosting the document; other
+  // tabs opening files are independent (MDV-11 design decision).
+  if (browser && host_browser_id_ != -1 &&
+      browser->GetIdentifier() != host_browser_id_) {
     return false;
   }
   // Viewer reloads are part of the editing flow, not transitions.
@@ -276,6 +304,15 @@ void MdvEditController::ApplyDecision(CefRefPtr<CefBrowser> browser,
   PushState(browser);
 }
 
+bool MdvEditController::SaveWriteBack(CefRefPtr<CefBrowser> browser) {
+  CEF_REQUIRE_UI_THREAD();
+  if (!viewer_.has_document() || current_path_.empty()) {
+    return true;  // swallow: no save target but the key was ours
+  }
+  PerformSave(browser, SaveKind::kWriteBack, current_path_);
+  return true;
+}
+
 void MdvEditController::PerformSave(CefRefPtr<CefBrowser> browser,
                                     SaveKind kind,
                                     const std::string& target_path) {
@@ -326,6 +363,7 @@ void MdvEditController::RenderAndStore() {
   snapshot.has_document = viewer_.has_document();
   snapshot.source_text = edit_.edit_buffer();
   snapshot.rendered_html = viewer_.rendered_html();
+  snapshot.document_name = DocumentBaseName(current_path_);
   snapshot.dirty = edit_.dirty();
   snapshot.confirm_visible =
       edit_.confirm_state() ==

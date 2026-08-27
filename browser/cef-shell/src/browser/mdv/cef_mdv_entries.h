@@ -9,6 +9,8 @@
 #include "browser/mdv/cef_mdv_handler.h"
 #include "crayon/browser_mdv/mdv_entry_guard.h"
 #include "include/cef_browser.h"
+#include "include/cef_context_menu_handler.h"
+#include "include/cef_drag_handler.h"
 
 namespace crayon::browser::cef_shell::mdv {
 
@@ -48,6 +50,24 @@ class MdvEntryController
   void LoadAndShow(CefRefPtr<CefBrowser> browser, const std::string& path_utf8,
                    EntrySource source);
 
+  /// E2 drag-drop: a single `.md` file dragged into the window is
+  /// loaded through the gate (cancel default handling).  Called on the
+  /// CEF UI thread.
+  bool HandleDragEnter(CefRefPtr<CefBrowser> browser,
+                       CefRefPtr<CefDragData> dragData,
+                       CefDragHandler::DragOperationsMask mask);
+
+  /// E4 context menu: appends "open in document viewer" when the
+  /// target is a `.md` file page or `.md` link.  Returns true when the
+  /// menu was augmented.
+  bool HandleContextMenuAugment(CefRefPtr<CefBrowser> browser,
+                                CefRefPtr<CefContextMenuParams> params,
+                                CefRefPtr<CefMenuModel> model);
+
+  /// E4 command dispatch: true when `command_id` is the viewer-open
+  /// item and the load was initiated.
+  bool HandleContextMenuCommand(CefRefPtr<CefBrowser> browser, int command_id);
+
   /// MDV-10: invoked after a successful gated load so the editing
   /// controller can arm its models (path, normalized bytes, size,
   /// mtime).  The entry controller still owns navigation.
@@ -60,6 +80,8 @@ class MdvEntryController
   const std::shared_ptr<MdvRuntimeState> state_;
   const MdvPageStrings strings_;
   DocumentLoadedCallback document_loaded_callback_;
+  /// The `.md` path captured while augmenting the context menu.
+  std::string context_menu_target_path_;
 };
 
 /// Converts a `file://` URL to a local path (percent-decoded, Windows

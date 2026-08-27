@@ -61,6 +61,36 @@ std::string ViewButton(const std::string& label, const char* view,
   return button.str();
 }
 
+std::string RenderToolbar(const MdvPageStrings& strings) {
+  std::ostringstream bar;
+  bar << "<div class=\"md-toolbar\" role=\"toolbar\" aria-label=\""
+      << EscapeHtml(strings.toolbar_title) << "\">";
+  const auto button = [&bar](const char* action, const std::string& label) {
+    bar << "<button type=\"button\" class=\"md-tool\" data-action=\""
+        << action << "\">" << EscapeHtml(label) << "</button>";
+  };
+  button("h1", "H1");
+  button("h2", "H2");
+  button("h3", "H3");
+  bar << "<span class=\"md-tool-sep\"></span>";
+  button("bold", strings.tool_bold);
+  button("italic", strings.tool_italic);
+  button("strike", strings.tool_strike);
+  button("inline-code", strings.tool_inline_code);
+  bar << "<span class=\"md-tool-sep\"></span>";
+  button("bullet-list", strings.tool_bullet_list);
+  button("ordered-list", strings.tool_ordered_list);
+  button("task-list", strings.tool_task_list);
+  button("quote", strings.tool_quote);
+  bar << "<span class=\"md-tool-sep\"></span>";
+  button("code-block", strings.tool_code_block);
+  button("table", strings.tool_table);
+  button("link", strings.tool_link);
+  button("divider", strings.tool_divider);
+  bar << "</div>";
+  return bar.str();
+}
+
 std::string StatusBanner(const std::string& error_text,
                          const MdvPageStrings& strings, bool save_ok,
                          MdvLoadStatus status) {
@@ -126,7 +156,10 @@ std::string RenderMdvDocument(const MdvPageSnapshot& snapshot,
            << "\"><head><meta charset=\"utf-8\">"
               "<meta name=\"viewport\" content=\"width=device-width,"
               "initial-scale=1\"><title>"
-           << EscapeHtml(strings.document_title)
+           << EscapeHtml(snapshot.document_name.empty()
+                             ? strings.document_title
+                             : snapshot.document_name + " - " +
+                                   strings.document_title)
            << "</title><link rel=\"stylesheet\" href=\"/app.css\">"
               "</head><body data-view=\""
            << ViewModeName(snapshot.view_mode)
@@ -144,17 +177,33 @@ std::string RenderMdvDocument(const MdvPageSnapshot& snapshot,
              << EscapeHtml(strings.status_empty) << "</p></main></body></html>";
     return document.str();
   }
-  // Source pane: fully escaped raw markdown.  Preview pane: trusted
-  // MDV-02 whitelist HTML inserted verbatim.
+  // Source pane: fully escaped editable textarea.  Preview pane:
+  // trusted MDV-02 whitelist HTML inserted verbatim.
   document << "<div class=\"md-panes\"><section class=\"md-source-pane\" "
               "aria-label=\""
-           << EscapeHtml(strings.view_source) << "\"><pre><code>"
+           << EscapeHtml(strings.view_source)
+           << "\">" << RenderToolbar(strings)
+           << "<textarea id=\"md-source\" spellcheck=\"false\">"
            << EscapeHtml(snapshot.source_text)
-           << "</code></pre></section><section class=\"md-preview-pane\" "
-              "aria-label=\""
-           << EscapeHtml(strings.view_preview) << "\"><article>"
-           << snapshot.rendered_html
+           << "</textarea></section><div id=\"md-divider\" class=\"md-"
+              "divider\" aria-hidden=\"true\"></div>"
+              "<section class=\"md-preview-pane\" aria-label=\""
+           << EscapeHtml(strings.view_preview)
+           << "\"><article id=\"md-preview\">" << snapshot.rendered_html
            << "</article></section></div>"
+              "<div id=\"md-confirm\" class=\"md-confirm\" data-show=\""
+           << (snapshot.confirm_visible ? "true" : "false")
+           << "\" role=\"dialog\"><p>" << EscapeHtml(strings.confirm_text)
+           << "</p>"
+              "<button type=\"button\" data-decision=\"save\">"
+           << EscapeHtml(strings.label_save)
+           << "</button>"
+              "<button type=\"button\" data-decision=\"discard\">"
+           << EscapeHtml(strings.label_discard)
+           << "</button>"
+              "<button type=\"button\" data-decision=\"cancel\">"
+           << EscapeHtml(strings.label_cancel)
+           << "</button></div>"
               "<script src=\"/app.js\"></script></body></html>";
   return document.str();
 }
@@ -174,6 +223,16 @@ std::string RenderMdvStylesheet() {
       << ".md-panes{display:flex;height:calc(100vh - 42px);}"
       << ".md-source-pane,.md-preview-pane{flex:1;overflow:auto;padding:"
          "0 14px;}"
+      << ".md-toolbar{display:flex;flex-wrap:wrap;gap:2px;padding:2px 0;"
+         "border-bottom:1px solid canvasText;margin-bottom:4px;}"
+      << ".md-tool{border:1px solid transparent;background:none;padding:1px 6px;"
+         "border-radius:4px;cursor:pointer;font-size:12px;}"
+      << ".md-tool:hover{border-color:currentColor;}"
+      << ".md-tool-sep{width:1px;background:canvasText;opacity:.2;"
+         "align-self:stretch;margin:2px 2px;}"
+      << ".md-divider{width:6px;cursor:col-resize;background:canvasText;"
+         "opacity:.08;flex:0 0 auto;}"
+      << ".md-divider:hover,.md-divider[data-dragging]{opacity:.25;}"
       << "body[data-view=preview] .md-source-pane{display:none;}"
       << "body[data-view=source] .md-preview-pane{display:none;}"
       << ".md-source-pane textarea{width:100%;height:100%;border:none;"
@@ -235,8 +294,10 @@ std::string RenderMdvScript() {
      << "window.mdvPush=apply;"
      << "function sendQuery(payload){"
      << "if(typeof window.mdvQuery!=='function'){return;}"
-     << "window.mdvQuery(JSON.stringify(payload),function(response){try{apply("
-        "JSON.parse(response));}catch(e){}},function(){});"
+     << "window.mdvQuery({request:JSON.stringify(payload),persistent:false,"
+     << "onSuccess:function(response){try{apply(JSON.parse(response));}catch(e)"
+        "{}},"
+     << "onFailure:function(){}});"
      << "}"
      << "var throttleUntil=0;"
      << "if(source){source.addEventListener('input',function(){"
@@ -254,6 +315,82 @@ std::string RenderMdvScript() {
      << "if(body.getAttribute('data-dirty')==='true'){e.preventDefault();e."
         "returnValue='';}"
      << "});"
+     << "var previewPane=document.querySelector('.md-preview-pane');"
+     << "var syncing=false;"
+     << "if(source&&previewPane){"
+     << "source.addEventListener('scroll',function(){"
+     << "if(syncing){return;}"
+     << "var max=source.scrollHeight-source.clientHeight;"
+     << "if(max<=0){return;}"
+     << "syncing=true;"
+     << "previewPane.scrollTop=(source.scrollTop/"
+        "max)*(previewPane.scrollHeight-previewPane.clientHeight);"
+     << "syncing=false;"
+     << "});}"
+     << "var toolbar=document.querySelector('.md-toolbar');"
+     << "function wrapOrCaret(pre,post){"
+     << "if(!source){return;}"
+     << "var st=source.selectionStart,en=source.selectionEnd;"
+     << "var sel=source.value.substring(st,en);"
+     << "source.setRangeText(pre+sel+post,st,en,sel?'select':'end');"
+     << "if(!sel){source.selectionStart=source.selectionEnd=st+pre.length;}"
+     << "source.dispatchEvent(new Event('input'));"
+     << "}"
+     << "function linePrefix(prefix){"
+     << "if(!source){return;}"
+     << "var st=source.selectionStart,en=source.selectionEnd;"
+     << "var from=source.value.lastIndexOf('\\n',st-1)+1;"
+     << "source.setRangeText(prefix+source.value.substring(from),from,en,'end');"
+     << "source.dispatchEvent(new Event('input'));"
+     << "}"
+     << "function insertBlock(text,placeholder){"
+     << "if(!source){return;}"
+     << "var st=source.selectionStart;"
+     << "source.setRangeText(text,st,st,'end');"
+     << "if(placeholder){var at=source.value.indexOf(placeholder,st);"
+     << "if(at>=0){source.selectionStart=at;source.selectionEnd=at+placeholder.length;}}"
+     << "source.dispatchEvent(new Event('input'));"
+     << "}"
+     << "if(toolbar&&source){toolbar.addEventListener('click',function(event){"
+     << "var a=event.target&&event.target.getAttribute?event.target.getAttribute('data-action'):null;"
+     << "if(!a){return;}"
+     << "if(a==='bold'){wrapOrCaret('**','**');}"
+     << "else if(a==='italic'){wrapOrCaret('*','*');}"
+     << "else if(a==='strike'){wrapOrCaret('~~','~~');}"
+     << "else if(a==='inline-code'){wrapOrCaret('`','`');}"
+     << "else if(a==='h1'){linePrefix('# ');}"
+     << "else if(a==='h2'){linePrefix('## ');}"
+     << "else if(a==='h3'){linePrefix('### ');}"
+     << "else if(a==='bullet-list'){linePrefix('- ');}"
+     << "else if(a==='ordered-list'){linePrefix('1. ');}"
+     << "else if(a==='task-list'){linePrefix('- [ ] ');}"
+     << "else if(a==='quote'){linePrefix('> ');}"
+     << "else if(a==='code-block'){insertBlock('\\n```\\n代码内容\\n```\\n','代码内容');}"
+     << "else if(a==='table'){insertBlock('\\n| 列一 | 列二 |\\n|---|---|\\n| 内容 | 内容 |\\n','列一');}"
+     << "else if(a==='link'){insertBlock('[链接文字](https://)','链接文字');}"
+     << "else if(a==='divider'){insertBlock('\\n---\\n',null);}"
+     << "});}"
+     << "var divider=document.getElementById('md-divider');"
+     << "var sourcePane=document.querySelector('.md-source-pane');"
+     << "var panes=document.querySelector('.md-panes');"
+     << "if(divider&&sourcePane&&panes){"
+     << "divider.addEventListener('mousedown',function(e){"
+     << "e.preventDefault();"
+     << "divider.setAttribute('data-dragging','1');"
+     << "var total=panes.clientWidth-6;"
+     << "function onMove(ev){"
+     << "var x=ev.clientX-panes.getBoundingClientRect().left;"
+     << "var ratio=Math.min(0.9,Math.max(0.1,x/total));"
+     << "sourcePane.style.flex='0 0 '+(ratio*100)+'%';"
+     << "}"
+     << "function onUp(){"
+     << "divider.removeAttribute('data-dragging');"
+     << "document.removeEventListener('mousemove',onMove);"
+     << "document.removeEventListener('mouseup',onUp);"
+     << "}"
+     << "document.addEventListener('mousemove',onMove);"
+     << "document.addEventListener('mouseup',onUp);"
+     << "});}"
      << "})();";
   return js.str();
 }

@@ -151,7 +151,15 @@ void TestNoNetworkOrInlineHandlers() {
   const std::string css = crayon::browser_mdv::RenderMdvStylesheet();
   const std::string js = crayon::browser_mdv::RenderMdvScript();
 
-  for (const auto* body : {&document, &css, &js}) {
+  // The link-skeleton placeholder is data, not a network reference.
+  std::string js_sanitized = js;
+  const std::string placeholder = "[链接文字](https://)";
+  const auto at = js_sanitized.find(placeholder);
+  if (at != std::string::npos) {
+    js_sanitized.replace(at, placeholder.size(), "");
+  }
+  const std::string& js_fixed = js_sanitized;
+  for (const std::string* body : {&document, &css, &js_fixed}) {
     for (const char* marker :
          {"http://", "https://", "fetch(", "XMLHttpRequest", "import(",
           "onclick=", "onload=", "javascript:"}) {
@@ -176,6 +184,79 @@ void TestEntryErrorBannerTakesPriority() {
       crayon::browser_mdv::RenderMdvDocument(hostile, SampleStrings());
   CHECK(escaped.find("<img src=x>") == std::string::npos);
   CHECK(escaped.find("&lt;img src=x&gt;") != std::string::npos);
+}
+
+void TestEditableSourceDividerAndConfirmOverlay() {
+  MdvPageSnapshot snapshot;
+  snapshot.has_document = true;
+  snapshot.source_text = "# 源码";
+  snapshot.confirm_visible = true;
+  const std::string document =
+      crayon::browser_mdv::RenderMdvDocument(snapshot, SampleStrings());
+  // Editable source pane: textarea, not a read-only <pre>.
+  CHECK(document.find("<textarea id=\"md-source\"") != std::string::npos);
+  CHECK(document.find("<pre><code>") == std::string::npos);
+  // Resizable divider present.
+  CHECK(document.find("id=\"md-divider\"") != std::string::npos);
+  // Confirm overlay with three closed choices and localized labels.
+  CHECK(document.find("id=\"md-confirm\"") != std::string::npos);
+  CHECK(document.find("data-show=\"true\"") != std::string::npos);
+  CHECK(document.find(SampleStrings().label_save) != std::string::npos);
+  CHECK(document.find(SampleStrings().label_discard) != std::string::npos);
+  CHECK(document.find(SampleStrings().label_cancel) != std::string::npos);
+
+  MdvPageSnapshot hidden;
+  hidden.has_document = true;
+  hidden.confirm_visible = false;
+  const std::string collapsed =
+      crayon::browser_mdv::RenderMdvDocument(hidden, SampleStrings());
+  CHECK(collapsed.find("data-show=\"false\"") != std::string::npos);
+}
+
+void TestDocumentNameInTitleAndScrollLinkage() {
+  MdvPageSnapshot snapshot;
+  snapshot.has_document = true;
+  snapshot.document_name = "verify.md";
+  const std::string document =
+      crayon::browser_mdv::RenderMdvDocument(snapshot, SampleStrings());
+  CHECK(document.find("verify.md - 蜡笔文档") != std::string::npos);
+
+  MdvPageSnapshot unnamed;
+  unnamed.has_document = true;
+  const std::string fallback =
+      crayon::browser_mdv::RenderMdvDocument(unnamed, SampleStrings());
+  CHECK(fallback.find("<title>蜡笔文档</title>") != std::string::npos);
+
+  // Split scroll linkage: one-way proportional sync present in the page
+  // script (md4c produces no source maps; V1 is ratio-based).
+  const std::string script = crayon::browser_mdv::RenderMdvScript();
+  CHECK(script.find("previewPane.scrollTop") != std::string::npos);
+  CHECK(script.find("scrollHeight") != std::string::npos);
+  CHECK(script.find("md-divider") != std::string::npos);
+}
+
+void TestToolbarClosedActionSet() {
+  MdvPageSnapshot snapshot;
+  snapshot.has_document = true;
+  const std::string document =
+      crayon::browser_mdv::RenderMdvDocument(snapshot, SampleStrings());
+  CHECK(document.find("class=\"md-toolbar\"") != std::string::npos);
+  // Closed action set: exactly the 14 documented actions.
+  const char* actions[] = {"h1", "h2",       "h3",         "bold",
+                           "italic",  "strike",    "inline-code",
+                           "bullet-list", "ordered-list", "task-list",
+                           "quote",       "code-block", "table",
+                           "link",         "divider"};
+  for (const char* action : actions) {
+    CHECK(document.find(std::string("data-action=\"") + action + "\"")
+          != std::string::npos);
+  }
+  CHECK(document.find("data-action=\"align\"") == std::string::npos);
+
+  const std::string script = crayon::browser_mdv::RenderMdvScript();
+  CHECK(script.find("setRangeText") != std::string::npos);
+  CHECK(script.find("wrapOrCaret") != std::string::npos);
+  CHECK(script.find("insertBlock") != std::string::npos);
 }
 
 void TestEmptyAndErrorSurfaces() {
@@ -215,6 +296,9 @@ int main() {
   TestSourceIsEscapedAndPreviewVerbatim();
   TestNoNetworkOrInlineHandlers();
   TestEntryErrorBannerTakesPriority();
+  TestEditableSourceDividerAndConfirmOverlay();
+  TestDocumentNameInTitleAndScrollLinkage();
+  TestToolbarClosedActionSet();
   TestEmptyAndErrorSurfaces();
   TestInitialViewStateAndCspConstantUnchanged();
   if (g_failures != 0) {

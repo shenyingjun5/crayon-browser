@@ -86,6 +86,20 @@ browser_mdv::MdvPageStrings LoadMdvStrings(HINSTANCE resource_module) {
       LoadUtf8String(resource_module, IDS_CRAYON_MDV_LABEL_SAVE),
       LoadUtf8String(resource_module, IDS_CRAYON_MDV_LABEL_DISCARD),
       LoadUtf8String(resource_module, IDS_CRAYON_MDV_LABEL_CANCEL),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_LABEL_OPEN_IN_VIEWER),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOLBAR_TITLE),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_BOLD),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_ITALIC),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_STRIKE),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_INLINE_CODE),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_BULLET_LIST),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_ORDERED_LIST),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_TASK_LIST),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_QUOTE),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_CODE_BLOCK),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_TABLE),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_LINK),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_DIVIDER),
   };
 }
 
@@ -199,6 +213,26 @@ void BrowserApp::OnContextInitialized() {
         }
         return entries->InterceptNavigation(browser, url, user_gesture);
       });
+  tab_controller_->SetLocalEntryDragHandler(
+      [entries = mdv_entries_](CefRefPtr<CefBrowser> browser,
+                               CefRefPtr<CefDragData> dragData,
+                               CefDragHandler::DragOperationsMask mask) {
+        return entries->HandleDragEnter(browser, dragData, mask);
+      });
+  tab_controller_->SetContextMenuAugmenter(
+      [entries = mdv_entries_](CefRefPtr<CefBrowser> browser,
+                               CefRefPtr<CefContextMenuParams> params,
+                               CefRefPtr<CefMenuModel> model) {
+        return entries->HandleContextMenuAugment(browser, params, model);
+      });
+  tab_controller_->SetContextMenuCommandHandler(
+      [entries = mdv_entries_](CefRefPtr<CefBrowser> browser, int command_id) {
+        return entries->HandleContextMenuCommand(browser, command_id);
+      });
+  tab_controller_->SetSaveCommandHandler(
+      [editing = mdv_editing_](CefRefPtr<CefBrowser> browser) {
+        return editing->SaveWriteBack(browser);
+      });
   tab_controller_->SetPageQueryHandler(
       [editing = mdv_editing_](
           CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
@@ -241,7 +275,19 @@ bool BrowserApp::mdv_strings_valid() const {
          !mdv_strings_.confirm_text.empty() &&
          !mdv_strings_.label_save.empty() &&
          !mdv_strings_.label_discard.empty() &&
-         !mdv_strings_.label_cancel.empty();
+         !mdv_strings_.label_cancel.empty() &&
+         !mdv_strings_.label_open_in_viewer.empty() &&
+         !mdv_strings_.toolbar_title.empty() &&
+         !mdv_strings_.tool_bold.empty() && !mdv_strings_.tool_italic.empty() &&
+         !mdv_strings_.tool_strike.empty() &&
+         !mdv_strings_.tool_inline_code.empty() &&
+         !mdv_strings_.tool_bullet_list.empty() &&
+         !mdv_strings_.tool_ordered_list.empty() &&
+         !mdv_strings_.tool_task_list.empty() &&
+         !mdv_strings_.tool_quote.empty() &&
+         !mdv_strings_.tool_code_block.empty() &&
+         !mdv_strings_.tool_table.empty() && !mdv_strings_.tool_link.empty() &&
+         !mdv_strings_.tool_divider.empty();
 }
 
 CefRefPtr<CefClient> BrowserApp::GetDefaultClient() {
