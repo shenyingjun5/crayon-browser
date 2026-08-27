@@ -172,3 +172,23 @@ frame-ancestors 'none'
 | MD-005 dirty 确认 | §8 |
 | MD-006 保存原子性与冲突 | §9 |
 | MD-007 Windows 实机 | 全文（平台门禁归 `MDV-07`） |
+
+## 14. 图表渲染选型评审结论（2026-08-27，mermaid）
+
+**决定：采用 vendored `@mermaid-js/tiny` 11.17.2（MIT）作为图表渲染引擎；若后续 vendor 评审复核任一项不过，退回"图表按代码块展示"的占位行为。**
+
+评审证据（2026-08-27，基于 npm registry 与 GitHub 上游实时数据）：
+
+| 维度 | 结论 |
+|---|---|
+| 来源 | 上游 `github.com/mermaid-js/mermaid`，官方 npm `@mermaid-js/tiny` 包；固定 revision 为 tag `@mermaid-js/tiny@11.17.2` |
+| 许可证 | MIT（包内 LICENSE 文件，MIT 全文确认）；允许 vendor 与再分发，无 copyleft 传染 |
+| 维护状态 | 活跃（最新发布 2026-08-25；近期合并提交 2026-08-27） |
+| 包体 | tarball 683 KB（解压后单一 `dist/mermaid.tiny.js` 2,555,146 字节）；相比完整版 84 MB 解压/21 个运行时依赖，tiny 版**零运行时依赖**，供应链面最小 |
+| 内容 hash | tarball SHA-256 `28302a2f6bd556bfd223acff76a1fd511bcc9e6f1cac1bad91b904469aeca102` |
+| 覆盖图类型 | flowchart、sequenceDiagram、stateDiagram-v2、classDiagram、erDiagram、gantt、pie、gitGraph、journey（用户场景"流程图"= flowchart/sequence 全覆盖）；不含 mindmap/architecture/katex/懒加载 |
+| 净化安全 | DOMPurify 已 bundle 内嵌（mermaid 原生 sanitize 路径），输出 SVG 经其净化 |
+| 跨平台 | 纯 JS，CEF/ArkWeb 内运行；无动态 import 分块（tiny 不支持懒加载，与我们"内存单文件资源、零网络"模型天然匹配） |
+| 运行方式 | 经 `crayon://mdv/mermaid.js` 内存资源加载（`script-src 'self'` 已允许），不触网络 |
+
+**实现语义（待 MDV-14 任务冻结）**：fenced code block 的 info string 为 `mermaid` 时，输出 `<div class="md-diagram" data-mermaid="…">`（引擎白名单需增 `div` 与 `data-mermaid` 属性）；页面 `/app.js` 在内容装载后调用 mermaid.render 并注入 SVG；渲染失败显示错误占位，绝不回退为可执行 HTML。
