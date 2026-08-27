@@ -16,7 +16,7 @@
 
 | ID | 状态 | 依赖 | 允许修改路径 | 交付目标 | 验收/测试 | 阶段 |
 |---|---|---|---|---|---|---|
-| CNT-01 | TODO | CEF-15,BUX-18,SDK-14,MED-19,PRV-08 | `crayon-content-contract/**`,`crayon-page-data/**` | 定义 `PageSnapshot`、结构块、provenance、revision、截断与资源上限 | `CT-001`,`CT-002`; schema/golden | C1 |
+| CNT-01 | IN_PROGRESS | CEF-15,BUX-18,SDK-14,MED-19,PRV-08 | `crayon-content-contract/**`,`crayon-page-data/**` | 定义 `PageSnapshot`、结构块、provenance、revision、截断与资源上限 | `CT-001`,`CT-002`; schema/golden | C1 |
 | CNT-02 | TODO | CNT-01,CEF-01B | `browser/engine-api/**`,`apps/desktop-cef/**`,`crayon-browser-gateway/**` | 在跨引擎接口增加有界 snapshot stream/cancel，并实现 Renderer 分块采集与 Browser 来源/navigation验证 | `CT-001`,`CT-002`,`CT-007`; interface contract/integration | C1 |
 | CNT-03 | TODO | CNT-02 | `crayon-page-data/**`,`crayon-app-runtime/**` | snapshot owner、generation 缓存、取消、分页和旧结果丢弃 | `CT-002`,`CT-007`; integration | C1 |
 | CNT-04 | TODO | CNT-03 | `crayon-content-extract/**` | 确定性主正文、阅读顺序和结构块识别 | `CT-003`,`CT-008`; fixture/unit | C1 |
@@ -41,3 +41,20 @@
 - 模型不接收 Cookie、Authorization、浏览历史、完整敏感 query、隐藏 DOM、跨源正文或其他标签。
 - 视频总结首期不下载媒体/音轨、不绕 DRM、不调用隐藏字幕 API；无合法文本来源即明确不支持。
 - 模型结果为 untrusted，不能触发 CAAP 工具、改变投屏策略或写回页面。
+
+## CNT-01 原子范围（PageSnapshot schema 冻结）
+
+- 状态：`IN_PROGRESS`；依赖（C1 门禁五项全部满足：CEF-15/BUX-18/SDK-14/MED-19/PRV-08）。
+- 路径说明：Roadmap 允许路径含 `crayon-content-contract/**` 与 `crayon-page-data/**` 两个名字；为避免单 schema 双 crate，契约类型落在新 crate **`crayon-page-data`** 的 `snapshot.rs`（CNT-03 的 owner/cache 亦在此 crate 扩展），不建空壳 `crayon-content-contract`。
+- 单一目标：冻结 `PageSnapshot` wire schema——navigation 引用（TabId+SessionGeneration）、脱敏 URL/title、闭合 nine-kind 内容块、provenance 恒等声明、revision 与 truncation 显式信息、compact/standard 两级资源上限；serde deny_unknown_fields 全覆盖 + 构造校验/解码复检 + current/previous golden。本任务不做采集、正文识别与 Markdown 转换。
+- 输入：CT-001（字段/顺序/schema 正确、节点/字节有界）、CT-002 模型部分（超大/畸形拒绝）、CT-003 类型部分（危险 URL 在 schema 层被拒）、PRD §4.3、FND-08 golden 机制与 SchemaVersion、domain TabId/SessionGeneration。
+- 输出与允许修改：新 crate `crates/crayon-page-data/{Cargo.toml,src/snapshot.rs,src/snapshot_tests.rs}`、根 Cargo.toml members、`schemas/current|previous/page_snapshot_*.json` golden、本 Roadmap。零第三方新增（serde/serde_json 沿用）。
+- 禁止修改：domain/FND-08 既有契约与 golden、其他 crate；不得出现采集逻辑、DOM/HTML/CDP/对象指针形态字段；不得引入网络/IO。
+- 边界：
+  - 内容块闭合九类：heading(1..=6)/paragraph/list_item(depth ≤8, 有序号可选)/link/image/table/code_block/divider/quote；inline 结构不做独立块类型。
+  - URL 白名单仅 `http://`/`https://` 绝对地址（≤2048 字节、无控制字符）——`javascript:`/`data:`/`blob:` 等在 validate 即拒绝，不可存储；image 只存引用元数据（alt/src），不含加载结果。
+  - 上限：standard 级 block ≤4096 个、单块文本 ≤16384 字节、总量 ≤1 MiB；compact 级 512/2048/128 KiB；table 行 ≤256 列 ≤32、cell ≤1024 字节、code ≤32768 字节、title ≤512 字节。
+  - provenance 为恒等声明：`verified_by` 必须等于 `"browser_process"`（页面伪造来源在 validate 被拒）；truncation 必须显式携带 omitted_blocks/omitted_bytes/reasons（闭合枚举 limit_block_count/limit_total_bytes/limit_depth）。
+  - 解码后 `validate()` 复检全覆盖；截断时快照仍须满足同一上限集。
+- 验收与测试：CT-001、CT-002/003 模型部分。矩阵：golden 往返逐字节一致与 previous 镜像、九类块 roundtrip、两级上限差异、危险 URL 拒绝矩阵、伪造 provenance/畸形/未知字段/超限拒绝、确定性伪 fuzz 不 panic。命令：`cargo test -p crayon-page-data`、clippy `-D warnings`、fmt、workspace 回归、`git diff --check`。
+- 明确不做：Renderer 分块采集（CNT-02）、snapshot owner/generation 缓存（CNT-03）、正文识别（CNT-04）、Markdown（CNT-05/06）。

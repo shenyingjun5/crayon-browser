@@ -221,3 +221,12 @@
 - 验证：`ctest` CEF shell 59/59（含更新后的 source contract）；共享层 39/39；workspace Rust 0 失败；E2E smoke harness（CEF-14）通过——完整 6 进程树、零外联 socket、退出零残留；签名验证 ad-hoc 通过。
 - Code Review：P0 0、P1 0、P2 1——初始 URL 硬编码为 `crayon://newtab` 常量；BUX-04 omnibox 接线后用户可导航到其他页面，但启动页应通过 preference 可配（归后续 BUX/装配任务）。
 - 未覆盖与风险：真实 Direct/Relay/外部客户端交接验收（M05b，真实接收端）；签名/公证用开发者证书（当前 ad-hoc，正式分发需 Apple 证书 + notarization，归 QAR）。`PLT-M05` 保持 `IN_PROGRESS`（M05a 完成）。
+
+### PLT-M05b 原子范围（真实接收端 Direct/交接验收，切片 2）
+
+- 状态：`IN_PROGRESS`；依赖 `PLT-M05a VERIFIED`。
+- 单一目标：真实接收端（小米）上的 Direct 投送与外部客户端交接验收（E2E-001/003/004 适用项）；CP-M01 生命周期与错误反馈。
+- 实现路径：CEF-13 cast feature view model + CastButtonModel 已存在于共享层（模型验证完成）；Cast-SDK facade 已验证（SDK-13 小米真机）；PLT-M04d 交接适配器已验证。本切片把 cast feature view 装配进 CEF shell（菜单/命令入口驱动 CastButtonModel → CastFeatureViewModel → Cast-SDK facade），真实接收端验证 Direct 投送与交接确认流。
+- 边界：不创建浏览器镜像 session；CP-M01 生命周期经 PLT-M04b lifecycle 模块消费；外部交接结果闭合（无"投屏中"变体）。
+- 验收与测试：E2E-001（clear fixture Direct 闭环）、E2E-003（DRM 不产生 Direct/Relay）、E2E-004（无路由交接确认）。命令：CEF 完整构建 + E2E smoke + 真实接收端（小米）投送。
+- 明确不做：M05c 资源稳定性、PLT-W05、PLT-19、QAR 矩阵。

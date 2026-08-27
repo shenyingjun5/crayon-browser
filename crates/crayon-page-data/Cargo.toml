@@ -1,0 +1,18 @@
+[package]
+name = "crayon-page-data"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Verified current-page data plane: PageSnapshot contract, block schema and resource limits (CNT C1)"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+crayon-domain = { path = "../crayon-domain" }
+crayon-ipc-schema = { path = "../crayon-ipc-schema" }
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1"
