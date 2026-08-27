@@ -25,6 +25,7 @@
 | MDV-09 | DONE | MDV-04,MDV-08,BUX-16 | `browser/cef-shell/src/browser/mdv` | 受控文件入口接线：菜单打开对话框（`.md` 过滤）、拖放、omnibox 本地路径路由三入口接手势门禁与入口守卫，平台分隔符归一 | MD-001；手势外零触发路径；Windows 实机 |
 | MDV-10 | VERIFIED | MDV-05,MDV-06,MDV-08,MDV-09 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | 编辑与保存接线：分栏编辑 UI 呈现、dirty 三选确认对话框、真实文件 IO 钩子注入保存控制器（原子写）、外部修改冲突提示 | MD-005、MD-006；Windows 实机含只读位置失败报告 |
 | MDV-07 | VERIFIED | MDV-01..06,MDV-08..10 | `docs/current`,`docs/plans` | Windows 实机收口与模块总 Review（macOS 对齐后置，不得用 Windows 证据完成 macOS） | MD-007；Review P0/P1=0 |
+| MDV-12 | VERIFIED | MDV-10 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv`,`docs/current` | 编辑工具栏：14 项闭合动作（包裹/行前缀/骨架三类语义），复用既有编辑通道 | mdv_page 断言 + 实机交互验证 |
 | MDV-11 | VERIFIED | MDV-08..10 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv`,`docs/current` | 编辑回归修复（textarea 化被覆盖丢失）+ 拖放打开 + 右键上下文菜单入口（E4）+ 分栏间隔条可拖动 | MD-001..006 回归 + 新交互实机验证 |
 
 ## 接线切片说明（MDV-08..10）
@@ -221,3 +222,11 @@ MDV-02..06 按"模型层零 IO / 零 CEF 类型"交付后，产品仍不可见�
 - 单一目标：修复 MDV-10 页面渲染回归（textarea 化在后续补丁覆盖中丢失，`RenderMdvDocument` 回退为 `<pre>` 只读源码面板），恢复源码面板可编辑；编辑查询响应携带预览负载（左栏键入右栏即时更新）；E2 拖放 `.md` 文件进窗口（`CefDragHandler::OnDragEnter` 经窄挂点接入口守卫）；E4 右键上下文菜单"在文档查看器中打开"（`.md` 的 file:// 页面或链接上追加菜单项，`MENU_ID_USER_FIRST`）；分栏间隔条左右拖动调宽（纯前端）。契约 `docs/current/markdown-viewer.md` §3 增 E4、§8 增 textarea/间隔条语义。
 - 输出与允许修改：共享层 `mdv_page`（面板 markup 恢复 textarea、浮层、间隔条样式/脚本）与 `mdv_page_test`（textarea/间隔条/浮层断言）；`window/tab_controller` 增加 `CefDragHandler`/`CefContextMenuHandler` 两个窄挂点（镜像既有惯例）；`cef_mdv_entries` 增加拖放/菜单处理；`cef_mdv_editing` 编辑响应携带预览负载；装配（app、资源 IDS 225、locale 双语 key `mdv.label_open_in_viewer`，75/75 parity）。
 - 验证：双配置 ctest **58/58**（含新断言）；clang-format、fast/security、`git diff --check` 通过；实机打开验证文档成功（用户现场进行交互验证：左栏编辑/拖放/间隔条/右键菜单）。`MDV-11` 转 `VERIFIED`，交互验证通过后与 MDV-07/10 一并转 `DONE`。
+
+## MDV-12 原子范围（编辑工具栏）
+
+- 单一目标：源码/分栏态源码面板顶部新增编辑工具栏，14 项闭合动作——标题 H1/H2/H3、加粗、斜体、删除线、行内代码、无序列表、有序列表、任务列表、引用、代码块、表格、链接、分割线；三类交互语义（包裹保留选区 / 行前缀 / 骨架插入含占位选中），全部经 `setRangeText` 保留撤销历史并触发既有 mdvQuery 编辑通道（预览即时更新）；纯页面内实现零新 binding、零外部资源。
+- 文档先行：契约 §8 增工具栏小节（闭合动作清单与三类语义），Roadmap 增本任务行。
+- 实现：`RenderToolbar` 生成工具栏（`<button data-action>` + addEventListener，CSP 无内联处理器）；14 个标签走 IDS 226..239 字符串资源与 locale 双语 key（108/108 parity）；预览态/无文档态不渲染工具栏。
+- 顺带修复（跨平台门禁 bug）：① macOS 可移植编译契约 target 缺 `shared-ui/new-tab/include` 路径（远端 M05a 引入），补 include；② PRV-12 不安全路由门禁的 legacy-dev 豁免在 Windows 上因路径分隔符 `\` 失效，共同入口归一化后修复；③ 远端 `crayon-platform-macos` 测试文件 rustfmt 不通过，格式化修复。
+- 验证：`mdv_page` 测试新增工具栏闭合动作集断言（14 项存在 + 非法项不存在 + setRangeText/wrapOrCaret/insertBlock 脚本面）；双配置 ctest **60/60**；fast/security 门禁、clang-format、`git diff --check` 全过；实机交互验证由用户现场进行。`MDV-12` 转 `VERIFIED`。

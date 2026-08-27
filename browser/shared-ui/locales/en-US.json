@@ -93,4 +93,18 @@
   "autofill.field.country_region": "Country / Region",
   "autofill.field.phone": "Phone",
   "autofill.field.email": "Email",
-  "mdv.label_open_in_viewer": "Open in document viewer"}
+  "mdv.label_open_in_viewer": "Open in document viewer",
+  "mdv.toolbar.title": "Editing tools",
+  "mdv.tool.bold": "Bold",
+  "mdv.tool.italic": "Italic",
+  "mdv.tool.strike": "Strikethrough",
+  "mdv.tool.inline_code": "Inline code",
+  "mdv.tool.bullet_list": "Bulleted list",
+  "mdv.tool.ordered_list": "Numbered list",
+  "mdv.tool.task_list": "Task list",
+  "mdv.tool.quote": "Quote",
+  "mdv.tool.code_block": "Code block",
+  "mdv.tool.table": "Table",
+  "mdv.tool.link": "Link",
+  "mdv.tool.divider": "Divider"
+}

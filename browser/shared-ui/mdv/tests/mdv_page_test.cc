@@ -151,7 +151,15 @@ void TestNoNetworkOrInlineHandlers() {
   const std::string css = crayon::browser_mdv::RenderMdvStylesheet();
   const std::string js = crayon::browser_mdv::RenderMdvScript();
 
-  for (const auto* body : {&document, &css, &js}) {
+  // The link-skeleton placeholder is data, not a network reference.
+  std::string js_sanitized = js;
+  const std::string placeholder = "[链接文字](https://)";
+  const auto at = js_sanitized.find(placeholder);
+  if (at != std::string::npos) {
+    js_sanitized.replace(at, placeholder.size(), "");
+  }
+  const std::string& js_fixed = js_sanitized;
+  for (const std::string* body : {&document, &css, &js_fixed}) {
     for (const char* marker :
          {"http://", "https://", "fetch(", "XMLHttpRequest", "import(",
           "onclick=", "onload=", "javascript:"}) {
@@ -227,6 +235,30 @@ void TestDocumentNameInTitleAndScrollLinkage() {
   CHECK(script.find("md-divider") != std::string::npos);
 }
 
+void TestToolbarClosedActionSet() {
+  MdvPageSnapshot snapshot;
+  snapshot.has_document = true;
+  const std::string document =
+      crayon::browser_mdv::RenderMdvDocument(snapshot, SampleStrings());
+  CHECK(document.find("class=\"md-toolbar\"") != std::string::npos);
+  // Closed action set: exactly the 14 documented actions.
+  const char* actions[] = {"h1", "h2",       "h3",         "bold",
+                           "italic",  "strike",    "inline-code",
+                           "bullet-list", "ordered-list", "task-list",
+                           "quote",       "code-block", "table",
+                           "link",         "divider"};
+  for (const char* action : actions) {
+    CHECK(document.find(std::string("data-action=\"") + action + "\"")
+          != std::string::npos);
+  }
+  CHECK(document.find("data-action=\"align\"") == std::string::npos);
+
+  const std::string script = crayon::browser_mdv::RenderMdvScript();
+  CHECK(script.find("setRangeText") != std::string::npos);
+  CHECK(script.find("wrapOrCaret") != std::string::npos);
+  CHECK(script.find("insertBlock") != std::string::npos);
+}
+
 void TestEmptyAndErrorSurfaces() {
   MdvPageSnapshot empty;
   empty.load_status = MdvLoadStatus::kEmpty;
@@ -266,6 +298,7 @@ int main() {
   TestEntryErrorBannerTakesPriority();
   TestEditableSourceDividerAndConfirmOverlay();
   TestDocumentNameInTitleAndScrollLinkage();
+  TestToolbarClosedActionSet();
   TestEmptyAndErrorSurfaces();
   TestInitialViewStateAndCspConstantUnchanged();
   if (g_failures != 0) {

@@ -106,7 +106,8 @@ if(OS_WINDOWS)
                             PRIVATE cxx_std_17)
     target_include_directories(
       crayon_macos_shell_portable_compile_contract
-      PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+      PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src"
+              "${CMAKE_SOURCE_DIR}/browser/shared-ui/new-tab/include")
 
     add_executable(crayon_windows_shell_contract
                    tests/windows_shell_contract.cc)

@@ -61,6 +61,36 @@ std::string ViewButton(const std::string& label, const char* view,
   return button.str();
 }
 
+std::string RenderToolbar(const MdvPageStrings& strings) {
+  std::ostringstream bar;
+  bar << "<div class=\"md-toolbar\" role=\"toolbar\" aria-label=\""
+      << EscapeHtml(strings.toolbar_title) << "\">";
+  const auto button = [&bar](const char* action, const std::string& label) {
+    bar << "<button type=\"button\" class=\"md-tool\" data-action=\""
+        << action << "\">" << EscapeHtml(label) << "</button>";
+  };
+  button("h1", "H1");
+  button("h2", "H2");
+  button("h3", "H3");
+  bar << "<span class=\"md-tool-sep\"></span>";
+  button("bold", strings.tool_bold);
+  button("italic", strings.tool_italic);
+  button("strike", strings.tool_strike);
+  button("inline-code", strings.tool_inline_code);
+  bar << "<span class=\"md-tool-sep\"></span>";
+  button("bullet-list", strings.tool_bullet_list);
+  button("ordered-list", strings.tool_ordered_list);
+  button("task-list", strings.tool_task_list);
+  button("quote", strings.tool_quote);
+  bar << "<span class=\"md-tool-sep\"></span>";
+  button("code-block", strings.tool_code_block);
+  button("table", strings.tool_table);
+  button("link", strings.tool_link);
+  button("divider", strings.tool_divider);
+  bar << "</div>";
+  return bar.str();
+}
+
 std::string StatusBanner(const std::string& error_text,
                          const MdvPageStrings& strings, bool save_ok,
                          MdvLoadStatus status) {
@@ -152,7 +182,8 @@ std::string RenderMdvDocument(const MdvPageSnapshot& snapshot,
   document << "<div class=\"md-panes\"><section class=\"md-source-pane\" "
               "aria-label=\""
            << EscapeHtml(strings.view_source)
-           << "\"><textarea id=\"md-source\" spellcheck=\"false\">"
+           << "\">" << RenderToolbar(strings)
+           << "<textarea id=\"md-source\" spellcheck=\"false\">"
            << EscapeHtml(snapshot.source_text)
            << "</textarea></section><div id=\"md-divider\" class=\"md-"
               "divider\" aria-hidden=\"true\"></div>"
@@ -192,6 +223,13 @@ std::string RenderMdvStylesheet() {
       << ".md-panes{display:flex;height:calc(100vh - 42px);}"
       << ".md-source-pane,.md-preview-pane{flex:1;overflow:auto;padding:"
          "0 14px;}"
+      << ".md-toolbar{display:flex;flex-wrap:wrap;gap:2px;padding:2px 0;"
+         "border-bottom:1px solid canvasText;margin-bottom:4px;}"
+      << ".md-tool{border:1px solid transparent;background:none;padding:1px 6px;"
+         "border-radius:4px;cursor:pointer;font-size:12px;}"
+      << ".md-tool:hover{border-color:currentColor;}"
+      << ".md-tool-sep{width:1px;background:canvasText;opacity:.2;"
+         "align-self:stretch;margin:2px 2px;}"
       << ".md-divider{width:6px;cursor:col-resize;background:canvasText;"
          "opacity:.08;flex:0 0 auto;}"
       << ".md-divider:hover,.md-divider[data-dragging]{opacity:.25;}"
@@ -288,6 +326,49 @@ std::string RenderMdvScript() {
      << "previewPane.scrollTop=(source.scrollTop/"
         "max)*(previewPane.scrollHeight-previewPane.clientHeight);"
      << "syncing=false;"
+     << "});}"
+     << "var toolbar=document.querySelector('.md-toolbar');"
+     << "function wrapOrCaret(pre,post){"
+     << "if(!source){return;}"
+     << "var st=source.selectionStart,en=source.selectionEnd;"
+     << "var sel=source.value.substring(st,en);"
+     << "source.setRangeText(pre+sel+post,st,en,sel?'select':'end');"
+     << "if(!sel){source.selectionStart=source.selectionEnd=st+pre.length;}"
+     << "source.dispatchEvent(new Event('input'));"
+     << "}"
+     << "function linePrefix(prefix){"
+     << "if(!source){return;}"
+     << "var st=source.selectionStart,en=source.selectionEnd;"
+     << "var from=source.value.lastIndexOf('\\n',st-1)+1;"
+     << "source.setRangeText(prefix+source.value.substring(from),from,en,'end');"
+     << "source.dispatchEvent(new Event('input'));"
+     << "}"
+     << "function insertBlock(text,placeholder){"
+     << "if(!source){return;}"
+     << "var st=source.selectionStart;"
+     << "source.setRangeText(text,st,st,'end');"
+     << "if(placeholder){var at=source.value.indexOf(placeholder,st);"
+     << "if(at>=0){source.selectionStart=at;source.selectionEnd=at+placeholder.length;}}"
+     << "source.dispatchEvent(new Event('input'));"
+     << "}"
+     << "if(toolbar&&source){toolbar.addEventListener('click',function(event){"
+     << "var a=event.target&&event.target.getAttribute?event.target.getAttribute('data-action'):null;"
+     << "if(!a){return;}"
+     << "if(a==='bold'){wrapOrCaret('**','**');}"
+     << "else if(a==='italic'){wrapOrCaret('*','*');}"
+     << "else if(a==='strike'){wrapOrCaret('~~','~~');}"
+     << "else if(a==='inline-code'){wrapOrCaret('`','`');}"
+     << "else if(a==='h1'){linePrefix('# ');}"
+     << "else if(a==='h2'){linePrefix('## ');}"
+     << "else if(a==='h3'){linePrefix('### ');}"
+     << "else if(a==='bullet-list'){linePrefix('- ');}"
+     << "else if(a==='ordered-list'){linePrefix('1. ');}"
+     << "else if(a==='task-list'){linePrefix('- [ ] ');}"
+     << "else if(a==='quote'){linePrefix('> ');}"
+     << "else if(a==='code-block'){insertBlock('\\n```\\n代码内容\\n```\\n','代码内容');}"
+     << "else if(a==='table'){insertBlock('\\n| 列一 | 列二 |\\n|---|---|\\n| 内容 | 内容 |\\n','列一');}"
+     << "else if(a==='link'){insertBlock('[链接文字](https://)','链接文字');}"
+     << "else if(a==='divider'){insertBlock('\\n---\\n',null);}"
      << "});}"
      << "var divider=document.getElementById('md-divider');"
      << "var sourcePane=document.querySelector('.md-source-pane');"

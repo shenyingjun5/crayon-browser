@@ -93,4 +93,18 @@
   "autofill.field.country_region": "国家/地区",
   "autofill.field.phone": "电话",
   "autofill.field.email": "邮箱",
-  "mdv.label_open_in_viewer": "在文档查看器中打开"}
+  "mdv.label_open_in_viewer": "在文档查看器中打开",
+  "mdv.toolbar.title": "编辑工具",
+  "mdv.tool.bold": "加粗",
+  "mdv.tool.italic": "斜体",
+  "mdv.tool.strike": "删除线",
+  "mdv.tool.inline_code": "行内代码",
+  "mdv.tool.bullet_list": "无序列表",
+  "mdv.tool.ordered_list": "有序列表",
+  "mdv.tool.task_list": "任务列表",
+  "mdv.tool.quote": "引用",
+  "mdv.tool.code_block": "代码块",
+  "mdv.tool.table": "表格",
+  "mdv.tool.link": "链接",
+  "mdv.tool.divider": "分割线"
+}
