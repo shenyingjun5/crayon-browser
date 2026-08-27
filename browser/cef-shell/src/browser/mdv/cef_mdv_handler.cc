@@ -2,11 +2,14 @@
 
 #include <algorithm>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <mutex>
 #include <string>
 #include <utility>
 
 #include "crayon/browser_markdown/markdown_render.h"
+#include "crayon/browser_mdv/mdv_images.h"
 #include "crayon/browser_mdv/mdv_page.h"
 #include "include/cef_parser.h"
 #include "include/cef_request.h"
@@ -18,6 +21,7 @@ namespace crayon::browser::cef_shell::mdv {
 namespace {
 
 using crayon::browser_mdv::ClassifyMdvRequest;
+using crayon::browser_mdv::kMaxLocalImageBytes;
 using crayon::browser_mdv::kMdvCsp;
 using crayon::browser_mdv::kMdvHost;
 using crayon::browser_mdv::kMdvScheme;
@@ -114,6 +118,38 @@ class MdvMemoryResourceHandler final : public CefResourceHandler {
   DISALLOW_COPY_AND_ASSIGN(MdvMemoryResourceHandler);
 };
 
+/// Maps a validated image path to its response mime type.
+std::string MimeForImage(const std::string& path) {
+  const auto dot = path.find_last_of('.');
+  std::string ext = dot == std::string::npos ? "" : path.substr(dot + 1);
+  std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
+  if (ext == "png") return "image/png";
+  if (ext == "jpg" || ext == "jpeg") return "image/jpeg";
+  if (ext == "gif") return "image/gif";
+  if (ext == "webp") return "image/webp";
+  if (ext == "bmp") return "image/bmp";
+  if (ext == "svg") return "image/svg+xml";
+  return {};
+}
+
+/// Reads at most `kMaxLocalImageBytes + 1` bytes; oversized or unreadable
+/// files return empty (the handler maps that to 404).
+std::string ReadImageBytes(const std::string& path_utf8) {
+  std::ifstream file(std::filesystem::u8path(path_utf8), std::ios::binary);
+  if (!file.is_open()) {
+    return {};
+  }
+  std::string bytes;
+  bytes.assign(std::istreambuf_iterator<char>(file),
+               std::istreambuf_iterator<char>());
+  if (bytes.size() > kMaxLocalImageBytes) {
+    return {};
+  }
+  return bytes;
+}
+
 class MdvSchemeHandlerFactory final : public CefSchemeHandlerFactory {
  public:
   MdvSchemeHandlerFactory(MdvPageStrings strings,
@@ -173,6 +209,23 @@ class MdvSchemeHandlerFactory final : public CefSchemeHandlerFactory {
           body = script_;
         }
         break;
+      case crayon::browser_mdv::MdvResourceKind::kImage: {
+        // Opaque validated local image: read on demand, bounded.
+        const auto snapshot = state_->snapshot();
+        const auto& images = snapshot.local_images;
+        std::string image_body;
+        std::string image_mime;
+        if (route.image_index < images.size()) {
+          image_mime = MimeForImage(images[route.image_index]);
+          image_body = ReadImageBytes(images[route.image_index]);
+        }
+        if (image_body.empty()) {
+          return new MdvMemoryResourceHandler(404, "Not Found", kTextMimeType,
+                                              {});
+        }
+        return new MdvMemoryResourceHandler(200, "OK", image_mime,
+                                            std::move(image_body));
+      }
       case crayon::browser_mdv::MdvResourceKind::kMethodNotAllowed:
         break;
       case crayon::browser_mdv::MdvResourceKind::kNotFound:

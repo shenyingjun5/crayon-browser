@@ -10,6 +10,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 #include "crayon/browser_mdv/mdv_viewer.h"
 
@@ -70,6 +71,8 @@ enum class MdvResourceKind {
   kDocument,
   kStylesheet,
   kScript,
+  /// Opaque validated local image (GET /img/<index>, digits only).
+  kImage,
   kMethodNotAllowed,
   kNotFound,
 };
@@ -79,6 +82,8 @@ struct MdvRoute {
   int status_code = 404;
   /// GET requests carry a body; HEAD suppresses it.
   bool include_body = false;
+  /// For kImage: the opaque index parsed from /img/<index>.
+  std::size_t image_index = 0;
 };
 
 /// Classifies one request against the fixed route table.  Anything off
@@ -104,6 +109,10 @@ struct MdvPageSnapshot {
   std::string document_name;
   /// Editing state pushed by the MDV-10 controller.
   bool dirty = false;
+  /// Validated local images of the current document (Browser-process
+  /// only; indexed by the opaque `/img/N` routes, never rendered into
+  /// the DOM).
+  std::vector<std::string> local_images;
   bool save_ok = false;
   bool confirm_visible = false;
 };

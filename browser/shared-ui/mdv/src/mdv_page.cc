@@ -1,5 +1,6 @@
 #include "crayon/browser_mdv/mdv_page.h"
 
+#include <algorithm>
 #include <sstream>
 
 namespace crayon::browser_mdv {
@@ -66,8 +67,8 @@ std::string RenderToolbar(const MdvPageStrings& strings) {
   bar << "<div class=\"md-toolbar\" role=\"toolbar\" aria-label=\""
       << EscapeHtml(strings.toolbar_title) << "\">";
   const auto button = [&bar](const char* action, const std::string& label) {
-    bar << "<button type=\"button\" class=\"md-tool\" data-action=\""
-        << action << "\">" << EscapeHtml(label) << "</button>";
+    bar << "<button type=\"button\" class=\"md-tool\" data-action=\"" << action
+        << "\">" << EscapeHtml(label) << "</button>";
   };
   button("h1", "H1");
   button("h2", "H2");
@@ -144,6 +145,18 @@ MdvRoute ClassifyMdvRequest(const MdvRequestParts& request) {
   if (request.path == kResourceAppJs) {
     return {MdvResourceKind::kScript, 200, is_get};
   }
+  // Opaque validated local image: /img/<digits>, 1-6 digits only.
+  constexpr const char* kImagePrefix = "/img/";
+  if (request.path.compare(0, 5, kImagePrefix) == 0) {
+    const std::string digits = request.path.substr(5);
+    if (!digits.empty() && digits.size() <= 6 &&
+        std::all_of(digits.begin(), digits.end(),
+                    [](char c) { return c >= '0' && c <= '9'; })) {
+      MdvRoute route{MdvResourceKind::kImage, 200, is_get, 0};
+      route.image_index = static_cast<std::size_t>(std::stoul(digits));
+      return route;
+    }
+  }
   return {MdvResourceKind::kNotFound, 404, false};
 }
 
@@ -181,8 +194,7 @@ std::string RenderMdvDocument(const MdvPageSnapshot& snapshot,
   // trusted MDV-02 whitelist HTML inserted verbatim.
   document << "<div class=\"md-panes\"><section class=\"md-source-pane\" "
               "aria-label=\""
-           << EscapeHtml(strings.view_source)
-           << "\">" << RenderToolbar(strings)
+           << EscapeHtml(strings.view_source) << "\">" << RenderToolbar(strings)
            << "<textarea id=\"md-source\" spellcheck=\"false\">"
            << EscapeHtml(snapshot.source_text)
            << "</textarea></section><div id=\"md-divider\" class=\"md-"
@@ -225,7 +237,8 @@ std::string RenderMdvStylesheet() {
          "0 14px;}"
       << ".md-toolbar{display:flex;flex-wrap:wrap;gap:2px;padding:2px 0;"
          "border-bottom:1px solid canvasText;margin-bottom:4px;}"
-      << ".md-tool{border:1px solid transparent;background:none;padding:1px 6px;"
+      << ".md-tool{border:1px solid transparent;background:none;padding:1px "
+         "6px;"
          "border-radius:4px;cursor:pointer;font-size:12px;}"
       << ".md-tool:hover{border-color:currentColor;}"
       << ".md-tool-sep{width:1px;background:canvasText;opacity:.2;"
@@ -340,7 +353,8 @@ std::string RenderMdvScript() {
      << "if(!source){return;}"
      << "var st=source.selectionStart,en=source.selectionEnd;"
      << "var from=source.value.lastIndexOf('\\n',st-1)+1;"
-     << "source.setRangeText(prefix+source.value.substring(from),from,en,'end');"
+     << "source.setRangeText(prefix+source.value.substring(from),from,en,'end')"
+        ";"
      << "source.dispatchEvent(new Event('input'));"
      << "}"
      << "function insertBlock(text,placeholder){"
@@ -348,11 +362,14 @@ std::string RenderMdvScript() {
      << "var st=source.selectionStart;"
      << "source.setRangeText(text,st,st,'end');"
      << "if(placeholder){var at=source.value.indexOf(placeholder,st);"
-     << "if(at>=0){source.selectionStart=at;source.selectionEnd=at+placeholder.length;}}"
+     << "if(at>=0){source.selectionStart=at;source.selectionEnd=at+placeholder."
+        "length;}}"
      << "source.dispatchEvent(new Event('input'));"
      << "}"
      << "if(toolbar&&source){toolbar.addEventListener('click',function(event){"
-     << "var a=event.target&&event.target.getAttribute?event.target.getAttribute('data-action'):null;"
+     << "var "
+        "a=event.target&&event.target.getAttribute?event.target.getAttribute('"
+        "data-action'):null;"
      << "if(!a){return;}"
      << "if(a==='bold'){wrapOrCaret('**','**');}"
      << "else if(a==='italic'){wrapOrCaret('*','*');}"
@@ -365,8 +382,11 @@ std::string RenderMdvScript() {
      << "else if(a==='ordered-list'){linePrefix('1. ');}"
      << "else if(a==='task-list'){linePrefix('- [ ] ');}"
      << "else if(a==='quote'){linePrefix('> ');}"
-     << "else if(a==='code-block'){insertBlock('\\n```\\n代码内容\\n```\\n','代码内容');}"
-     << "else if(a==='table'){insertBlock('\\n| 列一 | 列二 |\\n|---|---|\\n| 内容 | 内容 |\\n','列一');}"
+     << "else "
+        "if(a==='code-block'){insertBlock('\\n```\\n代码内容\\n```\\n','"
+        "代码内容');}"
+     << "else if(a==='table'){insertBlock('\\n| 列一 | 列二 |\\n|---|---|\\n| "
+        "内容 | 内容 |\\n','列一');}"
      << "else if(a==='link'){insertBlock('[链接文字](https://)','链接文字');}"
      << "else if(a==='divider'){insertBlock('\\n---\\n',null);}"
      << "});}"

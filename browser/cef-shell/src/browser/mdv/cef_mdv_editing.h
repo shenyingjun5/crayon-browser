@@ -71,6 +71,7 @@ class MdvEditController
   crayon::browser_mdv_edit::MdvEditModel edit_;
   crayon::browser_mdv_save::MdvSaveController save_;
   std::string current_path_;
+  std::string current_doc_dir_;
   std::string pending_url_;
   int host_browser_id_ = -1;
   bool conflict_pending_ = false;

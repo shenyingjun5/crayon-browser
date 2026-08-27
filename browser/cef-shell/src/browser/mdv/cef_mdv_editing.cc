@@ -12,6 +12,7 @@
 #include "browser/mdv/cef_mdv_entries.h"
 #include "crayon/browser_markdown/markdown_render.h"
 #include "crayon/browser_mdv/mdv_entry_guard.h"
+#include "crayon/browser_mdv/mdv_images.h"
 #include "include/cef_id_mappers.h"
 #include "include/cef_parser.h"
 #include "include/wrapper/cef_helpers.h"
@@ -142,6 +143,10 @@ void MdvEditController::OnDocumentLoaded(CefRefPtr<CefBrowser> browser,
                                          std::uint64_t mtime) {
   CEF_REQUIRE_UI_THREAD();
   current_path_ = path_utf8;
+  const auto dir_pos = path_utf8.find_last_of("\\/");
+  current_doc_dir_ = dir_pos == std::string::npos
+                         ? std::string()
+                         : path_utf8.substr(0, dir_pos);
   if (browser) {
     host_browser_id_ = browser->GetIdentifier();
   }
@@ -355,7 +360,27 @@ void MdvEditController::RenderAndStore() {
   const std::string html = crayon::browser_markdown::RenderMarkdownToSafeHtml(
       edit_.edit_buffer(), &status);
   if (status == crayon::browser_markdown::RenderStatus::kOk) {
-    viewer_.DeliverRender(revision, html);
+    // MDV-13: classify engine image markers into their final form
+    // (cloud https direct / validated local opaque route / placeholder).
+    auto probe = [](const std::string& path_utf8, std::uint64_t* size) {
+      std::error_code error;
+      const auto target = std::filesystem::u8path(path_utf8);
+      if (!std::filesystem::is_regular_file(target, error)) {
+        return false;
+      }
+      const auto file_size = std::filesystem::file_size(target, error);
+      if (error) {
+        return false;
+      }
+      *size = static_cast<std::uint64_t>(file_size);
+      return true;
+    };
+    auto snapshot_for_images = state_->snapshot();
+    snapshot_for_images.local_images.clear();
+    const std::string prepared = crayon::browser_mdv::PreparePreviewHtml(
+        html, current_doc_dir_, probe, &snapshot_for_images.local_images);
+    state_->SetSnapshot(std::move(snapshot_for_images));
+    viewer_.DeliverRender(revision, prepared);
   }
   auto snapshot = state_->snapshot();
   snapshot.view_mode = viewer_.view_mode();

@@ -61,13 +61,23 @@ if(hit EQUAL -1)
   message(FATAL_ERROR "handler must set Content-Security-Policy headers")
 endif()
 
-# The fixture is compile-time content; no filesystem or network IO.
-foreach(forbidden IN ITEMS "std::ifstream" "fopen" "CreateFileW(\"" "WinHttp" "URLDownload")
+# The fixture is compile-time content; no network IO and no arbitrary
+# file access.  Bounded reads are only permitted inside the MDV-13
+# validated local-image route (opaque /img/<index> tokens).
+foreach(forbidden IN ITEMS "fopen" "CreateFileW(\"" "WinHttp" "URLDownload")
   string(FIND "${impl_text}" "${forbidden}" hit)
   if(NOT hit EQUAL -1)
     message(FATAL_ERROR "handler must not contain ${forbidden}")
   endif()
 endforeach()
+string(FIND "${impl_text}" "ReadImageBytes" hit)
+if(hit EQUAL -1)
+  message(FATAL_ERROR "handler must serve validated local images via ReadImageBytes")
+endif()
+string(FIND "${impl_text}" "kMaxLocalImageBytes" hit)
+if(hit EQUAL -1)
+  message(FATAL_ERROR "image reads must be bounded by kMaxLocalImageBytes")
+endif()
 
 # The route classifier gates every request; no direct body serving.
 string(FIND "${impl_text}" "ClassifyMdvRequest" hit)

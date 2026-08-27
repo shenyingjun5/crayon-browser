@@ -1,11 +1,11 @@
 // MDV-02 contract tests (MD-002): deterministic golden rendering,
 // injection matrix, link scheme allowlist, image placeholders,
 // input bounds and normalization.
+#include "crayon/browser_markdown/markdown_render.h"
+
 #include <cstdlib>
 #include <iostream>
 #include <string>
-
-#include "crayon/browser_markdown/markdown_render.h"
 
 namespace {
 
@@ -51,7 +51,8 @@ bool GoldenBasics() {
   CHECK(task.find("disabled") != std::string::npos);
   // Fenced code block.
   const std::string code = Render("```cpp\nint x;\n```\n");
-  CHECK(code.find("<pre><code") != std::string::npos && code.find("int x;") != std::string::npos);
+  CHECK(code.find("<pre><code") != std::string::npos &&
+        code.find("int x;") != std::string::npos);
   return true;
 }
 
@@ -73,10 +74,12 @@ bool InjectionMatrix() {
   // Raw HTML is fully escaped, never passed through.
   const std::string script = Render("<script>alert(1)</script>");
   CHECK(script.find("<script") == std::string::npos);
-  CHECK(script.find("&lt;script&gt;alert(1)&lt;/script&gt;") != std::string::npos);
+  CHECK(script.find("&lt;script&gt;alert(1)&lt;/script&gt;") !=
+        std::string::npos);
   // Inline raw HTML with event handlers escapes the handlers away.
   const std::string event = Render("x <b onclick=\"evil\">y</b> z");
-  CHECK(event.find("onclick") == std::string::npos || event.find("<b ") == std::string::npos);
+  CHECK(event.find("onclick") == std::string::npos ||
+        event.find("<b ") == std::string::npos);
   CHECK(event.find("&lt;b onclick=&quot;evil&quot;&gt;") != std::string::npos);
   // javascript: links degrade to plain text.
   const std::string js = Render("[click](javascript:alert(1))");
@@ -86,13 +89,15 @@ bool InjectionMatrix() {
   // file: and relative links degrade too.
   CHECK(Render("[f](file:///etc/passwd)").find("<a ") == std::string::npos);
   CHECK(Render("[r](relative.md)").find("<a ") == std::string::npos);
-  // Images become placeholders: no <img>, no network fetch, alt + src
-  // shown as text.
+  // Images become intermediate markers: the raw reference rides in
+  // data-mdv-raw for Browser-side classification (MDV-13); nothing is
+  // fetched here and the marker never reaches the page unchanged.
   const std::string image = Render("![alt text](https://img.example/pic.png)");
-  CHECK(image.find("<img") == std::string::npos);
-  CHECK(image.find("md-img-placeholder") != std::string::npos);
-  CHECK(image.find("alt text") != std::string::npos);
-  CHECK(image.find("https://img.example/pic.png") != std::string::npos);
+  CHECK(image.find("<img class=\"md-img\" src=\"mdv-img:0\"") !=
+        std::string::npos);
+  CHECK(image.find("data-mdv-raw=\"https://img.example/pic.png\"") !=
+        std::string::npos);
+  CHECK(image.find("alt=\"alt text\"") != std::string::npos);
   // HTML comment escapes.
   const std::string comment = Render("<!-- hidden -->");
   CHECK(comment.find("<!--") == std::string::npos);
@@ -103,7 +108,8 @@ bool InjectionMatrix() {
 
 bool Determinism() {
   const std::string input =
-      "# T\n\ntext **b** and [l](https://x.example)\n\n| a | b |\n|---|---|\n| 1 | 2 |\n";
+      "# T\n\ntext **b** and [l](https://x.example)\n\n| a | b |\n|---|---|\n| "
+      "1 | 2 |\n";
   const std::string first = Render(input);
   CHECK(!first.empty());
   for (int i = 0; i < 3; ++i) {
@@ -127,13 +133,16 @@ bool InputNormalization() {
 
 bool InputBounds() {
   RenderStatus status = RenderStatus::kOk;
-  static_cast<void>(RenderMarkdownToSafeHtml(std::string(kMaxInputBytes + 1, 'a'), &status));
+  static_cast<void>(
+      RenderMarkdownToSafeHtml(std::string(kMaxInputBytes + 1, 'a'), &status));
   CHECK(status == RenderStatus::kInputTooLarge);
-  static_cast<void>(RenderMarkdownToSafeHtml(std::string(kMaxInputBytes, 'a'), &status));
+  static_cast<void>(
+      RenderMarkdownToSafeHtml(std::string(kMaxInputBytes, 'a'), &status));
   CHECK(status == RenderStatus::kOk);
   // Invalid UTF-8: bare continuation, overlong, surrogate, truncated.
-  for (const std::string& bad : {std::string("\x80"), std::string("\xC0\xAF"),
-                                std::string("\xED\xA0\x80"), std::string("\xE4\xB8")}) {
+  for (const std::string& bad :
+       {std::string("\x80"), std::string("\xC0\xAF"),
+        std::string("\xED\xA0\x80"), std::string("\xE4\xB8")}) {
     static_cast<void>(RenderMarkdownToSafeHtml(bad, &status));
     CHECK(status == RenderStatus::kInvalidUtf8);
   }
@@ -144,8 +153,9 @@ bool InputBounds() {
 }  // namespace
 
 int main() {
-  const bool ok = GoldenBasics() && GoldenLinksAndAutolinks() && InjectionMatrix() &&
-                  Determinism() && InputNormalization() && InputBounds();
+  const bool ok = GoldenBasics() && GoldenLinksAndAutolinks() &&
+                  InjectionMatrix() && Determinism() && InputNormalization() &&
+                  InputBounds();
   if (!ok) {
     return EXIT_FAILURE;
   }

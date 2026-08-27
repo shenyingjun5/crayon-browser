@@ -24,7 +24,7 @@ constexpr char kMdvCsp[] =
     "default-src 'none'; "
     "script-src 'self'; "
     "style-src 'self'; "
-    "img-src 'none'; "
+    "img-src 'self' https:; "
     "connect-src 'none'; "
     "font-src 'none'; "
     "media-src 'none'; "

@@ -20,7 +20,7 @@
 default-src 'none';
 script-src 'self';
 style-src 'self';
-img-src 'none';
+img-src 'self' https:;
 connect-src 'none';
 font-src 'none';
 media-src 'none';
@@ -102,7 +102,11 @@ frame-ancestors 'none'
 - 全量转义：原始 HTML 片段永不透传——解析引擎以"禁用 raw HTML"模式运行，HTML 语法按纯文本转义输出。
 - 生成标签白名单：输出中允许出现的标签闭合枚举为 `h1-h6, p, br, hr, blockquote, pre, code, ul, ol, li, table, thead, tbody, tr, th, td, em, strong, del, a, span, input(checkbox 只读禁用态)`；属性白名单为 `href, title, align, class(限内部样式标记), type/checked/disabled(任务列表)`。白名单外的一切生成内容不允许存在。
 - 链接目标：仅接受 `http:`/`https:`/`mailto:` 绝对地址为可点击链接（点击走浏览器正常导航门禁）；相对路径、`file:`、`javascript:` 及其他 scheme 一律渲染为纯文本。
-- 图片永不加载：`img` 引用不产生网络请求（`img-src 'none'`），渲染为占位框并显示 alt 文本与引用地址文本。
+- 图片加载（v1.1 修订，原"永不加载"作废）：
+  - 云端：仅 `https://` 直载（CSP `img-src 'self' https:`）；`http:` 一律占位（防明文劫持）；加载失败显示占位框与 alt 文本。
+  - 本地：仅当前文档同目录及子目录内的相对/绝对路径；格式白名单 `png/jpg/jpeg/gif/webp/bmp/svg`（svg 经 `<img>` 上下文渲染，无脚本执行面）；大小 ≤20 MiB；解析后不得逃逸文档目录。
+  - 页面 DOM/URL 中永不出现本地路径：渲染管线把合法本地引用改写为不透明序号路由 `crayon://mdv/img/<N>`，N 到绝对路径的映射只在 Browser 进程内存中，文档切换时代际失效。
+  - 拒绝集合占位：非白名单格式、`data:`/`javascript:`/其他 scheme、不存在/非常规文件、超限文件均渲染为占位框并显示 alt 文本与引用地址文本。
 - 输出不包含：script、事件属性（on*）、iframe/object/embed、表单动作、外部引用（src/href 指向非用户点击链接的外部资源）。
 
 ## 8. 视图与编辑交互

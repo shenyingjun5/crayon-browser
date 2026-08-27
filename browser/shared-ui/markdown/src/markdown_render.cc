@@ -27,8 +27,11 @@ void AppendOutput(const MD_CHAR* data, MD_SIZE size, void* user_data) {
 // --- entity decoding for attribute inspection (md4c escapes &<>"') ---
 
 void DecodeBasicEntities(std::string* value) {
-  const std::pair<const char*, const char*> table[] = {
-      {"&amp;", "&"}, {"&lt;", "<"}, {"&gt;", ">"}, {"&quot;", "\""}, {"&#39;", "'"}};
+  const std::pair<const char*, const char*> table[] = {{"&amp;", "&"},
+                                                       {"&lt;", "<"},
+                                                       {"&gt;", ">"},
+                                                       {"&quot;", "\""},
+                                                       {"&#39;", "'"}};
   for (auto& [from, to] : table) {
     std::string out;
     std::size_t pos = 0;
@@ -51,12 +54,23 @@ std::string EscapeHtmlText(const std::string& text) {
   out.reserve(text.size());
   for (const char c : text) {
     switch (c) {
-      case '&': out += "&amp;"; break;
-      case '<': out += "&lt;"; break;
-      case '>': out += "&gt;"; break;
-      case '"': out += "&quot;"; break;
-      case '\'': out += "&#39;"; break;
-      default: out += c;
+      case '&':
+        out += "&amp;";
+        break;
+      case '<':
+        out += "&lt;";
+        break;
+      case '>':
+        out += "&gt;";
+        break;
+      case '"':
+        out += "&quot;";
+        break;
+      case '\'':
+        out += "&#39;";
+        break;
+      default:
+        out += c;
     }
   }
   return out;
@@ -65,10 +79,10 @@ std::string EscapeHtmlText(const std::string& text) {
 // --- tag scanning helpers ---
 
 struct TagInfo {
-  std::string name;               // lower-cased tag name
+  std::string name;  // lower-cased tag name
   bool closing = false;
   bool self_closing = false;
-  std::string attributes;         // raw attribute text inside the tag
+  std::string attributes;  // raw attribute text inside the tag
 };
 
 /// Parses the tag starting at `pos` (which must point at '<').
@@ -83,7 +97,8 @@ bool ParseTag(const std::string& html, std::size_t pos, TagInfo* tag) {
     ++i;
   }
   std::size_t start = i;
-  while (i < html.size() && (std::isalnum(static_cast<unsigned char>(html[i])) != 0)) {
+  while (i < html.size() &&
+         (std::isalnum(static_cast<unsigned char>(html[i])) != 0)) {
     ++i;
   }
   if (i == start) {
@@ -91,7 +106,8 @@ bool ParseTag(const std::string& html, std::size_t pos, TagInfo* tag) {
   }
   tag->name.clear();
   for (std::size_t c = start; c < i; ++c) {
-    tag->name.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(html[c]))));
+    tag->name.push_back(
+        static_cast<char>(std::tolower(static_cast<unsigned char>(html[c]))));
   }
   const std::size_t close = html.find('>', i);
   if (close == std::string::npos) {
@@ -108,8 +124,8 @@ bool ParseTag(const std::string& html, std::size_t pos, TagInfo* tag) {
 
 /// Extracts the value of `attribute` inside raw attribute text; the
 /// value stays entity-encoded as generated.
-bool ExtractAttribute(const std::string& attributes, const std::string& attribute,
-                      std::string* value) {
+bool ExtractAttribute(const std::string& attributes,
+                      const std::string& attribute, std::string* value) {
   const std::string needle = attribute + "=\"";
   std::size_t pos = 0;
   while (true) {
@@ -118,7 +134,8 @@ bool ExtractAttribute(const std::string& attributes, const std::string& attribut
       return false;
     }
     // Attribute position must start a fresh attribute (whitespace before).
-    if (pos != 0 && (std::isspace(static_cast<unsigned char>(attributes[pos - 1])) == 0)) {
+    if (pos != 0 &&
+        (std::isspace(static_cast<unsigned char>(attributes[pos - 1])) == 0)) {
       ++pos;
       continue;
     }
@@ -135,14 +152,16 @@ bool ExtractAttribute(const std::string& attributes, const std::string& attribut
 bool IsAllowedScheme(std::string url) {
   DecodeBasicEntities(&url);
   // Skip leading whitespace; md4c does not normally emit any.
-  while (!url.empty() && std::isspace(static_cast<unsigned char>(url.front())) != 0) {
+  while (!url.empty() &&
+         std::isspace(static_cast<unsigned char>(url.front())) != 0) {
     url.erase(url.begin());
   }
   auto has_prefix = [&url](const char* prefix) {
     return url.size() >= std::char_traits<char>::length(prefix) &&
            url.compare(0, std::char_traits<char>::length(prefix), prefix) == 0;
   };
-  return has_prefix("http://") || has_prefix("https://") || has_prefix("mailto:");
+  return has_prefix("http://") || has_prefix("https://") ||
+         has_prefix("mailto:");
 }
 
 /// Rewrites `<a href="...">…</a>` anchors: allowed schemes keep the
@@ -183,11 +202,15 @@ std::string FilterAnchors(const std::string& html, bool* violation) {
   return out;
 }
 
-/// Replaces every `<img …>` with the contract placeholder: alt text
-/// plus the reference address, no network fetch ever.
+/// Replaces every `<img …>` with an intermediate marker carrying the
+/// raw reference in `data-mdv-raw`; the Browser-process preview
+/// pipeline (MDV-13) classifies each reference into a cloud URL, a
+/// validated local opaque index, or the placeholder.  The marker never
+/// reaches the page as-is.
 std::string ReplaceImages(const std::string& html) {
   std::string out;
   std::size_t pos = 0;
+  std::size_t image_index = 0;
   while (pos < html.size()) {
     const std::size_t img = html.find("<img", pos);
     if (img == std::string::npos) {
@@ -209,11 +232,13 @@ std::string ReplaceImages(const std::string& html) {
     static_cast<void>(ExtractAttribute(tag.attributes, "alt", &alt));
     DecodeBasicEntities(&src);
     DecodeBasicEntities(&alt);
-    out += "<span class=\"md-img-placeholder\">[图片] ";
-    out += EscapeHtmlText(alt);
-    out += " (";
+    out += "<img class=\"md-img\" src=\"mdv-img:";
+    out += std::to_string(image_index++);
+    out += "\" data-mdv-raw=\"";
     out += EscapeHtmlText(src);
-    out += ")</span>";
+    out += "\" alt=\"";
+    out += EscapeHtmlText(alt);
+    out += "\">";
     // Skip past the self-closing tag.
     const std::size_t close = html.find('>', img);
     pos = close == std::string::npos ? html.size() : close + 1;
@@ -221,18 +246,19 @@ std::string ReplaceImages(const std::string& html) {
   return out;
 }
 
-const std::array<const char*, 27>& AllowedTags() {
-  static const std::array<const char*, 27> tags = {
-      "h1", "h2", "h3", "h4", "h5", "h6",  "p",    "br",    "hr",
-      "blockquote", "pre", "code", "ul", "ol", "li", "table", "thead",
-      "tbody", "tr", "th", "td", "em", "strong", "del", "a", "span",
-      "input"};
+const std::array<const char*, 28>& AllowedTags() {
+  static const std::array<const char*, 28> tags = {
+      "h1", "h2",     "h3",         "h4",    "h5",   "h6",    "p",
+      "br", "hr",     "blockquote", "pre",   "code", "ul",    "ol",
+      "li", "table",  "thead",      "tbody", "tr",   "th",    "td",
+      "em", "strong", "del",        "a",     "span", "input", "img"};
   return tags;
 }
 
-const std::array<const char*, 7>& AllowedAttributes() {
-  static const std::array<const char*, 7> attributes = {"href",  "title",     "align", "class",
-                                                        "type",  "checked",   "disabled"};
+const std::array<const char*, 10>& AllowedAttributes() {
+  static const std::array<const char*, 10> attributes = {
+      "href",    "title",    "align", "class",        "type",
+      "checked", "disabled", "src",   "data-mdv-raw", "alt"};
   return attributes;
 }
 
@@ -261,12 +287,13 @@ bool AttributesAllowed(const std::string& attributes) {
     std::size_t next = pos;
     const std::size_t eq = attributes.find('=', pos);
     const std::size_t space = attributes.find_first_of(" \t\n", pos);
-    const bool valueless = eq == std::string::npos || (space != std::string::npos && space < eq);
+    const bool valueless =
+        eq == std::string::npos || (space != std::string::npos && space < eq);
     if (valueless) {
       // Boolean attribute (e.g. `disabled`): allowed only when the
       // name itself is whitelisted.
-      name = attributes.substr(pos, space == std::string::npos ? std::string::npos
-                                                               : space - pos);
+      name = attributes.substr(
+          pos, space == std::string::npos ? std::string::npos : space - pos);
       next = space == std::string::npos ? attributes.size() : space;
     } else {
       name = attributes.substr(pos, eq - pos);
@@ -395,7 +422,8 @@ bool IsValidUtf8(const std::string& data) {
   return true;
 }
 
-std::string RenderMarkdownToSafeHtml(const std::string& input, RenderStatus* status) {
+std::string RenderMarkdownToSafeHtml(const std::string& input,
+                                     RenderStatus* status) {
   auto finish = [&](RenderStatus code, std::string&& output) {
     if (status != nullptr) {
       *status = code;
@@ -412,8 +440,8 @@ std::string RenderMarkdownToSafeHtml(const std::string& input, RenderStatus* sta
 
   std::string generated;
   const int parse_result =
-      md_html(normalized.data(), static_cast<MD_SIZE>(normalized.size()), AppendOutput,
-              &generated, kParserFlags, 0);
+      md_html(normalized.data(), static_cast<MD_SIZE>(normalized.size()),
+              AppendOutput, &generated, kParserFlags, 0);
   if (parse_result != 0) {
     return finish(RenderStatus::kOutputPolicyViolation, {});
   }
