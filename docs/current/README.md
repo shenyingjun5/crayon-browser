@@ -17,6 +17,7 @@
 | [本地 Markdown 查看器契约](markdown-viewer.md) | `crayon://mdv` scheme/CSP、入口手势门禁、图标工具栏与 Mermaid Full 离线扩展契约（v1.4） |
 | [Markdown Runtime v1 契约](markdown-runtime.md) | `markdown-runtime-v1` ExtensionNode/manifest/registry、能力、预算、generation、错误与 current/previous golden |
 | [Code Highlight 供应链契约](code-highlight.md) | `code-highlight-assets-v1` 选型、固定离线 grammar/别名/dependency、hash/许可/包体与安全输出边界 |
+| [KaTeX 数学语法与供应链契约](math-katex.md) | `math-katex-assets-v1` 的 `$`/`$$` 定界、固定 option/宏禁令、ESM/CSS/WOFF2 离线闭包与 MRT-08 输出门禁 |
 | [总 Roadmap](../crayon-private-cast-browser-roadmap.md) | 271 项活跃任务、阶段和当前领取顺序 |
 | [模块 Roadmap 索引](../plans/README.md) | 每个模块的原子任务、依赖与状态 |
 

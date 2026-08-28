@@ -1,0 +1,120 @@
+{
+  "schema": "crayon-katex-syntax-vectors/v1",
+  "vectors": [
+    {
+      "id": "inline-basic",
+      "markdown": "Text $E = mc^2$ end.",
+      "expected": [{"kind": "inline", "source": "E = mc^2"}]
+    },
+    {
+      "id": "inline-number",
+      "markdown": "Value $5$.",
+      "expected": [{"kind": "inline", "source": "5"}]
+    },
+    {
+      "id": "inline-escaped-dollar",
+      "markdown": "Text $x + \\$5$ end.",
+      "expected": [{"kind": "inline", "source": "x + \\$5"}]
+    },
+    {
+      "id": "inline-escaped-opener",
+      "markdown": "Text \\$x$ end.",
+      "expected": []
+    },
+    {
+      "id": "inline-leading-space",
+      "markdown": "Text $ x$ end.",
+      "expected": []
+    },
+    {
+      "id": "inline-trailing-space",
+      "markdown": "Text $x $ end.",
+      "expected": []
+    },
+    {
+      "id": "inline-word-prefix",
+      "markdown": "US$5$ is text.",
+      "expected": []
+    },
+    {
+      "id": "inline-word-suffix",
+      "markdown": "$x$unit is text.",
+      "expected": []
+    },
+    {
+      "id": "inline-newline",
+      "markdown": "$x +\ny$",
+      "expected": []
+    },
+    {
+      "id": "inline-unclosed",
+      "markdown": "Text $x end.",
+      "expected": []
+    },
+    {
+      "id": "inline-code-excluded",
+      "markdown": "`$x$`",
+      "context": "code_span",
+      "expected": []
+    },
+    {
+      "id": "inline-link-destination-excluded",
+      "markdown": "[x]($y$)",
+      "context": "link_destination",
+      "expected": []
+    },
+    {
+      "id": "block-multiline",
+      "markdown": "$$\nE = mc^2\n$$",
+      "expected": [{"kind": "block", "source": "E = mc^2"}]
+    },
+    {
+      "id": "block-single-line",
+      "markdown": "$$ E = mc^2 $$",
+      "expected": [{"kind": "block", "source": "E = mc^2"}]
+    },
+    {
+      "id": "block-three-space-indent",
+      "markdown": "   $$\n   x + y\n   $$",
+      "expected": [{"kind": "block", "source": "   x + y"}]
+    },
+    {
+      "id": "block-four-space-code",
+      "markdown": "    $$\n    x\n    $$",
+      "context": "indented_code",
+      "expected": []
+    },
+    {
+      "id": "block-list-excluded",
+      "markdown": "- $$\n  x\n  $$",
+      "context": "list",
+      "expected": []
+    },
+    {
+      "id": "block-quote-excluded",
+      "markdown": "> $$\n> x\n> $$",
+      "context": "blockquote",
+      "expected": []
+    },
+    {
+      "id": "block-crosses-blank-paragraph",
+      "markdown": "$$\nx\n\ny\n$$",
+      "expected": []
+    },
+    {
+      "id": "block-unclosed",
+      "markdown": "$$\nx",
+      "expected": []
+    },
+    {
+      "id": "block-extra-delimiter",
+      "markdown": "$$ x $$ y $$",
+      "expected": []
+    },
+    {
+      "id": "alternate-delimiters-disabled",
+      "markdown": "\\(x\\) and \\[y\\]",
+      "expected": []
+    }
+  ]
+}

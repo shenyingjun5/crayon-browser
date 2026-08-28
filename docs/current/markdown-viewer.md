@@ -95,7 +95,7 @@ frame-ancestors 'none'
 - 图片引用 `![alt](…)`（见 §7 加载规则）
 - 尖括号自动链接 `<https://…>`、`<mailto:…>`
 
-**明确不在清单内（按纯文本转义渲染）**：原始 HTML（块/行内）、脚注、定义列表、顶层数学公式、wiki 双链、admonition、高亮/上下标/剧透扩展、自动 URL 裸链（未加尖括号者保持纯文本）。Mermaid Full 随包携带的 KaTeX/图标等能力不等于自动扩张 Markdown 语法；需要外部字体、图标包、网络资源或新 Markdown 方言的能力默认关闭，后续必须单独修订契约。
+**明确不在当前生产清单内（按纯文本转义渲染）**：原始 HTML（块/行内）、脚注、定义列表、数学公式、wiki 双链、admonition、高亮/上下标/剧透扩展、自动 URL 裸链（未加尖括号者保持纯文本）。KaTeX 的 `$`/`$$` 语法与离线闭包已由 [math-katex-assets-v1](math-katex.md) 冻结，但只有 MRT-08 完成后才能进入生产清单；Mermaid Full 随包携带的 KaTeX/图标等能力不等于自动扩张 Markdown 语法。
 
 ## 7. 渲染安全规则
 

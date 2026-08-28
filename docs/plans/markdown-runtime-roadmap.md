@@ -1,6 +1,6 @@
 # MRT：Markdown Runtime Extension Framework Roadmap
 
-状态：`MRT-01..05 DONE`，`MRT-06 VERIFIED`（macOS 完成，Windows 真机待远程补验），`MRT-07 READY`，`MRT-08..19 TODO`。本 Roadmap 吸收 `docs/reference/蜡笔投屏浏览器_Markdown_Runtime_Extension_Framework_V1.0.md` 第 34..59 章，但以当前 PRD、安全契约和真实 C++17/md4c/CEF 工程为准。目标是在不建立第二 Markdown parser、不扩大文件/Agent 权限、不让大型扩展进入浏览器 bootstrap 的前提下，为 MDV 提供统一、闭合、可审计的 Extension Framework。
+状态：`MRT-01..05 DONE`，`MRT-06 VERIFIED`（macOS 完成，Windows 真机待远程补验），`MRT-07 DONE`，`MRT-08 READY`，`MRT-09..19 TODO`。本 Roadmap 吸收 `docs/reference/蜡笔投屏浏览器_Markdown_Runtime_Extension_Framework_V1.0.md` 第 34..59 章，但以当前 PRD、安全契约和真实 C++17/md4c/CEF 工程为准。目标是在不建立第二 Markdown parser、不扩大文件/Agent 权限、不让大型扩展进入浏览器 bootstrap 的前提下，为 MDV 提供统一、闭合、可审计的 Extension Framework。
 
 ## 1. 采纳结论
 
@@ -34,8 +34,8 @@ MRT 是用户侧 MDV 基础设施，不进入 `crayon-page-data`、CNT 的确定
 | MRT-04 | DONE | MRT-03 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | 通用 runtime loader/cache/lifecycle：manifest 资源、按需 import、预算、generation、错误隔离与资源清理 | MR-003；lazy/cache/风暴 |
 | MRT-05 | DONE | MRT-04 | `third_party/highlight`,`tools`,`docs/current` | Code Highlight 依赖选型与离线 grammar 闭包冻结；比较 highlight.js/Prism/Shiki 后只固定一个 | MR-004；许可/hash/包体/语言矩阵 |
 | MRT-06 | VERIFIED | MRT-05 | `browser/shared-ui/markdown`,`browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | Code Highlight fence extension：语言 allowlist、grammar 按需加载、未知语言纯文本回退 | MR-004；macOS 自动化与真实 CEF 已闭合，Windows 真机待远程补验 |
-| MRT-07 | READY | MRT-04 | `third_party/katex`,`tools`,`docs/current` | KaTeX 语法与供应链契约：明确 inline/block 定界、转义、宏/URL/HTML 禁令、字体/CSS 本地闭包 | MR-005；许可/语法/安全矩阵 |
-| MRT-08 | TODO | MRT-07 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | KaTeX inline/block extension：按需加载、局部错误、主题/字体离线与编辑 generation | MR-005；公式 golden/注入/实机 |
+| MRT-07 | DONE | MRT-04 | `third_party/katex`,`tools`,`docs/current` | KaTeX 语法与供应链契约：明确 inline/block 定界、转义、宏/URL/HTML 禁令、字体/CSS 本地闭包 | MR-005；许可/语法/安全矩阵 |
+| MRT-08 | READY | MRT-07 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | KaTeX inline/block extension：按需加载、局部错误、主题/字体离线与编辑 generation | MR-005；公式 golden/注入/实机 |
 | MRT-09 | TODO | MDV-20,MRT-06,MRT-08 | `tests/e2e/desktop`,`tools/repo-guard`,`docs/current`,`docs/plans` | P0 Runtime 收口：CommonMark/GFM + Highlight + Mermaid Full + KaTeX 的双平台/包体/性能/安全总 Review | MR-001..005,MR-008/012；P0/P1=0 |
 | MRT-10 | TODO | MRT-09 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv` | TOC/Outline：从解析事实生成有界标题树、稳定会话锚点与键盘/读屏导航 | MR-006；重复标题/超深/编辑更新 |
 | MRT-11 | TODO | MRT-09 | `browser/shared-ui/mdv` | 当前文档本地 Search：只查内存源码/安全文本，结果/高亮有界，不持久化 query | MR-006；Unicode/大文档/取消 |
@@ -167,6 +167,26 @@ Gate:       MRT-18 TV/Cast gap / MRT-19 AI source-producer gap only
 - 真实 CEF：macOS arm64 离线打开本地 fixture，确认 C++/JavaScript/C# 着色、unknown 纯文本回退、恶意 `<img onerror>` 仅作为字符串文本、亮暗主题生效；开启 CEF stderr logging 后无 CSP/resource 错误，退出后无残留主进程/helper。
 - Code Review v0.8：APPROVE，P0/P1/P2/P3=0。registry/catalog immutable；无锁、网络、文件、worker、plugin、auto-detect 或新权限；运行时资产请求和 candidate/node/cache 预算均有界；普通/未知文档零 runtime import。
 - 未覆盖：Windows Debug/Release 构建、Windows x64 真实 CEF 的 viewport lazy/主题/未知回退由已激活的远程 Windows 会话在拉取本提交后补验；在此证据回写前保持 `VERIFIED`，不宣称 `DONE`。KaTeX 与 Mermaid 未在本任务提前实现。`MRT-07` 转为 `READY`。
+
+## 5F. MRT-07 原子范围（KaTeX 语法与供应链）
+
+- 状态：`DONE`；依赖 `MRT-04 DONE`。单一目标是冻结 KaTeX 的 Markdown 数学定界、安全 option/macro policy 与可离线复验的最小浏览器 runtime/CSS/font 闭包；不改变 MDV/Markdown 生产行为。
+- 输入/输出：输入为 KaTeX 官方发布包/仓库、许可与安全文档，现有 md4c inline/block parser 回调边界、`markdown-runtime-v1` 预算/registry/catalog，以及 MR-005；输出为 `math-katex-assets-v1` 当前契约、固定版本/来源/integrity/hash/许可 manifest、最小浏览器资产、离线 check/显式 vendor 工具和 hostile contract tests。
+- 允许修改：`third_party/katex/**`、`tools/katex/**`、`docs/current/**`、本 Roadmap与索引；若测试需要，只允许增加独立 supply-chain contract test。禁止修改 `browser/**`、md4c/parser/registry/MDV/CEF/CSP、本地文件/Agent/Cast/网络能力、npm workspace/lock 或其他 third-party 目录。
+- 语法边界：只冻结行内 `$...$` 与块级 `$$...$$` 的确定性识别、反斜杠转义、空/未闭合/跨段/代码 span/fence 排除和长度/嵌套预算；仍由 MRT-08 在现有 parser 事实层实现，本任务不得引入第二 Markdown parser。不得自动启用 `\(...\)`、`\[...\]`、环境块、单美元货币猜测或 Mermaid 内置 KaTeX 路径。
+- 安全边界：固定 `throwOnError:true`、`strict:"error"`、`trust:false`、`globalGroup:false`、`maxSize:16`、`maxExpand:256` 与显式 displayMode；禁用/拒绝 `\href`、`\url`、`\includegraphics`、`\html*`、用户宏定义/间接构造和任意 protocol/URL。宏表为每次 render 新建的 null-prototype 空对象；单公式 source/token/output/depth/时间预算有命名上限。异常 message/stack 不进 DOM，错误仅局部回退已转义源码。
+- 供应链：只 vendor 官方发布包中渲染所需浏览器 JS、CSS 与 CSS 实际引用的字体/许可；移除 CLI、Node adapter、contrib auto-render/copy-tex/render-a11y、源码/测试/docs/demo、source map 与非闭包文件。普通 check 零网络；显式更新先验证 registry integrity + 固定 tarball SHA-256，再做 tar path/type/count/size、package identity/license/runtime dependency、CSS URL/font closure 与逐文件 hash/bytes 校验后原子替换。
+- 验收：版本/维护/许可/浏览器运行方式与包体评审；manifest 机器锁定所有资产/MIME/hash/bytes/font family；本地 tarball 重建逐字节一致；missing/extra/tamper、错误 identity/integrity/hash、path traversal/link/duplicate/oversize、CSS 外链/data URL/未知 font、危险 option/macro/command 与语法矩阵均 fail closed；Node syntax/tests、离线 `--check`、`git diff --check` 和 v0.8 Review P0/P1/P2=0。
+- 明确不做：inline/block facts、KaTeX 调用、HTML/MathML output policy、placeholder/DOM、资源路由、字体响应、lazy/cache/generation、主题/UI/实机或任何生产 CMake 接入（归 `MRT-08`）；不做 MathJax、AsciiMath、自定义宏 UI、公式编号/交叉引用、网络字体或导出。
+
+### MRT-07 完成记录（2026-08-28）
+
+- 版本/契约：基于 KaTeX 官方 release、npm metadata、Security/Options/Supported Functions 固定 `katex@0.18.4`（MIT，tag/commit `v0.18.4`/`49dc3d986747fd7d3bb25b597bcb98b071ae6035`）；新增 `math-katex-assets-v1`，冻结 `$...$`/`$$...$$`、转义/空白/词内/代码/链接/容器/未闭合冲突与 22 个 golden，单公式 64 KiB/8192 token/64 brace-depth。
+- 供应链：锁 npm SHA-512、tarball SHA-256 与每个输出 SHA-256/bytes/MIME；只保留自包含 `katex.mjs`、确定性 WOFF2-only CSS、20 个 WOFF2 字体与 MIT LICENSE。Commander 为 CLI-only 并排除，auto-render/contrib/CLI/Node/源码/测试/docs/source-map/WOFF/TTF 全部排除。23 个资产合计 `885,374 B`，低于 2 MiB 上限。
+- 安全：固定 `output=htmlAndMathml`、`throwOnError=true`、`strict=error`、`trust=false`、`globalGroup=false`、`maxSize=16`、`maxExpand=256` 和每次 render 的 null-prototype 空宏；preflight 拒绝 URL/资源、所有 `html*`、宏定义/持久化/间接构造。ESM scan 拒绝 import/eval/Function/network/storage/worker，CSS 只含精确相对 WOFF2 URL；上游异常 message/stack 不得进入 DOM，HTML/MathML candidate 仍由 MRT-08 Browser-owned policy 重建。
+- 工具/验证：`node tools/katex/vendor.mjs --archive /private/tmp/katex-0.18.4.tgz` 连续重建一致，`node tools/katex/vendor.mjs --check` 报 23 assets / 885374 bytes；`node --test tools/katex/vendor.test.mjs` 8/8，覆盖 tar checksum/path/type/duplicate/size、identity/dependency/archive hash、missing/extra/tamper、CSS/font closure、语法 golden、危险命令/预算与真实 ESM accessible render。`bash scripts/check.sh fast`、`bash scripts/check.sh security`、Node syntax 与 `git diff --check` 通过。
+- Code Review v0.8：APPROVE，P0/P1/P2/P3=0。写入 root 从工具位置固定，tar 内容不能决定输出路径；先临时树离线复验再原子替换；生产构建/运行未接 npm/网络/工具、未改变 parser/MDV/CSP/权限。工具 555 行但职责单一且测试独立，未触发生产文件规模门禁。
+- 未覆盖：math facts、真实 adapter、HTML/MathML allowlist/style parser、资源/字体路由、lazy/cache/generation、主题/错误 UI 和双平台真实 CEF 全部归 `MRT-08`；本任务没有改变任何浏览器产物或 Markdown 行为。`MRT-08` 转为 `READY`。
 
 ## 6. 各阶段共同门禁
 
