@@ -1,6 +1,6 @@
 # MRT：Markdown Runtime Extension Framework Roadmap
 
-状态：`MRT-01 DONE`，`MRT-02 READY`，`MRT-03..19 TODO`。本 Roadmap 吸收 `docs/reference/蜡笔投屏浏览器_Markdown_Runtime_Extension_Framework_V1.0.md` 第 34..59 章，但以当前 PRD、安全契约和真实 C++17/md4c/CEF 工程为准。目标是在不建立第二 Markdown parser、不扩大文件/Agent 权限、不让大型扩展进入浏览器 bootstrap 的前提下，为 MDV 提供统一、闭合、可审计的 Extension Framework。
+状态：`MRT-01..02 DONE`，`MRT-03 READY`，`MRT-04..19 TODO`。本 Roadmap 吸收 `docs/reference/蜡笔投屏浏览器_Markdown_Runtime_Extension_Framework_V1.0.md` 第 34..59 章，但以当前 PRD、安全契约和真实 C++17/md4c/CEF 工程为准。目标是在不建立第二 Markdown parser、不扩大文件/Agent 权限、不让大型扩展进入浏览器 bootstrap 的前提下，为 MDV 提供统一、闭合、可审计的 Extension Framework。
 
 ## 1. 采纳结论
 
@@ -29,8 +29,8 @@ MRT 是用户侧 MDV 基础设施，不进入 `crayon-page-data`、CNT 的确定
 | ID | 状态 | 依赖 | 允许路径 | 单一交付 | 验收 |
 |---|---|---|---|---|---|
 | MRT-01 | DONE | MDV-13 | `docs/current`,`docs/plans` | 冻结 Runtime v1 契约：四类节点、三层兼容、manifest/schema、能力/资源策略、错误/预算/生命周期与永久禁止面 | MR-001；契约 Review |
-| MRT-02 | READY | MRT-01 | `browser/shared-ui/markdown`,`browser/shared-ui/markdown-runtime` | md4c ExtensionNode adapter：保留标准 HTML并产出有界 inline/block/fence/container 事实；默认全部未启用 | MR-002；CommonMark/GFM golden 零回退 |
-| MRT-03 | TODO | MRT-02 | `browser/shared-ui/markdown-runtime` | 编译期 Extension Registry/Router：按 node kind + 精确 info string 分发，冲突/未知/禁用稳定回退 | MR-001/002；registry contract |
+| MRT-02 | DONE | MRT-01 | `browser/shared-ui/markdown`,`browser/shared-ui/markdown-runtime` | ExtensionNode adapter：交付四类 closed DTO；以 md4c 公共 callback 产出有界 fence facts，未审核 inline/block/container 语法零发射；默认 selection 为空 | MR-002；CommonMark/GFM golden 零回退 |
+| MRT-03 | READY | MRT-02 | `browser/shared-ui/markdown-runtime` | 编译期 Extension Registry/Router：按 node kind + 精确 info string 分发，冲突/未知/禁用稳定回退 | MR-001/002；registry contract |
 | MRT-04 | TODO | MRT-03 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | 通用 runtime loader/cache/lifecycle：manifest 资源、按需 import、预算、generation、错误隔离与资源清理 | MR-003；lazy/cache/风暴 |
 | MRT-05 | TODO | MRT-04 | `third_party/highlight`,`tools`,`docs/current` | Code Highlight 依赖选型与离线 grammar 闭包冻结；比较 highlight.js/Prism/Shiki 后只固定一个 | MR-004；许可/hash/包体/语言矩阵 |
 | MRT-06 | TODO | MRT-05 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | Code Highlight fence extension：语言 allowlist、grammar 按需加载、未知语言纯文本回退 | MR-004；注入/主题/lazy |
@@ -76,6 +76,24 @@ Gate:       MRT-18 TV/Cast gap / MRT-19 AI source-producer gap only
 - 验证：两个 JSON current 示例均可解析；render plan 的 UTF-8 `source_bytes` 与半开 range 不变量通过；19 个 MR-001 vector ID 唯一；4 份相关 current 文档的相对 Markdown 链接存在；`git diff --check` 通过。任务只改契约/索引，未运行生产构建与 C++ 测试（无生产代码变化）。
 - Code Review：按 v0.8 复核需求/边界、架构/API、安全/隐私、生命周期、性能、测试和可维护性；P0/P1/P2 = 0/0/0。契约没有建立第二 parser、动态插件、通用执行器、Agent/Cast/文件/网络能力。
 - 未覆盖：ExtensionNode/registry/loader 生产实现与可执行 contract 分别归 `MRT-02..04`；Mermaid 供应链归 `MDV-14`。`MRT-02` 转为 `READY`。
+
+## 5A. MRT-02 原子范围（md4c ExtensionNode facts）
+
+- 状态：`DONE`；依赖 `MRT-01 DONE`。
+- 单一目标：在不修改 vendored md4c、不建立第二 parser、不改变现有 `RenderMarkdownToSafeHtml` 输出的前提下，交付四类闭合 ExtensionNode DTO 与 Browser-owned exact matcher selection；空 selection 保持零额外 parse/零 fact，非空 selection 只通过 md4c 公共 callback 产出有界 fence facts。
+- 输入：`markdown-runtime-v1`、现有 `markdown_render` 的 5 MiB/UTF-8/CRLF/BOM/md4c flags/HTML policy、md4c `MD_BLOCK_CODE_DETAIL` 与 `MD_TEXT_CODE` callback。
+- 允许修改：`browser/shared-ui/markdown/**`、必要的 `docs/current/**` 与 `docs/plans/**`；新增 `markdown_extension_facts` 独立 header/source/test 和 CMake target。禁止修改 `third_party/md4c/**`、MDV/CEF/platform、CAAP/CNT/Cast-SDK、第三方依赖。
+- 边界：selection 仅接受闭合 kind + 有界 ASCII exact token，重复/非法 selection fail closed；当前 parser-backed emitter 只认识 fenced code，未审核 inline/block/container 语法不得用 regex/扫描器提前实现；facts 的 node 数、单 source、总 source 有命名上限，超界只停止/跳过 facts，safe HTML 保持成功；node ID 仅当前 document generation/source revision 有效。md4c 公共 callback 不提供容器场景下连续 source range，故 current schema 在首个实现前移除该非必要字段，页面始终只按 Browser-owned node ID/assembly 映射落位。
+- 验收：`MR-002`；先补失败测试，覆盖空 selection、精确/未知/大小写/附加 token/重复/非法 matcher、普通/嵌套 fence、CRLF/UTF-8、四类 DTO、node/单 source/总 source 上限、确定性 node ID；所有既有 markdown/MDV golden 与全 CTest 回归；MSVC/GCC/Clang 可移植；`git diff --check`；v0.8 Review P0/P1/P2=0。
+- 明确不做：registry/manifest route（MRT-03）、loader/cache/worker（MRT-04）、Mermaid/KaTeX/Highlight 语法或 renderer、placeholder/DOM、资源路由与平台接线。
+
+### MRT-02 完成记录（2026-08-28）
+
+- 实现：新增四类 closed `ExtensionNode` DTO、`MarkdownRenderPlan` 与 Browser-owned matcher selection；复用唯一 md4c parser 的公开 callback，仅为精确启用的 fenced code 产出 facts。空 selection 或 selection 不含 fence 时零二次解析；普通 safe HTML 输出路径与 parser flags 保持一致。node 数、单 source、总 source、matcher 数/长度均有命名上限，node ID 绑定 document generation/source revision 且使用固定宽度 locale-independent hex。
+- 安全/性能：非法、重复、大小写或附加 token selection fail closed；未知/未审核 inline/block/container 零发射；超长 info 在复制前拒绝，matcher 预排序后二分查找，node 满载后不再积累 source；facts 失败不覆盖成功的 Level A safe HTML。没有修改 vendored md4c、没有新增 parser/依赖、CEF/文件/网络/Agent/Cast 能力。
+- 验证：先新增 contract test 并确认链接因缺少 `RenderMarkdownPlan` 失败，再实现通过。`cmake --build --preset engine-api` 通过，串行 `ctest --preset engine-api --output-on-failure` 51/51；`cmake --build --preset macos-arm64-cef-debug` 通过并完成 app/CEF/helpers ad-hoc signing，串行 CTest 62/62；macOS x64 CEF app 与两个 Markdown target 构建通过，`markdown_render|markdown_extension_facts` 2/2。Clang `-Wall -Wextra -Wpedantic -Werror` 与格式检查通过。Windows/MSVC 由独立 Windows 真机会话补平台证据，不伪记为本任务 macOS 证据。
+- Code Review：按 v0.8 复核需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性；P0/P1/P2 = 0/0/0。并行运行两个 CTest preset 曾使既有 bookmarks/preferences/history 测试争用临时文件而随机失败，改为串行后全通过；未修改无关模块。
+- 未覆盖：registry/route 归 `MRT-03`，loader/cache/lifecycle 归 `MRT-04`，第三方 renderer 与 MDV placeholder 均未提前实现。`MRT-03` 转为 `READY`。
 
 ## 6. 各阶段共同门禁
 

@@ -6,19 +6,14 @@
 #include <cstdint>
 #include <string>
 
+#include "markdown_internal.h"
+
 extern "C" {
 #include "md4c-html.h"
 }
 
 namespace crayon::browser_markdown {
 namespace {
-
-// GFM tables + strikethrough + tasklists; permissive autolinks are
-// deliberately excluded (bare URLs stay plain text per MDV-01 §6) and
-// raw HTML is disabled in both block and inline form.
-constexpr unsigned kParserFlags = MD_FLAG_TABLES | MD_FLAG_STRIKETHROUGH |
-                                  MD_FLAG_TASKLISTS | MD_FLAG_NOHTMLBLOCKS |
-                                  MD_FLAG_NOHTMLSPANS;
 
 void AppendOutput(const MD_CHAR* data, MD_SIZE size, void* user_data) {
   static_cast<std::string*>(user_data)->append(data, size);
@@ -351,30 +346,6 @@ bool OutputWithinWhitelist(const std::string& html) {
   return true;
 }
 
-std::string NormalizeInput(const std::string& input) {
-  std::string data = input;
-  // BOM strip.
-  if (data.size() >= 3 && static_cast<unsigned char>(data[0]) == 0xEF &&
-      static_cast<unsigned char>(data[1]) == 0xBB &&
-      static_cast<unsigned char>(data[2]) == 0xBF) {
-    data.erase(0, 3);
-  }
-  // CRLF / CR → LF.
-  std::string out;
-  out.reserve(data.size());
-  for (std::size_t i = 0; i < data.size(); ++i) {
-    if (data[i] == '\r') {
-      if (i + 1 < data.size() && data[i + 1] == '\n') {
-        ++i;
-      }
-      out.push_back('\n');
-    } else {
-      out.push_back(data[i]);
-    }
-  }
-  return out;
-}
-
 }  // namespace
 
 bool IsValidUtf8(const std::string& data) {
@@ -433,7 +404,7 @@ std::string RenderMarkdownToSafeHtml(const std::string& input,
   if (input.size() > kMaxInputBytes) {
     return finish(RenderStatus::kInputTooLarge, {});
   }
-  const std::string normalized = NormalizeInput(input);
+  const std::string normalized = internal::NormalizeInput(input);
   if (!IsValidUtf8(normalized)) {
     return finish(RenderStatus::kInvalidUtf8, {});
   }
@@ -441,7 +412,7 @@ std::string RenderMarkdownToSafeHtml(const std::string& input,
   std::string generated;
   const int parse_result =
       md_html(normalized.data(), static_cast<MD_SIZE>(normalized.size()),
-              AppendOutput, &generated, kParserFlags, 0);
+              AppendOutput, &generated, internal::kParserFlags, 0);
   if (parse_result != 0) {
     return finish(RenderStatus::kOutputPolicyViolation, {});
   }

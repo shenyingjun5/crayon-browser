@@ -226,7 +226,7 @@ flowchart LR
 4. `AGT-01` 在 `FND-08/PRV-08` 满足后冻结 CAAP v1；不得提前开放 CLI/MCP。
 5. `CNT-01` 等 `CEF-15/BUX-18/SDK-14/MED-19/PRV-08` 完成。
 6. `ACT-01` 等 `CNT-03/AGT-01` 完成；`WFL/HUB` 不得越过语义动作和权限依赖。
-7. `MRT-01 DONE / MRT-02 READY`：`markdown-runtime-v1` 已冻结 ExtensionNode/manifest/registry、能力、预算、generation、错误、兼容窗口与 19 个 MR-001 向量；下一项实现 md4c ExtensionNode facts，默认零分发且不能改变 CommonMark/GFM safe HTML。
+7. `MRT-01..02 DONE / MRT-03 READY`：`markdown-runtime-v1` 与 md4c ExtensionNode facts 已闭合；下一项实现编译期 registry/router，按 closed kind + exact matcher 路由，冲突/未知/禁用稳定回退。
 8. `MDV-24 VERIFIED`：`MDV-21..23 DONE`；macOS arm64 Helper/deployment target/signing、默认页与公网、MDV 三视图/深色/AX 真机已闭合，arm64/x64 自动化均 61/61。Windows、原生 macOS x64 以及当前 UI 自动化无法替代的 IME/窄窗交互真机仍待补；该工具栏门禁与 Mermaid `MDV-20` 独立。
 9. `MDV-14 READY`：可与 MRT 契约工作独立串行领取，冻结 Mermaid Full 11.17.2 的离线运行时 import closure、manifest/hash/许可与可重复 vendor；`MDV-15/16` 分别等待 `MRT-03/04` 后再按 `17 -> 18 -> 19 -> 20` 收口。
 

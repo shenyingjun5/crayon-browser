@@ -1,4 +1,6 @@
 add_library(crayon-browser-markdown STATIC
+  src/markdown_extension_facts.cc
+  src/markdown_internal.cc
   src/markdown_render.cc
   ${PROJECT_SOURCE_DIR}/third_party/md4c/src/md4c.c
   ${PROJECT_SOURCE_DIR}/third_party/md4c/src/md4c-html.c
@@ -62,4 +64,24 @@ if(CRAYON_BUILD_TESTS)
     )
   endif()
   add_test(NAME markdown_render COMMAND crayon_browser_markdown_test)
+
+  add_executable(crayon_browser_markdown_extension_facts_test
+    tests/markdown_extension_facts_test.cc
+  )
+  target_compile_features(crayon_browser_markdown_extension_facts_test
+    PRIVATE cxx_std_17)
+  target_link_libraries(crayon_browser_markdown_extension_facts_test
+    PRIVATE crayon::browser-markdown
+  )
+  if(MSVC)
+    target_compile_options(crayon_browser_markdown_extension_facts_test
+      PRIVATE /W4 /WX /permissive-
+    )
+  else()
+    target_compile_options(crayon_browser_markdown_extension_facts_test
+      PRIVATE -Wall -Wextra -Wpedantic -Werror
+    )
+  endif()
+  add_test(NAME markdown_extension_facts
+           COMMAND crayon_browser_markdown_extension_facts_test)
 endif()

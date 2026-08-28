@@ -50,7 +50,7 @@ v1 不提供：
 
 | 组件 | 拥有 | 不拥有 |
 |---|---|---|
-| `browser/shared-ui/markdown` | md4c、Level A 安全 HTML、source range 与 ExtensionNode 事实 | registry、动态资源、CEF、平台 API |
+| `browser/shared-ui/markdown` | md4c、Level A 安全 HTML、source revision 与 ExtensionNode 事实 | registry、动态资源、CEF、平台 API |
 | `browser/shared-ui/markdown-runtime` | 编译期 registry、manifest 校验、预算、route、cache key、generation 与错误状态 | parser、本地文件、Browser 特权、第三方算法 |
 | 专用 extension adapter | 精确语法到类型化 renderer 输入的转换 | 任意模块/URL、其他 extension、grant |
 | `browser/shared-ui/mdv` | 会话、主题、占位/错误 UI、页面局部落位 | Agent 工具、Cast 协议、任意文件路由 |
@@ -75,8 +75,6 @@ Markdown 字节、ExtensionNode source、第三方 renderer 输出、错误文�
       "matcher": "mermaid",
       "source_utf8": "flowchart LR\nA-->B\n",
       "source_bytes": 19,
-      "source_start": 31,
-      "source_end": 50,
       "source_revision": 19
     }
   ]
@@ -96,7 +94,6 @@ Markdown 字节、ExtensionNode source、第三方 renderer 输出、错误文�
 | `matcher` | parser/adapter 产生且已规范化的精确 token；不是 regex、glob、模块名或 URL |
 | `source_utf8` | 经 UTF-8 与预算校验的最小 extension 源文本；不得附加宿主文件路径、外围正文或其他元数据（用户源码自身出现的普通路径文本仍只按不可信文本处理） |
 | `source_bytes` | `source_utf8` 的实际 UTF-8 字节数，必须逐字节一致 |
-| `source_start/end` | 当前 Markdown 缓冲区的半开字节区间；必须位于文档内、UTF-8 边界上且与 source 一致 |
 | node `source_revision` | 必须等于 plan revision；不相等视为 stale |
 
 ExtensionNode v1 禁止附带：`manifest`、`extension_id`、`module`、`path`、`url`、`capabilities`、`options`、`trusted`、HTML、SVG、脚本、文件句柄或平台对象。
@@ -105,7 +102,7 @@ Render Plan、ExtensionNode 与 Manifest 均为 closed object：除 current/prev
 
 四类 node 只是闭合事实类型，不代表默认启用语法。MRT-02 只能在不改变 `safe_html` 的同时产生事实；某类没有已审核 adapter 时必须是零分发。
 
-本 schema 是 parser/runtime 之间的 fallback plan，不是直接交给页面的 DOM。Registry 命中后，Runtime/MDV assembly 才能为 node 生成唯一的 Browser-owned inert placeholder；未命中或失败时继续使用 `safe_html` 中对应的 Level A code/text。页面不得按 source range、DSL 或 CSS 猜测落位目标。
+本 schema 是 parser/runtime 之间的 fallback plan，不是直接交给页面的 DOM。Registry 命中后，Runtime/MDV assembly 才能为 node 生成唯一的 Browser-owned inert placeholder；未命中或失败时继续使用 `safe_html` 中对应的 Level A code/text。页面不得按 source offset、DSL 或 CSS 猜测落位目标。md4c 公共 callback 不提供容器场景下连续可靠的原文区间，因此 v1 不伪造 byte range；编辑定位由当前 revision 内的 node ID 与后续 Browser-owned assembly 映射负责。
 
 ### 4.2 node ID 与页面定位
 
@@ -289,7 +286,7 @@ v1 首次冻结时没有 previous golden。以后变更遵循：
 | `RP-V1-VALID-FENCE` | §4 current plan | 接受；保留 safe HTML；产生一个 fence fact |
 | `MF-V1-VALID-SVG` | §5 current manifest | 接受；registry key 为 `fence\0mermaid` |
 | `RP-V1-EMPTY` | current plan，`extension_nodes=[]` | 接受；零 registry/asset/runtime 读取 |
-| `RP-V1-FOUR-KINDS` | 四个唯一 node，kind 分别为四类且区间合法 | 接受事实；只有已登记 matcher 可路由 |
+| `RP-V1-FOUR-KINDS` | 构造四个唯一 node，kind 分别为四类且 source/bytes 合法 | schema 接受；只有已有专用 parser adapter 且已登记 matcher 的 node 可由生产解析链发射/路由 |
 
 ### 13.2 拒绝或安全回退
 
@@ -297,7 +294,7 @@ v1 首次冻结时没有 previous golden。以后变更遵循：
 |---|---|---|
 | `RP-UNKNOWN-SCHEMA/KIND` | 未知 schema 或 kind | plan 拒绝 / node `unknown_kind`，Level A fallback 保留 |
 | `RP-DUPLICATE-ID` | 同 plan 两个相同 node ID | 两 node 均不路由，`invalid_node` |
-| `RP-BYTE-MISMATCH` | bytes/range/UTF-8 边界与 source 不一致 | node 拒绝，不修猜 offset |
+| `RP-BYTE-MISMATCH` | bytes 与 UTF-8 source 不一致，或 source 非法 UTF-8 | node 拒绝，不修猜内容 |
 | `RP-STALE-REVISION` | node revision 或返回 generation 不一致 | `stale`，结果不落位 |
 | `RP-OVER-BUDGET` | node/单项/总量/深度超过上限 | 对应 node/剩余 node fallback；无无界分配 |
 | `RP-DOCUMENT-MANIFEST` | node 增加 manifest/module/path/url/option/capability/trusted | 拒绝额外字段，不能注册或扩权 |
