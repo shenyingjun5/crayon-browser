@@ -1,6 +1,6 @@
 # MRT：Markdown Runtime Extension Framework Roadmap
 
-状态：`MRT-01..02 DONE`，`MRT-03 READY`，`MRT-04..19 TODO`。本 Roadmap 吸收 `docs/reference/蜡笔投屏浏览器_Markdown_Runtime_Extension_Framework_V1.0.md` 第 34..59 章，但以当前 PRD、安全契约和真实 C++17/md4c/CEF 工程为准。目标是在不建立第二 Markdown parser、不扩大文件/Agent 权限、不让大型扩展进入浏览器 bootstrap 的前提下，为 MDV 提供统一、闭合、可审计的 Extension Framework。
+状态：`MRT-01..03 DONE`，`MRT-04 READY`，`MRT-05..19 TODO`。本 Roadmap 吸收 `docs/reference/蜡笔投屏浏览器_Markdown_Runtime_Extension_Framework_V1.0.md` 第 34..59 章，但以当前 PRD、安全契约和真实 C++17/md4c/CEF 工程为准。目标是在不建立第二 Markdown parser、不扩大文件/Agent 权限、不让大型扩展进入浏览器 bootstrap 的前提下，为 MDV 提供统一、闭合、可审计的 Extension Framework。
 
 ## 1. 采纳结论
 
@@ -30,8 +30,8 @@ MRT 是用户侧 MDV 基础设施，不进入 `crayon-page-data`、CNT 的确定
 |---|---|---|---|---|---|
 | MRT-01 | DONE | MDV-13 | `docs/current`,`docs/plans` | 冻结 Runtime v1 契约：四类节点、三层兼容、manifest/schema、能力/资源策略、错误/预算/生命周期与永久禁止面 | MR-001；契约 Review |
 | MRT-02 | DONE | MRT-01 | `browser/shared-ui/markdown`,`browser/shared-ui/markdown-runtime` | ExtensionNode adapter：交付四类 closed DTO；以 md4c 公共 callback 产出有界 fence facts，未审核 inline/block/container 语法零发射；默认 selection 为空 | MR-002；CommonMark/GFM golden 零回退 |
-| MRT-03 | READY | MRT-02 | `browser/shared-ui/markdown-runtime` | 编译期 Extension Registry/Router：按 node kind + 精确 info string 分发，冲突/未知/禁用稳定回退 | MR-001/002；registry contract |
-| MRT-04 | TODO | MRT-03 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | 通用 runtime loader/cache/lifecycle：manifest 资源、按需 import、预算、generation、错误隔离与资源清理 | MR-003；lazy/cache/风暴 |
+| MRT-03 | DONE | MRT-02 | `browser/shared-ui/markdown-runtime` | 编译期 Extension Registry/Router：按 node kind + 精确 info string 分发，冲突/未知/禁用稳定回退 | MR-001/002；registry contract |
+| MRT-04 | READY | MRT-03 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | 通用 runtime loader/cache/lifecycle：manifest 资源、按需 import、预算、generation、错误隔离与资源清理 | MR-003；lazy/cache/风暴 |
 | MRT-05 | TODO | MRT-04 | `third_party/highlight`,`tools`,`docs/current` | Code Highlight 依赖选型与离线 grammar 闭包冻结；比较 highlight.js/Prism/Shiki 后只固定一个 | MR-004；许可/hash/包体/语言矩阵 |
 | MRT-06 | TODO | MRT-05 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | Code Highlight fence extension：语言 allowlist、grammar 按需加载、未知语言纯文本回退 | MR-004；注入/主题/lazy |
 | MRT-07 | TODO | MRT-04 | `third_party/katex`,`tools`,`docs/current` | KaTeX 语法与供应链契约：明确 inline/block 定界、转义、宏/URL/HTML 禁令、字体/CSS 本地闭包 | MR-005；许可/语法/安全矩阵 |
@@ -94,6 +94,23 @@ Gate:       MRT-18 TV/Cast gap / MRT-19 AI source-producer gap only
 - 验证：先新增 contract test 并确认链接因缺少 `RenderMarkdownPlan` 失败，再实现通过。`cmake --build --preset engine-api` 通过，串行 `ctest --preset engine-api --output-on-failure` 51/51；`cmake --build --preset macos-arm64-cef-debug` 通过并完成 app/CEF/helpers ad-hoc signing，串行 CTest 62/62；macOS x64 CEF app 与两个 Markdown target 构建通过，`markdown_render|markdown_extension_facts` 2/2。Clang `-Wall -Wextra -Wpedantic -Werror` 与格式检查通过。Windows/MSVC 由独立 Windows 真机会话补平台证据，不伪记为本任务 macOS 证据。
 - Code Review：按 v0.8 复核需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性；P0/P1/P2 = 0/0/0。并行运行两个 CTest preset 曾使既有 bookmarks/preferences/history 测试争用临时文件而随机失败，改为串行后全通过；未修改无关模块。
 - 未覆盖：registry/route 归 `MRT-03`，loader/cache/lifecycle 归 `MRT-04`，第三方 renderer 与 MDV placeholder 均未提前实现。`MRT-03` 转为 `READY`。
+
+## 5B. MRT-03 原子范围（编译期 Registry/Router）
+
+- 状态：`DONE`；依赖 `MRT-02 DONE`。单一目标是新增独立 `browser/shared-ui/markdown-runtime` C++17 模块，以 Browser 编译期 manifest + adapter registration 构建不可变 registry snapshot，并对 `MarkdownRenderPlan` 做 exact `kind + matcher` 路由。
+- 输入：`markdown-runtime-v1` §5/§13、MRT-02 closed DTO/selection/token/UTF-8 事实、Browser-owned extension generation。输出为闭合 build/route 状态和不含源码的 extension descriptor；不执行 adapter、不读取资产。
+- 允许修改：`browser/shared-ui/markdown-runtime/**`、根 CMake 装配、必要的 `browser/shared-ui/markdown/**` 公共 matcher 校验复用与 current/plans 文档。禁止修改 MDV/CEF/platform、`third_party/**`、本地文件/网络/Agent/Cast、第三方依赖。
+- 边界：manifest 数、matcher 数与各 token/string 均有命名上限；schema/id/version/matcher/asset/capability 结构非法时整个新 snapshot 不发布，调用方只能保留 previous 或全关闭；unknown output/policy、缺失/版本不符 adapter registration 形成完整但 disabled entry；跨 manifest 同 key 两 owner 都标记 conflict，不能按注册顺序选胜者；其余合法 owner 仍可路由。空 plan 零 route；duplicate node ID、未知 kind、bytes/UTF-8/revision 不一致在 lookup 前 fail closed。
+- 验收：先补 `markdown_runtime_registry_test` 失败 target，逐项覆盖 `MF-V1-VALID-SVG`、`RP-V1-EMPTY/FOUR-KINDS`、`RP-UNKNOWN-KIND/DUPLICATE-ID/BYTE-MISMATCH/STALE-REVISION`、`MF-WILDCARD/DUPLICATE/UNLOCKED/CAPABILITY/UNKNOWN-OUTPUT-POLICY/ASSET-ROUTE`、跨 owner 冲突顺序不变、missing/version-mismatch adapter 与 `REG-PARTIAL-PUBLISH`；engine/macOS arm64 全 CTest、macOS x64 target、Clang format/diff、v0.8 Review P0/P1/P2=0。
+- 明确不做：factory 实例化、manifest/asset loader、cache/worker/异步生命周期（MRT-04），renderer/output policy 实现，placeholder/DOM/MDV/CEF 接线，Mermaid/Highlight/KaTeX 注册。
+
+### MRT-03 完成记录（2026-08-28）
+
+- 实现：新增独立 `crayon::browser-markdown-runtime` C++17 target、closed manifest/capability/output/policy DTO、adapter registration、不可变 `shared_ptr<const ExtensionRegistry>` snapshot 和 `MarkdownRenderPlan` router。Registry key 为类型化 `kind + exact matcher`；route descriptor 只含 extension/version/output/asset/policy 与三重 generation，不复制源码。MRT-02 matcher grammar 提升为共享公共校验，未改变 parser selection 行为。
+- 校验/安全：manifest/adapter/node/string 数量与长度全部有命名上限；版本锁定为精确 SemVer；schema/id/kind/matcher/version/asset/capability 或重复 owner set 结构非法时新 snapshot 为空，调用方可保留 previous；unknown output/policy、missing/version-mismatch adapter 完整发布为 disabled entry；跨 manifest 同 key 标记 conflict 且注册顺序不影响结果。路由在 lookup 前拒绝 invalid render/facts plan、超预算、duplicate/超长 node ID、unknown kind、matcher、bytes/UTF-8 与 revision 不一致。模块无文件、网络、CEF、平台、Agent、Cast、第三方代码或可执行 factory。
+- TDD/验证：先加入 target/header/contract test，确认缺少实现时链接因 `BuildExtensionRegistry/Route` undefined 失败；实现后 `markdown_runtime_registry` 通过。最终 `cmake --build --preset engine-api` 与串行全量 CTest 52/52；macOS arm64 CEF 全量构建通过（app/CEF/helpers ad-hoc signing）且串行 CTest 63/63；macOS x64 CEF app + registry target 构建通过，registry 1/1；Clang format dry-run 与 `git diff --check` 通过。两次 CEF configure 在未传环境变量时按契约报 `CRAYON_CEF_ROOT is required`，改用仓库内已校验 arm64/x64 离线根的明确绝对路径后通过，无下载/依赖变化。Windows/MSVC 由独立 Windows 真机会话补证据。
+- Code Review：按 v0.8 复核需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性；P0/P1/P2 = 0/0/0。snapshot 构建后不可变，无锁/线程/回调/IO；路由规模最多 1024 node，registry 最多 64 manifest × 32 matcher，错误与输出均有界且不含正文。
+- 未覆盖：factory 实例化、asset loader、cache、异步状态/取消/超时/清理和 MDV/CEF 接线归 `MRT-04`；具体 Mermaid/Highlight/KaTeX registration/renderer 未提前实现。`MRT-04` 转为 `READY`。
 
 ## 6. 各阶段共同门禁
 

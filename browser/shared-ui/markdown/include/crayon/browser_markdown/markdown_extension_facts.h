@@ -55,6 +55,10 @@ struct MarkdownRenderPlan final {
   std::vector<ExtensionNode> extension_nodes;
 };
 
+/// Returns true only for the bounded ASCII exact-token grammar shared by the
+/// parser selection and the compiled runtime registry.
+bool IsValidExtensionMatcherToken(const std::string& token);
+
 /// Renders the unchanged Level A safe HTML and, only for a non-empty trusted
 /// selection, runs md4c's public callbacks to collect exact fenced-code facts.
 /// Invalid/over-budget facts never turn a successful safe HTML render into a

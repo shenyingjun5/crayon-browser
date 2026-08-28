@@ -139,7 +139,7 @@ Render Plan、ExtensionNode 与 Manifest 均为 closed object：除 current/prev
 |---|---|
 | `schema` | current/previous golden 精确值 |
 | `id` | 编译期唯一、ASCII 小写 kebab token；不能由 matcher 推导模块路径 |
-| `version` | 锁定的实现/资产版本；不能使用 range、tag、`latest` 或空值 |
+| `version` | 锁定的精确 SemVer（含合法 prerelease/build metadata）；不能使用 range、tag、`latest` 或空值 |
 | `node_kind` | 四类闭合枚举之一 |
 | `matchers` | 非空、去重的精确 token 列表；禁止 regex/glob/前缀/大小写折叠/附加参数 |
 | `output` | 闭合枚举：`safe-html`、`svg`、`canvas`、`error` |

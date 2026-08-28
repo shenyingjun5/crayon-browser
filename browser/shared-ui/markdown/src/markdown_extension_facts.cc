@@ -21,29 +21,13 @@ bool IsKnownKind(ExtensionNodeKind kind) {
   return false;
 }
 
-bool IsValidMatcherToken(const std::string& token) {
-  if (token.empty() || token.size() > kMaxExtensionMatcherBytes) {
-    return false;
-  }
-  const auto is_lower_or_digit = [](unsigned char c) {
-    return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
-  };
-  if (!is_lower_or_digit(static_cast<unsigned char>(token.front()))) {
-    return false;
-  }
-  return std::all_of(token.begin(), token.end(), [&](char value) {
-    const unsigned char c = static_cast<unsigned char>(value);
-    return is_lower_or_digit(c) || c == '-' || c == '_' || c == '.' || c == '+';
-  });
-}
-
 bool IsValidSelection(const std::vector<ExtensionMatcher>& selection) {
   if (selection.size() > kMaxExtensionMatchers) {
     return false;
   }
   for (std::size_t i = 0; i < selection.size(); ++i) {
     if (!IsKnownKind(selection[i].kind) ||
-        !IsValidMatcherToken(selection[i].token)) {
+        !IsValidExtensionMatcherToken(selection[i].token)) {
       return false;
     }
     for (std::size_t earlier = 0; earlier < i; ++earlier) {
@@ -221,6 +205,22 @@ ExtensionFactsStatus CollectFenceFacts(
 }
 
 }  // namespace
+
+bool IsValidExtensionMatcherToken(const std::string& token) {
+  if (token.empty() || token.size() > kMaxExtensionMatcherBytes) {
+    return false;
+  }
+  const auto is_lower_or_digit = [](unsigned char c) {
+    return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
+  };
+  if (!is_lower_or_digit(static_cast<unsigned char>(token.front()))) {
+    return false;
+  }
+  return std::all_of(token.begin(), token.end(), [&](char value) {
+    const unsigned char c = static_cast<unsigned char>(value);
+    return is_lower_or_digit(c) || c == '-' || c == '_' || c == '.' || c == '+';
+  });
+}
 
 MarkdownRenderPlan RenderMarkdownPlan(
     const std::string& input, std::uint64_t document_generation,
