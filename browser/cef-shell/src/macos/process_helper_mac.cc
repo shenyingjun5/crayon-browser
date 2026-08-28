@@ -1,3 +1,4 @@
+#include "browser/new_tab/cef_new_tab_handler.h"
 #include "include/cef_app.h"
 #include "include/wrapper/cef_library_loader.h"
 
@@ -28,5 +29,7 @@ int main(int argc, char* argv[]) {
   }
 
   CefMainArgs main_args(argc, argv);
-  return CefExecuteProcess(main_args, nullptr, nullptr);
+  CefRefPtr<CefApp> child_app =
+      crayon::browser::cef_shell::new_tab::CreateNewTabProcessApp();
+  return CefExecuteProcess(main_args, child_app, nullptr);
 }

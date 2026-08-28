@@ -37,6 +37,14 @@ constexpr char kJsMimeType[] = "text/javascript";
 constexpr char kTextMimeType[] = "text/plain";
 constexpr char kUtf8Charset[] = "utf-8";
 
+std::filesystem::path FilesystemPath(const std::string& path_utf8) {
+#if defined(_WIN32)
+  return std::filesystem::u8path(path_utf8);
+#else
+  return std::filesystem::path(path_utf8);
+#endif
+}
+
 // Deterministic fixture document exercising the enabled syntax set
 // (headings, table, fenced code, task list, safe link, raw-HTML escape).
 // Real file entries arrive with MDV-09; this slice is content-driven.
@@ -137,7 +145,7 @@ std::string MimeForImage(const std::string& path) {
 /// Reads at most `kMaxLocalImageBytes + 1` bytes; oversized or unreadable
 /// files return empty (the handler maps that to 404).
 std::string ReadImageBytes(const std::string& path_utf8) {
-  std::ifstream file(std::filesystem::u8path(path_utf8), std::ios::binary);
+  std::ifstream file(FilesystemPath(path_utf8), std::ios::binary);
   if (!file.is_open()) {
     return {};
   }

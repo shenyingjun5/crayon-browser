@@ -106,5 +106,19 @@
   "mdv.tool.code_block": "Code block",
   "mdv.tool.table": "Table",
   "mdv.tool.link": "Link",
-  "mdv.tool.divider": "Divider"
+  "mdv.tool.divider": "Divider",
+  "mdv.tool.heading1": "Heading 1",
+  "mdv.tool.heading2": "Heading 2",
+  "mdv.tool.heading3": "Heading 3",
+  "mdv.tool.structure": "Indent and alignment",
+  "mdv.tool.indent": "Increase indent",
+  "mdv.tool.outdent": "Decrease indent",
+  "mdv.tool.align_default": "Default alignment",
+  "mdv.tool.align_left": "Align left",
+  "mdv.tool.align_center": "Align center",
+  "mdv.tool.align_right": "Align right",
+  "mdv.tooltip.view": "Switch document view",
+  "mdv.tooltip.markdown": "Markdown format",
+  "mdv.tooltip.structure": "List or quote level",
+  "mdv.tooltip.table_alignment": "Table column alignment"
 }

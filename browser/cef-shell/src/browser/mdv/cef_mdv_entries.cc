@@ -28,11 +28,19 @@ using crayon::browser_mdv::LoadGateResult;
 using crayon::browser_mdv::NormalizeLoadedContent;
 using crayon::browser_mdv::StatProbe;
 
+std::filesystem::path FilesystemPath(const std::string& path_utf8) {
+#if defined(_WIN32)
+  return std::filesystem::u8path(path_utf8);
+#else
+  return std::filesystem::path(path_utf8);
+#endif
+}
+
 /// std::filesystem-backed stat probe for the injected guard callback.
 int StatProbeFilesystem(const std::string& path_utf8) {
   std::error_code error;
   const auto status =
-      std::filesystem::status(std::filesystem::u8path(path_utf8), error);
+      std::filesystem::status(FilesystemPath(path_utf8), error);
   if (error || !std::filesystem::status_known(status) ||
       status.type() == std::filesystem::file_type::not_found) {
     return 0;
@@ -46,7 +54,7 @@ int StatProbeFilesystem(const std::string& path_utf8) {
 /// Reads at most `kMaxLoadBytes + 1` bytes so an oversized file is
 /// detectable without buffering it whole.
 std::string ReadBounded(const std::string& path_utf8) {
-  std::ifstream file(std::filesystem::u8path(path_utf8), std::ios::binary);
+  std::ifstream file(FilesystemPath(path_utf8), std::ios::binary);
   if (!file.is_open()) {
     return {};
   }
@@ -277,7 +285,7 @@ void MdvEntryController::LoadAndShow(CefRefPtr<CefBrowser> browser,
   // (models, baseline, snapshot push); the entry controller navigates.
   if (document_loaded_callback_) {
     std::error_code stat_error;
-    const auto entry = std::filesystem::u8path(path_utf8);
+    const auto entry = FilesystemPath(path_utf8);
     const auto file_size = std::filesystem::file_size(entry, stat_error);
     const auto write_time =
         stat_error ? std::filesystem::file_time_type::min()

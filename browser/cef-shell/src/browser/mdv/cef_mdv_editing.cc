@@ -4,6 +4,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -13,6 +14,7 @@
 #include "crayon/browser_markdown/markdown_render.h"
 #include "crayon/browser_mdv/mdv_entry_guard.h"
 #include "crayon/browser_mdv/mdv_images.h"
+#include "crayon/browser_mdv/mdv_transform.h"
 #include "include/cef_id_mappers.h"
 #include "include/cef_parser.h"
 #include "include/wrapper/cef_helpers.h"
@@ -31,6 +33,14 @@ using crayon::browser_mdv_save::SaveState;
 
 constexpr char kViewerPrefix[] = "crayon://mdv/";
 
+std::filesystem::path FilesystemPath(const std::string& path_utf8) {
+#if defined(_WIN32)
+  return std::filesystem::u8path(path_utf8);
+#else
+  return std::filesystem::path(path_utf8);
+#endif
+}
+
 std::uint64_t NowMs() {
   return static_cast<std::uint64_t>(
       std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -43,7 +53,7 @@ std::uint64_t NowMs() {
 int HookStat(const std::string& path, std::uint64_t* size,
              std::uint64_t* mtime) {
   std::error_code error;
-  const auto target = std::filesystem::u8path(path);
+  const auto target = FilesystemPath(path);
   const auto status = std::filesystem::status(target, error);
   if (error || status.type() != std::filesystem::file_type::regular) {
     return 1;
@@ -68,7 +78,7 @@ int HookWriteTemp(const std::string& target_path, const std::string& bytes,
   const std::string temp = target_path + ".tmp-" +
                            std::to_string(sequence.fetch_add(1)) + "-" +
                            std::to_string(ticks.count());
-  std::ofstream out(std::filesystem::u8path(temp), std::ios::binary);
+  std::ofstream out(FilesystemPath(temp), std::ios::binary);
   if (!out.is_open()) {
     return 1;
   }
@@ -83,15 +93,15 @@ int HookWriteTemp(const std::string& target_path, const std::string& bytes,
 
 int HookRename(const std::string& temp_path, const std::string& target_path) {
   std::error_code error;
-  std::filesystem::rename(std::filesystem::u8path(temp_path),
-                          std::filesystem::u8path(target_path), error);
+  std::filesystem::rename(FilesystemPath(temp_path), FilesystemPath(target_path),
+                          error);
   return error ? 1 : 0;
 }
 
 int HookRemove(const std::string& path) {
   std::error_code error;
   // An already-absent temp file is fine.
-  std::filesystem::remove(std::filesystem::u8path(path), error);
+  std::filesystem::remove(FilesystemPath(path), error);
   return error ? 1 : 0;
 }
 
@@ -183,6 +193,67 @@ bool MdvEditController::OnPageQuery(
   }
   CefRefPtr<CefDictionaryValue> dict = parsed->GetDictionary();
   const std::string type = dict->GetString("type").ToString();
+
+  if (type == "transform") {
+    if (!dict->HasKey("action") ||
+        dict->GetType("action") != VTYPE_STRING || !dict->HasKey("text") ||
+        dict->GetType("text") != VTYPE_STRING || !dict->HasKey("start") ||
+        dict->GetType("start") != VTYPE_INT || !dict->HasKey("end") ||
+        dict->GetType("end") != VTYPE_INT) {
+      callback->Failure(2, "bad transform request");
+      return true;
+    }
+    const std::string action_id = dict->GetString("action").ToString();
+    const std::string text = dict->GetString("text").ToString();
+    const int start_utf16 = dict->GetInt("start");
+    const int end_utf16 = dict->GetInt("end");
+    const auto action = crayon::browser_mdv::ParseMdvToolbarAction(action_id);
+    const auto start = start_utf16 < 0
+                           ? std::nullopt
+                           : crayon::browser_mdv::Utf16OffsetToUtf8Byte(
+                                 text, static_cast<std::size_t>(start_utf16));
+    const auto end = end_utf16 < 0
+                         ? std::nullopt
+                         : crayon::browser_mdv::Utf16OffsetToUtf8Byte(
+                               text, static_cast<std::size_t>(end_utf16));
+    CefRefPtr<CefValue> reply = CefValue::Create();
+    reply->SetDictionary(CefDictionaryValue::Create());
+    CefRefPtr<CefDictionaryValue> reply_dict = reply->GetDictionary();
+    if (text.size() > crayon::browser_mdv::kMaxLoadBytes || !action || !start ||
+        !end) {
+      reply_dict->SetBool("applied", false);
+      callback->Success(CefWriteJSON(reply, JSON_WRITER_DEFAULT));
+      return true;
+    }
+    const auto edit = crayon::browser_mdv::TransformMarkdownText(
+        text, *start, *end, *action);
+    if (!edit.applied) {
+      reply_dict->SetBool("applied", false);
+      callback->Success(CefWriteJSON(reply, JSON_WRITER_DEFAULT));
+      return true;
+    }
+    const auto replace_start = crayon::browser_mdv::Utf8ByteOffsetToUtf16(
+        text, edit.replace_start);
+    const auto replace_end = crayon::browser_mdv::Utf8ByteOffsetToUtf16(
+        text, edit.replace_end);
+    const auto selection_start = crayon::browser_mdv::Utf8ByteOffsetToUtf16(
+        edit.replacement, edit.selection_start);
+    const auto selection_end = crayon::browser_mdv::Utf8ByteOffsetToUtf16(
+        edit.replacement, edit.selection_end);
+    if (!replace_start || !replace_end || !selection_start || !selection_end) {
+      reply_dict->SetBool("applied", false);
+      callback->Success(CefWriteJSON(reply, JSON_WRITER_DEFAULT));
+      return true;
+    }
+    reply_dict->SetBool("applied", true);
+    reply_dict->SetString("replacement", edit.replacement);
+    reply_dict->SetInt("start", static_cast<int>(*replace_start));
+    reply_dict->SetInt("end", static_cast<int>(*replace_end));
+    reply_dict->SetInt("selectionStart", static_cast<int>(*selection_start));
+    reply_dict->SetInt("selectionEnd", static_cast<int>(*selection_end));
+    callback->Success(CefWriteJSON(reply, JSON_WRITER_DEFAULT));
+    return true;
+  }
 
   if (type == "edit") {
     if (edit_.confirm_state() ==
@@ -364,7 +435,7 @@ void MdvEditController::RenderAndStore() {
     // (cloud https direct / validated local opaque route / placeholder).
     auto probe = [](const std::string& path_utf8, std::uint64_t* size) {
       std::error_code error;
-      const auto target = std::filesystem::u8path(path_utf8);
+      const auto target = FilesystemPath(path_utf8);
       if (!std::filesystem::is_regular_file(target, error)) {
         return false;
       }

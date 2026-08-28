@@ -1,7 +1,7 @@
 # 蜡笔 AI Agent 投屏浏览器当前架构
 
-- 版本：v0.7
-- 日期：2026-08-11
+- 版本：v0.8
+- 日期：2026-08-28（补充 Markdown Runtime Extension Framework 边界）
 - 状态：当前权威架构契约
 
 ## 1. 架构结论
@@ -69,6 +69,9 @@ flowchart TB
 | `crayon-cast-adapter` | 固定 Cast-SDK facade、handle 和事件映射 | 新设备协议、网页/Agent transport |
 | `crayon-platform-api` | secure store、生命周期、更新、外部客户端交接、本机 IPC | 工具语义、采集/编码 |
 | `crayon-model-adapter`（第二阶段） | provider、流式/取消/错误和建议 DTO | capability、风险、动作、路由 |
+| `browser/shared-ui/markdown-runtime`（规划） | 编译期 Extension Registry、manifest loader、预算/cache/generation 与扩展 adapter 接口 | 第二 Markdown parser、运行时插件安装、Agent 能力、Cast 协议 |
+
+本地 `crayon://mdv` 是 `browser/shared-ui/{markdown,markdown-runtime,mdv}` 与 CEF shell resource handler 共同拥有的用户界面能力，不属于 `crayon-page-data`/`crayon-content-*` 的网页事实管线。普通 Markdown 继续由共享 C++17 md4c 确定性生成安全 HTML；`markdown-runtime` 只接受编译期闭合 registry 与 manifest 资源，负责通用预算、lazy/cache/generation 和错误隔离；MDV/各 adapter 拥有 Mermaid、Highlight、KaTeX 等具体渲染语义。任何扩展输出仍是不可信内容，SVG/HTML/URL 按类型经过独立 policy gate。该 runtime 不进入 Rust Core、CAAP registry、Agent 文件能力、CNT 的确定性页面 Markdown 或 Cast/receiver 协议。
 
 ## 4. CAAP 与入站访问
 

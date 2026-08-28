@@ -19,6 +19,8 @@ namespace crayon::browser_mdv {
 inline constexpr char kMdvScheme[] = "crayon";
 inline constexpr char kMdvHost[] = "mdv";
 
+enum class MdvShortcutPlatform { kWindows, kMacOS };
+
 /// Localized surface strings for the viewer page.  Callers load these
 /// from platform string resources; no user-visible text is hardcoded
 /// here.
@@ -52,6 +54,21 @@ struct MdvPageStrings {
   std::string tool_table;
   std::string tool_link;
   std::string tool_divider;
+  std::string tool_heading1;
+  std::string tool_heading2;
+  std::string tool_heading3;
+  std::string tool_structure;
+  std::string tool_indent;
+  std::string tool_outdent;
+  std::string tool_align_default;
+  std::string tool_align_left;
+  std::string tool_align_center;
+  std::string tool_align_right;
+  std::string tooltip_view;
+  std::string tooltip_markdown;
+  std::string tooltip_structure;
+  std::string tooltip_table_alignment;
+  MdvShortcutPlatform shortcut_platform = MdvShortcutPlatform::kWindows;
 };
 
 /// One request's parsed coordinates (mirrors the new-tab classifier
@@ -124,7 +141,7 @@ std::string RenderMdvDocument(const MdvPageSnapshot& snapshot,
 /// Renders the fixed /app.css body.
 std::string RenderMdvStylesheet();
 
-/// Renders the fixed /app.js body (view-mode switching only).
+/// Renders the fixed /app.js body (view/edit interactions over mdvQuery).
 std::string RenderMdvScript();
 
 }  // namespace crayon::browser_mdv

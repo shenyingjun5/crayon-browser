@@ -13,7 +13,9 @@ set(required_files
     "${macos_resource_root}/Info.plist.in"
     "${macos_resource_root}/helper-Info.plist.in"
     "${macos_resource_root}/en.lproj/InfoPlist.strings"
-    "${macos_resource_root}/zh-Hans.lproj/InfoPlist.strings")
+    "${macos_resource_root}/en.lproj/Localizable.strings"
+    "${macos_resource_root}/zh-Hans.lproj/InfoPlist.strings"
+    "${macos_resource_root}/zh-Hans.lproj/Localizable.strings")
 foreach(required_file IN LISTS required_files)
   if(NOT EXISTS "${required_file}")
     message(FATAL_ERROR "macOS CEF shell file is missing: ${required_file}")
@@ -24,6 +26,9 @@ file(READ "${macos_source_root}/app.cc" app_source)
 file(READ "${macos_source_root}/main_mac.mm" main_source)
 file(READ "${macos_source_root}/process_helper_mac.cc" helper_source)
 file(READ "${CRAYON_CEF_SHELL_SOURCE}/CMakeLists.txt" cmake_source)
+file(READ "${CRAYON_CEF_SHELL_SOURCE}/macos_adhoc_sign.cmake" signing_source)
+file(READ "${CRAYON_CEF_SHELL_SOURCE}/tests/macos_package_contract.cmake"
+     package_contract_source)
 file(READ "${macos_resource_root}/Info.plist.in" main_plist)
 file(READ "${macos_resource_root}/helper-Info.plist.in" helper_plist)
 
@@ -32,6 +37,17 @@ list(LENGTH initial_urls initial_url_count)
 if(NOT initial_url_count EQUAL 1)
   message(FATAL_ERROR "macOS shell must contain exactly one crayon://newtab URL")
 endif()
+
+foreach(required_mdv_token
+        "RegisterMdvSchemeHandlerFactory"
+        "MdvShortcutPlatform::kMacOS"
+        "SetPageQueryHandler"
+        "SetLocalEntryCommandHandler")
+  string(FIND "${app_source}" "${required_mdv_token}" token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR "macOS app is missing MDV token ${required_mdv_token}")
+  endif()
+endforeach()
 
 foreach(required_main_token
         "CefScopedLibraryLoader"
@@ -55,6 +71,7 @@ endif()
 foreach(required_helper_token
         "LoadInHelper"
         "CefExecuteProcess"
+        "CreateNewTabProcessApp"
         "CEF_USE_SANDBOX")
   string(FIND "${helper_source}" "${required_helper_token}" token_index)
   if(token_index EQUAL -1)
@@ -64,6 +81,7 @@ endforeach()
 foreach(forbidden_helper_token
         "CefInitialize"
         "CefRunMessageLoop"
+        "CefExecuteProcess(main_args, nullptr"
         "BrowserApp"
         "about:blank")
   string(FIND "${helper_source}" "${forbidden_helper_token}" token_index)
@@ -78,12 +96,52 @@ foreach(required_cmake_token
         "CEF_HELPER_APP_SUFFIXES"
         "COPY_MAC_FRAMEWORK"
         "COPY_MAC_RESOURCES"
+        "LINK_DEPENDS"
+        "crayon::browser-mdv"
         "MACOSX_BUNDLE_INFO_PLIST")
   string(FIND "${cmake_source}" "${required_cmake_token}" token_index)
   if(token_index EQUAL -1)
     message(FATAL_ERROR "macOS CMake graph is missing ${required_cmake_token}")
   endif()
 endforeach()
+
+file(READ "${CRAYON_CEF_SHELL_SOURCE}/../../CMakeLists.txt" root_cmake_source)
+foreach(required_root_token
+        "CRAYON_MACOS_DEPLOYMENT_TARGET"
+        "CMAKE_OSX_DEPLOYMENT_TARGET")
+  string(FIND "${root_cmake_source}" "${required_root_token}" token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "root CMake must seed ${required_root_token} before product targets")
+  endif()
+endforeach()
+
+foreach(required_signing_token
+        "Versions/A/Libraries/*.dylib"
+        "sign_bundle(\"\${cef_framework}\")"
+        "\${CRAYON_APP_BUNDLE}/Contents/Frameworks/\${helper_name}.app")
+  string(FIND "${signing_source}" "${required_signing_token}" token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "macOS signing graph is missing ${required_signing_token}")
+  endif()
+endforeach()
+foreach(required_package_token
+        "Bundled app.icns differs from the managed brand asset"
+        "assert_code_signed")
+  string(FIND "${package_contract_source}" "${required_package_token}"
+         token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "macOS package contract is missing ${required_package_token}")
+  endif()
+endforeach()
+string(FIND "${package_contract_source}" "COMMAND /usr/bin/iconutil"
+       iconutil_command_index)
+if(NOT iconutil_command_index EQUAL -1)
+  message(FATAL_ERROR
+          "macOS package contract must not depend on host iconutil round-trips")
+endif()
 
 foreach(plist_token
         "CFBundleIdentifier"

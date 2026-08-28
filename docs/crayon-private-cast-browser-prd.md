@@ -1,9 +1,9 @@
 # 蜡笔 AI Agent 投屏浏览器 PRD
 
 - 版本：v0.8
-- 日期：2026-08-22
+- 日期：2026-08-28
 - 状态：当前产品事实源
-- v0.8 变更：§4.1 新增本地 Markdown 查看器能力与边界（`MDV` Roadmap 承接）；其余内容自 v0.7 未变。
+- v0.8 变更：§4.1 新增本地 Markdown 查看器能力与边界（`MDV` Roadmap 承接）；2026-08-28 明确标准 Mermaid fence 使用离线 Mermaid Full，并由独立 `MRT` Roadmap 建立闭合 Extension Framework，P0 增加 Code Highlight/KaTeX；所有 runtime 按需加载且不扩张 Agent 文件能力，其余内容自 v0.7 未变。
 - 输入说明：`AI投屏浏览器_PRD更新稿_Agent-Native-Browser.md` 是本版的重要补充输入；与现有平台、安全或交付边界冲突时，以本 PRD、当前架构和专项安全契约为准。
 
 ## 1. 产品定义
@@ -56,7 +56,7 @@
 - 地址栏支持 URL/搜索判定、前进/后退、刷新/停止、站点身份与权限入口、书签动作、当前页投屏状态；建议来源、历史和搜索 provider 可配置并遵循 Profile/隐私边界。
 - 多标签与多窗口支持新建、切换、关闭、拖动排序、固定、复制、静音、恢复关闭、标签搜索和适用的分组；弹窗、全屏、画中画和外部协议必须有明确的来源与权限反馈。
 - 书签栏/管理器/导入导出、历史与最近关闭、下载管理、页面查找、缩放、全屏、打印/PDF、上下文菜单、常用快捷键和启动会话恢复属于桌面基线。
-- 本地 Markdown 查看器属于桌面基线的文档能力：用户通过受控入口（主菜单打开文件、拖放 `.md`、地址栏本地路径）打开本地 Markdown 文档，进入 `crayon://mdv` 内置查看器；支持源码视图/渲染预览切换与分栏模式（左侧编辑源码、右侧实时渲染预览），保存支持写回原文件与另存为（原子写、失败显式报告、外部修改冲突提示）。边界：仅限用户手势选择的本地 `.md` 文件，大小/编码有界；渲染输出强制转义与标签白名单；不开放任意文件系统、不作为 Agent/CAAP 工具暴露；不做远程 `.md` 渲染、双链/wiki 扩展语法、协同编辑或导出 PDF。
+- 本地 Markdown 查看器属于桌面基线的文档能力：用户通过受控入口（主菜单打开文件、拖放 `.md`、地址栏本地路径）打开本地 Markdown 文档，进入 `crayon://mdv` 内置查看器；支持源码视图/渲染预览切换与分栏模式（左侧编辑源码、右侧实时渲染预览），保存支持写回原文件与另存为（原子写、失败显式报告、外部修改冲突提示）。标准 ```` ```mermaid ```` fence 使用应用内离线 Mermaid Full 运行时，只有文档实际含图时才加载，逐 block 严格渲染、错误隔离并覆盖 flowchart/sequence/mindmap/architecture/class/state/ER 重点图。独立 Markdown Runtime Extension Framework 保持 md4c 为唯一 parser，以编译期闭合 registry/manifest 按需启用 P0 Code Highlight 与 KaTeX；扩展失败回退安全源码，文档和 AI 不能注册扩展或授予能力。边界：仅限用户手势选择的本地 `.md` 文件，大小/编码有界；普通 HTML 强制转义与标签白名单，SVG/扩展输出另过类型化 Browser-owned policy gate；不开放任意文件系统、不作为 Agent/CAAP 工具暴露；不做远程 `.md` 渲染、双链/wiki、协同编辑或导出 PDF。ECharts、Graphviz、Presentation 分波次评审；TV/Cast/AI 仅在独立边界与外部 facade 就绪后推进。
 - 设置中心覆盖启动行为、默认搜索、外观、下载、站点权限、隐私数据清理、Profile 和无障碍；证书错误、危险下载、弹窗与外部协议默认 fail closed。
 - 普通/无痕 Profile、崩溃恢复、Windows/macOS 键鼠/输入法、多屏/DPI、浅色/深色、休眠唤醒和退出生命周期必须有平台证据。
 - 地址自动填充只能在独立隐私/安全任务中以本地、用户可见、可删除方式提供。密码管理、支付卡、浏览器账号/云同步和扩展生态不是普通 UI 小功能；必须各自建立安全与供应链 Roadmap，不能为了“像 Chrome”直接接入 Google 服务或把凭证暴露给 Agent。
@@ -186,7 +186,7 @@
 
 - Windows/macOS 浏览器基本能力和 Direct/Relay/Cast-SDK 闭环完成。
 - 无路由只产生 ExternalClientHandoff，无浏览器 WebRTC/采集/编码路径。
-- 本地 Markdown 查看/预览/分栏编辑/保存由 `MDV` 独立 Roadmap 在 V1 期内收口（`MD-001..007`）；不阻塞其余浏览器基线项。
+- 本地 Markdown 查看/预览/分栏编辑/保存、图标化编辑工具栏与 Mermaid Full 图表由 `MDV-01..24` 在 V1 期内收口（`MD-001..013`）；`MRT-01..09` 交付闭合 Extension Framework、Code Highlight 与 KaTeX P0（`MR-001..005/008/012`）。二者都不阻塞其余浏览器基线项，后续扩展按独立 GO/NO-GO 推进。
 
 ### P0-B：页面数据与 Agent 协议内核
 

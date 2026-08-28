@@ -172,6 +172,30 @@
 | MD-005 | AUTO | dirty 状态下关闭标签、切换文件与导航离开；确认与取消路径 | 未保存变更显式确认；取消不丢内容；确认后不静默写盘 |
 | MD-006 | AUTO | 保存/另存为、覆盖已有文件、只读位置、盘满/权限失败、保存期间外部修改 | 原子写（`.tmp`+rename）或明确失败，无静默残留/半写文件；外部修改冲突显式提示 |
 | MD-007 | DEVICE | Windows 实机打开本地 `.md`、分栏编辑、实时预览、保存写回；IME、快捷键、浅/深色与无痕窗口 | 平台行为符合 PRD；无崩溃；无痕会话内可用且不持久化任何痕迹 |
+| MD-008 | CONTRACT | 校验锁定 `mermaid` Full tarball、运行时 import closure、manifest/hash/MIME/大小、LICENSE/NOTICE/SBOM；对 ESM 路由尝试未知路径、穿越、编码分隔符、query/fragment、错误方法和断网 | 只打包 manifest 精确枚举的完整浏览器运行时闭包；无 tiny、CDN、npm runtime、缺失 chunk、任意文件路由或许可漂移；普通 Markdown 零 Mermaid 资产读取 |
+| MD-009 | SECURITY | 标准 ```` ```mermaid ```` 分别渲染 flowchart、sequenceDiagram、mindmap、architecture-beta、classDiagram、stateDiagram-v2、erDiagram；混入非法 DSL、HTML/script/event、危险链接、外部资源与 CSS URL | 图类型由 Mermaid Full 自行识别并逐 block 输出安全 SVG；strict + SVG policy gate 生效；错误只影响当前 block，其他 Markdown/图表继续可用且无公网请求 |
+| MD-010 | PERF | 50 个 Mermaid block 覆盖离屏、重复、错误和快速编辑；切换主题、导航、关闭、Renderer 终止与内存压力 | viewport lazy、有界并发/cache/revision fencing 生效；旧 SVG 不落位；资源停止后回落；记录普通首屏、首次 import、首图/可见图完成、CPU/RSS/UI delay 与资产字节 |
+| MD-011 | CONTRACT | 校验 MDV toolbar glyph manifest、动作/label/tooltip/shortcut/context 完整映射；注入重复 ID、未登记文件、外链、事件、script/style/foreignObject/href、固定颜色与错误 viewBox | 24×24 原创 glyph 闭合集完整、`currentColor`、零外部引用；非法资产 fail closed；基线 15 个动作、结构菜单和三视图无缺失/重复 |
+| MD-012 | AUTO | 对空/单行/多行/文首文尾/CRLF/UTF-8 选区执行包裹、标题替换、列表/任务/引用、骨架、缩进/反缩进和 GFM 表格列对齐；复现旧 `linePrefix` 重复正文 | 每次产生单一 replacement，选区外字节不变、下一选区确定、重复操作可预测；非结构缩进与非表格对齐 fail closed；旧重复正文用例关闭 |
+| MD-013 | DEVICE | macOS/Windows 分别验证图标工具栏 hover/focus tooltip、Meta/Ctrl 快捷键、Tab/方向键/Home/End、overflow、中文/英文 IME、读屏、浅深色、窄分栏与 100%/200% DPI | 平台标签与实际按键一致；IME/AltGr 不误触；工具栏单 Tab stop、焦点可见、点击区达标；无遮挡/截断/横向溢出，快捷键被 Chromium 消费时不虚假展示 |
+
+## 7B. Markdown Runtime Extension Framework
+
+| ID | 类型 | 前置/步骤 | 预期 |
+|---|---|---|---|
+| MR-001 | CONTRACT | 校验 ExtensionNode/Manifest/Registry current golden，构造未知 kind、重复 ID、matcher 冲突、文档自带 manifest/模块路径/URL/capability | 四类节点与能力闭合；编译期 registry 稳定；文档/AI 不能注册扩展或扩权；冲突 fail closed |
+| MR-002 | AUTO | CommonMark/GFM golden 与 inline/block/fence/container 事实并行生成；未知/禁用/大小写/超界 info string | 标准 HTML 逐字节不回退；只有启用的精确 matcher 分发；其余保持安全代码块/文本 |
+| MR-003 | SECURITY | 大型 extension 按需加载、重复/并发/失败/超时/导航/Renderer 终止；攻击 manifest 路由与 cache key | 无匹配节点零加载；资源只来自 manifest；错误隔离、generation/cache/清理有界且无正文日志 |
+| MR-004 | SECURITY | 多语言 fenced code、未知语言、恶意 token/HTML、浅深主题与 grammar 懒加载 | 代码始终按文本处理；allowlist grammar 本地按需加载；未知语言纯文本回退；无 script/网络 |
+| MR-005 | SECURITY | KaTeX inline/block golden、未闭合定界、危险宏/HTML/URL、超长/深嵌套公式、快速编辑 | 仅契约语法启用；危险能力拒绝；单公式错误隔离；字体/CSS 离线且旧结果不落位 |
+| MR-006 | AUTO | 重复/空/超深标题、编辑更新、Unicode 搜索、超大文档、取消与无痕关闭 | TOC/Outline 锚点会话内稳定且有界；搜索只查当前内存文档、不持久化 query/路径 |
+| MR-007 | SECURITY | ECharts 合法 JSON 与 function/eval/callback/URL/prototype pollution/超大 series/非法 component | 只接受 schema allowlist 纯 JSON；无代码/网络执行；单图错误隔离，Canvas/SVG 与 listener 完整释放 |
+| MR-008 | PERF | Mermaid/Highlight/KaTeX/ECharts/Graphviz 混合 50-block 文档，覆盖离屏、重复、主题、编辑、满载和关闭 | 各 extension lazy、有界并发/cache；普通首屏不回退；记录 CPU/RSS/UI delay/资产字节并在停止后回落 |
+| MR-009 | SECURITY | Graphviz WASM 处理合法/递归/超大/高耗时/畸形 DOT，覆盖超时、取消、worker crash 与恶意 SVG | CPU/内存/时间有界；worker 可终止；SVG policy 生效；无本机 Graphviz/Java/网络依赖 |
+| MR-010 | AUTO | Normal/Presentation 状态切换、分节、键盘翻页、resize、主题、编辑、Esc/关闭与读屏 | parser 不改写 CommonMark HR；Presentation 状态可逆、有界、焦点正确；无 TV/Cast 会话 |
+| MR-011 | CONTRACT | 审查 TV/Cast gap：尝试浏览器私有 receiver 协议、HTML/SVG 媒体伪装与未受审远程控制 | 只产出外部 Cast-SDK/receiver facade 边界；无实现、无私有协议或媒体伪装 |
+| MR-012 | RELEASE | 扫描发布包的 extension assets、manifest/hash、LICENSE/NOTICE/SBOM、npm cache/node_modules、CDN 与未注册 fence | 仅包含启用 extension 的完整浏览器运行时闭包；无开发依赖/联网 fallback/隐藏执行器；版本可回滚 |
+| MR-013 | CONTRACT | 审查 AI Source Producer：尝试由模型注册扩展、改 manifest、读写本地文件、静默保存/投屏或把无来源文本标为原文 | AI 只产生带 provenance 的候选 Markdown，经发送预览/取消与用户正常编辑保存；无 registry、文件、保存或投屏权限 |
 
 ## 8. CAAP、CLI 与 MCP
 

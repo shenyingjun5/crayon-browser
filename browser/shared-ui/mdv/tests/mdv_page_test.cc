@@ -5,6 +5,7 @@
 
 #include <iostream>
 #include <string>
+#include <string_view>
 
 namespace {
 
@@ -29,6 +30,16 @@ int g_failures = 0;
     }                                                       \
   } while (false)
 
+std::size_t Count(std::string_view text, std::string_view needle) {
+  std::size_t count = 0;
+  std::size_t at = 0;
+  while ((at = text.find(needle, at)) != std::string_view::npos) {
+    ++count;
+    at += needle.size();
+  }
+  return count;
+}
+
 MdvRequestParts BaseRequest(std::string path = "/app.html") {
   return MdvRequestParts{"GET", "crayon", "mdv", std::move(path),
                          false, false,    false, false};
@@ -51,6 +62,35 @@ crayon::browser_mdv::MdvPageStrings SampleStrings() {
       "保存并继续",
       "放弃更改",
       "取消",
+      "在文档查看器中打开",
+      "编辑工具",
+      "加粗",
+      "斜体",
+      "删除线",
+      "行内代码",
+      "无序列表",
+      "有序列表",
+      "任务列表",
+      "引用",
+      "代码块",
+      "表格",
+      "链接",
+      "分割线",
+      "一级标题",
+      "二级标题",
+      "三级标题",
+      "缩进和对齐",
+      "增加缩进",
+      "减少缩进",
+      "默认对齐",
+      "左对齐",
+      "居中对齐",
+      "右对齐",
+      "切换文档视图",
+      "Markdown 格式",
+      "列表或引用层级",
+      "表格列对齐",
+      crayon::browser_mdv::MdvShortcutPlatform::kWindows,
   };
 }
 
@@ -240,8 +280,9 @@ void TestToolbarClosedActionSet() {
   snapshot.has_document = true;
   const std::string document =
       crayon::browser_mdv::RenderMdvDocument(snapshot, SampleStrings());
-  CHECK(document.find("class=\"md-toolbar\"") != std::string::npos);
-  // Closed action set: exactly the 14 documented actions.
+  CHECK(document.find("class=\"md-toolbar icon-toolbar\"") !=
+        std::string::npos);
+  // Closed action set: exactly the 15 documented actions.
   const char* actions[] = {"h1", "h2",       "h3",         "bold",
                            "italic",  "strike",    "inline-code",
                            "bullet-list", "ordered-list", "task-list",
@@ -255,8 +296,34 @@ void TestToolbarClosedActionSet() {
 
   const std::string script = crayon::browser_mdv::RenderMdvScript();
   CHECK(script.find("setRangeText") != std::string::npos);
-  CHECK(script.find("wrapOrCaret") != std::string::npos);
-  CHECK(script.find("insertBlock") != std::string::npos);
+  CHECK(script.find("type:'transform'") != std::string::npos);
+  CHECK(script.find("linePrefix") == std::string::npos);
+  CHECK(document.find("data-tooltip-title=") != std::string::npos);
+  CHECK(document.find("aria-keyshortcuts=\"Control+B\"") !=
+        std::string::npos);
+  CHECK(document.find("class=\"structure-menu\"") != std::string::npos);
+  CHECK(document.find("<svg") != std::string::npos);
+  CHECK(Count(document, "data-action=\"") == 21);
+  CHECK(Count(document, "xmlns=\"http://www.w3.org/2000/svg\"") == 0);
+  CHECK(script.find("setTimeout(reveal,450)") != std::string::npos);
+  CHECK(script.find("isComposing") != std::string::npos);
+  CHECK(script.find("keyCode===229") != std::string::npos);
+  CHECK(script.find("AltGraph") != std::string::npos);
+
+  auto mac_strings = SampleStrings();
+  mac_strings.shortcut_platform =
+      crayon::browser_mdv::MdvShortcutPlatform::kMacOS;
+  const std::string mac_document =
+      crayon::browser_mdv::RenderMdvDocument(snapshot, mac_strings);
+  CHECK(mac_document.find("data-platform=\"macos\"") != std::string::npos);
+  CHECK(mac_document.find("aria-keyshortcuts=\"Meta+B\"") !=
+        std::string::npos);
+  CHECK(mac_document.find("data-shortcut=\"⌘B\"") != std::string::npos);
+
+  const std::string css = crayon::browser_mdv::RenderMdvStylesheet();
+  CHECK(css.find("width:36px;height:36px") != std::string::npos);
+  CHECK(css.find("width:20px;height:20px") != std::string::npos);
+  CHECK(css.find("prefers-reduced-motion:reduce") != std::string::npos);
 }
 
 void TestEmptyAndErrorSurfaces() {
@@ -290,7 +357,11 @@ void TestInitialViewStateAndCspConstantUnchanged() {
 
 }  // namespace
 
-int main() {
+int main(int argc, char** argv) {
+  if (argc == 2 && std::string(argv[1]) == "--dump-script") {
+    std::cout << crayon::browser_mdv::RenderMdvScript();
+    return 0;
+  }
   TestRouteMatrix();
   TestDeterministicOutput();
   TestSourceIsEscapedAndPreviewVerbatim();

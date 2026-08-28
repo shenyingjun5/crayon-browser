@@ -100,6 +100,21 @@ browser_mdv::MdvPageStrings LoadMdvStrings(HINSTANCE resource_module) {
       LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_TABLE),
       LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_LINK),
       LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_DIVIDER),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_HEADING1),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_HEADING2),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_HEADING3),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_STRUCTURE),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_INDENT),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_OUTDENT),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_ALIGN_DEFAULT),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_ALIGN_LEFT),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_ALIGN_CENTER),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_ALIGN_RIGHT),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOLTIP_VIEW),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOLTIP_MARKDOWN),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOLTIP_STRUCTURE),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOLTIP_TABLE_ALIGNMENT),
+      browser_mdv::MdvShortcutPlatform::kWindows,
   };
 }
 
@@ -287,7 +302,21 @@ bool BrowserApp::mdv_strings_valid() const {
          !mdv_strings_.tool_quote.empty() &&
          !mdv_strings_.tool_code_block.empty() &&
          !mdv_strings_.tool_table.empty() && !mdv_strings_.tool_link.empty() &&
-         !mdv_strings_.tool_divider.empty();
+         !mdv_strings_.tool_divider.empty() &&
+         !mdv_strings_.tool_heading1.empty() &&
+         !mdv_strings_.tool_heading2.empty() &&
+         !mdv_strings_.tool_heading3.empty() &&
+         !mdv_strings_.tool_structure.empty() &&
+         !mdv_strings_.tool_indent.empty() &&
+         !mdv_strings_.tool_outdent.empty() &&
+         !mdv_strings_.tool_align_default.empty() &&
+         !mdv_strings_.tool_align_left.empty() &&
+         !mdv_strings_.tool_align_center.empty() &&
+         !mdv_strings_.tool_align_right.empty() &&
+         !mdv_strings_.tooltip_view.empty() &&
+         !mdv_strings_.tooltip_markdown.empty() &&
+         !mdv_strings_.tooltip_structure.empty() &&
+         !mdv_strings_.tooltip_table_alignment.empty();
 }
 
 CefRefPtr<CefClient> BrowserApp::GetDefaultClient() {

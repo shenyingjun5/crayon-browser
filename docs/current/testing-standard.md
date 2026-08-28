@@ -1,7 +1,7 @@
 # 蜡笔 AI Agent 投屏浏览器测试标准
 
 - 版本：v0.7
-- 日期：2026-08-11
+- 日期：2026-08-28（补充 MD-008..013、MR-001..013）
 
 ## 1. 分层
 
@@ -49,6 +49,8 @@ Linux 不在当前矩阵；不能用 Linux runner 结果代替 Windows/macOS 证
 - Cookie、Authorization、完整签名 URL、浏览历史和 session secret 的日志/DTO/网络/磁盘泄漏。
 - Direct/Relay 安全；无路由时 `ExternalClientHandoff` 需要确认且不创建 Cast-SDK/Relay/WebRTC 会话。
 - Markdown 快照/输出确定性、导航绑定、危险 URL、超大页面、取消、保存失败和峰值资源。
+- 本地 MDV 的 Mermaid Full 覆盖供应链闭包/manifest 路由、标准 fence、七类重点图、strict + SVG policy gate、单 block 错误隔离、零公网、无图零加载、viewport lazy、编辑/主题 generation 与资源回落；不得用 tiny 或 CDN fixture 冒充。
+- Markdown Runtime Framework 覆盖四类 ExtensionNode、编译期 registry/manifest、未知 fence 回退、按需 loader/cache、代码高亮文本隔离、KaTeX 宏/HTML/URL 禁令、ECharts 纯 JSON schema、Graphviz WASM 预算、Presentation 状态，以及独立的 TV/Cast 与 AI Source Producer gap；不得出现通用 JS/WASM 执行器。
 - CAAP previous/current、握手、tool registry、grant/确认、stream/cancel/deadline、幂等、重放、本机 ACL、MCP/CLI 同义性和 Release surface。
 - Agent 读页覆盖 first chunk/complete、CPU/RSS、UI event-loop delay、序列化字节、增量复用和背压；所有 fixture 本地确定。
 - 语义动作覆盖 action_id 失效、多信号唯一性、风险单调、前置条件、效果验证、未知副作用和人工接管。
@@ -61,7 +63,7 @@ Linux 不在当前矩阵；不能用 Linux runner 结果代替 Windows/macOS 证
 - 浏览器：冷启动、首导航、标签切换、崩溃恢复和 Profile 清理。
 - 投屏：发现、连接、Direct/Relay 首帧、控制、停止和 Relay 附加延迟。
 - Relay：并发、慢接收端、断流、缓存、30 分钟 VOD/live 与停止后回落。
-- Markdown：不同节点/文本规模的时延、峰值内存、取消响应和输出上限。
+- Markdown：不同节点/文本规模的时延、峰值内存、取消响应和输出上限；MDV 图表追加普通首屏、首次 Mermaid import、首图/全部可见图、50-block lazy/cache、CPU/RSS/UI delay、资产字节和停止后回落。
 - Agent：CAAP handshake、缓存命中 R1、100KB 页面、分页/增量、并发和恶意慢 consumer；未完成对照前不宣称优于具体浏览器。
 - Semantic/Workflow：地图和 ChangeSet 的时延/字节、effect wait、重复任务步骤/耗时/传输下降、技能运行健康和修复误匹配率。
 - Hub/Connector：路由计算、连接并发、限流/熔断、响应预算和取消后的资源回落。
@@ -77,4 +79,4 @@ Linux 不在当前矩阵；不能用 Linux runner 结果代替 Windows/macOS 证
 
 ## 7. 当前用例集
 
-当前权威用例为 [test-cases.md](test-cases.md) 中 193 个唯一 ID。任务必须引用适用 ID，新增/删除用例时同步总 Roadmap 与计划索引。
+当前权威用例为 [test-cases.md](test-cases.md) 中 212 个唯一 ID（新增 `MD-008..013`、`MR-001..013`）。任务必须引用适用 ID，新增/删除用例时同步总 Roadmap 与计划索引。

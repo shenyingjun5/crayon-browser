@@ -1,10 +1,10 @@
 # 蜡笔 AI Agent 投屏浏览器总 Roadmap
 
-- 版本：v0.8
-- 日期：2026-08-22
+- 版本：v0.8（Markdown Runtime Extension Framework 同步）
+- 日期：2026-08-28
 - 状态：活跃
-- 当前任务总数：234
-- 当前测试用例总数：193
+- 当前任务总数：271
+- 当前测试用例总数：212
 
 ## 1. 当前结论
 
@@ -13,7 +13,7 @@
 - 产品仍按“浏览器与 LAN 投屏 -> 页面数据/Markdown -> Agent 协议与语义动作 -> Workflow/Challenge -> Capability Hub/合作方 -> 模型”的依赖顺序交付。
 - CAAP、CLI/入站 MCP、高性能读页和授权操作是核心；具体模型/provider 与视频/文档总结属于第二阶段。
 - Windows/macOS 为当前桌面；HarmonyOS 只做鸿蒙电脑 PC 形态技术预览；Linux 无活跃任务。
-- `BUX` 独立承接完整桌面浏览器体验；`MDV` 独立承接本地 Markdown 查看/预览/分栏编辑内置页（PRD v0.8）；`ACT`、`WFL`、`HUB` 分别承接语义动作、持久化工作流和 connector 安全边界，避免把大模块塞进 CEF、AGT 或 CNT。
+- `BUX` 独立承接完整桌面浏览器体验；`MDV` 承接本地 Markdown 查看/编辑/保存、图标工具栏、图片与 Mermaid Full，`MRT` 独立承接闭合 Extension Framework、Highlight/KaTeX 与后续扩展门禁（PRD v0.8）；`ACT`、`WFL`、`HUB` 分别承接语义动作、持久化工作流和 connector 安全边界，避免把大模块塞进 CEF、AGT 或 CNT。
 
 ## 2. 交付不变量
 
@@ -34,9 +34,10 @@
 |---|---:|---|
 | BRD | 4 | 品牌图标母版、跨平台确定性资产与接入门禁 |
 | FND | 19 | Workspace、契约、质量入口与仓库基线 |
-| CEF | 19 | Windows/macOS CEF 浏览器壳 |
-| BUX | 18 | Chrome-inspired 蜡笔浏览器 UI 与日用基础功能 |
-| MDV | 7 | 本地 Markdown 查看器：内置查看/预览/分栏编辑与受控文件入口 |
+| CEF | 20 | Windows/macOS CEF 浏览器壳（含 `01A..01E`、`02W/02M` 拆分） |
+| BUX | 19 | Chrome-inspired 蜡笔浏览器 UI 与日用基础功能（含 `04A/04B` 拆分） |
+| MDV | 24 | 本地 Markdown Runtime：查看/编辑/保存、图标工具栏、图片、Mermaid Full 与跨平台门禁 |
+| MRT | 19 | Markdown Runtime Extension Framework、Highlight/KaTeX、后续图表/演示与跨域 gap analysis |
 | MED | 19 | 媒体观察、LAN Relay 与外部客户端交接语义 |
 | SDK | 16 | Cast-SDK 发现/投送/控制；后续 Partner Cast facade |
 | PLT | 7 | Windows/macOS 系统与本机 IPC/客户端交接适配 |
@@ -48,7 +49,8 @@
 | HUB | 16 | Capability Registry、Router 与 Partner connector |
 | HM | 12 | HarmonyOS 电脑 PC 形态技术预览 |
 | QAR | 15 | 质量、性能、安全、发布和回滚 |
-| **合计** | **225** | |
+| RNM | 8 | `get-video` → `crayon-browser` 命名迁移 |
+| **合计** | **271** | |
 
 ## 4. 依赖关系
 
@@ -60,8 +62,13 @@ flowchart LR
   FND --> CEF
   CEF --> BUX
   PRV --> BUX
-  BUX --> MDV["MDV 本地 Markdown 查看器"]
-  PRV --> MDV
+  BUX --> MDVBASE["MDV-01..14 查看器 / Mermaid closure"]
+  PRV --> MDVBASE
+  MDVBASE --> MRT["MRT 扩展框架"]
+  MRT --> MDVEXT["MDV-15..20 Mermaid adapter / 收口"]
+  MDVBASE --> MDVTOOL["MDV-21..23 编辑器工具栏"]
+  MDVEXT --> MDVFINAL["MDV-24 双平台总收口"]
+  MDVTOOL --> MDVFINAL
   FND --> MED
   FND --> SDK
   MED --> SDK
@@ -105,10 +112,10 @@ flowchart LR
 - 品牌资产 `BRD-01..04`、Foundation 19 项、`MED-01..19`、`CEF-01A..01B`、`SDK-01..12`。
 - 产出：`Direct/Relay/ExternalClientHandoff/Reject`，固定 SDK source/facade/Fake/真实 service/discovery/连接/投送/监督与 runtime 语义，以及 CEF/ArkWeb 共享的 C++17 engine-api 契约。
 
-### V1：Windows 浏览器可用
+### V1：桌面浏览器与 Markdown Runtime P0 可用（macOS 先行）
 
-- `CEF-01D`、`CEF-02W`、`CEF-03..12`、`BUX-01..18`、`MDV-01..07`、`PLT-01/02/W04` 与适用 PRV；`MDV` 在 `BUX-16` 完成后领取，不阻塞 BUX 主线。
-- 验收：Chrome-inspired 蜡笔 UI、本地起始页、地址栏、导航、标签/窗口、书签、历史、下载、设置、Profile/无痕、权限、安全反馈、崩溃恢复、快捷键/无障碍、生命周期和本地 Markdown 查看/预览/分栏编辑/保存可用。
+- `CEF-01D`、`CEF-02W`、`CEF-03..12`、`BUX-01..18`、`MDV-01..24`、`MRT-01..09`、`PLT-01/02/W04` 与适用 PRV；MDV/MRT 不阻塞 BUX 主线，第三方 runtime 与工具栏均按 macOS 先行、Windows 回归收口。
+- 验收：Chrome-inspired 蜡笔 UI、本地起始页、地址栏、导航、标签/窗口、书签、历史、下载、设置、Profile/无痕、权限、安全反馈、崩溃恢复、快捷键/无障碍、生命周期和本地 Markdown 查看/预览/分栏编辑/保存/图片/标准 Mermaid/Code Highlight/KaTeX 可用；无对应节点的文档零额外 runtime 加载，含扩展文档完全离线且错误隔离。
 
 ### A0：Agent 协议与权限内核
 
@@ -219,11 +226,14 @@ flowchart LR
 4. `AGT-01` 在 `FND-08/PRV-08` 满足后冻结 CAAP v1；不得提前开放 CLI/MCP。
 5. `CNT-01` 等 `CEF-15/BUX-18/SDK-14/MED-19/PRV-08` 完成。
 6. `ACT-01` 等 `CNT-03/AGT-01` 完成；`WFL/HUB` 不得越过语义动作和权限依赖。
-7. `MDV-01` 依赖 `BUX-03 DONE` 已满足，可领取冻结本地 Markdown 查看器契约；`MDV-04` 起等 `BUX-16` 完成，不与 BUX 主线抢位。
+7. `MRT-01 READY`：先冻结 Extension Framework v1 的节点、registry、manifest、能力、预算、生命周期与永久禁止面；只改契约，不提前接第三方 runtime。
+8. `MDV-24 VERIFIED`：`MDV-21..23 DONE`；macOS arm64 Helper/deployment target/signing、默认页与公网、MDV 三视图/深色/AX 真机已闭合，arm64/x64 自动化均 61/61。Windows、原生 macOS x64 以及当前 UI 自动化无法替代的 IME/窄窗交互真机仍待补；该工具栏门禁与 Mermaid `MDV-20` 独立。
+9. `MDV-14 READY`：可与 MRT 契约工作独立串行领取，冻结 Mermaid Full 11.17.2 的离线运行时 import closure、manifest/hash/许可与可重复 vendor；`MDV-15/16` 分别等待 `MRT-03/04` 后再按 `17 -> 18 -> 19 -> 20` 收口。
 
 ## 8. 发布门禁
 
-- 234 项任务按所选发布范围提供真实状态、命令与证据；193 个唯一测试 ID 可追踪，P0/P1 Review 为零。
+- 271 项任务按所选发布范围提供真实状态、命令与证据；212 个唯一测试 ID 可追踪，P0/P1 Review 为零。
+- MDV/MRT 发布包仅包含各 manifest 锁定的浏览器运行时闭包，无 tiny/CDN/npm runtime/动态插件；普通 Markdown 对未命中扩展的 runtime 零读取，Mermaid/Highlight/KaTeX 离线可用且通过类型化输出 policy、lazy/cache、generation 与资源回落门禁。
 - CLI/入站 MCP 共用 CAAP；出站 connector 独立；无 raw CDP/WebDriver/任意 JS/remote bind/通用文件上传。
 - 页面数据有界、action 有前置与效果、Workflow verified-only、Challenge 不绕过、self-heal 高风险 fail closed。
 - Hub route_reason/fallback 重授权和 Partner 信任/OAuth/SSRF/kill switch 通过后才开放对应 feature。

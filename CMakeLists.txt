@@ -7,6 +7,17 @@ option(CRAYON_ENABLE_CEF "Integrate an offline CEF Standard distribution" OFF)
 option(CRAYON_BUILD_CEF_SHELL "Build the platform CEF browser shell" ON)
 set(CRAYON_CEF_ROOT "" CACHE STRING
     "Absolute path to an extracted CEF distribution")
+set(CRAYON_MACOS_DEPLOYMENT_TARGET "12.0" CACHE STRING
+    "Minimum supported macOS version for product and CEF-linked targets")
+
+# Product libraries are declared before CEF is integrated below. Seed the
+# deployment target before any add_subdirectory() call so those static objects
+# do not inherit the host SDK version and later produce 26.x -> 12.0 link
+# warnings when consumed by the CEF shell.
+if(APPLE AND CRAYON_ENABLE_CEF)
+  set(CMAKE_OSX_DEPLOYMENT_TARGET "${CRAYON_MACOS_DEPLOYMENT_TARGET}"
+      CACHE STRING "Minimum macOS deployment target" FORCE)
+endif()
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 if(CMAKE_CONFIGURATION_TYPES)

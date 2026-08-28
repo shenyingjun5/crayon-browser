@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <sstream>
 
+#include "mdv_icons_generated.h"
+
 namespace crayon::browser_mdv {
 namespace {
 
@@ -46,48 +48,153 @@ const char* ViewModeName(MdvViewMode mode) {
   return "preview";
 }
 
-std::string ViewButton(const std::string& label, const char* view,
-                       MdvViewMode current) {
-  std::ostringstream button;
-  button << "<button type=\"button\" class=\"view-switch\" data-view=\"" << view
-         << "\"";
-  if (current == MdvViewMode::kPreview && std::string(view) == "preview") {
-    button << " data-active=\"true\"";
-  } else if (current == MdvViewMode::kSource && std::string(view) == "source") {
-    button << " data-active=\"true\"";
-  } else if (current == MdvViewMode::kSplit && std::string(view) == "split") {
-    button << " data-active=\"true\"";
+const char* ShortcutPlatformName(MdvShortcutPlatform platform) {
+  return platform == MdvShortcutPlatform::kMacOS ? "macos" : "windows";
+}
+
+struct ShortcutCopy {
+  std::string display;
+  std::string aria;
+};
+
+ShortcutCopy Shortcut(const char* action, MdvShortcutPlatform platform) {
+  const bool mac = platform == MdvShortcutPlatform::kMacOS;
+  const std::string primary = mac ? "⌘" : "Ctrl+";
+  const std::string aria_primary = mac ? "Meta+" : "Control+";
+  const std::string id(action);
+  if (id == "h1" || id == "h2" || id == "h3") {
+    const char level = id.back();
+    return {primary + (mac ? "⌥" : "Alt+") + level,
+            aria_primary + "Alt+" + level};
   }
-  button << ">" << EscapeHtml(label) << "</button>";
+  if (id == "bold") return {primary + "B", aria_primary + "B"};
+  if (id == "italic") return {primary + "I", aria_primary + "I"};
+  if (id == "strike") {
+    return {primary + (mac ? "⇧X" : "Shift+X"), aria_primary + "Shift+X"};
+  }
+  if (id == "bullet-list") {
+    return {primary + (mac ? "⇧8" : "Shift+8"), aria_primary + "Shift+8"};
+  }
+  if (id == "ordered-list") {
+    return {primary + (mac ? "⇧7" : "Shift+7"), aria_primary + "Shift+7"};
+  }
+  if (id == "link") return {primary + "K", aria_primary + "K"};
+  return {};
+}
+
+std::string TooltipAttributes(const std::string& label,
+                              const std::string& hint,
+                              const ShortcutCopy& shortcut) {
+  std::ostringstream attributes;
+  attributes << " aria-label=\"" << EscapeHtml(label)
+             << "\" data-tooltip-title=\"" << EscapeHtml(label)
+             << "\" data-tooltip-hint=\"" << EscapeHtml(hint) << "\"";
+  if (!shortcut.display.empty()) {
+    attributes << " data-shortcut=\"" << EscapeHtml(shortcut.display)
+               << "\" aria-keyshortcuts=\"" << EscapeHtml(shortcut.aria)
+               << "\"";
+  }
+  return attributes.str();
+}
+
+std::string ViewButton(const std::string& label, const std::string& hint,
+                       const char* icon, const char* view, MdvViewMode current,
+                       bool first) {
+  std::ostringstream button;
+  button << "<button type=\"button\" class=\"view-switch icon-button\" data-view=\""
+         << view << "\" tabindex=\"" << (first ? "0" : "-1") << "\""
+         << TooltipAttributes(label, hint, {});
+  if (current == MdvViewMode::kPreview && std::string(view) == "preview") {
+    button << " data-active=\"true\" aria-pressed=\"true\"";
+  } else if (current == MdvViewMode::kSource && std::string(view) == "source") {
+    button << " data-active=\"true\" aria-pressed=\"true\"";
+  } else if (current == MdvViewMode::kSplit && std::string(view) == "split") {
+    button << " data-active=\"true\" aria-pressed=\"true\"";
+  } else {
+    button << " aria-pressed=\"false\"";
+  }
+  button << ">" << icon << "</button>";
   return button.str();
+}
+
+void ToolButton(std::ostringstream& bar, const char* action,
+                const std::string& label, const char* icon,
+                const std::string& hint, MdvShortcutPlatform platform,
+                bool first = false, bool menu_item = false) {
+  const ShortcutCopy shortcut = Shortcut(action, platform);
+  bar << "<button type=\"button\" class=\"md-tool icon-button"
+      << (menu_item ? " structure-item" : "") << "\" data-action=\""
+      << action << "\" tabindex=\"" << (first ? "0" : "-1") << "\""
+      << TooltipAttributes(label, hint, shortcut);
+  if (menu_item) bar << " role=\"menuitem\"";
+  bar << ">" << icon;
+  if (menu_item) bar << "<span>" << EscapeHtml(label) << "</span>";
+  bar << "</button>";
 }
 
 std::string RenderToolbar(const MdvPageStrings& strings) {
   std::ostringstream bar;
-  bar << "<div class=\"md-toolbar\" role=\"toolbar\" aria-label=\""
+  const std::string md = strings.tooltip_markdown + " · ";
+  bar << "<div class=\"md-toolbar icon-toolbar\" role=\"toolbar\" aria-label=\""
       << EscapeHtml(strings.toolbar_title) << "\">";
-  const auto button = [&bar](const char* action, const std::string& label) {
-    bar << "<button type=\"button\" class=\"md-tool\" data-action=\"" << action
-        << "\">" << EscapeHtml(label) << "</button>";
-  };
-  button("h1", "H1");
-  button("h2", "H2");
-  button("h3", "H3");
+  ToolButton(bar, "h1", strings.tool_heading1, icons::kHeading1, md + "# …",
+             strings.shortcut_platform, true);
+  ToolButton(bar, "h2", strings.tool_heading2, icons::kHeading2, md + "## …",
+             strings.shortcut_platform);
+  ToolButton(bar, "h3", strings.tool_heading3, icons::kHeading3, md + "### …",
+             strings.shortcut_platform);
   bar << "<span class=\"md-tool-sep\"></span>";
-  button("bold", strings.tool_bold);
-  button("italic", strings.tool_italic);
-  button("strike", strings.tool_strike);
-  button("inline-code", strings.tool_inline_code);
+  ToolButton(bar, "bold", strings.tool_bold, icons::kBold, md + "**…**",
+             strings.shortcut_platform);
+  ToolButton(bar, "italic", strings.tool_italic, icons::kItalic, md + "*…*",
+             strings.shortcut_platform);
+  ToolButton(bar, "strike", strings.tool_strike, icons::kStrike, md + "~~…~~",
+             strings.shortcut_platform);
+  ToolButton(bar, "inline-code", strings.tool_inline_code, icons::kInlineCode,
+             md + "`…`", strings.shortcut_platform);
   bar << "<span class=\"md-tool-sep\"></span>";
-  button("bullet-list", strings.tool_bullet_list);
-  button("ordered-list", strings.tool_ordered_list);
-  button("task-list", strings.tool_task_list);
-  button("quote", strings.tool_quote);
+  ToolButton(bar, "bullet-list", strings.tool_bullet_list, icons::kBulletList,
+             md + "- …", strings.shortcut_platform);
+  ToolButton(bar, "ordered-list", strings.tool_ordered_list,
+             icons::kOrderedList, md + "1. …", strings.shortcut_platform);
+  ToolButton(bar, "task-list", strings.tool_task_list, icons::kTaskList,
+             md + "- [ ] …", strings.shortcut_platform);
+  ToolButton(bar, "quote", strings.tool_quote, icons::kQuote, md + "> …",
+             strings.shortcut_platform);
   bar << "<span class=\"md-tool-sep\"></span>";
-  button("code-block", strings.tool_code_block);
-  button("table", strings.tool_table);
-  button("link", strings.tool_link);
-  button("divider", strings.tool_divider);
+  ToolButton(bar, "code-block", strings.tool_code_block, icons::kCodeBlock,
+             md + "```", strings.shortcut_platform);
+  ToolButton(bar, "table", strings.tool_table, icons::kTable, md + "| … |",
+             strings.shortcut_platform);
+  ToolButton(bar, "link", strings.tool_link, icons::kLink, md + "[…](…)",
+             strings.shortcut_platform);
+  ToolButton(bar, "divider", strings.tool_divider, icons::kDivider, md + "---",
+             strings.shortcut_platform);
+  bar << "<span class=\"md-tool-sep\"></span>"
+         "<div class=\"structure-wrap\">"
+         "<button type=\"button\" class=\"md-tool icon-button structure-toggle\" "
+         "aria-haspopup=\"menu\" aria-expanded=\"false\" tabindex=\"-1\""
+      << TooltipAttributes(strings.tool_structure, strings.tooltip_structure, {})
+      << ">" << icons::kStructure << "</button>"
+         "<div class=\"structure-menu\" role=\"menu\" hidden>";
+  ToolButton(bar, "outdent", strings.tool_outdent, icons::kOutdent,
+             strings.tooltip_structure, strings.shortcut_platform, false, true);
+  ToolButton(bar, "indent", strings.tool_indent, icons::kIndent,
+             strings.tooltip_structure, strings.shortcut_platform, false, true);
+  bar << "<span class=\"structure-sep\"></span>";
+  ToolButton(bar, "align-default", strings.tool_align_default,
+             icons::kAlignDefault, strings.tooltip_table_alignment,
+             strings.shortcut_platform, false, true);
+  ToolButton(bar, "align-left", strings.tool_align_left, icons::kAlignLeft,
+             strings.tooltip_table_alignment, strings.shortcut_platform, false,
+             true);
+  ToolButton(bar, "align-center", strings.tool_align_center, icons::kAlignCenter,
+             strings.tooltip_table_alignment, strings.shortcut_platform, false,
+             true);
+  ToolButton(bar, "align-right", strings.tool_align_right, icons::kAlignRight,
+             strings.tooltip_table_alignment, strings.shortcut_platform, false,
+             true);
+  bar << "</div></div>";
   bar << "</div>";
   return bar.str();
 }
@@ -164,7 +271,9 @@ std::string RenderMdvDocument(const MdvPageSnapshot& snapshot,
                               const MdvPageStrings& strings) {
   std::ostringstream document;
   document << "<!doctype html><html lang=\"" << EscapeHtml(strings.language)
-           << "\" data-app=\"mdv\" data-dirty=\""
+           << "\" data-app=\"mdv\" data-platform=\""
+           << ShortcutPlatformName(strings.shortcut_platform)
+           << "\" data-dirty=\""
            << (snapshot.dirty ? "true" : "false")
            << "\"><head><meta charset=\"utf-8\">"
               "<meta name=\"viewport\" content=\"width=device-width,"
@@ -177,12 +286,18 @@ std::string RenderMdvDocument(const MdvPageSnapshot& snapshot,
               "</head><body data-view=\""
            << ViewModeName(snapshot.view_mode)
            << "\">"
-              "<nav class=\"view-bar\" aria-label=\""
+              "<nav class=\"view-bar icon-toolbar\" role=\"toolbar\" aria-label=\""
            << EscapeHtml(strings.document_title) << "\">"
-           << ViewButton(strings.view_source, "source", snapshot.view_mode)
-           << ViewButton(strings.view_preview, "preview", snapshot.view_mode)
-           << ViewButton(strings.view_split, "split", snapshot.view_mode)
-           << "</nav>";
+           << ViewButton(strings.view_source, strings.tooltip_view,
+                         icons::kViewSource, "source", snapshot.view_mode, true)
+           << ViewButton(strings.view_preview, strings.tooltip_view,
+                         icons::kViewPreview, "preview", snapshot.view_mode,
+                         false)
+           << ViewButton(strings.view_split, strings.tooltip_view,
+                         icons::kViewSplit, "split", snapshot.view_mode, false)
+           << "</nav><div id=\"md-tooltip\" role=\"tooltip\" hidden>"
+              "<span class=\"tooltip-title\"></span>"
+              "<span class=\"tooltip-hint\"></span></div>";
   document << StatusBanner(snapshot.error_text, strings, snapshot.save_ok,
                            snapshot.load_status);
   if (!snapshot.has_document) {
@@ -223,32 +338,61 @@ std::string RenderMdvDocument(const MdvPageSnapshot& snapshot,
 std::string RenderMdvStylesheet() {
   // Fixed in-memory stylesheet; no external references.
   std::ostringstream css;
-  css << ":root{color-scheme:light dark}"
+  css << ":root{color-scheme:light dark;--mdv-border:rgba(31,35,41,.15);"
+         "--mdv-hover:rgba(31,35,41,.08);--mdv-active:#e8efff;"
+         "--mdv-active-fg:#245bdb;--mdv-panel:canvas;--mdv-tip:#1f2329;"
+         "--mdv-tip-fg:#fff;}"
       << "*{box-sizing:border-box}"
-      << "body{margin:0;font:14px/1.6 system-ui,sans-serif;}"
-      << ".view-bar{display:flex;gap:4px;padding:6px 10px;"
-         "border-bottom:1px solid canvas;}"
-
-      << ".view-switch{border:1px solid transparent;background:none;"
-         "padding:2px 10px;border-radius:6px;cursor:pointer;}"
-      << ".view-switch[data-active]{border-color:currentColor;font-weight:600;}"
-      << ".md-panes{display:flex;height:calc(100vh - 42px);}"
-      << ".md-source-pane,.md-preview-pane{flex:1;overflow:auto;padding:"
-         "0 14px;}"
-      << ".md-toolbar{display:flex;flex-wrap:wrap;gap:2px;padding:2px 0;"
-         "border-bottom:1px solid canvasText;margin-bottom:4px;}"
-      << ".md-tool{border:1px solid transparent;background:none;padding:1px "
-         "6px;"
-         "border-radius:4px;cursor:pointer;font-size:12px;}"
-      << ".md-tool:hover{border-color:currentColor;}"
-      << ".md-tool-sep{width:1px;background:canvasText;opacity:.2;"
-         "align-self:stretch;margin:2px 2px;}"
+      << "body{margin:0;font:14px/1.6 system-ui,-apple-system,sans-serif;}"
+      << ".view-bar{display:flex;align-items:center;gap:4px;padding:6px 10px;"
+         "border-bottom:1px solid var(--mdv-border);min-height:49px;}"
+      << ".icon-button{display:inline-flex;align-items:center;justify-content:"
+         "center;width:36px;height:36px;flex:0 0 36px;border:1px solid "
+         "transparent;background:transparent;color:inherit;border-radius:8px;"
+         "padding:7px;cursor:pointer;transition:background-color .12s ease,color "
+         ".12s ease;}"
+      << ".icon-button svg{display:block;width:20px;height:20px;flex:none;}"
+      << ".icon-button:hover{background:var(--mdv-hover);}"
+      << ".icon-button:focus-visible{outline:2px solid #3370ff;outline-offset:0;}"
+      << ".icon-button:disabled{opacity:.35;cursor:not-allowed;background:none;}"
+      << ".view-switch[data-active]{background:var(--mdv-active);"
+         "color:var(--mdv-active-fg);}"
+      << ".md-panes{display:flex;height:calc(100vh - 49px);}"
+      << ".md-source-pane,.md-preview-pane{flex:1;min-width:0;padding:0 14px;}"
+      << ".md-source-pane{display:flex;flex-direction:column;overflow:hidden;}"
+      << ".md-preview-pane{overflow:auto;}"
+      << ".md-toolbar{display:flex;align-items:center;flex-wrap:nowrap;gap:2px;"
+         "padding:6px 0;border-bottom:1px solid var(--mdv-border);"
+         "margin-bottom:4px;overflow-x:auto;overflow-y:hidden;scrollbar-width:"
+         "thin;position:relative;z-index:2;}"
+      << ".md-tool{font-size:12px;}"
+      << ".md-tool-sep{width:1px;height:22px;background:var(--mdv-border);"
+         "flex:0 0 1px;margin:0 2px;}"
+      << ".structure-wrap{position:relative;display:flex;flex:0 0 auto;}"
+      << ".structure-menu{position:fixed;z-index:20;min-width:210px;padding:6px;"
+         "border:1px solid var(--mdv-border);border-radius:10px;"
+         "background:var(--mdv-panel);box-shadow:0 8px 28px rgba(31,35,41,.18);}"
+      << ".structure-menu[hidden]{display:none;}"
+      << ".structure-item{width:100%;height:36px;justify-content:flex-start;"
+         "gap:10px;padding:7px 10px;flex:none;text-align:left;}"
+      << ".structure-item svg{width:20px;height:20px;}"
+      << ".structure-item span{white-space:nowrap;}"
+      << ".structure-sep{display:block;height:1px;background:var(--mdv-border);"
+         "margin:5px 4px;}"
+      << "#md-tooltip{position:fixed;z-index:30;max-width:260px;padding:8px 10px;"
+         "border-radius:8px;background:var(--mdv-tip);color:var(--mdv-tip-fg);"
+         "box-shadow:0 6px 20px rgba(0,0,0,.2);pointer-events:none;"
+         "font-size:12px;line-height:1.45;}"
+      << "#md-tooltip[hidden]{display:none;}"
+      << ".tooltip-title,.tooltip-hint{display:block;}"
+      << ".tooltip-title{font-weight:600;}"
+      << ".tooltip-hint{opacity:.72;margin-top:2px;}"
       << ".md-divider{width:6px;cursor:col-resize;background:canvasText;"
          "opacity:.08;flex:0 0 auto;}"
       << ".md-divider:hover,.md-divider[data-dragging]{opacity:.25;}"
       << "body[data-view=preview] .md-source-pane{display:none;}"
       << "body[data-view=source] .md-preview-pane{display:none;}"
-      << ".md-source-pane textarea{width:100%;height:100%;border:none;"
+      << ".md-source-pane textarea{width:100%;flex:1;min-height:0;border:none;"
          "outline:none;resize:none;background:transparent;color:inherit;"
          "font:13px/1.6 ui-monospace,monospace;}"
       << ".md-source-pane pre{white-space:pre-wrap;word-break:break-word;}"
@@ -262,15 +406,22 @@ std::string RenderMdvStylesheet() {
       << ".md-confirm[data-show=true]{display:block;}"
       << ".md-confirm button{margin-right:8px;padding:4px 12px;}"
       << ".md-status{color:crimson;padding:4px 14px;margin:0;}"
-      << "@media(prefers-color-scheme:dark){a{color:#9ecbff;}}";
+      << "@media(max-width:680px){.icon-button{width:32px;height:32px;"
+         "flex-basis:32px;padding:5px}.view-bar{min-height:45px}.md-panes{"
+         "height:calc(100vh - 45px)}.md-source-pane,.md-preview-pane{padding:0 "
+         "10px}}"
+      << "@media(prefers-reduced-motion:reduce){.icon-button{transition:none}}"
+      << "@media(prefers-color-scheme:dark){:root{--mdv-border:rgba(255,255,"
+         "255,.16);--mdv-hover:rgba(255,255,255,.1);--mdv-active:#25385f;"
+         "--mdv-active-fg:#8fb4ff;--mdv-tip:#f2f3f5;--mdv-tip-fg:#1f2329;}"
+         "a{color:#9ecbff;}}";
   return css.str();
 }
 
-std::string RenderMdvScript() {
+void AppendMdvCoreScript(std::ostringstream& js) {
   // In-memory script: view switching, edit-burst queries over the
   // controlled mdvQuery binding, confirm-dialog decisions and the
   // beforeunload dirty guard.  No inline handlers (CSP), no network.
-  std::ostringstream js;
   js << "'use strict';"
      << "(function(){"
      << "var body=document.body;"
@@ -282,8 +433,10 @@ std::string RenderMdvScript() {
      << "body.setAttribute('data-view',next);"
      << "for(var j=0;j<buttons.length;j++){"
      << "buttons[j].removeAttribute('data-active');"
+     << "buttons[j].setAttribute('aria-pressed','false');"
      << "}"
      << "event.currentTarget.setAttribute('data-active','true');"
+     << "event.currentTarget.setAttribute('aria-pressed','true');"
      << "});}"
      << "var source=document.getElementById('md-source');"
      << "var preview=document.getElementById('md-preview');"
@@ -305,11 +458,11 @@ std::string RenderMdvScript() {
         "textContent=state.banner;}"
      << "}"
      << "window.mdvPush=apply;"
-     << "function sendQuery(payload){"
+     << "function sendQuery(payload,onReply){"
      << "if(typeof window.mdvQuery!=='function'){return;}"
      << "window.mdvQuery({request:JSON.stringify(payload),persistent:false,"
-     << "onSuccess:function(response){try{apply(JSON.parse(response));}catch(e)"
-        "{}},"
+     << "onSuccess:function(response){try{var state=JSON.parse(response);"
+        "if(onReply){onReply(state);}else{apply(state);}}catch(e){}},"
      << "onFailure:function(){}});"
      << "}"
      << "var throttleUntil=0;"
@@ -339,58 +492,124 @@ std::string RenderMdvScript() {
      << "previewPane.scrollTop=(source.scrollTop/"
         "max)*(previewPane.scrollHeight-previewPane.clientHeight);"
      << "syncing=false;"
+     << "});}";
+}
+
+void AppendMdvToolbarScript(std::ostringstream& js) {
+  js << "var toolbar=document.querySelector('.md-toolbar');"
+     << "var transformRevision=0;"
+     << "function requestAction(action){"
+     << "if(!source||!action){return;}"
+     << "var revision=++transformRevision;var original=source.value;"
+     << "sendQuery({type:'transform',action:action,text:original,"
+        "start:source.selectionStart,end:source.selectionEnd},function(edit){"
+     << "if(revision!==transformRevision||source.value!==original||!edit||"
+        "edit.applied!==true){return;}"
+     << "source.setRangeText(edit.replacement,edit.start,edit.end,'end');"
+     << "source.selectionStart=edit.start+edit.selectionStart;"
+     << "source.selectionEnd=edit.start+edit.selectionEnd;"
+     << "source.focus();source.dispatchEvent(new Event('input'));hideTooltip();"
      << "});}"
-     << "var toolbar=document.querySelector('.md-toolbar');"
-     << "function wrapOrCaret(pre,post){"
-     << "if(!source){return;}"
-     << "var st=source.selectionStart,en=source.selectionEnd;"
-     << "var sel=source.value.substring(st,en);"
-     << "source.setRangeText(pre+sel+post,st,en,sel?'select':'end');"
-     << "if(!sel){source.selectionStart=source.selectionEnd=st+pre.length;}"
-     << "source.dispatchEvent(new Event('input'));"
-     << "}"
-     << "function linePrefix(prefix){"
-     << "if(!source){return;}"
-     << "var st=source.selectionStart,en=source.selectionEnd;"
-     << "var from=source.value.lastIndexOf('\\n',st-1)+1;"
-     << "source.setRangeText(prefix+source.value.substring(from),from,en,'end')"
-        ";"
-     << "source.dispatchEvent(new Event('input'));"
-     << "}"
-     << "function insertBlock(text,placeholder){"
-     << "if(!source){return;}"
-     << "var st=source.selectionStart;"
-     << "source.setRangeText(text,st,st,'end');"
-     << "if(placeholder){var at=source.value.indexOf(placeholder,st);"
-     << "if(at>=0){source.selectionStart=at;source.selectionEnd=at+placeholder."
-        "length;}}"
-     << "source.dispatchEvent(new Event('input'));"
-     << "}"
+     << "var structureToggle=document.querySelector('.structure-toggle');"
+     << "var structureMenu=document.querySelector('.structure-menu');"
+     << "function closeStructure(){if(!structureMenu||!structureToggle){return;}"
+        "structureMenu.hidden=true;structureToggle.setAttribute('aria-expanded','"
+        "false');}"
+     << "function lineAtCaret(){if(!source){return '';}var before=source.value."
+        "lastIndexOf('\\n',Math.max(0,source.selectionStart-1))+1;var after=source."
+        "value.indexOf('\\n',source.selectionStart);if(after<0){after=source.value."
+        "length;}return source.value.substring(before,after);}"
+     << "function structureContext(){var line=lineAtCaret();var structured=/^\\s*"
+        "(?:[-*+] |[-] \\[[ xX]\\] |\\d+\\. |> )/.test(line);var lines=source?"
+        "source.value.split(/\\r?\\n/):[];var row=0;if(source){row=source.value."
+        "substring(0,source.selectionStart).split('\\n').length-1;}var table=false;"
+        "for(var i=1;i<lines.length;i++){if(/^\\s*\\|?\\s*:?-{3,}:?\\s*(?:\\|"
+        "\\s*:?-{3,}:?\\s*)+\\|?\\s*$/.test(lines[i])&&row>=i-1){var n=(lines[i]."
+        "match(/\\|/g)||[]).length;for(var j=i;j<lines.length;j++){if((lines[j]."
+        "match(/\\|/g)||[]).length!==n){break;}if(j===row){table=true;}}}}return "
+        "{structured:structured,table:table};}"
+     << "function updateStructure(){if(!structureMenu||!source){return;}var c="
+        "structureContext();var items=structureMenu.querySelectorAll('[data-action]"
+        "');for(var i=0;i<items.length;i++){var a=items[i].getAttribute('data-"
+        "action');items[i].disabled=a.indexOf('align-')===0?!c.table:!c."
+        "structured;}}"
+     << "if(structureToggle&&structureMenu){structureToggle.addEventListener('"
+        "click',function(){var opening=structureMenu.hidden;if(!opening){"
+        "closeStructure();return;}updateStructure();var r=structureToggle."
+        "getBoundingClientRect();structureMenu.hidden=false;structureMenu.style."
+        "top=(r.bottom+6)+'px';structureMenu.style.left=Math.max(8,Math.min(r.left,"
+        "window.innerWidth-218))+'px';structureToggle.setAttribute('aria-expanded',"
+        "'true');var first=structureMenu.querySelector('button:not([disabled])');"
+        "if(first){first.focus();}});}"
      << "if(toolbar&&source){toolbar.addEventListener('click',function(event){"
-     << "var "
-        "a=event.target&&event.target.getAttribute?event.target.getAttribute('"
-        "data-action'):null;"
-     << "if(!a){return;}"
-     << "if(a==='bold'){wrapOrCaret('**','**');}"
-     << "else if(a==='italic'){wrapOrCaret('*','*');}"
-     << "else if(a==='strike'){wrapOrCaret('~~','~~');}"
-     << "else if(a==='inline-code'){wrapOrCaret('`','`');}"
-     << "else if(a==='h1'){linePrefix('# ');}"
-     << "else if(a==='h2'){linePrefix('## ');}"
-     << "else if(a==='h3'){linePrefix('### ');}"
-     << "else if(a==='bullet-list'){linePrefix('- ');}"
-     << "else if(a==='ordered-list'){linePrefix('1. ');}"
-     << "else if(a==='task-list'){linePrefix('- [ ] ');}"
-     << "else if(a==='quote'){linePrefix('> ');}"
-     << "else "
-        "if(a==='code-block'){insertBlock('\\n```\\n代码内容\\n```\\n','"
-        "代码内容');}"
-     << "else if(a==='table'){insertBlock('\\n| 列一 | 列二 |\\n|---|---|\\n| "
-        "内容 | 内容 |\\n','列一');}"
-     << "else if(a==='link'){insertBlock('[链接文字](https://)','链接文字');}"
-     << "else if(a==='divider'){insertBlock('\\n---\\n',null);}"
-     << "});}"
-     << "var divider=document.getElementById('md-divider');"
+     << "var target=event.target&&event.target.closest?event.target.closest('[data-"
+        "action]'):null;if(!target||target.disabled){return;}requestAction(target."
+        "getAttribute('data-action'));closeStructure();});}"
+     << "if(structureMenu){structureMenu.addEventListener('keydown',function(e){var"
+        " items=Array.prototype.slice.call(structureMenu.querySelectorAll('button:"
+        "not([disabled])'));var at=items.indexOf(document.activeElement);if(e.key==="
+        "'Escape'){e.preventDefault();closeStructure();structureToggle.focus();return"
+        ";}if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();var step=e."
+        "key==='ArrowDown'?1:-1;items[(at+step+items.length)%items.length].focus();}}"
+        ");}"
+     << "var tooltip=document.getElementById('md-tooltip');var tooltipTimer=0;"
+     << "function hideTooltip(){if(tooltipTimer){clearTimeout(tooltipTimer);"
+        "tooltipTimer=0;}if(tooltip){tooltip.hidden=true;}}"
+     << "function showTooltip(target,immediate){if(!tooltip||!target){return;}"
+        "hideTooltip();var reveal=function(){var title=target.getAttribute('data-"
+        "tooltip-title')||'';var shortcut=target.getAttribute('data-shortcut')||'';"
+        "tooltip.querySelector('.tooltip-title').textContent=title+(shortcut?' · '+"
+        "shortcut:'');tooltip.querySelector('.tooltip-hint').textContent=target."
+        "getAttribute('data-tooltip-hint')||'';tooltip.hidden=false;var r=target."
+        "getBoundingClientRect();var tr=tooltip.getBoundingClientRect();tooltip.style."
+        "left=Math.max(8,Math.min(r.left+r.width/2-tr.width/2,window.innerWidth-tr."
+        "width-8))+'px';tooltip.style.top=Math.min(window.innerHeight-tr.height-8,r."
+        "bottom+8)+'px';};if(immediate){reveal();}else{tooltipTimer=setTimeout(reveal,"
+        "450);}}"
+     << "document.addEventListener('mouseover',function(e){var t=e.target.closest&&e."
+        "target.closest('[data-tooltip-title]');if(t&&!(e.relatedTarget&&t.contains(e."
+        "relatedTarget))){showTooltip(t,false);}});"
+     << "document.addEventListener('mouseout',function(e){var t=e.target.closest&&e."
+        "target.closest('[data-tooltip-title]');if(t&&!t.contains(e.relatedTarget)){"
+        "hideTooltip();}});"
+     << "document.addEventListener('focusin',function(e){var t=e.target.closest&&e."
+        "target.closest('[data-tooltip-title]');if(t){showTooltip(t,true);}});"
+     << "document.addEventListener('focusout',function(e){var t=e.target.closest&&e."
+        "target.closest('[data-tooltip-title]');if(t){hideTooltip();}});"
+     << "document.addEventListener('keydown',function(e){if(e.key==='Escape'){"
+        "hideTooltip();closeStructure();}});window.addEventListener('scroll',"
+        "hideTooltip,true);"
+     << "var bars=document.querySelectorAll('.icon-toolbar');for(var bi=0;bi<bars."
+        "length;bi++){bars[bi].addEventListener('keydown',function(e){if(e.key!=="
+        "'ArrowRight'&&e.key!=='ArrowLeft'&&e.key!=='Home'&&e.key!=='End'){return;}"
+        "var items=Array.prototype.slice.call(this.querySelectorAll('.icon-button:"
+        "not(.structure-item):not([disabled])'));var at=items.indexOf(document."
+        "activeElement);if(at<0){return;}e.preventDefault();var next=e.key==='Home'?0:"
+        "e.key==='End'?items.length-1:(at+(e.key==='ArrowRight'?1:-1)+items.length)%"
+        "items.length;for(var k=0;k<items.length;k++){items[k].tabIndex=k===next?0:-1;}"
+        "items[next].focus();});}"
+     << "function shortcutAction(e){if(!source||document.activeElement!==source||e."
+        "isComposing||e.keyCode===229||(e.getModifierState&&e.getModifierState('"
+        "AltGraph'))){return null;}var mac=document.documentElement.getAttribute('"
+        "data-platform')==='macos';var primary=mac?e.metaKey:e.ctrlKey;if(!primary||"
+        "(mac&&e.ctrlKey)||(!mac&&e.metaKey)){return null;}var key=e.key.toLowerCase"
+        "();if(e.altKey&&!e.shiftKey&&/^[123]$/.test(key)){return 'h'+key;}if(!e."
+        "altKey&&!e.shiftKey){if(key==='b'){return 'bold';}if(key==='i'){return '"
+        "italic';}if(key==='k'){return 'link';}}if(!e.altKey&&e.shiftKey){if(key==='"
+        "x'){return 'strike';}if(key==='8'){return 'bullet-list';}if(key==='7'){"
+        "return 'ordered-list';}}return null;}"
+     << "document.addEventListener('keydown',function(e){if(!source){return;}if((e."
+        "key==='Tab')&&document.activeElement===source&&!e.isComposing&&e.keyCode!=="
+        "229&&structureContext().structured){e.preventDefault();requestAction(e."
+        "shiftKey?'outdent':'indent');return;}var action=shortcutAction(e);if(action){"
+        "e.preventDefault();requestAction(action);}});"
+     << "if(source){source.addEventListener('select',updateStructure);source."
+        "addEventListener('keyup',updateStructure);source.addEventListener('click',"
+        "updateStructure);}";
+}
+
+void AppendMdvDividerScript(std::ostringstream& js) {
+  js << "var divider=document.getElementById('md-divider');"
      << "var sourcePane=document.querySelector('.md-source-pane');"
      << "var panes=document.querySelector('.md-panes');"
      << "if(divider&&sourcePane&&panes){"
@@ -412,6 +631,15 @@ std::string RenderMdvScript() {
      << "document.addEventListener('mouseup',onUp);"
      << "});}"
      << "})();";
+}
+
+std::string RenderMdvScript() {
+  // One IIFE is assembled from bounded, single-purpose sections so the script
+  // shares state without turning the C++ renderer into a >200-line function.
+  std::ostringstream js;
+  AppendMdvCoreScript(js);
+  AppendMdvToolbarScript(js);
+  AppendMdvDividerScript(js);
   return js.str();
 }
 

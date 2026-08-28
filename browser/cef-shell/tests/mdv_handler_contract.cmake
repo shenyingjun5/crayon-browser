@@ -28,6 +28,15 @@ if(hit EQUAL -1)
 endif()
 
 file(READ "${editing_cc}" editing_text)
+string(FIND "${editing_text}" "type == \"transform\"" transform_query_hit)
+string(FIND "${editing_text}" "TransformMarkdownText" transform_api_hit)
+string(FIND "${editing_text}" "Utf16OffsetToUtf8Byte" transform_offset_hit)
+string(FIND "${editing_text}" "GetType(\"start\") != VTYPE_INT"
+       transform_type_gate_hit)
+if(transform_query_hit EQUAL -1 OR transform_api_hit EQUAL -1 OR
+   transform_offset_hit EQUAL -1 OR transform_type_gate_hit EQUAL -1)
+  message(FATAL_ERROR "mdvQuery must reuse the shared transform API with typed UTF-16 offset gating")
+endif()
 file(READ "${CRAYON_CEF_SHELL_SOURCE}/src/browser/mdv/cef_mdv_editing.h" editing_header)
 string(FIND "${editing_header}${editing_text}" "MdvSaveController" hit)
 if(hit EQUAL -1)
@@ -95,6 +104,42 @@ endif()
 string(FIND "${process_app_text}" "CefRenderProcessHandler" hit)
 if(hit EQUAL -1)
   message(FATAL_ERROR "renderer process app lost CefRenderProcessHandler")
+endif()
+
+# Windows cannot be executed on the macOS-first development host, but its
+# resource surface must remain a closed compile-time triple: ID declaration,
+# RC string and platform injection. The Windows x64 executable remains the
+# authority for the final MDV-24 runtime gate.
+file(READ "${CRAYON_CEF_SHELL_SOURCE}/resources/windows/resource_ids.h"
+     windows_ids)
+file(READ "${CRAYON_CEF_SHELL_SOURCE}/resources/windows/app.rc.in"
+     windows_rc)
+file(READ "${CRAYON_CEF_SHELL_SOURCE}/src/windows/app.cc" windows_app)
+foreach(resource IN ITEMS
+        IDS_CRAYON_MDV_TOOL_HEADING1
+        IDS_CRAYON_MDV_TOOL_HEADING2
+        IDS_CRAYON_MDV_TOOL_HEADING3
+        IDS_CRAYON_MDV_TOOL_STRUCTURE
+        IDS_CRAYON_MDV_TOOL_INDENT
+        IDS_CRAYON_MDV_TOOL_OUTDENT
+        IDS_CRAYON_MDV_TOOL_ALIGN_DEFAULT
+        IDS_CRAYON_MDV_TOOL_ALIGN_LEFT
+        IDS_CRAYON_MDV_TOOL_ALIGN_CENTER
+        IDS_CRAYON_MDV_TOOL_ALIGN_RIGHT
+        IDS_CRAYON_MDV_TOOLTIP_VIEW
+        IDS_CRAYON_MDV_TOOLTIP_MARKDOWN
+        IDS_CRAYON_MDV_TOOLTIP_STRUCTURE
+        IDS_CRAYON_MDV_TOOLTIP_TABLE_ALIGNMENT)
+  foreach(surface IN ITEMS windows_ids windows_rc windows_app)
+    string(FIND "${${surface}}" "${resource}" resource_hit)
+    if(resource_hit EQUAL -1)
+      message(FATAL_ERROR "${resource} is missing from ${surface}")
+    endif()
+  endforeach()
+endforeach()
+string(FIND "${windows_app}" "MdvShortcutPlatform::kWindows" platform_hit)
+if(platform_hit EQUAL -1)
+  message(FATAL_ERROR "Windows MDV must inject the kWindows shortcut profile")
 endif()
 
 message(STATUS "mdv_handler_contract: OK")

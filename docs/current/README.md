@@ -7,15 +7,15 @@
 | 文档 | 作用 |
 |---|---|
 | [当前 PRD](../crayon-private-cast-browser-prd.md) | v0.8 产品事实源：定位、范围、阶段、语义动作、Workflow/Hub、隐私与验收 |
-| [当前架构](architecture.md) | v0.7 CAAP、语义动作、Workflow/Challenge、Hub/connector、投屏、模型与平台边界 |
+| [当前架构](architecture.md) | v0.8 CAAP、语义动作、Markdown Runtime、Workflow/Challenge、Hub/connector、投屏、模型与平台边界 |
 | [技术方案](../crayon-private-cast-browser-technical-design.md) | 当前实现方案与构建/供应链考虑 |
 | [测试标准](testing-standard.md) | 分层、设施、平台矩阵和证据规则 |
-| [测试用例](test-cases.md) | 193 个唯一当前权威测试 ID |
+| [测试用例](test-cases.md) | 212 个唯一当前权威测试 ID |
 | [Code Review 标准](code-review-standard.md) | 审查顺序、门禁和交付格式 |
 | [品牌图标契约](brand-assets.md) | `app-icon-v1` 参考源、母版、平台组合与禁用规则 |
 | [桌面浏览器体验契约](browser-ux.md) | `browser-design-v1` 顶部信息架构、共享 token、标题栏/功能 icon、键盘与无障碍规则 |
-| [本地 Markdown 查看器契约](markdown-viewer.md) | `crayon://mdv` scheme/CSP、入口手势门禁、渲染语法闭合清单与选型结论（`MDV-01` 冻结） |
-| [总 Roadmap](../crayon-private-cast-browser-roadmap.md) | 234 项活跃任务、阶段和当前领取顺序 |
+| [本地 Markdown 查看器契约](markdown-viewer.md) | `crayon://mdv` scheme/CSP、入口手势门禁、图标工具栏与 Mermaid Full 离线扩展契约（v1.4） |
+| [总 Roadmap](../crayon-private-cast-browser-roadmap.md) | 271 项活跃任务、阶段和当前领取顺序 |
 | [模块 Roadmap 索引](../plans/README.md) | 每个模块的原子任务、依赖与状态 |
 
 ## 2. 专项当前契约
@@ -35,7 +35,7 @@ Cast-SDK source lock 的当前事实位于 `config/cast-sdk-source.toml`、`.git
 
 - 当前产品名/定位：蜡笔 AI Agent 投屏浏览器；从协议、页面数据面和授权边界为 AI Agent 定制。
 - 桌面 UI 采用 Chrome/Chromium 用户熟悉的信息架构与快捷键心智，但使用蜡笔品牌和自有本地页面；`BUX-01..18` 覆盖起始页、omnibox、标签、书签、历史、下载、设置、Profile/无痕与日用基础功能。
-- 浏览器内建本地 Markdown 查看器：用户经受控入口打开本地 `.md`，支持源码/渲染预览切换与分栏编辑实时预览、原子保存；`MDV-01..07` 承接，属用户能力，不作为 Agent 能力暴露；契约已由 `MDV-01` 冻结为 [markdown-viewer.md](markdown-viewer.md)（v1.0，选型 vendored md4c 0.5.3/MIT）。
+- 浏览器内建本地 Markdown Runtime：用户经受控入口打开本地 `.md`，支持源码/渲染预览切换、分栏编辑实时预览、原子保存、图标化编辑工具栏与标准 Mermaid fence；`MDV-01..24` 承接查看器、工具栏与 Mermaid，`MRT-01..19` 承接闭合扩展框架、Highlight/KaTeX 及后续扩展/跨域门禁，均属用户能力，不作为 Agent 能力暴露。普通 Markdown 继续使用 vendored md4c 0.5.3/MIT；第三方 runtime 均为应用内固定闭包、按需加载，Mermaid tiny 选型已撤销。
 - Windows/macOS CEF 浏览器与 LAN Direct/Relay 投屏优先。
 - 无 Direct/Relay 路由时只交接给独立蜡笔投屏客户端；浏览器不做 WebRTC、屏幕/标签页/系统音频采集或编码。
 - 浏览器与投屏主链路完成后建设当前页数据/Markdown；CAAP、CLI/MCP、高性能读页与授权操作是核心分阶段能力。

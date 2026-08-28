@@ -1,0 +1,5 @@
+#pragma once
+
+namespace crayon::browser_mdv::icons {
+@MDV_ICON_DECLARATIONS@
+}  // namespace crayon::browser_mdv::icons

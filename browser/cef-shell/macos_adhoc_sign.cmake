@@ -34,10 +34,36 @@ if(NOT EXISTS "${CRAYON_HELPER_MANIFEST}")
   message(FATAL_ERROR "helper manifest missing: ${CRAYON_HELPER_MANIFEST}")
 endif()
 file(STRINGS "${CRAYON_HELPER_MANIFEST}" helper_names)
+set(cef_framework
+    "${CRAYON_APP_BUNDLE}/Contents/Frameworks/Chromium Embedded Framework.framework")
+if(NOT IS_DIRECTORY "${cef_framework}")
+  message(FATAL_ERROR "CEF framework missing from app bundle: ${cef_framework}")
+endif()
+
+# CEF's arm64 distribution currently carries linker signatures while the x64
+# distribution does not. Never depend on that upstream difference: sign every
+# nested Mach-O explicitly, from the deepest dylibs outward, before sealing the
+# framework and the containing app bundle.
+file(GLOB cef_dylibs LIST_DIRECTORIES false
+     "${cef_framework}/Versions/A/Libraries/*.dylib")
+list(SORT cef_dylibs)
+if(NOT cef_dylibs)
+  message(FATAL_ERROR "CEF framework contains no dylibs to sign")
+endif()
+foreach(cef_dylib IN LISTS cef_dylibs)
+  sign_bundle("${cef_dylib}")
+endforeach()
+sign_bundle("${cef_framework}")
+
 foreach(helper_name IN LISTS helper_names)
-  get_filename_component(helper_dir "${CRAYON_APP_BUNDLE}" DIRECTORY)
-  sign_bundle("${helper_dir}/${helper_name}.app")
+  set(embedded_helper
+      "${CRAYON_APP_BUNDLE}/Contents/Frameworks/${helper_name}.app")
+  if(NOT IS_DIRECTORY "${embedded_helper}")
+    message(FATAL_ERROR "embedded helper missing: ${embedded_helper}")
+  endif()
+  sign_bundle("${embedded_helper}")
 endforeach()
 
 sign_bundle("${CRAYON_APP_BUNDLE}")
-message(STATUS "Ad-hoc signed ${CRAYON_APP_BUNDLE} (+ helpers) for the macOS sandbox")
+message(STATUS
+        "Ad-hoc signed ${CRAYON_APP_BUNDLE} (CEF dylibs/framework + embedded helpers) for the macOS sandbox")

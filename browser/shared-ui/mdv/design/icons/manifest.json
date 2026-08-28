@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "mdv-toolbar-v1",
+  "canvas": "0 0 24 24",
+  "source": "crayon-original-glyphs",
+  "tokenSource": "browser/shared-ui/design/tokens.json",
+  "metrics": {
+    "glyphDip": 20,
+    "minimumHitTargetDip": 32,
+    "preferredHitTargetDip": 36,
+    "focusRingDip": 2
+  },
+  "glyphs": [
+    {"id":"view.source","file":"view-source.svg","labelKey":"mdv.view_source","group":"view","surfaces":["mdv-view-switch"],"mirrorInRtl":false},
+    {"id":"view.preview","file":"view-preview.svg","labelKey":"mdv.view_preview","group":"view","surfaces":["mdv-view-switch"],"mirrorInRtl":false},
+    {"id":"view.split","file":"view-split.svg","labelKey":"mdv.view_split","group":"view","surfaces":["mdv-view-switch"],"mirrorInRtl":false},
+    {"id":"format.heading1","file":"format-heading-1.svg","labelKey":"mdv.tool.heading1","group":"heading","surfaces":["mdv-format-toolbar"],"mirrorInRtl":false},
+    {"id":"format.heading2","file":"format-heading-2.svg","labelKey":"mdv.tool.heading2","group":"heading","surfaces":["mdv-format-toolbar"],"mirrorInRtl":false},
+    {"id":"format.heading3","file":"format-heading-3.svg","labelKey":"mdv.tool.heading3","group":"heading","surfaces":["mdv-format-toolbar"],"mirrorInRtl":false},
+    {"id":"format.bold","file":"format-bold.svg","labelKey":"mdv.tool.bold","group":"inline","surfaces":["mdv-format-toolbar"],"mirrorInRtl":false},
+    {"id":"format.italic","file":"format-italic.svg","labelKey":"mdv.tool.italic","group":"inline","surfaces":["mdv-format-toolbar"],"mirrorInRtl":false},
+    {"id":"format.strike","file":"format-strike.svg","labelKey":"mdv.tool.strike","group":"inline","surfaces":["mdv-format-toolbar"],"mirrorInRtl":false},
+    {"id":"format.inline-code","file":"format-inline-code.svg","labelKey":"mdv.tool.inline_code","group":"inline","surfaces":["mdv-format-toolbar"],"mirrorInRtl":false},
+    {"id":"block.bullet-list","file":"block-bullet-list.svg","labelKey":"mdv.tool.bullet_list","group":"block","surfaces":["mdv-format-toolbar"],"mirrorInRtl":true},
+    {"id":"block.ordered-list","file":"block-ordered-list.svg","labelKey":"mdv.tool.ordered_list","group":"block","surfaces":["mdv-format-toolbar"],"mirrorInRtl":true},
+    {"id":"block.task-list","file":"block-task-list.svg","labelKey":"mdv.tool.task_list","group":"block","surfaces":["mdv-format-toolbar"],"mirrorInRtl":true},
+    {"id":"block.quote","file":"block-quote.svg","labelKey":"mdv.tool.quote","group":"block","surfaces":["mdv-format-toolbar"],"mirrorInRtl":false},
+    {"id":"block.code","file":"block-code.svg","labelKey":"mdv.tool.code_block","group":"insert","surfaces":["mdv-format-toolbar"],"mirrorInRtl":false},
+    {"id":"block.table","file":"block-table.svg","labelKey":"mdv.tool.table","group":"insert","surfaces":["mdv-format-toolbar"],"mirrorInRtl":false},
+    {"id":"block.link","file":"block-link.svg","labelKey":"mdv.tool.link","group":"insert","surfaces":["mdv-format-toolbar"],"mirrorInRtl":false},
+    {"id":"block.divider","file":"block-divider.svg","labelKey":"mdv.tool.divider","group":"insert","surfaces":["mdv-format-toolbar"],"mirrorInRtl":false},
+    {"id":"structure.menu","file":"structure-menu.svg","labelKey":"mdv.tool.structure","group":"structure","surfaces":["mdv-format-toolbar"],"mirrorInRtl":true},
+    {"id":"structure.outdent","file":"structure-outdent.svg","labelKey":"mdv.tool.outdent","group":"structure","surfaces":["mdv-structure-menu"],"mirrorInRtl":true},
+    {"id":"structure.indent","file":"structure-indent.svg","labelKey":"mdv.tool.indent","group":"structure","surfaces":["mdv-structure-menu"],"mirrorInRtl":true},
+    {"id":"structure.align-default","file":"structure-align-default.svg","labelKey":"mdv.tool.align_default","group":"alignment","surfaces":["mdv-structure-menu"],"mirrorInRtl":false},
+    {"id":"structure.align-left","file":"structure-align-left.svg","labelKey":"mdv.tool.align_left","group":"alignment","surfaces":["mdv-structure-menu"],"mirrorInRtl":true},
+    {"id":"structure.align-center","file":"structure-align-center.svg","labelKey":"mdv.tool.align_center","group":"alignment","surfaces":["mdv-structure-menu"],"mirrorInRtl":false},
+    {"id":"structure.align-right","file":"structure-align-right.svg","labelKey":"mdv.tool.align_right","group":"alignment","surfaces":["mdv-structure-menu"],"mirrorInRtl":true}
+  ]
+}

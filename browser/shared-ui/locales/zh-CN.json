@@ -106,5 +106,19 @@
   "mdv.tool.code_block": "代码块",
   "mdv.tool.table": "表格",
   "mdv.tool.link": "链接",
-  "mdv.tool.divider": "分割线"
+  "mdv.tool.divider": "分割线",
+  "mdv.tool.heading1": "一级标题",
+  "mdv.tool.heading2": "二级标题",
+  "mdv.tool.heading3": "三级标题",
+  "mdv.tool.structure": "缩进和对齐",
+  "mdv.tool.indent": "增加缩进",
+  "mdv.tool.outdent": "减少缩进",
+  "mdv.tool.align_default": "默认对齐",
+  "mdv.tool.align_left": "左对齐",
+  "mdv.tool.align_center": "居中对齐",
+  "mdv.tool.align_right": "右对齐",
+  "mdv.tooltip.view": "切换文档视图",
+  "mdv.tooltip.markdown": "Markdown 格式",
+  "mdv.tooltip.structure": "列表或引用层级",
+  "mdv.tooltip.table_alignment": "表格列对齐"
 }

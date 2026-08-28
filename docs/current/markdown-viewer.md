@@ -1,8 +1,8 @@
 # 本地 Markdown 查看器（MDV）契约
 
-- 版本：v1.0（由 `MDV-01` 冻结）
-- 日期：2026-08-24
-- 上位依据：PRD v0.8 §4.1；本契约是 `MDV-02..06` 的验收输入，冲突时以上位契约为准。
+- 版本：v1.4（`MDV-21..24` 编辑器图标工具栏实现与平台装配修订）
+- 日期：2026-08-28
+- 上位依据：PRD v0.8 §4.1；本契约是 `MDV-02..24` 的验收输入，冲突时以上位契约为准。
 
 ## 1. 定位与非能力声明
 
@@ -13,7 +13,7 @@
 ## 2. Scheme / Origin / CSP 与资源路由
 
 - Scheme：`crayon://mdv`，复用 `BUX-03` 确立的内置页自定义 scheme handler 模式（Browser process 内存资源 + 受控 resource handler）。
-- 资源路由：页面框架（HTML/CSS/JS）只从编译期/内存资源提供，带内容 hash 校验的固定路径（如 `/app.html`、`/app.css`、`/app.js`）；渲染内容 HTML 由 Browser process 确定性生成后经受控绑定注入，**不经网络、不经文件系统 URL**。
+- 资源路由：页面框架（HTML/CSS/JS）只从编译期/内存资源提供，带内容 hash 校验的固定路径（如 `/app.html`、`/app.css`、`/app.js`）；Mermaid Full 的 ESM 入口与运行时 chunk 由构建期生成的只读 manifest 精确枚举在 `/assets/mermaid/<version>/<upstream-relative-path>` 下，路径与逐文件 hash 分别锁定，同样只从应用内资源提供。渲染内容 HTML 由 Browser process 确定性生成后经受控绑定注入，**不经网络、不经任意文件系统 URL**。
 - CSP（全页强制，resource handler 下发）：
 
 ```
@@ -81,6 +81,7 @@ frame-ancestors 'none'
 - Setext 标题（`===`/`---` 下划线）
 - 段落与硬换行（行尾两空格或反斜杠）
 - 围栏代码块 ``` 与 ~~~（含 info string 显示）；缩进代码块（4 空格）
+- 标准 Mermaid 围栏代码块 ```` ```mermaid ````：仅精确、大小写敏感的 `mermaid` info string 进入图表扩展；图类型由 Mermaid Full 自行识别，不新增 ```` ```mindmap ````、```` ```architecture ```` 等蜡笔私有方言
 - 引用块（可嵌套）
 - 无序/有序列表（可嵌套、松散/紧凑）；GFM 任务列表项 `- [ ]` / `- [x]`（只读勾选态展示，编辑器内可改字符）
 - GFM 表格（含对齐冒号）
@@ -94,7 +95,7 @@ frame-ancestors 'none'
 - 图片引用 `![alt](…)`（见 §7 加载规则）
 - 尖括号自动链接 `<https://…>`、`<mailto:…>`
 
-**明确不在清单内（按纯文本转义渲染）**：原始 HTML（块/行内）、脚注、定义列表、数学公式、wiki 双链、admonition、高亮/上下标/剧透扩展、自动 URL 裸链（未加尖括号者保持纯文本）。
+**明确不在清单内（按纯文本转义渲染）**：原始 HTML（块/行内）、脚注、定义列表、顶层数学公式、wiki 双链、admonition、高亮/上下标/剧透扩展、自动 URL 裸链（未加尖括号者保持纯文本）。Mermaid Full 随包携带的 KaTeX/图标等能力不等于自动扩张 Markdown 语法；需要外部字体、图标包、网络资源或新 Markdown 方言的能力默认关闭，后续必须单独修订契约。
 
 ## 7. 渲染安全规则
 
@@ -108,15 +109,22 @@ frame-ancestors 'none'
   - 页面 DOM/URL 中永不出现本地路径：渲染管线把合法本地引用改写为不透明序号路由 `crayon://mdv/img/<N>`，N 到绝对路径的映射只在 Browser 进程内存中，文档切换时代际失效。
   - 拒绝集合占位：非白名单格式、`data:`/`javascript:`/其他 scheme、不存在/非常规文件、超限文件均渲染为占位框并显示 alt 文本与引用地址文本。
 - 输出不包含：script、事件属性（on*）、iframe/object/embed、表单动作、外部引用（src/href 指向非用户点击链接的外部资源）。
+- Mermaid fence 在 Browser process 只生成带不透明 block ID 的占位节点；原始 DSL 作为不可信文本交给页面内的受控扩展运行时，不拼进脚本、URL 或事件属性。Mermaid 返回的 SVG 不复用 Markdown HTML 白名单：必须先经过独立 SVG policy gate，拒绝 script、事件属性、`javascript:`/`data:`/`file:`、外部 URL、`foreignObject`、`@import` 与 CSS `url()`，通过后才可局部替换对应占位节点。
 
 ## 8. 视图与编辑交互
 
 - 三种视图态：源码视图、渲染预览、分栏模式（左源码右实时预览）。切换即时，滚动位置在会话内保持。
 - 源码面板在源码/分栏态为可编辑 `<textarea>`；分栏两面板之间的间隔条支持左右拖动调整宽度（纯前端调整，会话内有效）。
 - 分栏滚动联动：编辑侧滚动时预览侧按同一滚动比例跟随（单向，右→左不联动以防循环）。V1 为滚动比例近似——渲染引擎不产出源码行号映射，逐行精确同步属于后续契约扩展。
-- 编辑工具栏（源码/分栏态源码面板顶部）：闭合动作集共 14 项——标题 H1/H2/H3、加粗、斜体、删除线、行内代码、无序列表、有序列表、任务列表、引用块、代码块、表格、链接、分割线。交互语义三类：包裹（选中文本→包裹标记并保留选区，无选中→插标记对光标居中）、行前缀（对选中行施加，无选中对当前行）、骨架插入（结构化模板，光标落首个占位）。全部经 `setRangeText`（保留撤销历史）并触发既有编辑通道更新预览；预览态与无文档态隐藏；不引入新 binding、不携带外部资源。
+- 编辑工具栏（源码/分栏态源码面板顶部）：基线闭合动作集共 **15 项**——标题 H1/H2/H3、加粗、斜体、删除线、行内代码、无序列表、有序列表、任务列表、引用块、代码块、表格、链接、分割线。历史 `MDV-12` 文档中的“14 项”是计数错误，以真实 action 集与本修订为准。交互语义三类：包裹（选中文本→包裹标记并保留选区，无选中→插标记对光标居中）、行前缀（对选中行施加，无选中对当前行）、骨架插入（结构化模板，光标落首个占位）。全部经单次 `setRangeText`（保留撤销历史）并触发既有编辑通道更新预览；预览态与无文档态隐藏；不引入新 binding、不携带外部资源。
+- 工具栏视觉采用 icon-only 顶层控件：24×24 DIP 图标画布、20×20 DIP glyph、点击区优选 36 DIP 且不得低于 32 DIP、2 DIP 可见焦点环；图标必须是蜡笔原创资产、继承 `currentColor`、无外部引用，不复制第三方产品 glyph。源码/预览/分栏同样改为图标分段控件；窄分栏保持单行并按冻结优先级收入“更多”，不得通过多行换行持续挤压编辑区。
+- 每个图标按钮必须有本地化 `aria-label` 与两行 tooltip（动作名/平台快捷键 + 简短 Markdown 语义说明）；hover 450ms 后显示，键盘 focus 立即显示，`Escape`/blur/scroll/激活后关闭。工具栏使用 roving tabindex：Tab/Shift+Tab 只进出一次，左右键移动，Home/End 到首尾；`prefers-reduced-motion` 下关闭非必要过渡。
+- 快捷键 profile 由平台 adapter 以闭合语义注入：macOS 主修饰键显示/匹配 Meta（`⌘`），Windows 显示/匹配 Control（`Ctrl`）；共享 UI 不通过 UA/路径猜平台。闭合快捷键为 H1/H2/H3=`Primary+Alt+1/2/3`、加粗=`Primary+B`、斜体=`Primary+I`、删除线=`Primary+Shift+X`、无序列表=`Primary+Shift+8`、有序列表=`Primary+Shift+7`、链接=`Primary+K`。其余动作无稳定行业组合时不显示快捷键；IME composing、keyCode 229 与 AltGr 期间不得触发格式动作。
+- “缩进和表格对齐”作为结构菜单，不扩张 Markdown 方言：增加/减少缩进只作用于无序/有序/任务列表和引用层级，`Tab`/`Shift+Tab` 仅在这些结构上下文拦截；表格列默认/左/中/右对齐只改写 GFM delimiter cell（`---`/`:---`/`:---:`/`---:`），光标不在可确定识别的 GFM 表格时禁用。普通段落首行缩进、居中、右对齐保持不可表达，禁止用 raw HTML、CSS 或私有标记模拟。
 - 文档宿主 tab：编辑/保存/未保存确认只作用于打开文档的那个标签；其他标签打开文件独立互不影响（V1 每窗口一份文档状态，多标签同时编辑两份为明确不做项）。
 - 分栏编辑：右侧预览随左侧编辑确定性增量更新；连续快速输入时合并渲染帧（去抖 ≤100ms），旧渲染结果不残留（MD-004）。
+- Mermaid block 默认显示轻量占位，进入 viewport 后才触发图表渲染；普通 Markdown 或不含 Mermaid fence 的文档不得加载 Mermaid ESM。主题变化与编辑 revision 变化只重绘受影响 block，迟到 SVG 按文档/revision/block generation 丢弃。
+- Mermaid 单 block 失败只显示局部错误卡片与源码切换入口，其他 Markdown 和其他图表继续可用；错误不得回显本地路径、堆栈或整篇文档内容。
 - 编辑只产生内存 dirty 状态，绝不自动写盘。
 - dirty 状态下关闭标签、切换文件、导航离开：显式三选确认（保存并继续 / 放弃更改 / 取消）；取消不丢内容，放弃不写盘（MD-005）。
 
@@ -172,23 +180,42 @@ frame-ancestors 'none'
 | MD-005 dirty 确认 | §8 |
 | MD-006 保存原子性与冲突 | §9 |
 | MD-007 Windows 实机 | 全文（平台门禁归 `MDV-07`） |
+| MD-008 Mermaid 供应链与路由 | §2、§14、§16 |
+| MD-009 Mermaid 图类型与安全 | §6、§7、§8、§14 |
+| MD-010 Mermaid 性能与生命周期 | §8、§16 |
+| MD-011 工具栏 glyph 与交互契约 | §8 |
+| MD-012 编辑变换与缩进/表格对齐 | §6、§8 |
+| MD-013 双平台快捷键、IME 与无障碍 | §8、§10 |
 
-## 14. 图表渲染选型评审结论（2026-08-27，mermaid）
+## 14. 图表渲染选型评审结论（2026-08-28，Mermaid Full）
 
-**决定：采用 vendored `@mermaid-js/tiny` 11.17.2（MIT）作为图表渲染引擎；若后续 vendor 评审复核任一项不过，退回"图表按代码块展示"的占位行为。**
+**决定：撤销 2026-08-27 的 `@mermaid-js/tiny` 选型，采用官方完整版 `mermaid` 11.17.2（MIT）的离线 ESM 运行时闭包。若 `MDV-14` 的依赖闭包、许可证、CSP 或 CEF 兼容复核任一项不过，保持 Mermaid fence 为安全代码块，不以 tiny 版降级冒充完整支持。**
 
-评审证据（2026-08-27，基于 npm registry 与 GitHub 上游实时数据）：
+评审证据（2026-08-28，基于 npm registry 与 GitHub 上游实时数据）：
 
 | 维度 | 结论 |
 |---|---|
-| 来源 | 上游 `github.com/mermaid-js/mermaid`，官方 npm `@mermaid-js/tiny` 包；固定 revision 为 tag `@mermaid-js/tiny@11.17.2` |
+| 来源 | 上游 `github.com/mermaid-js/mermaid`，官方 npm `mermaid` 包；候选固定版本 `11.17.2`，实际 vendor 由 `MDV-14` 记录 tarball integrity、SHA-256、上游 tag/commit 与完整 import closure |
 | 许可证 | MIT（包内 LICENSE 文件，MIT 全文确认）；允许 vendor 与再分发，无 copyleft 传染 |
-| 维护状态 | 活跃（最新发布 2026-08-25；近期合并提交 2026-08-27） |
-| 包体 | tarball 683 KB（解压后单一 `dist/mermaid.tiny.js` 2,555,146 字节）；相比完整版 84 MB 解压/21 个运行时依赖，tiny 版**零运行时依赖**，供应链面最小 |
-| 内容 hash | tarball SHA-256 `28302a2f6bd556bfd223acff76a1fd511bcc9e6f1cac1bad91b904469aeca102` |
-| 覆盖图类型 | flowchart、sequenceDiagram、stateDiagram-v2、classDiagram、erDiagram、gantt、pie、gitGraph、journey（用户场景"流程图"= flowchart/sequence 全覆盖）；不含 mindmap/architecture/katex/懒加载 |
-| 净化安全 | DOMPurify 已 bundle 内嵌（mermaid 原生 sanitize 路径），输出 SVG 经其净化 |
-| 跨平台 | 纯 JS，CEF/ArkWeb 内运行；无动态 import 分块（tiny 不支持懒加载，与我们"内存单文件资源、零网络"模型天然匹配） |
-| 运行方式 | 经 `crayon://mdv/mermaid.js` 内存资源加载（`script-src 'self'` 已允许），不触网络 |
+| 能力理由 | 官方文档明确 tiny 不支持 Mindmap、Architecture、KaTeX 与 lazy loading；完整版覆盖本项目要求的 `flowchart`、`sequenceDiagram`、`mindmap`、`architecture-beta`、`classDiagram`、`stateDiagram-v2`、`erDiagram`，并按 diagram chunk 懒加载 |
+| 包体策略 | 不把 npm 的源码、文档、测试和开发依赖全部塞进应用；vendor 经审计的**完整浏览器运行时闭包**（ESM 入口 + 所有可达 diagram/layout chunks + 必需 CSS/资源），由 manifest 锁 hash/MIME/大小/许可证。不得 tree-shake 删除图类型，也不得改用 tiny |
+| 净化安全 | Mermaid 固定 `startOnLoad: false`、`securityLevel: "strict"`；仍将返回 SVG 视为不可信并经过 Browser-owned SVG policy gate，不能只依赖上游内部净化 |
+| 跨平台 | 纯 JS/ESM 在 CEF Renderer 内执行；Windows/macOS 共用同一 vendored 资产与共享 runtime，平台层只负责资源打包/读取。HarmonyOS 接线后置且不得用 CEF 证据宣称完成 |
+| 运行方式 | `/app.js` 先扫描标准 Mermaid block；仅命中时 `import()` 本地 ESM 入口，具体 diagram chunk 再由 Mermaid 从同 origin manifest 路由加载；无 CDN、无 npm runtime、无公网 fallback |
 
-**实现语义（待 MDV-14 任务冻结）**：fenced code block 的 info string 为 `mermaid` 时，输出 `<div class="md-diagram" data-mermaid="…">`（引擎白名单需增 `div` 与 `data-mermaid` 属性）；页面 `/app.js` 在内容装载后调用 mermaid.render 并注入 SVG；渲染失败显示错误占位，绝不回退为可执行 HTML。
+`MRT-01..04` 先冻结通用扩展节点、编译期 registry 与 loader/lifecycle；`MDV-14` 独立完成 Mermaid 供应链与运行时闭包冻结。`MDV-15..20` 只交付 Mermaid adapter、资源路由、渲染、安全、交互/懒加载、有界缓存与跨平台收口。任何一步失败时普通 Markdown 必须保持可用。
+
+## 15. Markdown Runtime 扩展边界
+
+- 保留现有 C++17 `md4c` 作为 Markdown parser 与普通安全 HTML 生成器，不引入第二套 `markdown-it`/`marked` parser，也不让 Rust Core 重写 Mermaid。
+- 通用 Extension Framework 由 `docs/plans/markdown-runtime-roadmap.md` 的 `MRT-01..04` 承接：`browser/shared-ui/markdown` 产出 `safe_html + extension_nodes[]` 的内部 render plan；规划中的 `browser/shared-ui/markdown-runtime` 拥有编译期 registry、manifest loader、预算/cache/generation 与错误隔离。节点至少包含闭合 `kind`、不透明 block ID、经过大小校验的源码与 source revision，页面只按 ID 定位，不接受扩展名、URL 或任意模块路径。
+- `MDV-15..20` 只向闭合 registry 注册 `mermaid` adapter。Code Highlight、KaTeX、ECharts、Graphviz 与 Presentation 分别由 MRT 原子任务评审后启用；PlantUML、Vega、TV/Cast 和 AI 编辑保持延后或 gap analysis。任何能力都不能以动态模块名、文档 manifest 或配置字符串绕过 registry。
+- Mermaid 只属于用户打开的本地 MDV 页面，不进入 `crayon-page-data`、CNT 的确定性页面 Markdown、CAAP/tool registry 或 Agent 文件能力。
+
+## 16. 资源、性能与生命周期门禁
+
+- 构建期生成 manifest，Release 扫描逐文件核对路径、hash、MIME、总字节、许可证与 import closure；运行时路由只接受 manifest 中的精确相对路径，拒绝 query/fragment、`..`、编码分隔符、未知扩展和目录枚举。
+- Mermaid 初始化 promise 每个文档页至多一个；block 数、单 block DSL 字节、并发渲染、内存 cache 与错误文本均有命名上限。默认值由 `MDV-19` benchmark 冻结，不在业务代码散落 magic value。
+- cache 仅限会话内存，key 至少包含 `source hash + theme + mermaid version + runtime policy version`；文档关闭、导航、Profile 销毁、无痕窗口关闭或内存压力时清除，不新增磁盘缓存或最近文档痕迹。
+- 无 Mermaid 文档的启动/首屏不得读取 Mermaid 资产；多图文档使用 viewport lazy render 与有界并发。性能验收必须记录首个普通 Markdown paint、首次 Mermaid import、首图完成、全部可见图完成、CPU/RSS/UI delay 与资源字节。
+- 文档切换、编辑、主题切换和退出均推进 generation；上游 `render()` 不可取消时只允许结果失效丢弃，不能让旧 SVG 覆盖新文档，也不能在退出后回调已销毁页面。

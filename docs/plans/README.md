@@ -25,7 +25,8 @@
 | MED | [media-policy-relay-roadmap.md](media-policy-relay-roadmap.md) | 媒体观察、策略、LAN Relay、外部客户端交接迁移 | `MED-01..19 DONE` |
 | CEF | [desktop-cef-browser-roadmap.md](desktop-cef-browser-roadmap.md) | Windows/macOS CEF 壳、共享 UI、媒体观察和 IPC | `CEF-01..15 全部完成`（`CEF-06..14` 模型层 VERIFIED，实机接线归后续装配/切片任务）；Windows 总 Review 证据已补齐 |
 | BUX | [browser-product-experience-roadmap.md](browser-product-experience-roadmap.md) | Chrome-inspired 蜡笔桌面浏览器 UI 与日用基础功能 | `BUX-01..18 DONE`（BUX-17/18 2026-08-26） |
-| MDV | [markdown-viewer-roadmap.md](markdown-viewer-roadmap.md) | 本地 Markdown 查看/预览/分栏编辑内置页与受控文件入口 | `MDV-01..10 全部完成`（`MDV-07/10 VERIFIED`：交互式键入冒烟待人工 2 分钟补验，清单见 Roadmap；其余 DONE） |
+| MDV | [markdown-viewer-roadmap.md](markdown-viewer-roadmap.md) | 本地 Markdown Runtime：查看/编辑/保存、图标工具栏、图片与 Mermaid Full 离线扩展 | 基线 `MDV-01..13` 已实现/验证；工具栏 `MDV-21..23 DONE`、`MDV-24 VERIFIED`（macOS arm64 默认页/公网/MDV/AX/签名真机闭合，双架构 61/61；Windows、原生 x64 与剩余交互真机待补）；Mermaid `14..20` 保持独立依赖波次 |
+| MRT | [markdown-runtime-roadmap.md](markdown-runtime-roadmap.md) | Markdown Runtime Extension Framework：闭合扩展 API、Highlight/KaTeX 与后续图表/演示门禁 | `MRT-01 READY` 先冻结 v1 契约；`MRT-02..09` 为 P0，`10..19` 分波次推进或仅做 gap analysis |
 | SDK | [cast-sdk-integration-roadmap.md](cast-sdk-integration-roadmap.md) | 固定源码 Cast-SDK facade、发现、连接和控制；后续 Partner Cast facade | `SDK-13 BLOCKED`（需真实接收端 Harness） |
 | PLT | [desktop-platform-adapters-roadmap.md](desktop-platform-adapters-roadmap.md) | Windows/macOS 存储、网络、生命周期、更新和客户端交接 | `PLT-01` |
 | PRV | [privacy-security-roadmap.md](privacy-security-roadmap.md) | Profile、隐私、安全、日志和删除语义 | `PRV-01` |
@@ -38,7 +39,7 @@
 | QAR | [quality-release-roadmap.md](quality-release-roadmap.md) | Windows/macOS 构建、真实设备、性能、长稳和发布门禁 | `QAR-01` |
 | RNM | [naming-migration-roadmap.md](naming-migration-roadmap.md) | `get-video` → `crayon-browser` 仓库、包、README、GitHub 与本地路径迁移 | `RNM-01..08 DONE` |
 
-当前共 237 个活跃任务，193 个唯一当前测试用例。新增 `RNM-01..08` 命名迁移任务、`MDV-01..07` 本地 Markdown 查看器任务与 `MDV-08..10` 接线切片（PRD v0.8）；`CEF-02` 已按 Windows 首发/macOS 后置拆为 `CEF-02W/02M`；Linux、浏览器 WebRTC/采集/编码等已删除范围不计入活跃总数。
+当前共 271 个活跃任务，212 个唯一当前测试用例。MDV 的 `MDV-14..20` 专注 Mermaid Full 依赖闭包、adapter、安全渲染、交互与跨平台收口，`MDV-21..24` 专注工具栏契约/glyph、编辑变换、平台快捷键与双平台无障碍；MRT 的 `MRT-01..19` 统一承接扩展节点/registry/loader、Highlight、KaTeX、TOC/Search、ECharts、Graphviz、Presentation，并将 TV/Cast 与 AI Source Producer 拆成两个独立 gap analysis；新增 `MD-011..013` 与 `MR-001..013`。任务数同时按真实模块 ID 纳入 `RNM-01..08`、`CEF-01A..01E/02W/02M` 与 `BUX-04A/04B` 拆分；Linux、浏览器 WebRTC/采集/编码等仍不计入活跃范围。
 
 ## 4. 当前领取队列
 
@@ -50,8 +51,10 @@
 | 4 | `AGT-01` | TODO | 依赖满足后冻结 CAAP v1；不提前开放 CLI/MCP transport |
 | 5 | `CNT-01` | TODO | 等浏览器/投屏/隐私门禁后开始正式 page-data/Markdown |
 | 6 | `ACT-01` | TODO | 等 `CNT-03/AGT-01`；不提前发明第二页面数据面 |
-| 7 | `MDV-08` | TODO | `crayon://mdv` scheme handler 与只读查看接线（依赖 `MDV-02/03 VERIFIED`、BUX-03 模式已满足）；随后按 09→10→07 顺序收口，属 V1 期内增量 |
-| 8 | 后续任务 | TODO | WFL/HUB 严格按语义动作、权限和隐私依赖领取 |
+| 7 | `MRT-01` | READY | 先冻结 Extension Framework v1 的节点、registry、manifest、能力、预算、生命周期与禁止面；只改契约，不提前接第三方 runtime |
+| 8 | `MDV-24` | VERIFIED | macOS arm64 Helper/签名/默认页/公网/MDV/AX 已闭合、双架构 61/61；Windows、原生 x64 与 UI 自动化不可替代的 IME/窄窗交互真机待补 |
+| 9 | `MDV-14` | READY | 与 MRT 契约工作可独立串行领取：固定 Mermaid Full 11.17.2 的离线运行时闭包、manifest/hash/许可；`MDV-15/16` 分别等待 `MRT-03/04` 后再接 Mermaid adapter/资源路由 |
+| 10 | 后续任务 | TODO | WFL/HUB 严格按语义动作、权限和隐私依赖领取 |
 
 `CNT-01` 必须等 `CEF-15`、`BUX-18`、`SDK-14`、`MED-19`、`PRV-08` 完成后才能进入 `READY`。`CNT-11` 必须等 `CNT-10`、`AGT-16`、`PRV-13` 完成且模型/provider ADR 获批；不得提前接真实 provider。
 

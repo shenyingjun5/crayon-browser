@@ -173,12 +173,20 @@ if(OS_MAC)
   set(crayon_macos_resources
       "${CRAYON_MACOS_APP_ICON}"
       resources/macos/en.lproj/InfoPlist.strings
-      resources/macos/zh-Hans.lproj/InfoPlist.strings)
+      resources/macos/en.lproj/Localizable.strings
+      resources/macos/zh-Hans.lproj/InfoPlist.strings
+      resources/macos/zh-Hans.lproj/Localizable.strings)
   set(crayon_macos_sources
       src/browser/context/profile_context_factory.cc
       src/browser/context/profile_context_factory.h
       src/browser/context/profile_id_validator.cc
       src/browser/context/profile_id_validator.h
+      src/browser/mdv/cef_mdv_editing.cc
+      src/browser/mdv/cef_mdv_editing.h
+      src/browser/mdv/cef_mdv_entries.cc
+      src/browser/mdv/cef_mdv_entries.h
+      src/browser/mdv/cef_mdv_handler.cc
+      src/browser/mdv/cef_mdv_handler.h
       src/browser/permission/cef_download_handler.cc
       src/browser/permission/cef_download_handler.h
       src/browser/permission/cef_permission_handler.cc
@@ -194,7 +202,10 @@ if(OS_MAC)
       src/macos/app.cc
       src/macos/app.h
       src/macos/main_mac.mm)
-  set(crayon_macos_helper_sources src/macos/process_helper_mac.cc)
+  set(crayon_macos_helper_sources
+      src/browser/new_tab/cef_new_tab_handler.cc
+      src/browser/new_tab/cef_new_tab_handler.h
+      src/macos/process_helper_mac.cc)
   set(CRAYON_MACOS_APP
       "${CEF_TARGET_OUT_DIR}/${CRAYON_MACOS_EXECUTABLE}.app")
 
@@ -214,7 +225,7 @@ if(OS_MAC)
   add_dependencies(${CRAYON_BROWSER_TARGET} libcef_dll_wrapper)
   target_link_libraries(${CRAYON_BROWSER_TARGET}
                         PRIVATE libcef_dll_wrapper ${CEF_STANDARD_LIBS}
-                                crayon::browser-new-tab)
+                                crayon::browser-mdv crayon::browser-new-tab)
   set_target_properties(
     ${CRAYON_BROWSER_TARGET}
     PROPERTIES OUTPUT_NAME "${CRAYON_MACOS_EXECUTABLE}"
@@ -245,14 +256,22 @@ if(OS_MAC)
                    ${crayon_macos_helper_sources})
     SET_EXECUTABLE_TARGET_PROPERTIES(${helper_target})
     target_compile_features(${helper_target} PRIVATE cxx_std_17)
+    target_include_directories(${helper_target}
+                               PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     add_dependencies(${helper_target} libcef_dll_wrapper)
     target_link_libraries(${helper_target}
-                          PRIVATE libcef_dll_wrapper ${CEF_STANDARD_LIBS})
+                          PRIVATE libcef_dll_wrapper ${CEF_STANDARD_LIBS}
+                                  crayon::browser-new-tab)
     set_target_properties(
       ${helper_target}
       PROPERTIES OUTPUT_NAME "${CRAYON_MACOS_HELPER_EXECUTABLE}"
                  MACOSX_BUNDLE_INFO_PLIST "${helper_info_plist}")
     add_dependencies(${CRAYON_BROWSER_TARGET} ${helper_target})
+    # A helper-only source change must rebuild the containing app as well;
+    # otherwise the POST_BUILD copy/sign steps leave a stale Helper executable
+    # inside CrayonBrowser.app with an obsolete enclosing signature.
+    set_property(TARGET ${CRAYON_BROWSER_TARGET} APPEND PROPERTY LINK_DEPENDS
+                 "$<TARGET_FILE:${helper_target}>")
     add_custom_command(
       TARGET ${CRAYON_BROWSER_TARGET}
       POST_BUILD
@@ -304,8 +323,6 @@ if(OS_MAC)
               "-DCRAYON_HELPER_MANIFEST=${CMAKE_CURRENT_BINARY_DIR}/crayon-macos-helper-apps.txt"
               "-DCRAYON_EXPECTED_ARCH=${PROJECT_ARCH}"
               "-DCRAYON_MANAGED_ICON=${CRAYON_MACOS_APP_ICON}"
-              "-DCRAYON_MANAGED_ICONSET=${CRAYON_MACOS_ICONSET}"
-              "-DCRAYON_ICONUTIL_OUTPUT=${CMAKE_CURRENT_BINARY_DIR}/iconutil-contract.icns"
               -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/macos_package_contract.cmake")
     set_tests_properties(
       macos_cef_shell_source_contract macos_cef_shell_package_contract
@@ -393,4 +410,3 @@ if(CRAYON_BUILD_TESTS)
   set_tests_properties(permission_contract
                        PROPERTIES LABELS "cef;shell;permission;contract")
 endif()
-
