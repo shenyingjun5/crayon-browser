@@ -1,6 +1,6 @@
 # MRT：Markdown Runtime Extension Framework Roadmap
 
-状态：`MRT-01 READY`，`MRT-02..19 TODO`。本 Roadmap 吸收 `docs/reference/蜡笔投屏浏览器_Markdown_Runtime_Extension_Framework_V1.0.md` 第 34..59 章，但以当前 PRD、安全契约和真实 C++17/md4c/CEF 工程为准。目标是在不建立第二 Markdown parser、不扩大文件/Agent 权限、不让大型扩展进入浏览器 bootstrap 的前提下，为 MDV 提供统一、闭合、可审计的 Extension Framework。
+状态：`MRT-01 DONE`，`MRT-02 READY`，`MRT-03..19 TODO`。本 Roadmap 吸收 `docs/reference/蜡笔投屏浏览器_Markdown_Runtime_Extension_Framework_V1.0.md` 第 34..59 章，但以当前 PRD、安全契约和真实 C++17/md4c/CEF 工程为准。目标是在不建立第二 Markdown parser、不扩大文件/Agent 权限、不让大型扩展进入浏览器 bootstrap 的前提下，为 MDV 提供统一、闭合、可审计的 Extension Framework。
 
 ## 1. 采纳结论
 
@@ -28,8 +28,8 @@ MRT 是用户侧 MDV 基础设施，不进入 `crayon-page-data`、CNT 的确定
 
 | ID | 状态 | 依赖 | 允许路径 | 单一交付 | 验收 |
 |---|---|---|---|---|---|
-| MRT-01 | READY | MDV-13 | `docs/current`,`docs/plans` | 冻结 Runtime v1 契约：四类节点、三层兼容、manifest/schema、能力/资源策略、错误/预算/生命周期与永久禁止面 | MR-001；契约 Review |
-| MRT-02 | TODO | MRT-01 | `browser/shared-ui/markdown`,`browser/shared-ui/markdown-runtime` | md4c ExtensionNode adapter：保留标准 HTML并产出有界 inline/block/fence/container 事实；默认全部未启用 | MR-002；CommonMark/GFM golden 零回退 |
+| MRT-01 | DONE | MDV-13 | `docs/current`,`docs/plans` | 冻结 Runtime v1 契约：四类节点、三层兼容、manifest/schema、能力/资源策略、错误/预算/生命周期与永久禁止面 | MR-001；契约 Review |
+| MRT-02 | READY | MRT-01 | `browser/shared-ui/markdown`,`browser/shared-ui/markdown-runtime` | md4c ExtensionNode adapter：保留标准 HTML并产出有界 inline/block/fence/container 事实；默认全部未启用 | MR-002；CommonMark/GFM golden 零回退 |
 | MRT-03 | TODO | MRT-02 | `browser/shared-ui/markdown-runtime` | 编译期 Extension Registry/Router：按 node kind + 精确 info string 分发，冲突/未知/禁用稳定回退 | MR-001/002；registry contract |
 | MRT-04 | TODO | MRT-03 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | 通用 runtime loader/cache/lifecycle：manifest 资源、按需 import、预算、generation、错误隔离与资源清理 | MR-003；lazy/cache/风暴 |
 | MRT-05 | TODO | MRT-04 | `third_party/highlight`,`tools`,`docs/current` | Code Highlight 依赖选型与离线 grammar 闭包冻结；比较 highlight.js/Prism/Shiki 后只固定一个 | MR-004；许可/hash/包体/语言矩阵 |
@@ -62,12 +62,20 @@ Gate:       MRT-18 TV/Cast gap / MRT-19 AI source-producer gap only
 
 ## 5. MRT-01 原子范围（Runtime v1 契约冻结）
 
-- 状态：`READY`；依赖 `MDV-13 VERIFIED`。单一目标是新增 `docs/current/markdown-runtime.md`，不写生产代码。
+- 状态：`DONE`；依赖 `MDV-13 VERIFIED`。单一目标是新增 `docs/current/markdown-runtime.md`，不写生产代码。
 - 契约必须冻结：Level A/B/C；`ExtensionNodeKind` 四类闭合枚举；精确 matcher 与优先级/冲突；未知/禁用回退；manifest 字段与版本；输出类型（safe-html/svg/canvas/error）及各自 policy；network/script/file/export/interactive 能力默认 deny；source/document/extension generation；block/字节/深度/时间/并发/cache 上限语义；加载失败、渲染失败、取消、超时、满载、导航与销毁状态；locale/a11y；previous/current manifest golden 规则。
 - 允许修改：新增 `docs/current/markdown-runtime.md`，更新 current/plans/总 Roadmap/test 索引。禁止修改生产代码、现有 md4c/MDV 行为、CAAP/CNT/Cast-SDK、第三方依赖。
 - 安全边界：manifest 是编译期声明，不允许文档或 AI 提供 manifest、模块路径、版本、URL、capability 或 render options；`trusted` 不能由文档字段表达；所有可执行内容永久禁止。
 - 验收：MR-001 的 schema/example/reject vectors 可直接驱动 MRT-02..04；与 `markdown-viewer.md`、架构、PRD、AGENT 文件禁令无冲突；`git diff --check`；按 Review 标准 P0/P1/P2=0。
 - 明确不做：parser/AST、registry 代码、第三方选型、Presentation/Cast 实现。
+
+### MRT-01 完成记录（2026-08-28）
+
+- 实现：新增权威 `docs/current/markdown-runtime.md`（`markdown-runtime-v1`），冻结 Level A/B/C、`inline/block/fence/container` 四类 closed node、`render-plan/v1` 与 `manifest/v1` current schema、Level A-first/精确 matcher/冲突双方拒绝、编译期 registry 原子发布、四类类型化输出 policy、默认 deny capability、资源边界、命名预算、document/source/extension 三重 generation、闭合状态/错误、session-only cache、locale/a11y 与 current/previous 兼容窗口。提供 4 个接受、15 个拒绝/回退的 MR-001 向量。
+- 安全：文档/网页/AI/MCP 不能提供 manifest、extension ID、模块/路径/URL/options/capability/`trusted`；network/file/dynamic code/external process/export 默认关闭，未审核 page-local interaction 关闭；未知字段、schema、matcher、policy 或 partial registry 均 fail closed；失败保持 Level A fallback 且零资产/网络/文件副作用。
+- 验证：两个 JSON current 示例均可解析；render plan 的 UTF-8 `source_bytes` 与半开 range 不变量通过；19 个 MR-001 vector ID 唯一；4 份相关 current 文档的相对 Markdown 链接存在；`git diff --check` 通过。任务只改契约/索引，未运行生产构建与 C++ 测试（无生产代码变化）。
+- Code Review：按 v0.8 复核需求/边界、架构/API、安全/隐私、生命周期、性能、测试和可维护性；P0/P1/P2 = 0/0/0。契约没有建立第二 parser、动态插件、通用执行器、Agent/Cast/文件/网络能力。
+- 未覆盖：ExtensionNode/registry/loader 生产实现与可执行 contract 分别归 `MRT-02..04`；Mermaid 供应链归 `MDV-14`。`MRT-02` 转为 `READY`。
 
 ## 6. 各阶段共同门禁
 

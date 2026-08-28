@@ -183,7 +183,7 @@
 
 | ID | 类型 | 前置/步骤 | 预期 |
 |---|---|---|---|
-| MR-001 | CONTRACT | 校验 ExtensionNode/Manifest/Registry current golden，构造未知 kind、重复 ID、matcher 冲突、文档自带 manifest/模块路径/URL/capability | 四类节点与能力闭合；编译期 registry 稳定；文档/AI 不能注册扩展或扩权；冲突 fail closed |
+| MR-001 | CONTRACT | 执行 `markdown-runtime.md` §13 的 `RP-*`/`MF-*`/`OUT-*`/`REG-*` current vectors：四类 node、空 plan、未知 schema/kind、重复 ID、字节/range/revision、预算、额外字段、matcher 冲突、文档 manifest/模块/URL/capability、输出 policy 与 partial publish | current schema 接受且 Level A fallback 保持；四类节点/能力/错误闭合；编译期 registry 原子发布；文档/AI 不能注册扩展或扩权；冲突双方 fail closed；零资产/网络/文件副作用 |
 | MR-002 | AUTO | CommonMark/GFM golden 与 inline/block/fence/container 事实并行生成；未知/禁用/大小写/超界 info string | 标准 HTML 逐字节不回退；只有启用的精确 matcher 分发；其余保持安全代码块/文本 |
 | MR-003 | SECURITY | 大型 extension 按需加载、重复/并发/失败/超时/导航/Renderer 终止；攻击 manifest 路由与 cache key | 无匹配节点零加载；资源只来自 manifest；错误隔离、generation/cache/清理有界且无正文日志 |
 | MR-004 | SECURITY | 多语言 fenced code、未知语言、恶意 token/HTML、浅深主题与 grammar 懒加载 | 代码始终按文本处理；allowlist grammar 本地按需加载；未知语言纯文本回退；无 script/网络 |
