@@ -1,0 +1,453 @@
+{
+  "schema": "crayon-highlight-assets/v1",
+  "package": {
+    "name": "@highlightjs/cdn-assets",
+    "version": "11.12.0",
+    "license": "BSD-3-Clause",
+    "source": "https://registry.npmjs.org/@highlightjs/cdn-assets/-/cdn-assets-11.12.0.tgz",
+    "npmIntegrity": "sha512-KvOKXODaiFmId9xaq3xc5xCL66wVLUuOngDbO9B/kewbFTqdGbn2nJxNhN3H5R1cgDTVj6R8vH0zgiNDEGjpDw==",
+    "tarballSha256": "b8a006d30f45afe783072569f3d69c5b60c0e7b9ca28cd474e12f2584e2a3bd9"
+  },
+  "policy": {
+    "autoDetect": false,
+    "unknownLanguage": "plaintext",
+    "runtimeDependencies": 0,
+    "selectedBytes": 124585,
+    "selectedByteBudget": 524288
+  },
+  "plaintextAliases": [
+    "plaintext",
+    "text",
+    "txt",
+    "plain",
+    "nohighlight"
+  ],
+  "languages": [
+    {
+      "id": "bash",
+      "aliases": [
+        "bash",
+        "sh",
+        "shell",
+        "zsh"
+      ],
+      "dependencies": []
+    },
+    {
+      "id": "c",
+      "aliases": [
+        "c",
+        "h"
+      ],
+      "dependencies": []
+    },
+    {
+      "id": "cpp",
+      "aliases": [
+        "cpp",
+        "c++",
+        "cc",
+        "cxx",
+        "hpp",
+        "hxx"
+      ],
+      "dependencies": []
+    },
+    {
+      "id": "csharp",
+      "aliases": [
+        "csharp",
+        "c#",
+        "cs"
+      ],
+      "dependencies": []
+    },
+    {
+      "id": "css",
+      "aliases": [
+        "css"
+      ],
+      "dependencies": []
+    },
+    {
+      "id": "diff",
+      "aliases": [
+        "diff",
+        "patch"
+      ],
+      "dependencies": []
+    },
+    {
+      "id": "dockerfile",
+      "aliases": [
+        "dockerfile",
+        "docker"
+      ],
+      "dependencies": [
+        "bash"
+      ]
+    },
+    {
+      "id": "go",
+      "aliases": [
+        "go",
+        "golang"
+      ],
+      "dependencies": []
+    },
+    {
+      "id": "graphql",
+      "aliases": [
+        "graphql",
+        "gql"
+      ],
+      "dependencies": []
+    },
+    {
+      "id": "java",
+      "aliases": [
+        "java"
+      ],
+      "dependencies": []
+    },
+    {
+      "id": "javascript",
+      "aliases": [
+        "javascript",
+        "js",
+        "jsx",
+        "mjs",
+        "cjs"
+      ],
+      "dependencies": [
+        "css",
+        "graphql",
+        "xml"
+      ]
+    },
+    {
+      "id": "json",
+      "aliases": [
+        "json"
+      ],
+      "dependencies": []
+    },
+    {
+      "id": "kotlin",
+      "aliases": [
+        "kotlin",
+        "kt",
+        "kts"
+      ],
+      "dependencies": []
+    },
+    {
+      "id": "markdown",
+      "aliases": [
+        "markdown",
+        "md",
+        "mkdown",
+        "mkd"
+      ],
+      "dependencies": [
+        "xml"
+      ]
+    },
+    {
+      "id": "objectivec",
+      "aliases": [
+        "objectivec",
+        "objective-c",
+        "objc",
+        "obj-c"
+      ],
+      "dependencies": []
+    },
+    {
+      "id": "php",
+      "aliases": [
+        "php"
+      ],
+      "dependencies": []
+    },
+    {
+      "id": "powershell",
+      "aliases": [
+        "powershell",
+        "ps1",
+        "pwsh"
+      ],
+      "dependencies": []
+    },
+    {
+      "id": "python",
+      "aliases": [
+        "python",
+        "py"
+      ],
+      "dependencies": []
+    },
+    {
+      "id": "ruby",
+      "aliases": [
+        "ruby",
+        "rb"
+      ],
+      "dependencies": []
+    },
+    {
+      "id": "rust",
+      "aliases": [
+        "rust",
+        "rs"
+      ],
+      "dependencies": []
+    },
+    {
+      "id": "sql",
+      "aliases": [
+        "sql"
+      ],
+      "dependencies": []
+    },
+    {
+      "id": "swift",
+      "aliases": [
+        "swift"
+      ],
+      "dependencies": []
+    },
+    {
+      "id": "typescript",
+      "aliases": [
+        "typescript",
+        "ts",
+        "tsx",
+        "mts",
+        "cts"
+      ],
+      "dependencies": [
+        "css",
+        "graphql",
+        "xml"
+      ]
+    },
+    {
+      "id": "xml",
+      "aliases": [
+        "xml",
+        "html",
+        "xhtml",
+        "rss",
+        "atom",
+        "svg",
+        "xsd",
+        "xsl",
+        "plist"
+      ],
+      "dependencies": [
+        "css",
+        "javascript"
+      ]
+    },
+    {
+      "id": "yaml",
+      "aliases": [
+        "yaml",
+        "yml"
+      ],
+      "dependencies": [
+        "ruby"
+      ]
+    }
+  ],
+  "files": [
+    {
+      "path": "LICENSE",
+      "bytes": 1514,
+      "sha256": "6c081431591d9df696c82dc598fe1423765b8a299b200ed00b281afd0f64c490",
+      "kind": "license"
+    },
+    {
+      "path": "assets/core.min.js",
+      "bytes": 20501,
+      "sha256": "67a339aa68880a40c9803def9c8cebb2225dec76230382db86e349370dee70e9",
+      "kind": "core"
+    },
+    {
+      "path": "assets/languages/bash.min.js",
+      "bytes": 3182,
+      "sha256": "7db1758fe6f04cd410760c29879812a3774edc54edcc91323511a24efc0b9e61",
+      "kind": "grammar",
+      "language": "bash"
+    },
+    {
+      "path": "assets/languages/c.min.js",
+      "bytes": 4788,
+      "sha256": "edada72825cceb7dec51cc785efcc3e6378970917e11e4c7dfab29d0079e08a5",
+      "kind": "grammar",
+      "language": "c"
+    },
+    {
+      "path": "assets/languages/cpp.min.js",
+      "bytes": 6161,
+      "sha256": "aa67eeacdbbda9f40ca34c59147581aef1601f19b71a55966de4ccf4246e8c31",
+      "kind": "grammar",
+      "language": "cpp"
+    },
+    {
+      "path": "assets/languages/csharp.min.js",
+      "bytes": 4159,
+      "sha256": "74bb1a32b37d581173fc9d880ab5be6c7e448bbb12552c3e2a3ac7fc3c57cf8f",
+      "kind": "grammar",
+      "language": "csharp"
+    },
+    {
+      "path": "assets/languages/css.min.js",
+      "bytes": 13544,
+      "sha256": "2f4264d9a07a4f5446e51e2d93b0c0e031b4fd910e8e44984cd17f996a990b99",
+      "kind": "grammar",
+      "language": "css"
+    },
+    {
+      "path": "assets/languages/diff.min.js",
+      "bytes": 688,
+      "sha256": "cbd7cf3b49bee36d6a0cf97789a7c5e68fbfd4231e86a81966f9b78c7bc127d0",
+      "kind": "grammar",
+      "language": "diff"
+    },
+    {
+      "path": "assets/languages/dockerfile.min.js",
+      "bytes": 510,
+      "sha256": "5a83ccd455a2910e9018f591fc1d2856ff5151ffa9889fc000542e16b329b039",
+      "kind": "grammar",
+      "language": "dockerfile"
+    },
+    {
+      "path": "assets/languages/go.min.js",
+      "bytes": 1563,
+      "sha256": "05658f281f7f12233cd891e879c8b9ebfd5998f5dc3f1e80632889ce61178534",
+      "kind": "grammar",
+      "language": "go"
+    },
+    {
+      "path": "assets/languages/graphql.min.js",
+      "bytes": 823,
+      "sha256": "d33b3b12e4106cb21e930c0c5905aa0882ec547e5c34d9803a7b76df623781d5",
+      "kind": "grammar",
+      "language": "graphql"
+    },
+    {
+      "path": "assets/languages/java.min.js",
+      "bytes": 2850,
+      "sha256": "7987da1c2dcc1d83f7a5a670cdc622fdac834cb1c140ad503bf8d7ea9237ac36",
+      "kind": "grammar",
+      "language": "java"
+    },
+    {
+      "path": "assets/languages/javascript.min.js",
+      "bytes": 6599,
+      "sha256": "c3dbd515a79e2c00ff4535aa5ad2fe539fb2587d047f9ab826107d0784da7bb6",
+      "kind": "grammar",
+      "language": "javascript"
+    },
+    {
+      "path": "assets/languages/json.min.js",
+      "bytes": 689,
+      "sha256": "8f2343ffbcc4fdea4b336a4241d54d223d52f99b67729d2d6d3556bbf66908ae",
+      "kind": "grammar",
+      "language": "json"
+    },
+    {
+      "path": "assets/languages/kotlin.min.js",
+      "bytes": 3468,
+      "sha256": "afce4ebc96165516de9ea9fc4c8b146efb556806bf093dc98ea73d3e9acdd3cf",
+      "kind": "grammar",
+      "language": "kotlin"
+    },
+    {
+      "path": "assets/languages/markdown.min.js",
+      "bytes": 2206,
+      "sha256": "73cb474b4687421a0949ded1ba8314ec74c26058688dc7f6154084240352cc79",
+      "kind": "grammar",
+      "language": "markdown"
+    },
+    {
+      "path": "assets/languages/objectivec.min.js",
+      "bytes": 2939,
+      "sha256": "3a7ff444af83d285aff34b7f66e06309bccc5820957c5d915b5711a94ff5fd43",
+      "kind": "grammar",
+      "language": "objectivec"
+    },
+    {
+      "path": "assets/languages/php.min.js",
+      "bytes": 6585,
+      "sha256": "d47d3e20ee16dd1a34bdc8bfa8a605801de7dac8bb33ee40e85cd28f2a6a7bf9",
+      "kind": "grammar",
+      "language": "php"
+    },
+    {
+      "path": "assets/languages/powershell.min.js",
+      "bytes": 4438,
+      "sha256": "67c95a71dae92f010a15e959158aaf682cd850a008d466f1c5d40394cbe22f12",
+      "kind": "grammar",
+      "language": "powershell"
+    },
+    {
+      "path": "assets/languages/python.min.js",
+      "bytes": 3655,
+      "sha256": "fd5d479dcc9d07b957cf07b1df76d3d8fb6ee6f6d1437238d9530a9be724c046",
+      "kind": "grammar",
+      "language": "python"
+    },
+    {
+      "path": "assets/languages/ruby.min.js",
+      "bytes": 4027,
+      "sha256": "1b4c8f07774a13770cd4e0445fa47c555a41f29dad4d3ca9d1d7c3aad9e4ea79",
+      "kind": "grammar",
+      "language": "ruby"
+    },
+    {
+      "path": "assets/languages/rust.min.js",
+      "bytes": 3050,
+      "sha256": "fde151d2b246bef44c98da80e7cac3cbb05de794911305fe9a3adf6beff87659",
+      "kind": "grammar",
+      "language": "rust"
+    },
+    {
+      "path": "assets/languages/sql.min.js",
+      "bytes": 6545,
+      "sha256": "79bead5cf2bfa93d3982073d000a97802f394fe287736644bab30f40cb5c7380",
+      "kind": "grammar",
+      "language": "sql"
+    },
+    {
+      "path": "assets/languages/swift.min.js",
+      "bytes": 8294,
+      "sha256": "9522716ca5b45f102b26c2ee8fc13b16d7707b2a10b650872207a17882a4109c",
+      "kind": "grammar",
+      "language": "swift"
+    },
+    {
+      "path": "assets/languages/typescript.min.js",
+      "bytes": 7868,
+      "sha256": "0e10ce9a81d42f8d43a54007ca7e31fe22ad801b2a2e1693d31736aa79fa5404",
+      "kind": "grammar",
+      "language": "typescript"
+    },
+    {
+      "path": "assets/languages/xml.min.js",
+      "bytes": 1992,
+      "sha256": "2e8c8ba1e7a200cd83dfbf9c746b8e00f7d7bad966dbfd83eca142cf2caa4dd7",
+      "kind": "grammar",
+      "language": "xml"
+    },
+    {
+      "path": "assets/languages/yaml.min.js",
+      "bytes": 1947,
+      "sha256": "7010955f1f87aef1de085483d79d42817544aaf03c4f57a6fd4eb838f2cdf609",
+      "kind": "grammar",
+      "language": "yaml"
+    }
+  ]
+}

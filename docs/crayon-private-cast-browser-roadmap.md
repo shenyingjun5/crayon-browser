@@ -226,7 +226,7 @@ flowchart LR
 4. `AGT-01` 在 `FND-08/PRV-08` 满足后冻结 CAAP v1；不得提前开放 CLI/MCP。
 5. `CNT-01` 等 `CEF-15/BUX-18/SDK-14/MED-19/PRV-08` 完成。
 6. `ACT-01` 等 `CNT-03/AGT-01` 完成；`WFL/HUB` 不得越过语义动作和权限依赖。
-7. `MRT-01..04 DONE / MRT-05 READY`：Runtime v1 foundation（facts、immutable registry/router、fixed asset catalog、bounded lifecycle/cache）已闭合；下一项冻结 Code Highlight 供应链，具体 CEF route/renderer 不偷跑。
+7. `MRT-01..05 DONE / MRT-06 READY`：Runtime v1 foundation 与 Code Highlight 11.12.0 固定离线 grammar 闭包已闭合；下一项接入 exact allowlist/lazy/SafeHtml token policy，未知语言继续纯文本回退。
 8. `MDV-24 VERIFIED`：`MDV-21..23 DONE`；macOS arm64 Helper/deployment target/signing、默认页与公网、MDV 三视图/深色/AX 真机已闭合，arm64/x64 自动化均 61/61。Windows、原生 macOS x64 以及当前 UI 自动化无法替代的 IME/窄窗交互真机仍待补；该工具栏门禁与 Mermaid `MDV-20` 独立。
 9. `MDV-14 READY`：可与 MRT 契约工作独立串行领取，冻结 Mermaid Full 11.17.2 的离线运行时 import closure、manifest/hash/许可与可重复 vendor；`MDV-15/16` 分别等待 `MRT-03/04` 后再按 `17 -> 18 -> 19 -> 20` 收口。
 

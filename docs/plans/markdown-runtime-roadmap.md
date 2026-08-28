@@ -1,6 +1,6 @@
 # MRT：Markdown Runtime Extension Framework Roadmap
 
-状态：`MRT-01..04 DONE`，`MRT-05 READY`，`MRT-06..19 TODO`。本 Roadmap 吸收 `docs/reference/蜡笔投屏浏览器_Markdown_Runtime_Extension_Framework_V1.0.md` 第 34..59 章，但以当前 PRD、安全契约和真实 C++17/md4c/CEF 工程为准。目标是在不建立第二 Markdown parser、不扩大文件/Agent 权限、不让大型扩展进入浏览器 bootstrap 的前提下，为 MDV 提供统一、闭合、可审计的 Extension Framework。
+状态：`MRT-01..05 DONE`，`MRT-06 READY`，`MRT-07..19 TODO`。本 Roadmap 吸收 `docs/reference/蜡笔投屏浏览器_Markdown_Runtime_Extension_Framework_V1.0.md` 第 34..59 章，但以当前 PRD、安全契约和真实 C++17/md4c/CEF 工程为准。目标是在不建立第二 Markdown parser、不扩大文件/Agent 权限、不让大型扩展进入浏览器 bootstrap 的前提下，为 MDV 提供统一、闭合、可审计的 Extension Framework。
 
 ## 1. 采纳结论
 
@@ -32,8 +32,8 @@ MRT 是用户侧 MDV 基础设施，不进入 `crayon-page-data`、CNT 的确定
 | MRT-02 | DONE | MRT-01 | `browser/shared-ui/markdown`,`browser/shared-ui/markdown-runtime` | ExtensionNode adapter：交付四类 closed DTO；以 md4c 公共 callback 产出有界 fence facts，未审核 inline/block/container 语法零发射；默认 selection 为空 | MR-002；CommonMark/GFM golden 零回退 |
 | MRT-03 | DONE | MRT-02 | `browser/shared-ui/markdown-runtime` | 编译期 Extension Registry/Router：按 node kind + 精确 info string 分发，冲突/未知/禁用稳定回退 | MR-001/002；registry contract |
 | MRT-04 | DONE | MRT-03 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | 通用 runtime loader/cache/lifecycle：manifest 资源、按需 import、预算、generation、错误隔离与资源清理 | MR-003；lazy/cache/风暴 |
-| MRT-05 | READY | MRT-04 | `third_party/highlight`,`tools`,`docs/current` | Code Highlight 依赖选型与离线 grammar 闭包冻结；比较 highlight.js/Prism/Shiki 后只固定一个 | MR-004；许可/hash/包体/语言矩阵 |
-| MRT-06 | TODO | MRT-05 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | Code Highlight fence extension：语言 allowlist、grammar 按需加载、未知语言纯文本回退 | MR-004；注入/主题/lazy |
+| MRT-05 | DONE | MRT-04 | `third_party/highlight`,`tools`,`docs/current` | Code Highlight 依赖选型与离线 grammar 闭包冻结；比较 highlight.js/Prism/Shiki 后只固定一个 | MR-004；许可/hash/包体/语言矩阵 |
+| MRT-06 | READY | MRT-05 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | Code Highlight fence extension：语言 allowlist、grammar 按需加载、未知语言纯文本回退 | MR-004；注入/主题/lazy |
 | MRT-07 | TODO | MRT-04 | `third_party/katex`,`tools`,`docs/current` | KaTeX 语法与供应链契约：明确 inline/block 定界、转义、宏/URL/HTML 禁令、字体/CSS 本地闭包 | MR-005；许可/语法/安全矩阵 |
 | MRT-08 | TODO | MRT-07 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | KaTeX inline/block extension：按需加载、局部错误、主题/字体离线与编辑 generation | MR-005；公式 golden/注入/实机 |
 | MRT-09 | TODO | MDV-20,MRT-06,MRT-08 | `tests/e2e/desktop`,`tools/repo-guard`,`docs/current`,`docs/plans` | P0 Runtime 收口：CommonMark/GFM + Highlight + Mermaid Full + KaTeX 的双平台/包体/性能/安全总 Review | MR-001..005,MR-008/012；P0/P1=0 |
@@ -129,6 +129,25 @@ Gate:       MRT-18 TV/Cast gap / MRT-19 AI source-producer gap only
 - TDD/验证：先加入 header/target/contract test，确认缺实现时 `BuildRuntimeAssetCatalog` 与 `RuntimeSession::*` undefined 链接失败；实现后专项通过。最终 engine build + 串行 CTest 53/53；macOS arm64 CEF build + 串行 CTest 64/64；macOS x64 CEF app/runtime targets build，registry+lifecycle 2/2。warm `/usr/bin/time -p` 的 lifecycle storm（含 306 次 history 与 129 次 cache 插入）为 `real 0.00`（工具 0.01 s 精度）；Clang `-Wall -Wextra -Wpedantic -Werror`/format 与 diff check 通过。Windows/MSVC 由独立真机会话补证据。
 - Code Review：按 v0.8 复核需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性；P0/P1/P2 = 0/0/0。无锁、无跨线程可变状态、无外部回调/IO；所有 map/scan/eviction 上限分别受 64/128/256/1024 常量约束，不存在无界日志或正文复制。
 - 未覆盖：CEF opaque asset route/placeholder/DOM 和真实 adapter/output policy 由 MDV-16/各 extension 接入任务实现；Highlight 选型/供应链归 `MRT-05`，Mermaid 供应链归 `MDV-14`。`MRT-05` 转为 `READY`。
+
+## 5D. MRT-05 原子范围（Code Highlight 供应链）
+
+- 状态：`DONE`；依赖 `MRT-04 DONE`。单一目标是比较 highlight.js、Prism 与 Shiki 后只固定一个浏览器侧高亮实现，并交付可离线复验、最小化、按语言拆分的 grammar 资产闭包；不改变任何 MDV/Runtime 生产行为。
+- 输入：三者官方仓库/包元数据、许可证/维护状态/浏览器依赖闭包，MR-004 的多语言/未知语言/恶意文本/主题/lazy 要求。输出：`third_party/highlight` 内的固定版本 core + allowlist grammar、原始许可证、逐文件 SHA-256/包完整性 manifest、选型与别名/包体说明，以及 `tools/highlight` 的离线 check/显式更新脚本。
+- 允许修改：`third_party/highlight/**`、`tools/highlight/**`、`docs/current/**` 与必要 plans/总 Roadmap；若固定 grammar 关键词触发现有通用静态规则误报，只允许在 `tools/repo-guard` 收紧该 matcher 并补回归测试。禁止修改 `browser/**`、CMake/CEF/MDV/Runtime/parser、npm lock/workspace、Cast/Agent/文件/网络能力；普通构建和运行不得调用 npm、网络或更新脚本。
+- 安全/包体：生产闭包只能含官方 `@highlightjs/cdn-assets@11.12.0` 的 ESM core、精确 allowlist grammar 与 BSD-3-Clause LICENSE；不携带 auto-detect/all-language bundle、plugins、worker、Node/runtime/dev dependency、theme 图片、source map 或远程 URL。下载仅由显式 vendor 命令执行，先验证 npm SHA-512 与固定 tarball SHA-256，再做 tar path/type/size/文件 allowlist 校验；正常 `--check` 必须零网络。
+- 验收：选型矩阵记录版本、维护、许可、运行依赖、浏览器加载/主题与包体权衡；manifest 的 package/version/integrity/tarball hash、资产 hash/size、canonical language/alias/dependency 闭合；本地 tarball 重建后逐字节一致；tamper、missing、extra、path/type/超量、错误包 hash/version 均 fail closed；`node tools/highlight/vendor.mjs --check`、tool tests、`git diff --check` 与 v0.8 Review P0/P1/P2=0。
+- 明确不做：高亮调用、HTML/token policy、CEF route、registry/adapter、主题 CSS、自动语言检测、运行时网络/文件读取、未知语言猜测、KaTeX/Mermaid 或任何文档语法变化；这些分别归 `MRT-06`、`MRT-07..08`、`MDV-14..20`。
+
+### MRT-05 完成记录（2026-08-28）
+
+- 选型/闭包：基于官方仓库与包元数据比较 highlight.js、Prism、Shiki，固定 `@highlightjs/cdn-assets@11.12.0`（BSD-3-Clause、零 runtime dependency）。新增 `code-highlight-assets-v1` 契约与 `third_party/highlight`：只含 ESM core、25 个 allowlist grammar、原始 LICENSE、逐文件 manifest 和 vendored 说明；未纳入全语言/auto-detect bundle、plugin、worker、theme、图片、source map、npm lock 或 dev dependency。
+- 语言/包体：canonical grammar 覆盖 Bash/C/C++/C#/Web/Java/Kotlin/Go/Rust/Python/Ruby/PHP/PowerShell/Swift/Objective-C/SQL/Markdown/YAML 等常用集合，manifest 固定习惯别名和 nested dependency closure；虚拟 plaintext 别名不加载资产。core `20,501 B` + grammar `102,570 B` = runtime JS `123,071 B`，加 LICENSE 后受管闭包 `124,585 B`，低于 `512 KiB` 固定上限。
+- 供应链/安全：更新工具固定 npm SHA-512、tarball SHA-256 和每个选择资产 SHA-256/bytes；下载仅为显式 `--download`，离线 `--archive/--check` 验证 gzip/tar/path/type/checksum/count/size、包名/版本/许可/零 runtime dependency、选择集与 subLanguage dependency 后，以固定根同目录临时树原子替换。正常构建/运行零 npm/网络。资产扫描无 fetch/XHR/WebSocket/dynamic import；上游 core 两个 GitHub 字符串只进入 console warning，CSP 仍禁止连接。
+- TDD/验证：先加入 contract test，因缺 `tools/highlight/vendor.mjs` 以 `ERR_MODULE_NOT_FOUND` 失败；实现后 `node --test tools/highlight/vendor.test.mjs` 5/5，通过 bounded tar、traversal/link/duplicate/oversize、wrong identity/hash、missing/extra/tamper，以及 25 个真实 ESM grammar 注册与恶意 `<script>/<img onerror>` 源码保持转义文本。`node tools/highlight/vendor.mjs --archive <locked tgz>` 连续重建逐字节一致，`--check` 报 `25 grammars, 124585 bytes`；Node syntax、Cargo format、`git diff --check` 通过。
+- 仓库门禁：首次 `fast` 在 RG-004A 把 vendored Rust grammar 字符串 `debug_assert!` 误判为宏调用；repo-guard 改为只匹配带调用括号的 Rust debug macro，并增加“真实调用拒绝/grammar 关键词接受”回归。沙箱内第二轮因既有 Cast integration 创建本地测试资源报 9 个 `Operation not permitted`，在允许本地资源的同一 `bash scripts/check.sh fast` 命令复验全通过；`bash scripts/check.sh security` 全通过。既有 RG-003/004 warning 集无新增错误。
+- Code Review：按 v0.8 复核需求、供应链、路径/归档边界、原子替换、网络入口、运行能力、包体、测试与维护性；P0/P1/P2 = 0/0/0。测试造 tar helper 只留在 `vendor.test.mjs`，正式工具不含 fixture/test API；脚本写入根由自身位置固定，归档路径与内容不能决定输出位置。
+- 未覆盖：高亮 adapter、SafeHtml token/class policy、CEF fixed route、MDV 浅深主题与真正 viewport lazy 由 `MRT-06` 实现；本任务没有改变任何浏览器产物或 Markdown 行为。`MRT-06` 转为 `READY`。
 
 ## 6. 各阶段共同门禁
 

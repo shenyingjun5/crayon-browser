@@ -124,6 +124,21 @@ fn sensitive_key_denylist_is_not_a_hardcoded_secret() {
 }
 
 #[test]
+fn debug_assert_invocation_fails_but_grammar_keyword_does_not() {
+    let repo = TestRepo::new("debug-assert-grammar");
+    repo.write("Cargo.toml", &basic_manifest("debug-assert-grammar"));
+    repo.write("src/lib.rs", "pub fn value() { debug_assert!(true); }\n");
+    assert_eq!(status(&repo, "RG-004A"), CheckStatus::Failed);
+
+    repo.write("src/lib.rs", "pub fn value() {}\n");
+    repo.write(
+        "third_party/highlight/assets/languages/rust.min.js",
+        "const grammarKeywords = [\"debug_assert!\", \"debug_assert_eq!\"];\n",
+    );
+    assert_eq!(status(&repo, "RG-004A"), CheckStatus::Passed);
+}
+
+#[test]
 fn three_thousand_line_test_file_fails_rg_003() {
     let repo = TestRepo::new("large-test");
     repo.write("Cargo.toml", &basic_manifest("large-test"));

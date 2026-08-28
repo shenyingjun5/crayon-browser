@@ -252,7 +252,12 @@ fn inspect_debug_entries(path: &Path, text: &str, findings: &mut Vec<Finding>) {
             continue;
         }
         let lower = line.to_ascii_lowercase();
-        if lower.contains("debug_assert!")
+        if lower.contains("debug_assert!(")
+            || lower.contains("debug_assert! (")
+            || lower.contains("debug_assert_eq!(")
+            || lower.contains("debug_assert_eq! (")
+            || lower.contains("debug_assert_ne!(")
+            || lower.contains("debug_assert_ne! (")
             || lower.contains("devtools")
             || lower.contains("remote_debugging")
             || lower.contains("chrome_devtools")
