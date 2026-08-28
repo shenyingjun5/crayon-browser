@@ -134,6 +134,7 @@ export async function highlightCode(code, canonical, nodeId) {
     const fragment = document.createDocumentFragment();
     appendTokenTree(fragment, tokens);
     code.replaceChildren(fragment);
+    code.classList.add("hljs");
     code.setAttribute("data-mdv-highlighted", "true");
     return true;
   } catch (_) {

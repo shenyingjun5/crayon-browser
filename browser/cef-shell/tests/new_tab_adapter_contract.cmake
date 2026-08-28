@@ -25,6 +25,7 @@ foreach(required_token
         "CEF_SCHEME_OPTION_STANDARD"
         "CEF_SCHEME_OPTION_SECURE"
         "CEF_SCHEME_OPTION_DISPLAY_ISOLATED"
+        "CEF_SCHEME_OPTION_CORS_ENABLED"
         "CefRegisterSchemeHandlerFactory"
         "ClassifyNewTabRequest"
         "SetCharset"
@@ -46,8 +47,7 @@ endforeach()
 
 foreach(forbidden_scheme_option
         "CEF_SCHEME_OPTION_CSP_BYPASSING"
-        "CEF_SCHEME_OPTION_FETCH_ENABLED"
-        "CEF_SCHEME_OPTION_CORS_ENABLED")
+        "CEF_SCHEME_OPTION_FETCH_ENABLED")
   string(FIND "${source_text}" "${forbidden_scheme_option}" option_index)
   if(NOT option_index EQUAL -1)
     message(FATAL_ERROR

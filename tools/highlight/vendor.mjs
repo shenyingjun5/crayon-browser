@@ -342,13 +342,29 @@ async function listFiles(root, relative = '') {
   return found.sort();
 }
 
+function canonicalLfText(value) {
+  const normalized = value.replace(/\r\n/g, '\n');
+  if (normalized.includes('\r')) {
+    throw new Error('vendored text contains an invalid carriage return');
+  }
+  return normalized;
+}
+
+function canonicalLfBytes(bytes) {
+  const text = bytes.toString('utf8');
+  if (!Buffer.from(text, 'utf8').equals(bytes)) {
+    throw new Error('vendored text is not valid UTF-8');
+  }
+  return Buffer.from(canonicalLfText(text), 'utf8');
+}
+
 export async function verifyVendorDirectory(root = vendorRoot()) {
   const manifestPath = path.join(root, 'manifest.json');
   if (!existsSync(manifestPath)) {
     throw new Error('missing manifest');
   }
   const expectedText = `${JSON.stringify(expectedManifest(), null, 2)}\n`;
-  const actualText = await readFile(manifestPath, 'utf8');
+  const actualText = canonicalLfText(await readFile(manifestPath, 'utf8'));
   if (actualText !== expectedText) {
     throw new Error('manifest content mismatch');
   }
@@ -362,12 +378,12 @@ export async function verifyVendorDirectory(root = vendorRoot()) {
       actualFiles.some((item) => !expectedFiles.has(item))) {
     throw new Error('vendor file set mismatch');
   }
-  if (await readFile(path.join(root, 'VENDORED.md'), 'utf8') !==
+  if (canonicalLfText(await readFile(path.join(root, 'VENDORED.md'), 'utf8')) !==
       vendoredReadme()) {
     throw new Error('vendored documentation mismatch');
   }
   for (const item of FILES) {
-    const bytes = await readFile(path.join(root, item.output));
+    const bytes = canonicalLfBytes(await readFile(path.join(root, item.output)));
     if (bytes.length !== item.bytes || digest('sha256', bytes) !== item.sha256) {
       throw new Error(`vendored asset integrity mismatch: ${item.output}`);
     }

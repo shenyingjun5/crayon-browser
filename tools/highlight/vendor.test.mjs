@@ -91,6 +91,17 @@ test('vendor verifier rejects tamper, missing and extra files', async () => {
     await assert.rejects(() => verifyVendorDirectory(root), /missing manifest/);
     await cp(source, root, {recursive: true});
     await verifyVendorDirectory(root);
+    for (const relative of [
+      'manifest.json',
+      'VENDORED.md',
+      'LICENSE',
+      'assets/core.min.js',
+    ]) {
+      const target = path.join(root, relative);
+      const text = await readFile(target, 'utf8');
+      await writeFile(target, text.replace(/\r?\n/g, '\r\n'));
+    }
+    await verifyVendorDirectory(root);
     await writeFile(path.join(root, 'assets/core.min.js'), 'tampered');
     await assert.rejects(() => verifyVendorDirectory(root),
                          /vendored asset integrity mismatch/);

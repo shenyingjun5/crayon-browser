@@ -73,3 +73,9 @@ test("all adapter load plans match the frozen manifest closure", () => {
       `load order for ${language.id}`);
   }
 });
+
+test("successful highlighting applies the Browser-owned base theme class", () => {
+  const adapterSource = fs.readFileSync(
+    new URL("../assets/highlight-adapter.js", import.meta.url), "utf8");
+  assert.match(adapterSource, /code\.classList\.add\(["']hljs["']\)/);
+});

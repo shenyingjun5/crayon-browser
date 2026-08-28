@@ -228,7 +228,8 @@ void RegisterCrayonCustomSchemes(CefRawPtr<CefSchemeRegistrar> registrar) {
   }
   constexpr int kSchemeOptions = CEF_SCHEME_OPTION_STANDARD |
                                  CEF_SCHEME_OPTION_SECURE |
-                                 CEF_SCHEME_OPTION_DISPLAY_ISOLATED;
+                                 CEF_SCHEME_OPTION_DISPLAY_ISOLATED |
+                                 CEF_SCHEME_OPTION_CORS_ENABLED;
   registrar->AddCustomScheme(browser_new_tab::kNewTabScheme, kSchemeOptions);
 }
 

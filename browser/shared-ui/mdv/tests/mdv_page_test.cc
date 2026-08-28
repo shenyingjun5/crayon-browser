@@ -401,6 +401,11 @@ void TestHighlightRoutesAndLazyBootstrap() {
   CHECK(script.find("IntersectionObserver") != std::string::npos);
   CHECK(script.find("import('/runtime/highlight/adapter')") !=
         std::string::npos);
+  CHECK(script.find("data-mdv-highlight-loading") != std::string::npos);
+  CHECK(script.find("if(ok&&highlightObserver){highlightObserver.unobserve(") !=
+        std::string::npos);
+  CHECK(script.find("highlightObserver.unobserve(entries[i].target);"
+                    "startHighlight(entries[i].target)") == std::string::npos);
   CHECK(script.find("highlightAuto") == std::string::npos);
   CHECK(script.find("highlightAll") == std::string::npos);
   const std::string css = crayon::browser_mdv::RenderMdvStylesheet();
