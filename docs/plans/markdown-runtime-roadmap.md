@@ -1,6 +1,6 @@
 # MRT：Markdown Runtime Extension Framework Roadmap
 
-状态：`MRT-01..05 DONE`，`MRT-06 VERIFIED`（macOS 完成，Windows 真机待远程补验），`MRT-07 DONE`，`MRT-08 READY`，`MRT-09..19 TODO`。本 Roadmap 吸收 `docs/reference/蜡笔投屏浏览器_Markdown_Runtime_Extension_Framework_V1.0.md` 第 34..59 章，但以当前 PRD、安全契约和真实 C++17/md4c/CEF 工程为准。目标是在不建立第二 Markdown parser、不扩大文件/Agent 权限、不让大型扩展进入浏览器 bootstrap 的前提下，为 MDV 提供统一、闭合、可审计的 Extension Framework。
+状态：`MRT-01..05 DONE`，`MRT-06 VERIFIED`（macOS 已闭合；Windows 自动化通过、真实 CEF 高亮失败，待修复复验），`MRT-07 DONE`，`MRT-08 READY`，`MRT-09..19 TODO`。本 Roadmap 吸收 `docs/reference/蜡笔投屏浏览器_Markdown_Runtime_Extension_Framework_V1.0.md` 第 34..59 章，但以当前 PRD、安全契约和真实 C++17/md4c/CEF 工程为准。目标是在不建立第二 Markdown parser、不扩大文件/Agent 权限、不让大型扩展进入浏览器 bootstrap 的前提下，为 MDV 提供统一、闭合、可审计的 Extension Framework。
 
 ## 1. 采纳结论
 
@@ -33,7 +33,7 @@ MRT 是用户侧 MDV 基础设施，不进入 `crayon-page-data`、CNT 的确定
 | MRT-03 | DONE | MRT-02 | `browser/shared-ui/markdown-runtime` | 编译期 Extension Registry/Router：按 node kind + 精确 info string 分发，冲突/未知/禁用稳定回退 | MR-001/002；registry contract |
 | MRT-04 | DONE | MRT-03 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | 通用 runtime loader/cache/lifecycle：manifest 资源、按需 import、预算、generation、错误隔离与资源清理 | MR-003；lazy/cache/风暴 |
 | MRT-05 | DONE | MRT-04 | `third_party/highlight`,`tools`,`docs/current` | Code Highlight 依赖选型与离线 grammar 闭包冻结；比较 highlight.js/Prism/Shiki 后只固定一个 | MR-004；许可/hash/包体/语言矩阵 |
-| MRT-06 | VERIFIED | MRT-05 | `browser/shared-ui/markdown`,`browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | Code Highlight fence extension：语言 allowlist、grammar 按需加载、未知语言纯文本回退 | MR-004；macOS 自动化与真实 CEF 已闭合，Windows 真机待远程补验 |
+| MRT-06 | VERIFIED | MRT-05 | `browser/shared-ui/markdown`,`browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | Code Highlight fence extension：语言 allowlist、grammar 按需加载、未知语言纯文本回退 | MR-004；macOS 已闭合；Windows Debug/Release 与 CTest 通过，真实 CEF 高亮失败，待修复复验 |
 | MRT-07 | DONE | MRT-04 | `third_party/katex`,`tools`,`docs/current` | KaTeX 语法与供应链契约：明确 inline/block 定界、转义、宏/URL/HTML 禁令、字体/CSS 本地闭包 | MR-005；许可/语法/安全矩阵 |
 | MRT-08 | READY | MRT-07 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | KaTeX inline/block extension：按需加载、局部错误、主题/字体离线与编辑 generation | MR-005；公式 golden/注入/实机 |
 | MRT-09 | TODO | MDV-20,MRT-06,MRT-08 | `tests/e2e/desktop`,`tools/repo-guard`,`docs/current`,`docs/plans` | P0 Runtime 收口：CommonMark/GFM + Highlight + Mermaid Full + KaTeX 的双平台/包体/性能/安全总 Review | MR-001..005,MR-008/012；P0/P1=0 |
@@ -151,7 +151,7 @@ Gate:       MRT-18 TV/Cast gap / MRT-19 AI source-producer gap only
 
 ## 5E. MRT-06 原子范围（Code Highlight Runtime 接入）
 
-- 状态：`VERIFIED`（macOS 自动化/真实 CEF 完成；Windows 真机待远程补验）；依赖 `MRT-05 DONE`。单一目标是把已冻结的 highlight.js core/grammar 作为一个闭合 fence adapter 接入 `crayon://mdv`，仅对精确 allowlist 语言按可见 block 懒加载并应用 MDV 自有浅/深色 token 主题；普通、纯文本、未知或失败 fence 保留 md4c 已转义的 Level A code block。
+- 状态：`VERIFIED`（macOS 自动化/真实 CEF 完成；Windows 自动化通过、真实 CEF 高亮失败，待修复复验）；依赖 `MRT-05 DONE`。单一目标是把已冻结的 highlight.js core/grammar 作为一个闭合 fence adapter 接入 `crayon://mdv`，仅对精确 allowlist 语言按可见 block 懒加载并应用 MDV 自有浅/深色 token 主题；普通、纯文本、未知或失败 fence 保留 md4c 已转义的 Level A code block。
 - 输入/输出：输入仅为 MRT-02 `MarkdownRenderPlan`、MRT-03/04 immutable registry/catalog 契约和 `code-highlight-assets-v1` manifest；输出为 Browser-owned inert code marker、固定同源 runtime route、显式 language highlight 结果以及严格 `span`/`hljs-*` token policy 后的 DOM。
 - 允许修改：`browser/shared-ui/markdown-runtime/**`、`browser/shared-ui/mdv/**`、`browser/cef-shell/src/browser/mdv/**`、相关 CMake/测试与本 Roadmap/当前契约；为消除冻结 `c#` alias 与 MRT-02 token 语法冲突，允许在 `browser/shared-ui/markdown/**` 的唯一 matcher 校验入口增加单个 `#` ASCII 字符并补回归。只读 `third_party/highlight/**` 作为已冻结生成源；不得修改 vendor 资产或扩大语言集。
 - 禁止修改：md4c/vendor parser、Markdown Level A 语法与 SafeHtml policy、文件打开/保存权限、Agent/Cast/网络能力、CSP `unsafe-inline`/`unsafe-eval`/`connect-src`；禁止 auto-detect、DOM 全页扫描、文档指定 module/path/URL、CDN fallback、worker/plugin 或未经 policy 的 `innerHTML`。
@@ -166,7 +166,11 @@ Gate:       MRT-18 TV/Cast gap / MRT-19 AI source-producer gap only
 - 自动化：`node --test browser/shared-ui/markdown-runtime/tests/highlight_adapter.test.mjs` 4/4；`node tools/highlight/vendor.mjs --check` 为 25 grammars / 124585 bytes；macOS arm64 Debug CEF build 与 `ctest --test-dir .cache/build/macos-arm64-cef-debug --output-on-failure` 65/65；macOS x64 Debug CEF build 与 MRT/MDV/package scoped CTest 7/7；`bash scripts/check.sh fast`、`bash scripts/check.sh security`、新 C++ 文件 Google clang-format dry-run 与 `git diff --check` 均通过。fast/security 的 loopback 集成测试需在沙箱外运行，沙箱内原始阻断均为 `Operation not permitted`。
 - 真实 CEF：macOS arm64 离线打开本地 fixture，确认 C++/JavaScript/C# 着色、unknown 纯文本回退、恶意 `<img onerror>` 仅作为字符串文本、亮暗主题生效；开启 CEF stderr logging 后无 CSP/resource 错误，退出后无残留主进程/helper。
 - Code Review v0.8：APPROVE，P0/P1/P2/P3=0。registry/catalog immutable；无锁、网络、文件、worker、plugin、auto-detect 或新权限；运行时资产请求和 candidate/node/cache 预算均有界；普通/未知文档零 runtime import。
-- 未覆盖：Windows Debug/Release 构建、Windows x64 真实 CEF 的 viewport lazy/主题/未知回退由已激活的远程 Windows 会话在拉取本提交后补验；在此证据回写前保持 `VERIFIED`，不宣称 `DONE`。KaTeX 与 Mermaid 未在本任务提前实现。`MRT-07` 转为 `READY`。
+- Windows 构建/自动化（2026-08-28）：基于 `832b487` 与本机离线 CEF 150 Windows x64 分发，`cmake --preset windows-cef-debug` 通过；`cmake --build .cache\build\windows-cef-debug --config Debug --parallel 1 -- /nr:false` 与同命令 `--config Release` 均通过；Debug/Release 的 `ctest --test-dir .cache\build\windows-cef-debug -C <CONFIG> --output-on-failure` 均为 66/66。首次受工具超时中断的 `--parallel 4` 构建留下 MSBuild node-reuse worker，立即重试遇到 `fatal error C1041`；确认原因后改为上述串行 `/nr:false` 完整重跑通过，不记为产品失败。`node --test browser\shared-ui\markdown-runtime\tests\highlight_adapter.test.mjs` 4/4。
+- Windows 真实 CEF（2026-08-28）：Release `CrayonBrowser.exe` 在亮色和 `--force-dark-mode` 下打开本地 fixture，MDV 页面与浅/深整体主题正常；`plaintext`/未知语言保持纯文本，恶意 `<img onerror>`/`<script>` 仅显示为字面文本。但首屏 canonical C++ 以及滚入 viewport 后的 `js`/`c#` alias 均未出现 token 着色或 `hljs` 基础主题，等待后仍为单色；因此精确语言/alias、viewport lazy 与高亮浅深主题未闭合。
+- Windows 资源/离线证据（2026-08-28）：`node tools\highlight\vendor.mjs --check` 失败为 `highlight vendor failed: manifest content mismatch`；本机 `core.autocrlf=true`，worktree manifest 为 CRLF，而工具用固定 LF 字符串严格比较，Git blob hash 与 HEAD 一致，属 Windows 可移植性 blocker。CEF 生产设置将 `log_severity` 禁用，`--enable-logging` 生成的日志为 0 byte；DevTools Console 显示 0 messages，但页面会将 dynamic `import()`/高亮异常静默吞掉，不足以证明无 CSP/resource 错误。一次内部 route 直接导航探测被 omnibox 转为公网搜索，已立即关闭并从离线证据中排除；本轮不宣称零网络/零 resource 错误闭合。
+- Windows 独立 Code Review v0.8（2026-08-28）：CHANGES_REQUIRED，P0=0、P1=2、P2=1。P1：Windows CEF 中 dynamic module/highlight 未启动，`crayon` scheme 仅注册 `STANDARD|SECURE|DISPLAY_ISOLATED`，未带 CEF 建议给 standard scheme 的 `CORS_ENABLED`，同时 `mdv_page.cc` 在 observer 先 unobserve 后吞掉 import 错误，失败后无重试/可观测状态；adapter 成功路径仅写 `data-mdv-highlighted` 而不写 `hljs` class，与 `pre code.hljs` 浅/深基础主题 selector 不匹配。P2：vendor manifest check 对 Git 合法 CRLF checkout 不稳定。本会话按授权仅回写 MRT-06 Windows 证据，未夹带生产修复。
+- 未覆盖与状态：Windows 真实 CEF 的 canonical/alias 高亮、viewport lazy、高亮亮/暗主题与零 CSP/resource/网络错误均未闭合，保持 `VERIFIED`，不转 `DONE`；需先修复上述 P1/P2 并在 Windows x64 真实 CEF 复验。KaTeX 与 Mermaid 未在本任务提前实现；保留远程已完成的 `MRT-07 DONE`，`MRT-08` 为 `READY`。
 
 ## 5F. MRT-07 原子范围（KaTeX 语法与供应链）
 
