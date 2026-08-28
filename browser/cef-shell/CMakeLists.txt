@@ -99,16 +99,6 @@ if(OS_WINDOWS)
        CONTENT "${crayon_cef_runtime_manifest}\n")
 
   if(CRAYON_BUILD_TESTS)
-    add_library(crayon_macos_shell_portable_compile_contract OBJECT
-                src/macos/app.cc)
-    SET_LIBRARY_TARGET_PROPERTIES(crayon_macos_shell_portable_compile_contract)
-    target_compile_features(crayon_macos_shell_portable_compile_contract
-                            PRIVATE cxx_std_17)
-    target_include_directories(
-      crayon_macos_shell_portable_compile_contract
-      PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src"
-              "${CMAKE_SOURCE_DIR}/browser/shared-ui/new-tab/include")
-
     add_executable(crayon_windows_shell_contract
                    tests/windows_shell_contract.cc)
     target_compile_features(crayon_windows_shell_contract PRIVATE cxx_std_17)

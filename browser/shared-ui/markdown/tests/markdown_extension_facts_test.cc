@@ -81,9 +81,9 @@ bool NestedAndNormalizedFenceFacts() {
 }
 
 bool FourKindsAreClosedAndUnreviewedKindsEmitNothing() {
-  CHECK(ExtensionNodeKind::kInline != ExtensionNodeKind::kBlock);
-  CHECK(ExtensionNodeKind::kBlock != ExtensionNodeKind::kFence);
-  CHECK(ExtensionNodeKind::kFence != ExtensionNodeKind::kContainer);
+  static_assert(ExtensionNodeKind::kInline != ExtensionNodeKind::kBlock);
+  static_assert(ExtensionNodeKind::kBlock != ExtensionNodeKind::kFence);
+  static_assert(ExtensionNodeKind::kFence != ExtensionNodeKind::kContainer);
   const std::vector<ExtensionMatcher> selection = {
       {ExtensionNodeKind::kInline, "math-inline"},
       {ExtensionNodeKind::kBlock, "math-block"},

@@ -415,7 +415,7 @@ MDV-02..06 按"模型层零 IO / 零 CEF 类型"交付后，产品仍不可见�
 
 ### MDV-24 原子范围（工具栏双平台收口）
 
-- 状态：`VERIFIED`；依赖 `MDV-23 DONE`；与 Mermaid `MDV-20` 解耦。macOS arm64 的 Helper、deployment target、签名、默认页/公网导航、MDV 三视图、主题与 VoiceOver 语义已闭合；Windows 与无法在当前 arm64 主机替代的原生 x64/交互真机矩阵保留，故不得转 `DONE`。
+- 状态：`VERIFIED`；依赖 `MDV-23 DONE`；与 Mermaid `MDV-20` 解耦。macOS arm64 的 Helper、deployment target、签名、默认页/公网导航、MDV 三视图、主题与 VoiceOver 语义已闭合；Windows x64 的 Debug/Release、完整契约和主要真实 CEF 交互已闭合。原生 macOS x64 长稳、Windows Narrator/中文 IME 组合态与原生系统 200% DPI 仍未闭合，故不得转 `DONE`。
 - 单一目标：在完整 MDV 装配上先验证 macOS arm64 的 Meta/Option 快捷键、VoiceOver、IME 与布局，再回归 Windows x64 的 Ctrl/Alt、Narrator、IME 和 DPI；记录不可达/被 Chromium 消费的组合并从 tooltip 契约中移除。
 - 允许修改：`browser/cef-shell` 平台装配/本地化、E2E/device harness、发现缺陷对应的最小 shared/platform 修复、契约/Roadmap 证据；生产缺陷超出本任务时退回 MDV-22/23 独立修复。
 - 禁止修改：新增格式动作、第三方依赖、Markdown parser、文件权限或保存协议；不得以单平台或模型层结果冒充双平台。
@@ -432,3 +432,13 @@ MDV-02..06 按"模型层零 IO / 零 CEF 类型"交付后，产品仍不可见�
 - macOS arm64 真机：干净启动 `crayon://newtab` 正常渲染；以 `https://example.com` 为启动页时公网 HTTPS 正常渲染；MDV Preview/Source/Split 与强制深色模式均取得真实 CEF 截图；AX 树暴露源码/预览/分栏 toggle、编辑工具栏、15 个动作、缩进和对齐 popup、editable textarea、预览 heading/table/task/link 语义。默认实例连续存活超过 1 分钟，Browser/GPU/Network/Storage/Renderer 均稳定，无新增 crash report；`SIGTERM` 后无 Helper 残留。所有临时 URL、主题、accessibility 与窗口参数均已回退。
 - 未覆盖：当前 arm64 主机不能替代原生 macOS x64 长稳（Rosetta 长跑受 Chromium `StackSamplingProfiler`/sandbox 限制）；Windows x64 Debug/Release、Narrator、IME 与 100%/200% DPI 未运行；本机 UI 自动化对该 CEF 窗口执行 click/drag/set-value 时 native pipe 关闭，因此鼠标 tooltip、中文/英文 IME 实际输入和窄窗拖拽仍只有 DOM/快捷键/IME guard/响应式 CSS 自动化契约证据，不能冒充真机交互通过。
 - Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试与可维护性审查；P0/P1/P2 = 0/0/0。任务回到 `VERIFIED`；`DONE` 仍需 Windows 与上述不可替代的真机交互矩阵。
+
+### MDV-24 完成记录（2026-08-28，Windows x64 收口）
+
+- 缺陷与实现：Windows 全量重建先稳定复现 `crayon_macos_shell_portable_compile_contract` 的两级失败：补齐 MDV include 后暴露 `CoreFoundation/CoreFoundation.h` 无法由 MSVC 编译。该目标把已合法使用 CoreFoundation 的 macOS 平台 adapter 错当为跨平台源码；移除失效的 Windows 伪跨平台 OBJECT target，保留 `macos_cef_shell_source_contract` 与 macOS 原生双架构构建门禁，没有向生产源码加入测试分支。提交前快进到 `d4bdb21` 后又由 MSVC `/W4 /WX` 复现新增 `markdown_extension_facts_test.cc:84-86` 的 `C4127/C2220`；三条编译期枚举关系从运行时 `CHECK` 最小改为 `static_assert`，不改变生产行为。
+- Windows x64 构建：`$env:CRAYON_CEF_ROOT=(Resolve-Path '.cache/cef/windows64-root/cef_binary_150.0.10+g8042e43+chromium-150.0.7871.101_windows64').Path; cmake --preset windows-cef-debug; cmake --build --preset windows-cef-debug --parallel 4` 通过；`cmake --build .cache/build/windows-cef-debug --config Release --parallel 4` 首次工具调用在 124 秒超时且没有错误，继续同一增量构建后明确以 exit 0 完成。CEF 报告本机未安装 ATL，以及既有 `/DELAYLOAD` 未使用项 warning；均未阻断产物和测试。
+- 完整自动化：在 `d9ebe8b` 首轮 `ctest --test-dir .cache/build/windows-cef-debug -C Debug/Release --output-on-failure` 均为 62/62；提交前整合 `d4bdb21` 新增的 Markdown Runtime 三项测试并关闭上述 MSVC 阻断后，Debug 与 Release 最终均为 65/65。专项 `ctest ... -C Debug -R '^(markdown_extension_facts|mdv_handler_contract|windows_cef_shell_package_contract|windows_cef_shell_source_contract)$'` 为 4/4；`cmake -S browser/shared-ui/mdv/design -B .cache/build/mdv-toolbar-design && ctest --test-dir .cache/build/mdv-toolbar-design --output-on-failure` 为 2/2；`git diff --check` 通过。本机无 `clang-format`，故该工具未运行；三行改动已由 MSVC Debug/Release `/W4 /WX` 双构建覆盖。
+- Debug 真实 CEF（100% device scale、浅色）：`crayon://newtab` 与 `https://example.com` 正常渲染；本地 `.md` 进入 `crayon://mdv/app.html`，Preview/Source/Split、15 个图标动作与结构菜单均由真实截图和 UIA/AX 树确认。鼠标/键盘焦点 tooltip 显示两行本地化信息；`Shift+Tab` 进入 roving toolbar、`End` 定位结构按钮；`Ctrl+B` 将“段落”变为 `**段落**`，`Ctrl+Alt+1` 将当前行变为 H1；列表 `Tab`/`Shift+Tab` 在 2/4 空格间往返；GFM 第一列分隔符由 `---` 实际改为 `---:`。英文 `EnglishIME` 与中文文本“中文输入”均写入、预览并经 `Ctrl+S` 落到隔离验收夹具。
+- 布局与主题：真实窗口在 621x1005 窄窗下保持单行工具栏水平 overflow，窄 Split 两栏均可见；最大化 1920x1032 后宽 Split 正常。Debug `--force-dark-mode --force-device-scale-factor=1` 下 new-tab 与 MDV 深色正常。Release `--force-device-scale-factor=2` 下 new-tab、MDV Preview/Source、图标和 tooltip 以 200% Chromium device scale 真实渲染；Release 进程正常退出且无残留窗口。
+- 未覆盖与原始阻塞：① Narrator 不在 `list_apps`，通过既有 `C:\Windows\System32\Narrator.exe` 启动时 Computer Use 返回 `Computer Use app approval timed out`，随后窗口列表为空，不能冒充 Narrator 通过；技能同时禁止发送 Windows 键组合。② `Alt+Shift` 与 `Ctrl+Shift` 均未切入中文组合态，拼音按键直接写入拉丁字符并已撤销；因此只验证中英文文本输入，未验证中文 IME composition/candidate。③ 200% 使用 CEF `--force-device-scale-factor=2`，没有修改宿主 Windows 的系统显示缩放，不能冒充原生 OS 200% DPI。④ 原生 macOS x64 长稳仍受既有硬件边界限制。
+- Code Review：按 `code-review-standard.md` v0.8 独立复核需求/边界、CMake 平台职责、正确性、安全/隐私、性能、测试与可维护性；P0/P1/P2 = 0/0/0。Windows 构建阻断已关闭，任务保持 `VERIFIED`；转 `DONE` 仍需关闭上述 Narrator、中文 IME 组合态、原生 Windows 200% DPI 与原生 macOS x64 门禁。
