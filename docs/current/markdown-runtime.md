@@ -182,7 +182,7 @@ Extension 返回的是不可信候选，不是可直接写 DOM 的可信结果�
 - 无导出、保存、剪贴板、投屏、窗口/系统设置、CAAP/MCP/Agent 能力；
 - 无跨 block 或跨文档 DOM 查询；page-local UI 也必须由后续独立契约显式启用。
 
-Runtime 资产只从构建期 manifest 的精确相对路径读取。CEF 路由必须先规范化并拒绝目录、`..`、反斜杠、NUL、编码/二次编码分隔符、query、fragment、大小写别名、未知 MIME 和 manifest 外路径；普通构建与运行完全离线。
+供应链任务只从受管清单的精确相对源路径生成资产，生产 Runtime 不接收或保存这些路径：MRT-04 将资产编译为 closed `manifest_id + resource_id + content_type + bytes` catalog，resource ID 只接受有界小写 kebab token，entry 只能是显式 JavaScript/WASM 资源。CEF 路由由 MDV-16 把资源 ID 映射为 Browser-owned opaque route，并拒绝目录、`..`、反斜杠、NUL、编码/二次编码分隔符、query、fragment、大小写别名、未知 MIME 和 catalog 外资源；普通构建与运行完全离线。
 
 ## 8. 预算模型
 
@@ -201,6 +201,8 @@ Runtime 资产只从构建期 manifest 的精确相对路径读取。CEF 路由�
 | `max_error_bytes` | 单 block 对用户/诊断可见错误文本上限 |
 
 所有值必须是有限正数，由对应实现任务的 benchmark 冻结为命名常量；`0 = unlimited`、负数、缺失、文档 override 和运行时自动扩容均非法。达到 node/source/depth 上限时只保留 Level A fallback；达到队列/cache 上限时返回 `capacity_exceeded` 并记录不含正文的 dropped counter。
+
+MRT-02/04 当前固定实现值：单 plan `1024` node、单 source `256 KiB`、总 source `2 MiB`；单 request 最大 deadline `30 s`，并发 loading/rendering `4`、等待 queued `16`、终态 history `256`；cache `128` 项/总 `16 MiB`/单项 accounting `2 MiB`；asset catalog `64` bundle × 每 bundle `64` resource，单 resource `16 MiB`、单 bundle `32 MiB`、总 catalog `64 MiB`。这些都是 Browser 编译期上限，不是页面配置；未启用的 inline/block/container nesting 仍为零发射，不借 API 预留绕过语法审核。
 
 ## 9. Generation、状态机与取消
 
@@ -248,7 +250,8 @@ output_rejected
 
 - 无匹配 node 时不得读取 manifest 资产、创建 worker、初始化 runtime 或改变普通 Markdown 首屏路径。
 - 匹配后才请求专用 extension；viewport lazy 由后续任务实现，但不能改变 generation/预算语义。
-- cache 仅在当前 Browser 会话内存中存在，不写磁盘。key 至少包含：`extension id + locked version + source hash + theme + normalized options + policy version`，并绑定 Profile/文档隔离域。
+- cache 仅在当前 Browser 会话内存中存在，不写磁盘。key 必须显式包含：`extension id + locked version + 32-byte source digest + theme + 32-byte normalized-options digest + policy version`，并绑定非零 Profile/文档 isolation nonce；缺任一 digest、类型或隔离域即拒绝请求。
+- MRT-04 cache 只保留 Browser-owned opaque result token 与 accounting bytes，不保存原始 source、第三方对象或未过 policy 的 HTML/SVG/Canvas payload；generation 变化使 ready token 一并 stale 并清 cache。
 - key、日志和指标不保存原始 source。hash 不能作为跨 Profile 的文档标识。
 - 文档关闭/导航、Profile/无痕关闭、Renderer 终止、manifest/policy 变化或内存压力必须清除相关项。
 - 不在 UI/IO 线程同步加载大型资产，不在锁内加载/渲染/回调；队列、cache、错误与指标均有界。

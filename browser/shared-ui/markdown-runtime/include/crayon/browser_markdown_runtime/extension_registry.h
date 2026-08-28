@@ -147,4 +147,15 @@ RegistryBuildResult BuildExtensionRegistry(
     const std::vector<ExtensionManifest>& manifests,
     const std::vector<ExtensionAdapterRegistration>& adapters);
 
+/// Shared grammar for Browser-owned manifest and asset catalog identifiers.
+bool IsValidManifestId(const std::string& value,
+                       std::size_t max_bytes = kMaxManifestIdBytes);
+
+/// Exact SemVer validator used by both extension and asset manifests.
+bool IsValidLockedVersion(const std::string& version);
+
+/// Closed v1 output-policy compatibility matrix.
+bool IsCompatibleOutputPolicy(ExtensionOutputKind output,
+                              ExtensionPolicyVersion policy);
+
 }  // namespace crayon::browser_markdown_runtime

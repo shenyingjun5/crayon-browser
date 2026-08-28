@@ -21,32 +21,6 @@ bool IsKnownKind(browser_markdown::ExtensionNodeKind kind) {
   return false;
 }
 
-bool IsLowerKebabToken(const std::string& value, std::size_t max_bytes) {
-  if (value.empty() || value.size() > max_bytes) {
-    return false;
-  }
-  const auto is_lower_or_digit = [](unsigned char c) {
-    return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
-  };
-  if (!is_lower_or_digit(static_cast<unsigned char>(value.front())) ||
-      !is_lower_or_digit(static_cast<unsigned char>(value.back()))) {
-    return false;
-  }
-  bool previous_hyphen = false;
-  for (const char character : value) {
-    const unsigned char c = static_cast<unsigned char>(character);
-    if (is_lower_or_digit(c)) {
-      previous_hyphen = false;
-      continue;
-    }
-    if (c != '-' || previous_hyphen) {
-      return false;
-    }
-    previous_hyphen = true;
-  }
-  return true;
-}
-
 bool IsNumericIdentifier(std::string_view identifier) {
   if (identifier.empty() ||
       (identifier.size() > 1 && identifier.front() == '0')) {
@@ -93,7 +67,67 @@ bool IsSemverIdentifierList(std::string_view value,
   return false;
 }
 
-bool IsLockedVersion(const std::string& version) {
+bool CapabilitiesAreDenied(const ExtensionCapabilities& capabilities) {
+  return capabilities.network == CapabilityValue::kDeny &&
+         capabilities.file == CapabilityValue::kDeny &&
+         capabilities.dynamic_code == CapabilityValue::kDeny &&
+         capabilities.external_process == CapabilityValue::kDeny &&
+         capabilities.export_data == CapabilityValue::kDeny &&
+         capabilities.interaction == CapabilityValue::kDeny;
+}
+
+bool ManifestIsStructurallyValid(const ExtensionManifest& manifest) {
+  if (manifest.schema != kManifestSchemaV1 || !IsValidManifestId(manifest.id) ||
+      !IsValidLockedVersion(manifest.version) ||
+      !manifest.node_kind.has_value() || !IsKnownKind(*manifest.node_kind) ||
+      manifest.matchers.empty() ||
+      manifest.matchers.size() > kMaxMatchersPerManifest ||
+      !CapabilitiesAreDenied(manifest.capabilities)) {
+    return false;
+  }
+  if (!manifest.asset_manifest.empty() &&
+      !IsValidManifestId(manifest.asset_manifest, kMaxAssetManifestIdBytes)) {
+    return false;
+  }
+  std::set<std::string> unique_matchers;
+  for (const std::string& matcher : manifest.matchers) {
+    if (!browser_markdown::IsValidExtensionMatcherToken(matcher) ||
+        !unique_matchers.insert(matcher).second) {
+      return false;
+    }
+  }
+  return true;
+}
+
+}  // namespace
+
+bool IsValidManifestId(const std::string& value, std::size_t max_bytes) {
+  if (value.empty() || value.size() > max_bytes) {
+    return false;
+  }
+  const auto is_lower_or_digit = [](unsigned char c) {
+    return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
+  };
+  if (!is_lower_or_digit(static_cast<unsigned char>(value.front())) ||
+      !is_lower_or_digit(static_cast<unsigned char>(value.back()))) {
+    return false;
+  }
+  bool previous_hyphen = false;
+  for (const char character : value) {
+    const unsigned char c = static_cast<unsigned char>(character);
+    if (is_lower_or_digit(c)) {
+      previous_hyphen = false;
+      continue;
+    }
+    if (c != '-' || previous_hyphen) {
+      return false;
+    }
+    previous_hyphen = true;
+  }
+  return true;
+}
+
+bool IsValidLockedVersion(const std::string& version) {
   if (version.empty() || version.size() > kMaxManifestVersionBytes) {
     return false;
   }
@@ -125,17 +159,8 @@ bool IsLockedVersion(const std::string& version) {
          IsNumericIdentifier(core.substr(second_dot + 1));
 }
 
-bool CapabilitiesAreDenied(const ExtensionCapabilities& capabilities) {
-  return capabilities.network == CapabilityValue::kDeny &&
-         capabilities.file == CapabilityValue::kDeny &&
-         capabilities.dynamic_code == CapabilityValue::kDeny &&
-         capabilities.external_process == CapabilityValue::kDeny &&
-         capabilities.export_data == CapabilityValue::kDeny &&
-         capabilities.interaction == CapabilityValue::kDeny;
-}
-
-bool OutputMatchesPolicy(ExtensionOutputKind output,
-                         ExtensionPolicyVersion policy) {
+bool IsCompatibleOutputPolicy(ExtensionOutputKind output,
+                              ExtensionPolicyVersion policy) {
   switch (output) {
     case ExtensionOutputKind::kUnknown:
       return false;
@@ -150,31 +175,6 @@ bool OutputMatchesPolicy(ExtensionOutputKind output,
   }
   return false;
 }
-
-bool ManifestIsStructurallyValid(const ExtensionManifest& manifest) {
-  if (manifest.schema != kManifestSchemaV1 ||
-      !IsLowerKebabToken(manifest.id, kMaxManifestIdBytes) ||
-      !IsLockedVersion(manifest.version) || !manifest.node_kind.has_value() ||
-      !IsKnownKind(*manifest.node_kind) || manifest.matchers.empty() ||
-      manifest.matchers.size() > kMaxMatchersPerManifest ||
-      !CapabilitiesAreDenied(manifest.capabilities)) {
-    return false;
-  }
-  if (!manifest.asset_manifest.empty() &&
-      !IsLowerKebabToken(manifest.asset_manifest, kMaxAssetManifestIdBytes)) {
-    return false;
-  }
-  std::set<std::string> unique_matchers;
-  for (const std::string& matcher : manifest.matchers) {
-    if (!browser_markdown::IsValidExtensionMatcherToken(matcher) ||
-        !unique_matchers.insert(matcher).second) {
-      return false;
-    }
-  }
-  return true;
-}
-
-}  // namespace
 
 struct ExtensionRegistry::Impl {
   struct RouteKey final {
@@ -300,8 +300,8 @@ RegistryBuildResult BuildExtensionRegistry(
 
   std::map<std::string, std::string> adapter_versions;
   for (const ExtensionAdapterRegistration& adapter : adapters) {
-    if (!IsLowerKebabToken(adapter.extension_id, kMaxManifestIdBytes) ||
-        !IsLockedVersion(adapter.version) ||
+    if (!IsValidManifestId(adapter.extension_id) ||
+        !IsValidLockedVersion(adapter.version) ||
         !adapter_versions.emplace(adapter.extension_id, adapter.version)
              .second) {
       return result;
@@ -322,7 +322,7 @@ RegistryBuildResult BuildExtensionRegistry(
   for (const ExtensionManifest& manifest : manifests) {
     const auto adapter = adapter_versions.find(manifest.id);
     const bool enabled =
-        OutputMatchesPolicy(manifest.output, manifest.policy_version) &&
+        IsCompatibleOutputPolicy(manifest.output, manifest.policy_version) &&
         adapter != adapter_versions.end() &&
         adapter->second == manifest.version;
     ExtensionDescriptor descriptor;

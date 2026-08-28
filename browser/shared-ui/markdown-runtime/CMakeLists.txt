@@ -1,5 +1,7 @@
 add_library(crayon-browser-markdown-runtime STATIC
   src/extension_registry.cc
+  src/runtime_assets.cc
+  src/runtime_session.cc
 )
 add_library(crayon::browser-markdown-runtime ALIAS
             crayon-browser-markdown-runtime)
@@ -44,4 +46,23 @@ if(CRAYON_BUILD_TESTS)
   endif()
   add_test(NAME markdown_runtime_registry
            COMMAND crayon_browser_markdown_runtime_registry_test)
+
+  add_executable(crayon_browser_markdown_runtime_lifecycle_test
+    tests/runtime_lifecycle_test.cc
+  )
+  target_link_libraries(crayon_browser_markdown_runtime_lifecycle_test
+    PRIVATE crayon::browser-markdown-runtime)
+  target_compile_features(crayon_browser_markdown_runtime_lifecycle_test
+    PRIVATE cxx_std_17)
+  if(MSVC)
+    target_compile_options(crayon_browser_markdown_runtime_lifecycle_test
+      PRIVATE /W4 /WX /permissive-
+    )
+  else()
+    target_compile_options(crayon_browser_markdown_runtime_lifecycle_test
+      PRIVATE -Wall -Wextra -Wpedantic -Werror
+    )
+  endif()
+  add_test(NAME markdown_runtime_lifecycle
+           COMMAND crayon_browser_markdown_runtime_lifecycle_test)
 endif()

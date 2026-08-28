@@ -1,6 +1,6 @@
 # MRT：Markdown Runtime Extension Framework Roadmap
 
-状态：`MRT-01..03 DONE`，`MRT-04 READY`，`MRT-05..19 TODO`。本 Roadmap 吸收 `docs/reference/蜡笔投屏浏览器_Markdown_Runtime_Extension_Framework_V1.0.md` 第 34..59 章，但以当前 PRD、安全契约和真实 C++17/md4c/CEF 工程为准。目标是在不建立第二 Markdown parser、不扩大文件/Agent 权限、不让大型扩展进入浏览器 bootstrap 的前提下，为 MDV 提供统一、闭合、可审计的 Extension Framework。
+状态：`MRT-01..04 DONE`，`MRT-05 READY`，`MRT-06..19 TODO`。本 Roadmap 吸收 `docs/reference/蜡笔投屏浏览器_Markdown_Runtime_Extension_Framework_V1.0.md` 第 34..59 章，但以当前 PRD、安全契约和真实 C++17/md4c/CEF 工程为准。目标是在不建立第二 Markdown parser、不扩大文件/Agent 权限、不让大型扩展进入浏览器 bootstrap 的前提下，为 MDV 提供统一、闭合、可审计的 Extension Framework。
 
 ## 1. 采纳结论
 
@@ -31,8 +31,8 @@ MRT 是用户侧 MDV 基础设施，不进入 `crayon-page-data`、CNT 的确定
 | MRT-01 | DONE | MDV-13 | `docs/current`,`docs/plans` | 冻结 Runtime v1 契约：四类节点、三层兼容、manifest/schema、能力/资源策略、错误/预算/生命周期与永久禁止面 | MR-001；契约 Review |
 | MRT-02 | DONE | MRT-01 | `browser/shared-ui/markdown`,`browser/shared-ui/markdown-runtime` | ExtensionNode adapter：交付四类 closed DTO；以 md4c 公共 callback 产出有界 fence facts，未审核 inline/block/container 语法零发射；默认 selection 为空 | MR-002；CommonMark/GFM golden 零回退 |
 | MRT-03 | DONE | MRT-02 | `browser/shared-ui/markdown-runtime` | 编译期 Extension Registry/Router：按 node kind + 精确 info string 分发，冲突/未知/禁用稳定回退 | MR-001/002；registry contract |
-| MRT-04 | READY | MRT-03 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | 通用 runtime loader/cache/lifecycle：manifest 资源、按需 import、预算、generation、错误隔离与资源清理 | MR-003；lazy/cache/风暴 |
-| MRT-05 | TODO | MRT-04 | `third_party/highlight`,`tools`,`docs/current` | Code Highlight 依赖选型与离线 grammar 闭包冻结；比较 highlight.js/Prism/Shiki 后只固定一个 | MR-004；许可/hash/包体/语言矩阵 |
+| MRT-04 | DONE | MRT-03 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | 通用 runtime loader/cache/lifecycle：manifest 资源、按需 import、预算、generation、错误隔离与资源清理 | MR-003；lazy/cache/风暴 |
+| MRT-05 | READY | MRT-04 | `third_party/highlight`,`tools`,`docs/current` | Code Highlight 依赖选型与离线 grammar 闭包冻结；比较 highlight.js/Prism/Shiki 后只固定一个 | MR-004；许可/hash/包体/语言矩阵 |
 | MRT-06 | TODO | MRT-05 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | Code Highlight fence extension：语言 allowlist、grammar 按需加载、未知语言纯文本回退 | MR-004；注入/主题/lazy |
 | MRT-07 | TODO | MRT-04 | `third_party/katex`,`tools`,`docs/current` | KaTeX 语法与供应链契约：明确 inline/block 定界、转义、宏/URL/HTML 禁令、字体/CSS 本地闭包 | MR-005；许可/语法/安全矩阵 |
 | MRT-08 | TODO | MRT-07 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | KaTeX inline/block extension：按需加载、局部错误、主题/字体离线与编辑 generation | MR-005；公式 golden/注入/实机 |
@@ -111,6 +111,24 @@ Gate:       MRT-18 TV/Cast gap / MRT-19 AI source-producer gap only
 - TDD/验证：先加入 target/header/contract test，确认缺少实现时链接因 `BuildExtensionRegistry/Route` undefined 失败；实现后 `markdown_runtime_registry` 通过。最终 `cmake --build --preset engine-api` 与串行全量 CTest 52/52；macOS arm64 CEF 全量构建通过（app/CEF/helpers ad-hoc signing）且串行 CTest 63/63；macOS x64 CEF app + registry target 构建通过，registry 1/1；Clang format dry-run 与 `git diff --check` 通过。两次 CEF configure 在未传环境变量时按契约报 `CRAYON_CEF_ROOT is required`，改用仓库内已校验 arm64/x64 离线根的明确绝对路径后通过，无下载/依赖变化。Windows/MSVC 由独立 Windows 真机会话补证据。
 - Code Review：按 v0.8 复核需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性；P0/P1/P2 = 0/0/0。snapshot 构建后不可变，无锁/线程/回调/IO；路由规模最多 1024 node，registry 最多 64 manifest × 32 matcher，错误与输出均有界且不含正文。
 - 未覆盖：factory 实例化、asset loader、cache、异步状态/取消/超时/清理和 MDV/CEF 接线归 `MRT-04`；具体 Mermaid/Highlight/KaTeX registration/renderer 未提前实现。`MRT-04` 转为 `READY`。
+
+## 5C. MRT-04 原子范围（通用 Loader/Cache/Lifecycle）
+
+- 状态：`DONE`；依赖 `MRT-03 DONE`。单一目标是在 `browser/shared-ui/markdown-runtime` 内交付纯 C++17、owner-thread 驱动的固定资产 catalog 与 request coordinator，闭合按需 acquire、状态、deadline/cancel/stale、并发/history/cache 预算和幂等 shutdown。
+- 输入：MRT-03 routed `ExtensionDescriptor`、Browser-owned compiled asset bundles、三重 generation、无正文的 source/options digest、theme、Profile/document isolation nonce 与注入时钟 `now_ms`。输出仅为不可变资产 bundle handle、闭合 request snapshot 和 Browser-owned opaque result token；不接收模块路径/URL/原始源码/DOM/CEF 对象。
+- 允许修改：`browser/shared-ui/markdown-runtime/**` 与必要的 current/plans 文档；只有发现通用接口无法消费时才触及 MDV/CEF，默认不提前接线。禁止修改 `third_party/**`、平台/文件/网络/Agent/Cast、具体 Mermaid/Highlight/KaTeX renderer 或资源。
+- 边界：catalog bundle/resource/单项/总 bytes 有命名上限，ID/version/content-type/entry/重复/兼容关系非法则整个 catalog 不发布；Queue 不读取 bundle，只有 `BeginLoad` 才 exact acquire；请求闭合为 queued/loading/rendering/ready/failed/cancelled/stale，非法跳转不变；active/history/cache 有界，满载 fail closed；cache key 必含 isolation、extension/version、source/options digest、theme/policy，值只存 opaque token + accounting bytes；generation 变化使未终态 stale 并清 cache/bundle handle；shutdown 按 cancel -> detach(无 callback) -> clear cache/resources 收敛且幂等。
+- 验收：先补 `markdown_runtime_lifecycle_test` 链接失败，覆盖空/非法 catalog、lazy missing asset、正常状态链、错误隔离、重复/非法转移、deadline/cancel/stale、generation、cache hit/LRU/隔离、capacity/history storm、memory pressure/shutdown；engine/macOS arm64 全 CTest、macOS x64 target、Clang format/diff、v0.8 Review P0/P1/P2=0。
+- 明确不做：JS/WASM 执行、CEF resource route/placeholder/DOM、真实 output payload/policy、线程/worker/callback、磁盘 cache、网络/文件 IO、具体 extension 资产/注册；MDV-16 只在 MRT-04 contract 后消费 catalog 做 CEF 固定资源路由。
+
+### MRT-04 完成记录（2026-08-28）
+
+- 实现：新增 immutable `RuntimeAssetCatalog`（closed bundle/resource/content-type/entry/payload）与 owner-thread `RuntimeSession`。Catalog 全量验证后原子发布，payload 只来自调用方编译期 bytes；Queue 只记录有界元数据，`BeginLoad` 才 exact acquire compatible bundle。Session 闭合 queued/loading/rendering/ready/failed/cancelled/stale，支持 injected absolute deadline、cancel、failure isolation、generation advance、memory pressure 和幂等 shutdown。
+- 预算/cache：固定单 deadline `30 s`、并发 loading/rendering `4`、pending `16`、history `256`、cache `128` 项/`16 MiB`、单 token accounting `2 MiB`；capacity rejection 递增饱和 dropped counter。Cache key 强制非零 Profile/document isolation、extension/version、显式 32-byte source/options digest、theme 与 policy；值只存 Browser-owned opaque token，不存正文或 renderer payload。generation 变化使 active 和 ready token 全部 stale 并清 cache。
+- 资产/安全：catalog 固定 `64` bundle × `64` resource，单 resource `16 MiB`、bundle `32 MiB`、总 `64 MiB`；ID 只接受 bounded kebab，版本为 exact SemVer，entry 只允许显式 JS/WASM 类型，重复、未知类型、空 payload、缺 entry、版本/extension 不兼容或预算超界 fail closed。没有路径、URL、IO、网络、磁盘 cache、CEF、JS/WASM 执行器、线程、worker、callback、DOM、Agent/Cast 或具体第三方资产。
+- TDD/验证：先加入 header/target/contract test，确认缺实现时 `BuildRuntimeAssetCatalog` 与 `RuntimeSession::*` undefined 链接失败；实现后专项通过。最终 engine build + 串行 CTest 53/53；macOS arm64 CEF build + 串行 CTest 64/64；macOS x64 CEF app/runtime targets build，registry+lifecycle 2/2。warm `/usr/bin/time -p` 的 lifecycle storm（含 306 次 history 与 129 次 cache 插入）为 `real 0.00`（工具 0.01 s 精度）；Clang `-Wall -Wextra -Wpedantic -Werror`/format 与 diff check 通过。Windows/MSVC 由独立真机会话补证据。
+- Code Review：按 v0.8 复核需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性；P0/P1/P2 = 0/0/0。无锁、无跨线程可变状态、无外部回调/IO；所有 map/scan/eviction 上限分别受 64/128/256/1024 常量约束，不存在无界日志或正文复制。
+- 未覆盖：CEF opaque asset route/placeholder/DOM 和真实 adapter/output policy 由 MDV-16/各 extension 接入任务实现；Highlight 选型/供应链归 `MRT-05`，Mermaid 供应链归 `MDV-14`。`MRT-05` 转为 `READY`。
 
 ## 6. 各阶段共同门禁
 
