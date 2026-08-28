@@ -10,6 +10,7 @@
 
 #include "crayon/browser_markdown/markdown_render.h"
 #include "crayon/browser_markdown_runtime/highlight_extension.h"
+#include "crayon/browser_markdown_runtime/katex_extension.h"
 #include "crayon/browser_mdv/mdv_images.h"
 #include "crayon/browser_mdv/mdv_page.h"
 #include "include/cef_parser.h"
@@ -36,6 +37,7 @@ constexpr char kHtmlMimeType[] = "text/html";
 constexpr char kCssMimeType[] = "text/css";
 constexpr char kJsMimeType[] = "text/javascript";
 constexpr char kTextMimeType[] = "text/plain";
+constexpr char kFontMimeType[] = "font/woff2";
 constexpr char kUtf8Charset[] = "utf-8";
 
 std::filesystem::path FilesystemPath(const std::string& path_utf8) {
@@ -47,7 +49,7 @@ std::filesystem::path FilesystemPath(const std::string& path_utf8) {
 }
 
 // Deterministic fixture document exercising the enabled syntax set
-// (headings, table, fenced code, task list, safe link, raw-HTML escape).
+// (headings, table, fenced code, math, task list, safe link, raw-HTML escape).
 // Real file entries arrive with MDV-09; this slice is content-driven.
 constexpr char kFixtureMarkdown[] =
     "# 蜡笔文档查看器\n\n"
@@ -55,6 +57,8 @@ constexpr char kFixtureMarkdown[] =
     "| 特性 | 状态 |\n|---|---|\n| 表格 | 支持 |\n| 任务列表 | 只读展示 |\n\n"
     "- [x] 渲染引擎接入\n- [ ] 文件入口（后续切片）\n\n"
     "```cpp\nint answer = 42;\n```\n\n"
+    "行内公式：$E = mc^2$。\n\n"
+    "$$\n\\frac{x^2 + 1}{\\sqrt{2}}\n$$\n\n"
     "安全链接：<https://example.com/ok> 与原始 HTML "
     "<b>按纯文本转义</b>。\n";
 
@@ -83,7 +87,9 @@ class MdvMemoryResourceHandler final : public CefResourceHandler {
     response->SetStatus(status_code_);
     response->SetStatusText(status_text_);
     response->SetMimeType(mime_type_);
-    response->SetCharset(kUtf8Charset);
+    if (mime_type_ != kFontMimeType) {
+      response->SetCharset(kUtf8Charset);
+    }
     CefResponse::HeaderMap headers;
     headers.emplace("Cache-Control", "no-store");
     // Contract CSP (MDV-01 §2): byte-for-byte the shared constant.
@@ -166,10 +172,14 @@ class MdvSchemeHandlerFactory final : public CefSchemeHandlerFactory {
                           std::shared_ptr<const crayon::browser_markdown_runtime::
                                                     RuntimeAssetBundle>
                               highlight_assets,
+                          std::shared_ptr<const crayon::browser_markdown_runtime::
+                                                    RuntimeAssetBundle>
+                              katex_assets,
                           std::string stylesheet, std::string script)
       : strings_(std::move(strings)),
         state_(std::move(state)),
         highlight_assets_(std::move(highlight_assets)),
+        katex_assets_(std::move(katex_assets)),
         stylesheet_(std::move(stylesheet)),
         script_(std::move(script)) {}
 
@@ -223,18 +233,39 @@ class MdvSchemeHandlerFactory final : public CefSchemeHandlerFactory {
         }
         break;
       case crayon::browser_mdv::MdvResourceKind::kRuntimeAsset: {
-        mime_type = kJsMimeType;
-        const auto found = std::find_if(
-            highlight_assets_->resources.begin(),
-            highlight_assets_->resources.end(), [&](const auto& asset) {
-              return asset.resource_id == route.runtime_resource_id &&
-                     asset.content_type == crayon::browser_markdown_runtime::
-                                               RuntimeAssetContentType::
-                                                   kJavaScript;
-            });
-        if (found == highlight_assets_->resources.end()) {
+        const auto& bundle = route.runtime_namespace == "katex"
+                                 ? katex_assets_
+                                 : highlight_assets_;
+        if (!bundle) {
           return new MdvMemoryResourceHandler(404, "Not Found", kTextMimeType,
                                               {});
+        }
+        const auto found = std::find_if(
+            bundle->resources.begin(), bundle->resources.end(),
+            [&](const auto& asset) {
+              return asset.resource_id == route.runtime_resource_id;
+            });
+        if (found == bundle->resources.end()) {
+          return new MdvMemoryResourceHandler(404, "Not Found", kTextMimeType,
+                                              {});
+        }
+        using ContentType =
+            crayon::browser_markdown_runtime::RuntimeAssetContentType;
+        switch (found->content_type) {
+          case ContentType::kJavaScript:
+            mime_type = kJsMimeType;
+            break;
+          case ContentType::kCss:
+            mime_type = kCssMimeType;
+            break;
+          case ContentType::kFont:
+            mime_type = kFontMimeType;
+            break;
+          case ContentType::kUnknown:
+          case ContentType::kWasm:
+          case ContentType::kJson:
+            return new MdvMemoryResourceHandler(404, "Not Found", kTextMimeType,
+                                                {});
         }
         if (route.include_body) {
           body = found->bytes;
@@ -287,6 +318,9 @@ class MdvSchemeHandlerFactory final : public CefSchemeHandlerFactory {
   const std::shared_ptr<const crayon::browser_markdown_runtime::
                             RuntimeAssetBundle>
       highlight_assets_;
+  const std::shared_ptr<const crayon::browser_markdown_runtime::
+                            RuntimeAssetBundle>
+      katex_assets_;
   const std::string stylesheet_;
   const std::string script_;
 
@@ -307,7 +341,7 @@ MdvPageSnapshot BuildFixtureSnapshotImpl() {
                     /*utf8_valid=*/true, /*now_ms=*/0);
   const auto revision = model.RequestRender(/*now_ms=*/1000);
   const auto highlighted =
-      crayon::browser_markdown_runtime::RenderHighlightDocument(
+      crayon::browser_markdown_runtime::RenderP0MarkdownDocument(
           kFixtureMarkdown, /*document_generation=*/1, revision);
   if (highlighted.render_status ==
           crayon::browser_markdown::RenderStatus::kOk &&
@@ -363,10 +397,25 @@ bool RegisterMdvSchemeHandlerFactory(
   if (!highlight_assets) {
     return false;
   }
+  const auto katex_catalog =
+      crayon::browser_markdown_runtime::BuildKatexAssetCatalog();
+  if (katex_catalog.status != crayon::browser_markdown_runtime::
+                                  AssetCatalogBuildStatus::kReady ||
+      !katex_catalog.catalog) {
+    return false;
+  }
+  auto katex_assets = katex_catalog.catalog->FindCompatible(
+      crayon::browser_markdown_runtime::kKatexAssetManifestId,
+      crayon::browser_markdown_runtime::kKatexInlineExtensionId,
+      crayon::browser_markdown_runtime::kKatexExtensionVersion);
+  if (!katex_assets) {
+    return false;
+  }
   return CefRegisterSchemeHandlerFactory(
       kMdvScheme, kMdvHost,
       new MdvSchemeHandlerFactory(std::move(strings), state,
                                   std::move(highlight_assets),
+                                  std::move(katex_assets),
                                   crayon::browser_mdv::RenderMdvStylesheet(),
                                   crayon::browser_mdv::RenderMdvScript()));
 }

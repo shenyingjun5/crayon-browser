@@ -1,6 +1,6 @@
 # 本地 Markdown 查看器（MDV）契约
 
-- 版本：v1.4（`MDV-21..24` 编辑器图标工具栏实现与平台装配修订）
+- 版本：v1.5（`MRT-08` KaTeX 同源字体与受控布局属性 CSP 修订）
 - 日期：2026-08-28
 - 上位依据：PRD v0.8 §4.1；本契约是 `MDV-02..24` 的验收输入，冲突时以上位契约为准。
 
@@ -20,9 +20,10 @@
 default-src 'none';
 script-src 'self';
 style-src 'self';
+style-src-attr 'unsafe-inline';
 img-src 'self' https:;
 connect-src 'none';
-font-src 'none';
+font-src 'self';
 media-src 'none';
 object-src 'none';
 frame-src 'none';
@@ -31,7 +32,7 @@ form-action 'none';
 frame-ancestors 'none'
 ```
 
-- 零默认网络请求：不加载远程脚本、样式、字体、图片或任何子资源；内联事件属性禁止，脚本仅来自内存资源的独立文件。
+- 零默认网络请求：不加载远程脚本、样式、字体或任何其他主动子资源；脚本、样式表和字体只来自 `crayon://mdv` 的编译期精确资源路由。`style-src-attr 'unsafe-inline'` 仅承载 KaTeX candidate 经 Browser-owned property/value 白名单重建后的数值布局属性；仍禁止 inline `<style>`、事件属性、URL CSS、未知 property/value。图片继续只按 §7 的显式用户文档规则加载。
 - `crayon://mdv` 不响应任何携带文件路径参数的导航：路径只存在于 Browser process 内存状态中，永不出现在 URL、query 或页面 DOM 属性里。
 
 ## 3. 入口与手势门禁

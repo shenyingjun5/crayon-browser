@@ -91,7 +91,8 @@ bool CloseDocumentInvalidatesInflight() {
 bool CspGolden() {
   CHECK(std::string(kMdvCsp) ==
         "default-src 'none'; script-src 'self'; style-src 'self'; "
-        "img-src 'self' https:; connect-src 'none'; font-src 'none'; "
+        "style-src-attr 'unsafe-inline'; img-src 'self' https:; "
+        "connect-src 'none'; font-src 'self'; "
         "media-src 'none'; object-src 'none'; frame-src 'none'; "
         "base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
   CHECK(std::string(crayon::browser_mdv::kResourceAppHtml) == "/app.html");

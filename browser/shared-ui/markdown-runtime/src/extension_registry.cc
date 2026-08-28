@@ -166,6 +166,8 @@ bool IsCompatibleOutputPolicy(ExtensionOutputKind output,
       return false;
     case ExtensionOutputKind::kSafeHtml:
       return policy == ExtensionPolicyVersion::kSafeHtmlV1;
+    case ExtensionOutputKind::kMathHtml:
+      return policy == ExtensionPolicyVersion::kMathHtmlV1;
     case ExtensionOutputKind::kSvg:
       return policy == ExtensionPolicyVersion::kSvgV1;
     case ExtensionOutputKind::kCanvas:

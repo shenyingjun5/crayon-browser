@@ -319,6 +319,6 @@ MR-001 的实现测试必须逐项实例化这些向量，并断言失败不修�
 - `MRT-03`：实现 §5 registry 与 §13 manifest/冲突向量。
 - `MRT-04`：实现 §7～10 的 asset loader、预算、cache、generation 和清理。
 - `MDV-14..20`：只注册/消费 Mermaid 专用 manifest/adapter，不复制通用 framework。
-- `MRT-05..09`：Code Highlight/KaTeX 各自增加专用语法、安全与供应链契约，不扩大 v1 capability；Highlight 的唯一依赖、语言/别名、离线闭包与 MRT-06 运行时路由/token policy 由 [code-highlight-assets-v1](code-highlight.md) 固定。KaTeX 的 `$`/`$$` 定界、危险命令/宏禁令、固定 render option 与 ESM/CSS/WOFF2 闭包由 [math-katex-assets-v1](math-katex.md) 固定。MRT-06 只启用精确 fence matcher、viewport lazy 与页面 session module 去重；MRT-07 尚不改变 Level A parser 或默认普通 Markdown 输出。
+- `MRT-05..09`：Code Highlight/KaTeX 各自增加专用语法、安全与供应链契约，不扩大 v1 capability；Highlight 的唯一依赖、语言/别名、离线闭包与 MRT-06 运行时路由/token policy 由 [code-highlight-assets-v1](code-highlight.md) 固定。KaTeX 的 `$`/`$$` 定界、危险命令/宏禁令、固定 render option 与 ESM/CSS/WOFF2 闭包由 [math-katex-assets-v1](math-katex.md) 固定。MRT-06 只启用精确 fence matcher、viewport lazy 与页面 session module 去重；MRT-08 只允许 KaTeX candidate 经 Browser-owned tag/attribute/class/style 白名单重建后落入 DOM，字体限定 `crayon://mdv/runtime/katex/fonts/*` 精确资源，布局样式只使用 CSP `style-src-attr`，不开放 inline `<style>`、URL CSS、网络或新 capability。
 
 任何后续任务若需要文档 manifest、动态模块、网络、文件、脚本、导出、投屏、Agent 或跨文档交互，必须先新建独立 Roadmap 并升级契约；不得在 adapter 内绕过本文件。

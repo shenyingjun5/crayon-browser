@@ -1,0 +1,21 @@
+#pragma once
+
+#include <cstddef>
+
+#include "crayon/browser_markdown_runtime/runtime_assets.h"
+
+namespace crayon::browser_markdown_runtime::internal {
+
+struct EmbeddedKatexAsset final {
+  const char* resource_id;
+  const unsigned char* bytes;
+  std::size_t size;
+  RuntimeAssetContentType content_type;
+};
+
+@KATEX_ASSET_DECLARATIONS@
+
+inline constexpr EmbeddedKatexAsset kEmbeddedKatexAssets[] = {
+@KATEX_ASSET_ROWS@};
+
+}  // namespace crayon::browser_markdown_runtime::internal

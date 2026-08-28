@@ -5,6 +5,7 @@
 #include <string_view>
 
 #include "crayon/browser_markdown_runtime/extension_registry.h"
+#include "crayon/browser_markdown_runtime/katex_extension.h"
 #include "mdv_icons_generated.h"
 
 namespace crayon::browser_mdv {
@@ -243,23 +244,35 @@ MdvRoute ClassifyMdvRequest(const MdvRequestParts& request) {
   const bool is_get = request.method == "GET";
   const bool is_head = request.method == "HEAD";
   if (!is_get && !is_head) {
-    return {MdvResourceKind::kMethodNotAllowed, 405, false, 0, {}};
+    return {MdvResourceKind::kMethodNotAllowed, 405, false, 0, {}, {}};
   }
   if (request.path == "/" || request.path == kResourceAppHtml) {
-    return {MdvResourceKind::kDocument, 200, is_get, 0, {}};
+    return {MdvResourceKind::kDocument, 200, is_get, 0, {}, {}};
   }
   if (request.path == kResourceAppCss) {
-    return {MdvResourceKind::kStylesheet, 200, is_get, 0, {}};
+    return {MdvResourceKind::kStylesheet, 200, is_get, 0, {}, {}};
   }
   if (request.path == kResourceAppJs) {
-    return {MdvResourceKind::kScript, 200, is_get, 0, {}};
+    return {MdvResourceKind::kScript, 200, is_get, 0, {}, {}};
   }
   constexpr std::string_view kRuntimePrefix = "/runtime/highlight/";
   if (request.path.compare(0, kRuntimePrefix.size(), kRuntimePrefix) == 0) {
     const std::string resource_id = request.path.substr(kRuntimePrefix.size());
     if (crayon::browser_markdown_runtime::IsValidManifestId(resource_id)) {
-      MdvRoute route{MdvResourceKind::kRuntimeAsset, 200, is_get, 0, {}};
+      MdvRoute route{MdvResourceKind::kRuntimeAsset, 200, is_get, 0, {}, {}};
       route.runtime_resource_id = resource_id;
+      route.runtime_namespace = "highlight";
+      return route;
+    }
+  }
+  constexpr std::string_view kKatexPrefix = "/runtime/katex/";
+  if (request.path.compare(0, kKatexPrefix.size(), kKatexPrefix) == 0) {
+    const std::string resource_id = request.path.substr(kKatexPrefix.size());
+    if (crayon::browser_markdown_runtime::IsKatexRuntimeResourceId(
+            resource_id)) {
+      MdvRoute route{MdvResourceKind::kRuntimeAsset, 200, is_get, 0, {}, {}};
+      route.runtime_resource_id = resource_id;
+      route.runtime_namespace = "katex";
       return route;
     }
   }
@@ -270,12 +283,12 @@ MdvRoute ClassifyMdvRequest(const MdvRequestParts& request) {
     if (!digits.empty() && digits.size() <= 6 &&
         std::all_of(digits.begin(), digits.end(),
                     [](char c) { return c >= '0' && c <= '9'; })) {
-      MdvRoute route{MdvResourceKind::kImage, 200, is_get, 0, {}};
+      MdvRoute route{MdvResourceKind::kImage, 200, is_get, 0, {}, {}};
       route.image_index = static_cast<std::size_t>(std::stoul(digits));
       return route;
     }
   }
-  return {MdvResourceKind::kNotFound, 404, false, 0, {}};
+  return {MdvResourceKind::kNotFound, 404, false, 0, {}, {}};
 }
 
 std::string RenderMdvDocument(const MdvPageSnapshot& snapshot,
@@ -418,6 +431,14 @@ std::string RenderMdvStylesheet() {
          ".hljs-params{color:#b85c00;}"
       << ".hljs-deletion{color:#c03639;}"
       << ".hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700;}"
+      << ".md-math{max-width:100%;}.md-math-inline{display:inline-block;"
+         "vertical-align:middle}.md-math-block{display:block;overflow-x:auto;"
+         "margin:1em 0;text-align:center}.md-math-input{display:none!important}"
+         ".md-math-source{white-space:pre-wrap;"
+         "font:inherit;color:inherit;background:rgba(31,35,41,.06);padding:"
+         "1px 4px;border-radius:4px}.md-math-block>.md-math-source{display:"
+         "block;text-align:left;padding:10px 12px}.md-math[data-mdv-math-"
+         "rendered=true]>.katex-display{margin:0;}"
       << ".view-bar .md-dirty{display:none;width:8px;height:8px;"
          "border-radius:50%;background:darkorange;align-self:center;}"
       << "body[data-dirty=true] .md-dirty{display:inline-block;}"
@@ -473,8 +494,9 @@ void AppendMdvCoreScript(std::ostringstream& js) {
      << "function apply(state){"
      << "if(!state){return;}"
      << "if(typeof "
-        "state.preview==='string'&&preview){resetHighlights();preview.innerHTML="
-        "state.preview;observeHighlights(preview);}"
+        "state.preview==='string'&&preview){resetHighlights();resetMath();"
+        "preview.innerHTML=state.preview;observeHighlights(preview);"
+        "observeMath(preview);}"
      << "if(typeof "
         "state.dirty==='boolean'){body.setAttribute('data-dirty',state.dirty?'"
         "true':'false');}"
@@ -684,6 +706,25 @@ void AppendMdvHighlightScript(std::ostringstream& js) {
      << "observeHighlights(preview);";
 }
 
+void AppendMdvMathScript(std::ostringstream& js) {
+  js << "var mathObserver=null;"
+     << "function resetMath(){if(mathObserver){mathObserver.disconnect();"
+        "mathObserver=null;}}"
+     << "function startMath(node){if(!node||node.getAttribute('data-mdv-math-"
+        "rendered')==='true'){return;}var kind=node.getAttribute('data-mdv-"
+        "math');var nodeId=node.getAttribute('data-mdv-node');if(!kind||!nodeId)"
+        "{return;}import('/runtime/katex/adapter').then(function(adapter){return "
+        "adapter.renderMath(node,nodeId,kind==='block');}).catch(function(){});}"
+     << "function observeMath(root){if(!root||typeof IntersectionObserver!=="
+        "'function'){return;}if(!mathObserver){mathObserver=new "
+        "IntersectionObserver(function(entries){for(var i=0;i<entries.length;i++)"
+        "{if(entries[i].isIntersecting){mathObserver.unobserve(entries[i].target);"
+        "startMath(entries[i].target);}}},{root:null,rootMargin:'120px 0px',"
+        "threshold:0});}var nodes=root.querySelectorAll('[data-mdv-math]');"
+        "for(var i=0;i<nodes.length;i++){mathObserver.observe(nodes[i]);}}"
+     << "observeMath(preview);";
+}
+
 std::string RenderMdvScript() {
   // One IIFE is assembled from bounded, single-purpose sections so the script
   // shares state without turning the C++ renderer into a >200-line function.
@@ -691,6 +732,7 @@ std::string RenderMdvScript() {
   AppendMdvCoreScript(js);
   AppendMdvToolbarScript(js);
   AppendMdvHighlightScript(js);
+  AppendMdvMathScript(js);
   AppendMdvDividerScript(js);
   return js.str();
 }

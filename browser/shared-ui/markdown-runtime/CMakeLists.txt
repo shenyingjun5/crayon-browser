@@ -1,3 +1,83 @@
+set(katex_manifest "${PROJECT_SOURCE_DIR}/third_party/katex/manifest.json")
+file(READ "${katex_manifest}" katex_manifest_json)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+             "${katex_manifest}")
+string(JSON katex_schema GET "${katex_manifest_json}" schema)
+string(JSON katex_package_name GET "${katex_manifest_json}" package name)
+string(JSON katex_package_version GET "${katex_manifest_json}" package version)
+string(JSON katex_package_license GET "${katex_manifest_json}" package license)
+string(JSON katex_runtime_dependencies GET "${katex_manifest_json}" policy
+       browserRuntimeDependencies)
+string(JSON katex_font_count GET "${katex_manifest_json}" policy fontCount)
+if(NOT katex_schema STREQUAL "crayon-katex-assets/v1" OR
+   NOT katex_package_name STREQUAL "katex" OR
+   NOT katex_package_version STREQUAL "0.18.4" OR
+   NOT katex_package_license STREQUAL "MIT" OR
+   NOT katex_runtime_dependencies EQUAL 0 OR NOT katex_font_count EQUAL 20)
+  message(FATAL_ERROR "KaTeX manifest violates the MRT-07 lock")
+endif()
+
+set(KATEX_ASSET_DECLARATIONS "")
+set(KATEX_ASSET_ROWS "")
+set(katex_asset_index 0)
+function(crayon_embed_katex_asset resource_id source_path content_type)
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+               "${source_path}")
+  file(READ "${source_path}" asset_hex HEX)
+  string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," asset_literals
+         "${asset_hex}")
+  set(asset_symbol "kKatexAsset${katex_asset_index}")
+  string(APPEND KATEX_ASSET_DECLARATIONS
+         "inline constexpr unsigned char ${asset_symbol}[] = {${asset_literals}};\n")
+  string(APPEND KATEX_ASSET_ROWS
+         "  {\"${resource_id}\", ${asset_symbol}, sizeof(${asset_symbol}), RuntimeAssetContentType::${content_type}},\n")
+  math(EXPR katex_asset_index "${katex_asset_index} + 1")
+  set(KATEX_ASSET_DECLARATIONS "${KATEX_ASSET_DECLARATIONS}" PARENT_SCOPE)
+  set(KATEX_ASSET_ROWS "${KATEX_ASSET_ROWS}" PARENT_SCOPE)
+  set(katex_asset_index "${katex_asset_index}" PARENT_SCOPE)
+endfunction()
+
+crayon_embed_katex_asset(
+  adapter "${CMAKE_CURRENT_SOURCE_DIR}/assets/katex-adapter.js" kJavaScript)
+string(JSON katex_file_count LENGTH "${katex_manifest_json}" files)
+if(NOT katex_file_count EQUAL 23)
+  message(FATAL_ERROR "KaTeX closure must contain exactly 23 locked files")
+endif()
+math(EXPR katex_file_last "${katex_file_count} - 1")
+foreach(file_index RANGE 0 ${katex_file_last})
+  string(JSON asset_path GET "${katex_manifest_json}" files ${file_index} path)
+  string(JSON expected_bytes GET "${katex_manifest_json}" files ${file_index}
+         bytes)
+  string(JSON expected_sha256 GET "${katex_manifest_json}" files ${file_index}
+         sha256)
+  if(asset_path STREQUAL "LICENSE")
+    continue()
+  endif()
+  set(source_path "${PROJECT_SOURCE_DIR}/third_party/katex/${asset_path}")
+  file(SIZE "${source_path}" actual_bytes)
+  file(SHA256 "${source_path}" actual_sha256)
+  if(NOT actual_bytes EQUAL expected_bytes OR
+     NOT actual_sha256 STREQUAL expected_sha256)
+    message(FATAL_ERROR "KaTeX asset does not match manifest: ${asset_path}")
+  endif()
+  if(asset_path STREQUAL "assets/katex.mjs")
+    set(resource_id katex)
+    set(content_type kJavaScript)
+  elseif(asset_path STREQUAL "assets/katex.min.css")
+    set(resource_id stylesheet)
+    set(content_type kCss)
+  elseif(asset_path MATCHES "^assets/fonts/KaTeX_[A-Za-z0-9-]+\\.woff2$")
+    string(REPLACE "assets/" "" resource_id "${asset_path}")
+    set(content_type kFont)
+  else()
+    message(FATAL_ERROR "unknown KaTeX runtime asset: ${asset_path}")
+  endif()
+  crayon_embed_katex_asset("${resource_id}" "${source_path}" "${content_type}")
+endforeach()
+if(NOT katex_asset_index EQUAL 23)
+  message(FATAL_ERROR "KaTeX embedded runtime closure must contain 23 assets")
+endif()
+
 set(highlight_manifest
     "${PROJECT_SOURCE_DIR}/third_party/highlight/manifest.json")
 file(READ "${highlight_manifest}" highlight_manifest_json)
@@ -124,10 +204,14 @@ file(MAKE_DIRECTORY "${markdown_runtime_generated_dir}")
 configure_file(
   src/highlight_assets_generated.h.in
   "${markdown_runtime_generated_dir}/highlight_assets_generated.h" @ONLY)
+configure_file(
+  src/katex_assets_generated.h.in
+  "${markdown_runtime_generated_dir}/katex_assets_generated.h" @ONLY)
 
 add_library(crayon-browser-markdown-runtime STATIC
   src/extension_registry.cc
   src/highlight_extension.cc
+  src/katex_extension.cc
   src/runtime_assets.cc
   src/runtime_session.cc
 )
@@ -214,4 +298,21 @@ if(CRAYON_BUILD_TESTS)
   endif()
   add_test(NAME markdown_runtime_highlight
            COMMAND crayon_browser_markdown_runtime_highlight_test)
+
+  add_executable(crayon_browser_markdown_runtime_katex_test
+    tests/katex_extension_test.cc
+  )
+  target_link_libraries(crayon_browser_markdown_runtime_katex_test
+    PRIVATE crayon::browser-markdown-runtime)
+  target_compile_features(crayon_browser_markdown_runtime_katex_test
+    PRIVATE cxx_std_17)
+  if(MSVC)
+    target_compile_options(crayon_browser_markdown_runtime_katex_test
+      PRIVATE /W4 /WX /permissive-)
+  else()
+    target_compile_options(crayon_browser_markdown_runtime_katex_test
+      PRIVATE -Wall -Wextra -Wpedantic -Werror)
+  endif()
+  add_test(NAME markdown_runtime_katex
+           COMMAND crayon_browser_markdown_runtime_katex_test)
 endif()

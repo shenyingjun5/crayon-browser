@@ -104,8 +104,10 @@ struct MdvRoute {
   bool include_body = false;
   /// For kImage: the opaque index parsed from /img/<index>.
   std::size_t image_index = 0;
-  /// For kRuntimeAsset: validated lower-kebab catalog resource ID.
+  /// For kRuntimeAsset: validated exact catalog resource ID.
   std::string runtime_resource_id;
+  /// Exact compiled runtime namespace (currently highlight or katex).
+  std::string runtime_namespace;
 };
 
 /// Classifies one request against the fixed route table.  Anything off

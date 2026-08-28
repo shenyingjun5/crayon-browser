@@ -70,16 +70,19 @@ if(hit EQUAL -1)
   message(FATAL_ERROR "handler must set Content-Security-Policy headers")
 endif()
 
-# MRT-06 runtime assets come only from the immutable embedded catalog and the
-# exact MDV route; grammar IDs cannot become filesystem or network paths.
+# MRT-06/MRT-08 runtime assets come only from immutable embedded catalogs and
+# exact MDV routes; resource IDs cannot become filesystem or network paths.
 foreach(required_text IN ITEMS
         "BuildHighlightAssetCatalog"
+        "BuildKatexAssetCatalog"
         "FindCompatible"
         "runtime_resource_id"
-        "RuntimeAssetContentType::")
+        "ContentType::kJavaScript"
+        "ContentType::kCss"
+        "ContentType::kFont")
   string(FIND "${impl_text}" "${required_text}" hit)
   if(hit EQUAL -1)
-    message(FATAL_ERROR "MDV handler lost Highlight catalog gate: ${required_text}")
+    message(FATAL_ERROR "MDV handler lost runtime catalog gate: ${required_text}")
   endif()
 endforeach()
 

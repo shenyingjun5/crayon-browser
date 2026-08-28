@@ -1,7 +1,9 @@
 #include "crayon/browser_markdown_runtime/runtime_assets.h"
 
+#include <algorithm>
 #include <map>
 #include <set>
+#include <string_view>
 #include <utility>
 
 #include "crayon/browser_markdown_runtime/extension_registry.h"
@@ -30,6 +32,35 @@ bool IsEntryContentType(RuntimeAssetContentType type) {
 
 }  // namespace
 
+bool IsValidRuntimeResourceId(const std::string& value) {
+  if (value.empty() || value.size() > kMaxAssetResourceIdBytes ||
+      value.front() == '/' || value.back() == '/') {
+    return false;
+  }
+  std::size_t segment_start = 0;
+  for (std::size_t index = 0; index <= value.size(); ++index) {
+    if (index < value.size() && value[index] != '/') {
+      const unsigned char character = static_cast<unsigned char>(value[index]);
+      const bool ascii_alnum =
+          (character >= 'a' && character <= 'z') ||
+          (character >= 'A' && character <= 'Z') ||
+          (character >= '0' && character <= '9');
+      if (!ascii_alnum && character != '-' && character != '_' &&
+          character != '.') {
+        return false;
+      }
+      continue;
+    }
+    const std::string_view segment(value.data() + segment_start,
+                                   index - segment_start);
+    if (segment.empty() || segment == "." || segment == "..") {
+      return false;
+    }
+    segment_start = index + 1;
+  }
+  return true;
+}
+
 struct RuntimeAssetCatalog::Impl {
   std::map<std::string, std::shared_ptr<const RuntimeAssetBundle>> bundles;
   std::size_t total_bytes = 0;
@@ -45,7 +76,10 @@ std::shared_ptr<const RuntimeAssetBundle> RuntimeAssetCatalog::FindCompatible(
     const std::string& extension_version) const {
   const auto found = impl_->bundles.find(manifest_id);
   if (found == impl_->bundles.end() ||
-      found->second->extension_id != extension_id ||
+      (found->second->extension_id != extension_id &&
+       std::find(found->second->compatible_extension_ids.begin(),
+                 found->second->compatible_extension_ids.end(), extension_id) ==
+           found->second->compatible_extension_ids.end()) ||
       found->second->extension_version != extension_version) {
     return nullptr;
   }
@@ -73,11 +107,17 @@ AssetCatalogBuildResult BuildRuntimeAssetCatalog(
     if (!IsValidManifestId(bundle.manifest_id, kMaxAssetManifestIdBytes) ||
         !IsValidManifestId(bundle.extension_id) ||
         !IsValidLockedVersion(bundle.extension_version) ||
-        !IsValidManifestId(bundle.entry_resource_id,
-                           kMaxAssetResourceIdBytes) ||
+        !IsValidRuntimeResourceId(bundle.entry_resource_id) ||
         bundle.resources.empty() ||
         impl->bundles.find(bundle.manifest_id) != impl->bundles.end()) {
       return result;
+    }
+    std::set<std::string> compatible_ids{bundle.extension_id};
+    for (const std::string& extension_id : bundle.compatible_extension_ids) {
+      if (!IsValidManifestId(extension_id) ||
+          !compatible_ids.insert(extension_id).second) {
+        return result;
+      }
     }
     if (bundle.resources.size() > kMaxAssetsPerBundle) {
       result.status = AssetCatalogBuildStatus::kBudgetExceeded;
@@ -88,7 +128,7 @@ AssetCatalogBuildResult BuildRuntimeAssetCatalog(
     std::size_t bundle_bytes = 0;
     const RuntimeAsset* entry = nullptr;
     for (const RuntimeAsset& asset : bundle.resources) {
-      if (!IsValidManifestId(asset.resource_id, kMaxAssetResourceIdBytes) ||
+      if (!IsValidRuntimeResourceId(asset.resource_id) ||
           !IsKnownContentType(asset.content_type) || asset.bytes.empty() ||
           !resource_ids.insert(asset.resource_id).second) {
         return result;

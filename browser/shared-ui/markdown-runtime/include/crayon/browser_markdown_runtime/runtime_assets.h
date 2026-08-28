@@ -33,6 +33,9 @@ struct RuntimeAsset final {
 struct RuntimeAssetBundle final {
   std::string manifest_id;
   std::string extension_id;
+  /// Additional exact compile-time identities allowed to consume this same
+  /// immutable byte closure. Wildcards are intentionally unsupported.
+  std::vector<std::string> compatible_extension_ids;
   std::string extension_version;
   std::string entry_resource_id;
   std::vector<RuntimeAsset> resources;
@@ -75,5 +78,9 @@ struct AssetCatalogBuildResult final {
 
 AssetCatalogBuildResult BuildRuntimeAssetCatalog(
     std::vector<RuntimeAssetBundle> bundles);
+
+/// Closed relative resource grammar for embedded bundles. It permits exact
+/// nested font paths but rejects traversal, absolute paths and URL syntax.
+bool IsValidRuntimeResourceId(const std::string& value);
 
 }  // namespace crayon::browser_markdown_runtime

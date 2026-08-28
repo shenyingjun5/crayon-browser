@@ -104,6 +104,22 @@ void TestRouteMatrix() {
   CHECK(route.kind == MdvResourceKind::kStylesheet && route.include_body);
   route = ClassifyMdvRequest(BaseRequest("/app.js"));
   CHECK(route.kind == MdvResourceKind::kScript && route.include_body);
+  route = ClassifyMdvRequest(BaseRequest("/runtime/highlight/adapter"));
+  CHECK(route.kind == MdvResourceKind::kRuntimeAsset &&
+        route.runtime_namespace == "highlight" &&
+        route.runtime_resource_id == "adapter");
+  route = ClassifyMdvRequest(BaseRequest("/runtime/katex/stylesheet"));
+  CHECK(route.kind == MdvResourceKind::kRuntimeAsset &&
+        route.runtime_namespace == "katex" &&
+        route.runtime_resource_id == "stylesheet");
+  route = ClassifyMdvRequest(
+      BaseRequest("/runtime/katex/fonts/KaTeX_Main-Regular.woff2"));
+  CHECK(route.kind == MdvResourceKind::kRuntimeAsset &&
+        route.runtime_namespace == "katex");
+  CHECK(ClassifyMdvRequest(BaseRequest("/runtime/katex/../LICENSE")).kind ==
+        MdvResourceKind::kNotFound);
+  CHECK(ClassifyMdvRequest(BaseRequest("/runtime/katex/unknown")).kind ==
+        MdvResourceKind::kNotFound);
 
   // HEAD is accepted with the body suppressed.
   auto head = BaseRequest();
@@ -208,9 +224,11 @@ void TestNoNetworkOrInlineHandlers() {
   }
   CHECK(document.find("src=\"/app.js\"") != std::string::npos);
   CHECK(document.find("href=\"/app.css\"") != std::string::npos);
-  CHECK(Count(js_fixed, "import(") == 1);
+  CHECK(Count(js_fixed, "import(") == 2);
   CHECK(js_fixed.find("import('/runtime/highlight/adapter')") !=
         std::string::npos);
+  CHECK(js_fixed.find("import('/runtime/katex/adapter')") != std::string::npos);
+  CHECK(js_fixed.find("observeMath(preview)") != std::string::npos);
 }
 
 void TestEntryErrorBannerTakesPriority() {
@@ -356,6 +374,11 @@ void TestInitialViewStateAndCspConstantUnchanged() {
   // The CSP constant stays byte-for-byte locked (MDV-01 §2).
   CHECK(std::string(kMdvCsp).find("script-src 'self'") != std::string::npos);
   CHECK(std::string(kMdvCsp).find("default-src 'none'") != std::string::npos);
+  CHECK(std::string(kMdvCsp).find("style-src-attr 'unsafe-inline'") !=
+        std::string::npos);
+  CHECK(std::string(kMdvCsp).find("font-src 'self'") != std::string::npos);
+  CHECK(std::string(kMdvCsp).find("style-src-elem 'unsafe-inline'") ==
+        std::string::npos);
 }
 
 void TestHighlightRoutesAndLazyBootstrap() {

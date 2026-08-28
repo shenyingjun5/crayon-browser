@@ -13,7 +13,7 @@
 
 #include "browser/mdv/cef_mdv_entries.h"
 #include "crayon/browser_markdown/markdown_render.h"
-#include "crayon/browser_markdown_runtime/highlight_extension.h"
+#include "crayon/browser_markdown_runtime/katex_extension.h"
 #include "crayon/browser_mdv/mdv_entry_guard.h"
 #include "crayon/browser_mdv/mdv_images.h"
 #include "crayon/browser_mdv/mdv_transform.h"
@@ -432,7 +432,7 @@ void MdvEditController::RenderAndStore() {
   const std::uint64_t now = NowMs();
   const auto revision = viewer_.RequestRender(now);
   const auto highlighted =
-      crayon::browser_markdown_runtime::RenderHighlightDocument(
+      crayon::browser_markdown_runtime::RenderP0MarkdownDocument(
           edit_.edit_buffer(), document_generation_, revision);
   if (highlighted.render_status ==
       crayon::browser_markdown::RenderStatus::kOk) {

@@ -24,6 +24,7 @@ inline constexpr std::size_t kMaxNodeIdBytes = 96;
 enum class ExtensionOutputKind {
   kUnknown = 0,
   kSafeHtml,
+  kMathHtml,
   kSvg,
   kCanvas,
   kError,
@@ -32,6 +33,7 @@ enum class ExtensionOutputKind {
 enum class ExtensionPolicyVersion {
   kUnknown = 0,
   kSafeHtmlV1,
+  kMathHtmlV1,
   kSvgV1,
   kCanvasV1,
   kErrorV1,

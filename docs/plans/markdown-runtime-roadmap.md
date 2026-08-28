@@ -1,6 +1,6 @@
 # MRT：Markdown Runtime Extension Framework Roadmap
 
-状态：`MRT-01..05 DONE`，`MRT-06 VERIFIED`（macOS 已闭合；Windows 自动化通过、真实 CEF 高亮失败，待修复复验），`MRT-07 DONE`，`MRT-08 READY`，`MRT-09..19 TODO`。本 Roadmap 吸收 `docs/reference/蜡笔投屏浏览器_Markdown_Runtime_Extension_Framework_V1.0.md` 第 34..59 章，但以当前 PRD、安全契约和真实 C++17/md4c/CEF 工程为准。目标是在不建立第二 Markdown parser、不扩大文件/Agent 权限、不让大型扩展进入浏览器 bootstrap 的前提下，为 MDV 提供统一、闭合、可审计的 Extension Framework。
+状态：`MRT-01..05 DONE`，`MRT-06 VERIFIED`（macOS 已闭合；Windows 自动化通过、真实 CEF 高亮失败，待修复复验），`MRT-07..08 DONE`，`MRT-09..19 TODO`。本 Roadmap 吸收 `docs/reference/蜡笔投屏浏览器_Markdown_Runtime_Extension_Framework_V1.0.md` 第 34..59 章，但以当前 PRD、安全契约和真实 C++17/md4c/CEF 工程为准。目标是在不建立第二 Markdown parser、不扩大文件/Agent 权限、不让大型扩展进入浏览器 bootstrap 的前提下，为 MDV 提供统一、闭合、可审计的 Extension Framework。
 
 ## 1. 采纳结论
 
@@ -35,7 +35,7 @@ MRT 是用户侧 MDV 基础设施，不进入 `crayon-page-data`、CNT 的确定
 | MRT-05 | DONE | MRT-04 | `third_party/highlight`,`tools`,`docs/current` | Code Highlight 依赖选型与离线 grammar 闭包冻结；比较 highlight.js/Prism/Shiki 后只固定一个 | MR-004；许可/hash/包体/语言矩阵 |
 | MRT-06 | VERIFIED | MRT-05 | `browser/shared-ui/markdown`,`browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | Code Highlight fence extension：语言 allowlist、grammar 按需加载、未知语言纯文本回退 | MR-004；macOS 已闭合；Windows Debug/Release 与 CTest 通过，真实 CEF 高亮失败，待修复复验 |
 | MRT-07 | DONE | MRT-04 | `third_party/katex`,`tools`,`docs/current` | KaTeX 语法与供应链契约：明确 inline/block 定界、转义、宏/URL/HTML 禁令、字体/CSS 本地闭包 | MR-005；许可/语法/安全矩阵 |
-| MRT-08 | READY | MRT-07 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | KaTeX inline/block extension：按需加载、局部错误、主题/字体离线与编辑 generation | MR-005；公式 golden/注入/实机 |
+| MRT-08 | DONE | MRT-07 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | KaTeX inline/block extension：按需加载、局部错误、主题/字体离线与编辑 generation | MR-005；公式 golden/注入/实机 |
 | MRT-09 | TODO | MDV-20,MRT-06,MRT-08 | `tests/e2e/desktop`,`tools/repo-guard`,`docs/current`,`docs/plans` | P0 Runtime 收口：CommonMark/GFM + Highlight + Mermaid Full + KaTeX 的双平台/包体/性能/安全总 Review | MR-001..005,MR-008/012；P0/P1=0 |
 | MRT-10 | TODO | MRT-09 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv` | TOC/Outline：从解析事实生成有界标题树、稳定会话锚点与键盘/读屏导航 | MR-006；重复标题/超深/编辑更新 |
 | MRT-11 | TODO | MRT-09 | `browser/shared-ui/mdv` | 当前文档本地 Search：只查内存源码/安全文本，结果/高亮有界，不持久化 query | MR-006；Unicode/大文档/取消 |
@@ -191,6 +191,27 @@ Gate:       MRT-18 TV/Cast gap / MRT-19 AI source-producer gap only
 - 工具/验证：`node tools/katex/vendor.mjs --archive /private/tmp/katex-0.18.4.tgz` 连续重建一致，`node tools/katex/vendor.mjs --check` 报 23 assets / 885374 bytes；`node --test tools/katex/vendor.test.mjs` 8/8，覆盖 tar checksum/path/type/duplicate/size、identity/dependency/archive hash、missing/extra/tamper、CSS/font closure、语法 golden、危险命令/预算与真实 ESM accessible render。`bash scripts/check.sh fast`、`bash scripts/check.sh security`、Node syntax 与 `git diff --check` 通过。
 - Code Review v0.8：APPROVE，P0/P1/P2/P3=0。写入 root 从工具位置固定，tar 内容不能决定输出路径；先临时树离线复验再原子替换；生产构建/运行未接 npm/网络/工具、未改变 parser/MDV/CSP/权限。工具 555 行但职责单一且测试独立，未触发生产文件规模门禁。
 - 未覆盖：math facts、真实 adapter、HTML/MathML allowlist/style parser、资源/字体路由、lazy/cache/generation、主题/错误 UI 和双平台真实 CEF 全部归 `MRT-08`；本任务没有改变任何浏览器产物或 Markdown 行为。`MRT-08` 转为 `READY`。
+
+## 5G. MRT-08 原子范围（KaTeX inline/block runtime）
+
+- 状态：`DONE`；依赖 `MRT-07 DONE`。单一目标是把 `math-katex-assets-v1` 以闭合 inline/block extension 接入现有 Markdown Runtime/MDV/CEF 产物，公式失败只局部回退安全源文。
+- 输入/输出：输入为现有 md4c Level A parse 事实、`markdown-runtime-v1` registry/catalog/session、MRT-06 lazy/generation 接线和 MRT-07 固定资产/policy；输出为确定性 math facts、编译期 descriptor/asset bundle、专用 KaTeX adapter 与 Browser-owned output policy、MDV placeholder/lazy/error/theme/generation 生命周期、CEF 精确资源/MIME 路由和 MR-005 证据。
+- 允许修改：`browser/shared-ui/markdown/**`、`browser/shared-ui/markdown-runtime/**`、`browser/shared-ui/mdv/**`、`browser/cef-shell/src/browser/mdv/**`、相关 CMake/本地化资源、`tests/e2e/desktop/**`、`docs/current/**` 与本 Roadmap/索引。禁止修改 KaTeX 固定版本/定界/option/禁令、md4c vendor、Agent/Cast/文件权限、CSP 网络能力或其他 extension 语义。
+- facts：只实现 `$...$` 和根级 `$$...$$`，遵循 MRT-07 转义/空白/词内/代码/链接/容器/未闭合/预算规则；继续由唯一 md4c 流程产生 Level A 结果，facts 范围不重叠、节点 ID 绑定 document/source generation。
+- 输出安全：调用前实施 source/token/depth/命令门禁与固定 option；KaTeX candidate 在 detached document 中解析，通过版本化 tag/attribute/class/style/MathML/SVG 白名单重建，禁止 active content/URL/event/unknown output。Browser 端不展示上游 message/stack。
+- 加载/生命周期：无公式文档零 KaTeX JS/CSS/font 请求；公式进入 viewport 才请求会话内去重的 ESM/CSS，字体仅随 CSS 实际需要精确路由。source/document/extension generation 改变、导航、Renderer 销毁或超时使旧结果失效；主题只改 Browser-owned 容器 token，不扩大 KaTeX option。
+- 验收：MRT-07 的 22 个语法 golden 全部实例化；正常 inline/block/混合、light/dark、未知/禁止命令、语法错误、hostile text/output、超预算、资产缺失/MIME/路径、viewport lazy/会话去重、cache/generation/取消/超时/销毁和普通 Markdown 零回归；执行 Node/C++ unit、CTest、CEF arm64 build/实机与可行的 x64 编译验证，最终 v0.8 Review P0/P1/P2=0。
+- 明确不做：MathJax/AsciiMath/自定义宏 UI/公式编号交叉引用/auto-render/contrib/网络字体/导出、可编辑 WYSIWYG math、Mermaid 内部 KaTeX、Windows 真机验收或 MRT-09 总收口。
+
+### MRT-08 完成记录（2026-08-28）
+
+- 实现：复用 md4c `LATEXMATH` callback 确认 facts，并以有界扫描器收紧 MRT-07 的 `$...$`/根级 `$$...$$` 契约；22 个冻结语法向量全部实例化。新增 inline/block descriptor、共享 immutable KaTeX byte closure、嵌套字体 resource ID grammar、Browser-owned inert placeholder，以及与 MRT-06 highlight 组合的 P0 renderer；禁止命令或失败公式只保留 Level A 已转义源码。
+- 输出/生命周期：专用 adapter 固定 MRT-07 option 与空宏表，在 detached document 中按 tag/attribute/class/style/MathML/SVG 白名单重建候选；source/token/brace、2 MiB candidate、32768 nodes、64 depth、16 attrs 与 30 s asset deadline 有界。公式进入 viewport 才 session-dedup import ESM/CSS，generation/preview replacement/navigation/Renderer 销毁通过 node ID、连接态和原始 source/fallback 复检拒绝迟到结果。
+- CSP/资源：真实 CEF 首轮发现 `font-src 'none'` 与 `style-src 'self'` 会阻止 WOFF2 和 KaTeX `msupsub/vlist` 数值布局，导致指数落在基线附近；已改为仅同源 `font-src 'self'` 与仅属性 `style-src-attr 'unsafe-inline'`。inline `<style>`、事件、URL CSS、未知 property/value、connect/media/object/frame 仍关闭，字体只能命中编译期 `/runtime/katex/fonts/*` 精确清单。
+- 自动化：`node --test browser/shared-ui/markdown-runtime/tests/katex_adapter.test.mjs` 3/3，`node tools/katex/vendor.mjs --check` 为 23 assets / 885374 bytes；macOS arm64 Debug CEF build 与最终 `ctest --test-dir .cache/build/macos-arm64-cef-debug --output-on-failure` 67/67；macOS x64 Debug CEF build 与 MRT/MDV/package scoped CTest 6/6；`bash scripts/check.sh fast`、`bash scripts/check.sh security`、Xcode clang-format 和 `git diff --check` 通过。
+- 真实 CEF：arm64 `crayon://mdv/` light/dark 均完成 inline/block 渲染，2/2 placeholder 转 ready、2 个 MathML、无 stale input；adapter/ESM/CSS 与实际两种 WOFF2 均 200 且 MIME 正确，CSP/JS exception 为 0。`E=mc^2` 中指数 `2` 顶部 `382.56 px`、基字符 `c` 顶部 `387.21 px`，指数实际高出约 `4.65 px`；最终进程 smoke 为 main + 5 类 helper、loopback-only、退出零残留。
+- Code Review v0.8：APPROVE，P0/P1/P2/P3=0。无第二 Markdown parser、网络/文件 IO、任意 JS、宏持久化、新权限或 Windows 路径；catalog/registry immutable，错误局部回退，所有 queue/output/source/asset 边界闭合。初检发现并关闭 CSP/公式布局 P1，最终复验无遗留 finding。
+- 未覆盖：Windows 真机明确不属于本原子任务，也未向正在执行其他验证的 Windows 会话追加任务；MRT-09 仍等待 `MDV-20`，不在本任务偷跑 P0 总收口。
 
 ## 6. 各阶段共同门禁
 
