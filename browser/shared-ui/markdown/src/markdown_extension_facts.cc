@@ -218,7 +218,8 @@ bool IsValidExtensionMatcherToken(const std::string& token) {
   }
   return std::all_of(token.begin(), token.end(), [&](char value) {
     const unsigned char c = static_cast<unsigned char>(value);
-    return is_lower_or_digit(c) || c == '-' || c == '_' || c == '.' || c == '+';
+    return is_lower_or_digit(c) || c == '-' || c == '_' || c == '.' ||
+           c == '+' || c == '#';
   });
 }
 

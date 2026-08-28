@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "crayon/browser_markdown/markdown_render.h"
+#include "crayon/browser_markdown_runtime/highlight_extension.h"
 #include "crayon/browser_mdv/mdv_images.h"
 #include "crayon/browser_mdv/mdv_page.h"
 #include "include/cef_parser.h"
@@ -162,9 +163,13 @@ class MdvSchemeHandlerFactory final : public CefSchemeHandlerFactory {
  public:
   MdvSchemeHandlerFactory(MdvPageStrings strings,
                           std::shared_ptr<const MdvRuntimeState> state,
+                          std::shared_ptr<const crayon::browser_markdown_runtime::
+                                                    RuntimeAssetBundle>
+                              highlight_assets,
                           std::string stylesheet, std::string script)
       : strings_(std::move(strings)),
         state_(std::move(state)),
+        highlight_assets_(std::move(highlight_assets)),
         stylesheet_(std::move(stylesheet)),
         script_(std::move(script)) {}
 
@@ -217,6 +222,25 @@ class MdvSchemeHandlerFactory final : public CefSchemeHandlerFactory {
           body = script_;
         }
         break;
+      case crayon::browser_mdv::MdvResourceKind::kRuntimeAsset: {
+        mime_type = kJsMimeType;
+        const auto found = std::find_if(
+            highlight_assets_->resources.begin(),
+            highlight_assets_->resources.end(), [&](const auto& asset) {
+              return asset.resource_id == route.runtime_resource_id &&
+                     asset.content_type == crayon::browser_markdown_runtime::
+                                               RuntimeAssetContentType::
+                                                   kJavaScript;
+            });
+        if (found == highlight_assets_->resources.end()) {
+          return new MdvMemoryResourceHandler(404, "Not Found", kTextMimeType,
+                                              {});
+        }
+        if (route.include_body) {
+          body = found->bytes;
+        }
+        break;
+      }
       case crayon::browser_mdv::MdvResourceKind::kImage: {
         // Opaque validated local image: read on demand, bounded.
         const auto snapshot = state_->snapshot();
@@ -260,6 +284,9 @@ class MdvSchemeHandlerFactory final : public CefSchemeHandlerFactory {
 
   const MdvPageStrings strings_;
   const std::shared_ptr<const MdvRuntimeState> state_;
+  const std::shared_ptr<const crayon::browser_markdown_runtime::
+                            RuntimeAssetBundle>
+      highlight_assets_;
   const std::string stylesheet_;
   const std::string script_;
 
@@ -279,12 +306,12 @@ MdvPageSnapshot BuildFixtureSnapshotImpl() {
   model.LoadContent(kFixtureMarkdown,
                     /*utf8_valid=*/true, /*now_ms=*/0);
   const auto revision = model.RequestRender(/*now_ms=*/1000);
-  crayon::browser_markdown::RenderStatus status =
-      crayon::browser_markdown::RenderStatus::kOk;
-  const std::string html = crayon::browser_markdown::RenderMarkdownToSafeHtml(
-      kFixtureMarkdown, &status);
-  if (status == crayon::browser_markdown::RenderStatus::kOk &&
-      model.DeliverRender(revision, html)) {
+  const auto highlighted =
+      crayon::browser_markdown_runtime::RenderHighlightDocument(
+          kFixtureMarkdown, /*document_generation=*/1, revision);
+  if (highlighted.render_status ==
+          crayon::browser_markdown::RenderStatus::kOk &&
+      model.DeliverRender(revision, highlighted.safe_html)) {
     snapshot.load_status = model.load_status();
     snapshot.rendered_html = model.rendered_html();
   } else {
@@ -322,9 +349,24 @@ MdvPageSnapshot BuildFixtureSnapshot() { return BuildFixtureSnapshotImpl(); }
 
 bool RegisterMdvSchemeHandlerFactory(
     MdvPageStrings strings, const std::shared_ptr<MdvRuntimeState>& state) {
+  const auto catalog_result =
+      crayon::browser_markdown_runtime::BuildHighlightAssetCatalog();
+  if (catalog_result.status != crayon::browser_markdown_runtime::
+                                   AssetCatalogBuildStatus::kReady ||
+      !catalog_result.catalog) {
+    return false;
+  }
+  auto highlight_assets = catalog_result.catalog->FindCompatible(
+      crayon::browser_markdown_runtime::kHighlightAssetManifestId,
+      crayon::browser_markdown_runtime::kHighlightExtensionId,
+      crayon::browser_markdown_runtime::kHighlightExtensionVersion);
+  if (!highlight_assets) {
+    return false;
+  }
   return CefRegisterSchemeHandlerFactory(
       kMdvScheme, kMdvHost,
       new MdvSchemeHandlerFactory(std::move(strings), state,
+                                  std::move(highlight_assets),
                                   crayon::browser_mdv::RenderMdvStylesheet(),
                                   crayon::browser_mdv::RenderMdvScript()));
 }

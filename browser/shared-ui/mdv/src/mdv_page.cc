@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <sstream>
+#include <string_view>
 
+#include "crayon/browser_markdown_runtime/extension_registry.h"
 #include "mdv_icons_generated.h"
 
 namespace crayon::browser_mdv {
@@ -241,16 +243,25 @@ MdvRoute ClassifyMdvRequest(const MdvRequestParts& request) {
   const bool is_get = request.method == "GET";
   const bool is_head = request.method == "HEAD";
   if (!is_get && !is_head) {
-    return {MdvResourceKind::kMethodNotAllowed, 405, false};
+    return {MdvResourceKind::kMethodNotAllowed, 405, false, 0, {}};
   }
   if (request.path == "/" || request.path == kResourceAppHtml) {
-    return {MdvResourceKind::kDocument, 200, is_get};
+    return {MdvResourceKind::kDocument, 200, is_get, 0, {}};
   }
   if (request.path == kResourceAppCss) {
-    return {MdvResourceKind::kStylesheet, 200, is_get};
+    return {MdvResourceKind::kStylesheet, 200, is_get, 0, {}};
   }
   if (request.path == kResourceAppJs) {
-    return {MdvResourceKind::kScript, 200, is_get};
+    return {MdvResourceKind::kScript, 200, is_get, 0, {}};
+  }
+  constexpr std::string_view kRuntimePrefix = "/runtime/highlight/";
+  if (request.path.compare(0, kRuntimePrefix.size(), kRuntimePrefix) == 0) {
+    const std::string resource_id = request.path.substr(kRuntimePrefix.size());
+    if (crayon::browser_markdown_runtime::IsValidManifestId(resource_id)) {
+      MdvRoute route{MdvResourceKind::kRuntimeAsset, 200, is_get, 0, {}};
+      route.runtime_resource_id = resource_id;
+      return route;
+    }
   }
   // Opaque validated local image: /img/<digits>, 1-6 digits only.
   constexpr const char* kImagePrefix = "/img/";
@@ -259,12 +270,12 @@ MdvRoute ClassifyMdvRequest(const MdvRequestParts& request) {
     if (!digits.empty() && digits.size() <= 6 &&
         std::all_of(digits.begin(), digits.end(),
                     [](char c) { return c >= '0' && c <= '9'; })) {
-      MdvRoute route{MdvResourceKind::kImage, 200, is_get, 0};
+      MdvRoute route{MdvResourceKind::kImage, 200, is_get, 0, {}};
       route.image_index = static_cast<std::size_t>(std::stoul(digits));
       return route;
     }
   }
-  return {MdvResourceKind::kNotFound, 404, false};
+  return {MdvResourceKind::kNotFound, 404, false, 0, {}};
 }
 
 std::string RenderMdvDocument(const MdvPageSnapshot& snapshot,
@@ -396,6 +407,17 @@ std::string RenderMdvStylesheet() {
          "outline:none;resize:none;background:transparent;color:inherit;"
          "font:13px/1.6 ui-monospace,monospace;}"
       << ".md-source-pane pre{white-space:pre-wrap;word-break:break-word;}"
+      << "pre code.hljs{display:block;overflow-x:auto;padding:12px 14px;"
+         "border-radius:8px;background:#f5f6f7;color:#1f2329;}"
+      << ".hljs-comment,.hljs-quote{color:#8f959e;font-style:italic;}"
+      << ".hljs-keyword,.hljs-selector-tag,.hljs-literal,.hljs-section,"
+         ".hljs-link{color:#7c3aed;}"
+      << ".hljs-string,.hljs-title,.hljs-name,.hljs-type,.hljs-attribute,"
+         ".hljs-symbol,.hljs-bullet,.hljs-addition{color:#067d68;}"
+      << ".hljs-number,.hljs-meta,.hljs-built_in,.hljs-builtin-name,"
+         ".hljs-params{color:#b85c00;}"
+      << ".hljs-deletion{color:#c03639;}"
+      << ".hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700;}"
       << ".view-bar .md-dirty{display:none;width:8px;height:8px;"
          "border-radius:50%;background:darkorange;align-self:center;}"
       << "body[data-dirty=true] .md-dirty{display:inline-block;}"
@@ -414,7 +436,14 @@ std::string RenderMdvStylesheet() {
       << "@media(prefers-color-scheme:dark){:root{--mdv-border:rgba(255,255,"
          "255,.16);--mdv-hover:rgba(255,255,255,.1);--mdv-active:#25385f;"
          "--mdv-active-fg:#8fb4ff;--mdv-tip:#f2f3f5;--mdv-tip-fg:#1f2329;}"
-         "a{color:#9ecbff;}}";
+         "a{color:#9ecbff;}pre code.hljs{background:#202124;color:#e8eaed;}"
+         ".hljs-comment,.hljs-quote{color:#9aa0a6;}"
+         ".hljs-keyword,.hljs-selector-tag,.hljs-literal,.hljs-section,"
+         ".hljs-link{color:#c9a7ff;}"
+         ".hljs-string,.hljs-title,.hljs-name,.hljs-type,.hljs-attribute,"
+         ".hljs-symbol,.hljs-bullet,.hljs-addition{color:#81c995;}"
+         ".hljs-number,.hljs-meta,.hljs-built_in,.hljs-builtin-name,"
+         ".hljs-params{color:#fdd663;}.hljs-deletion{color:#f28b82;}}";
   return css.str();
 }
 
@@ -444,7 +473,8 @@ void AppendMdvCoreScript(std::ostringstream& js) {
      << "function apply(state){"
      << "if(!state){return;}"
      << "if(typeof "
-        "state.preview==='string'&&preview){preview.innerHTML=state.preview;}"
+        "state.preview==='string'&&preview){resetHighlights();preview.innerHTML="
+        "state.preview;observeHighlights(preview);}"
      << "if(typeof "
         "state.dirty==='boolean'){body.setAttribute('data-dirty',state.dirty?'"
         "true':'false');}"
@@ -633,12 +663,34 @@ void AppendMdvDividerScript(std::ostringstream& js) {
      << "})();";
 }
 
+void AppendMdvHighlightScript(std::ostringstream& js) {
+  js << "var highlightObserver=null;"
+     << "function resetHighlights(){if(highlightObserver){highlightObserver."
+        "disconnect();highlightObserver=null;}}"
+     << "function startHighlight(code){if(!code||code.getAttribute('data-mdv-"
+        "highlighted')==='true'){return;}var language=code.getAttribute('data-"
+        "mdv-highlight');var nodeId=code.getAttribute('data-mdv-node');if(!"
+        "language||!nodeId){return;}import('/runtime/highlight/adapter').then("
+        "function(adapter){return adapter.highlightCode(code,language,nodeId);})"
+        ".catch(function(){});}"
+     << "function observeHighlights(root){if(!root||typeof IntersectionObserver"
+        "!=='function'){return;}if(!highlightObserver){highlightObserver=new "
+        "IntersectionObserver(function(entries){for(var i=0;i<entries.length;i++)"
+        "{if(entries[i].isIntersecting){highlightObserver.unobserve(entries[i]."
+        "target);startHighlight(entries[i].target);}}},{root:null,rootMargin:'120px"
+        " 0px',threshold:0});}var nodes=root.querySelectorAll('code[data-mdv-"
+        "highlight]');for(var i=0;i<nodes.length;i++){highlightObserver.observe("
+        "nodes[i]);}}"
+     << "observeHighlights(preview);";
+}
+
 std::string RenderMdvScript() {
   // One IIFE is assembled from bounded, single-purpose sections so the script
   // shares state without turning the C++ renderer into a >200-line function.
   std::ostringstream js;
   AppendMdvCoreScript(js);
   AppendMdvToolbarScript(js);
+  AppendMdvHighlightScript(js);
   AppendMdvDividerScript(js);
   return js.str();
 }

@@ -2,7 +2,8 @@
 // document/stylesheet/script renderers).
 //
 // The scheme handler serves exactly three fixed in-memory framework
-// resources (/app.html, /app.css, /app.js) under host "mdv"; rendered
+// resources (/app.html, /app.css, /app.js) and closed runtime assets under
+// host "mdv"; rendered
 // content is generated in the Browser process from the MDV-03 viewer
 // snapshot and injected server-side.  Paths never enter the URL or the
 // DOM (MDV-01 §2).  All output is deterministic; the CSP is the
@@ -88,6 +89,8 @@ enum class MdvResourceKind {
   kDocument,
   kStylesheet,
   kScript,
+  /// Build-time embedded Markdown Runtime JavaScript asset.
+  kRuntimeAsset,
   /// Opaque validated local image (GET /img/<index>, digits only).
   kImage,
   kMethodNotAllowed,
@@ -101,6 +104,8 @@ struct MdvRoute {
   bool include_body = false;
   /// For kImage: the opaque index parsed from /img/<index>.
   std::size_t image_index = 0;
+  /// For kRuntimeAsset: validated lower-kebab catalog resource ID.
+  std::string runtime_resource_id;
 };
 
 /// Classifies one request against the fixed route table.  Anything off

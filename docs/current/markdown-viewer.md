@@ -209,7 +209,7 @@ frame-ancestors 'none'
 
 - 保留现有 C++17 `md4c` 作为 Markdown parser 与普通安全 HTML 生成器，不引入第二套 `markdown-it`/`marked` parser，也不让 Rust Core 重写 Mermaid。
 - 通用 Extension Framework 以 [Markdown Runtime v1 契约](markdown-runtime.md) 为事实源，由 `docs/plans/markdown-runtime-roadmap.md` 的 `MRT-01..04` 承接：`browser/shared-ui/markdown` 产出 `safe_html + extension_nodes[]` 的内部 fallback plan；规划中的 `browser/shared-ui/markdown-runtime` 拥有编译期 registry、manifest loader、预算/cache/generation 与错误隔离。节点只含闭合 `kind`、不透明 node ID、经过大小校验的最小源码与 source revision；Runtime 命中后才由 MDV assembly 生成唯一 inert placeholder，页面不按源码/offset 猜目标，也不接受扩展名、URL 或任意模块路径。
-- `MDV-15..20` 只向闭合 registry 注册 `mermaid` adapter。Code Highlight、KaTeX、ECharts、Graphviz 与 Presentation 分别由 MRT 原子任务评审后启用；PlantUML、Vega、TV/Cast 和 AI 编辑保持延后或 gap analysis。任何能力都不能以动态模块名、文档 manifest 或配置字符串绕过 registry。
+- `MDV-15..20` 只向闭合 registry 注册 `mermaid` adapter。Code Highlight 已由 MRT-06 以精确 fence matcher、固定同源资源路由、viewport lazy 和严格 `span`/`hljs-*` token policy 接入；未知/纯文本/失败 fence 保持普通代码块。KaTeX、ECharts、Graphviz 与 Presentation 分别由后续 MRT 原子任务评审后启用；PlantUML、Vega、TV/Cast 和 AI 编辑保持延后或 gap analysis。任何能力都不能以动态模块名、文档 manifest 或配置字符串绕过 registry。
 - Mermaid 只属于用户打开的本地 MDV 页面，不进入 `crayon-page-data`、CNT 的确定性页面 Markdown、CAAP/tool registry 或 Agent 文件能力。
 
 ## 16. 资源、性能与生命周期门禁

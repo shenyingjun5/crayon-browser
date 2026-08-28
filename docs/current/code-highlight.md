@@ -2,7 +2,7 @@
 
 版本：`code-highlight-assets-v1`
 
-状态：MRT-05 冻结；MRT-06 只能消费本文与 `third_party/highlight/manifest.json` 的闭包，不得自行扩大语言、模块或权限。
+状态：MRT-05 供应链冻结；MRT-06 已在 macOS 完成运行时接入与验证，Windows 真机复验待远程会话补齐。后续任务只能消费本文与 `third_party/highlight/manifest.json` 的闭包，不得自行扩大语言、模块或权限。
 
 ## 1. 选型结论
 
@@ -67,3 +67,12 @@ node tools/highlight/vendor.mjs --archive <approved-tarball.tgz>
 ```
 
 `--download` 只是显式维护动作，不进入 CMake、CI 普通门禁或产品运行路径。脚本在写入前验证压缩/解压大小、SHA-512、SHA-256、tar checksum、path/type/count/entry budget、包名/版本/许可/零 runtime dependency、选择集与 nested dependency；以同目录临时树验证后再原子替换固定 vendor 根。
+
+## 6. MRT-06 运行时接入
+
+- CMake 在 configure 阶段锁定 manifest schema、包名、版本、许可、关闭 auto-detect、零 runtime dependency 与 25 个 grammar，并把 adapter/core/grammar 编译进只读资产 catalog；运行期不读取 vendor 文件、不访问 npm/网络。
+- `RenderHighlightDocument` 复用唯一 md4c `MarkdownRenderPlan`，只为精确 allowlist fence 增加 Browser-owned inert marker；alias 在路由前归一为 canonical ID，纯文本、未知、解析/registry/marker 失败均保留原 Level A `<pre><code>`。
+- `crayon://mdv/runtime/highlight/<resource-id>` 只接受无 credential/port/query/fragment 的 lower-kebab 精确资源 ID，handler 再按不可变 catalog 精确命中；未知 ID 返回 404。
+- 页面使用 `IntersectionObserver` 在 block 接近 viewport 时才加载 adapter/core/dependency closure/grammar；module promise 在页面 session 内去重。亮暗主题仅由 MDV 自有 `hljs-*` token CSS 切换，不重载 grammar。
+- adapter 只调用 `highlight(source, {language, ignoreIllegals: true})`。返回候选先受 2 MiB、64 层、32768 节点预算约束，再只以 `createTextNode`/`createElement("span")` 重建；仅保留 `hljs-[a-z0-9_-]+` class，不使用第三方 `innerHTML`。
+- 编辑 revision 或文档 generation 变化会换新 node ID；异步结果落位前复核 DOM 仍连接、node ID 与原始 `textContent` 均未变化，迟到结果直接丢弃。

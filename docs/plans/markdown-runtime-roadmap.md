@@ -1,6 +1,6 @@
 # MRT：Markdown Runtime Extension Framework Roadmap
 
-状态：`MRT-01..05 DONE`，`MRT-06 READY`，`MRT-07..19 TODO`。本 Roadmap 吸收 `docs/reference/蜡笔投屏浏览器_Markdown_Runtime_Extension_Framework_V1.0.md` 第 34..59 章，但以当前 PRD、安全契约和真实 C++17/md4c/CEF 工程为准。目标是在不建立第二 Markdown parser、不扩大文件/Agent 权限、不让大型扩展进入浏览器 bootstrap 的前提下，为 MDV 提供统一、闭合、可审计的 Extension Framework。
+状态：`MRT-01..05 DONE`，`MRT-06 VERIFIED`（macOS 完成，Windows 真机待远程补验），`MRT-07 READY`，`MRT-08..19 TODO`。本 Roadmap 吸收 `docs/reference/蜡笔投屏浏览器_Markdown_Runtime_Extension_Framework_V1.0.md` 第 34..59 章，但以当前 PRD、安全契约和真实 C++17/md4c/CEF 工程为准。目标是在不建立第二 Markdown parser、不扩大文件/Agent 权限、不让大型扩展进入浏览器 bootstrap 的前提下，为 MDV 提供统一、闭合、可审计的 Extension Framework。
 
 ## 1. 采纳结论
 
@@ -33,8 +33,8 @@ MRT 是用户侧 MDV 基础设施，不进入 `crayon-page-data`、CNT 的确定
 | MRT-03 | DONE | MRT-02 | `browser/shared-ui/markdown-runtime` | 编译期 Extension Registry/Router：按 node kind + 精确 info string 分发，冲突/未知/禁用稳定回退 | MR-001/002；registry contract |
 | MRT-04 | DONE | MRT-03 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | 通用 runtime loader/cache/lifecycle：manifest 资源、按需 import、预算、generation、错误隔离与资源清理 | MR-003；lazy/cache/风暴 |
 | MRT-05 | DONE | MRT-04 | `third_party/highlight`,`tools`,`docs/current` | Code Highlight 依赖选型与离线 grammar 闭包冻结；比较 highlight.js/Prism/Shiki 后只固定一个 | MR-004；许可/hash/包体/语言矩阵 |
-| MRT-06 | READY | MRT-05 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | Code Highlight fence extension：语言 allowlist、grammar 按需加载、未知语言纯文本回退 | MR-004；注入/主题/lazy |
-| MRT-07 | TODO | MRT-04 | `third_party/katex`,`tools`,`docs/current` | KaTeX 语法与供应链契约：明确 inline/block 定界、转义、宏/URL/HTML 禁令、字体/CSS 本地闭包 | MR-005；许可/语法/安全矩阵 |
+| MRT-06 | VERIFIED | MRT-05 | `browser/shared-ui/markdown`,`browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | Code Highlight fence extension：语言 allowlist、grammar 按需加载、未知语言纯文本回退 | MR-004；macOS 自动化与真实 CEF 已闭合，Windows 真机待远程补验 |
+| MRT-07 | READY | MRT-04 | `third_party/katex`,`tools`,`docs/current` | KaTeX 语法与供应链契约：明确 inline/block 定界、转义、宏/URL/HTML 禁令、字体/CSS 本地闭包 | MR-005；许可/语法/安全矩阵 |
 | MRT-08 | TODO | MRT-07 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | KaTeX inline/block extension：按需加载、局部错误、主题/字体离线与编辑 generation | MR-005；公式 golden/注入/实机 |
 | MRT-09 | TODO | MDV-20,MRT-06,MRT-08 | `tests/e2e/desktop`,`tools/repo-guard`,`docs/current`,`docs/plans` | P0 Runtime 收口：CommonMark/GFM + Highlight + Mermaid Full + KaTeX 的双平台/包体/性能/安全总 Review | MR-001..005,MR-008/012；P0/P1=0 |
 | MRT-10 | TODO | MRT-09 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv` | TOC/Outline：从解析事实生成有界标题树、稳定会话锚点与键盘/读屏导航 | MR-006；重复标题/超深/编辑更新 |
@@ -148,6 +148,25 @@ Gate:       MRT-18 TV/Cast gap / MRT-19 AI source-producer gap only
 - 仓库门禁：首次 `fast` 在 RG-004A 把 vendored Rust grammar 字符串 `debug_assert!` 误判为宏调用；repo-guard 改为只匹配带调用括号的 Rust debug macro，并增加“真实调用拒绝/grammar 关键词接受”回归。沙箱内第二轮因既有 Cast integration 创建本地测试资源报 9 个 `Operation not permitted`，在允许本地资源的同一 `bash scripts/check.sh fast` 命令复验全通过；`bash scripts/check.sh security` 全通过。既有 RG-003/004 warning 集无新增错误。
 - Code Review：按 v0.8 复核需求、供应链、路径/归档边界、原子替换、网络入口、运行能力、包体、测试与维护性；P0/P1/P2 = 0/0/0。测试造 tar helper 只留在 `vendor.test.mjs`，正式工具不含 fixture/test API；脚本写入根由自身位置固定，归档路径与内容不能决定输出位置。
 - 未覆盖：高亮 adapter、SafeHtml token/class policy、CEF fixed route、MDV 浅深主题与真正 viewport lazy 由 `MRT-06` 实现；本任务没有改变任何浏览器产物或 Markdown 行为。`MRT-06` 转为 `READY`。
+
+## 5E. MRT-06 原子范围（Code Highlight Runtime 接入）
+
+- 状态：`VERIFIED`（macOS 自动化/真实 CEF 完成；Windows 真机待远程补验）；依赖 `MRT-05 DONE`。单一目标是把已冻结的 highlight.js core/grammar 作为一个闭合 fence adapter 接入 `crayon://mdv`，仅对精确 allowlist 语言按可见 block 懒加载并应用 MDV 自有浅/深色 token 主题；普通、纯文本、未知或失败 fence 保留 md4c 已转义的 Level A code block。
+- 输入/输出：输入仅为 MRT-02 `MarkdownRenderPlan`、MRT-03/04 immutable registry/catalog 契约和 `code-highlight-assets-v1` manifest；输出为 Browser-owned inert code marker、固定同源 runtime route、显式 language highlight 结果以及严格 `span`/`hljs-*` token policy 后的 DOM。
+- 允许修改：`browser/shared-ui/markdown-runtime/**`、`browser/shared-ui/mdv/**`、`browser/cef-shell/src/browser/mdv/**`、相关 CMake/测试与本 Roadmap/当前契约；为消除冻结 `c#` alias 与 MRT-02 token 语法冲突，允许在 `browser/shared-ui/markdown/**` 的唯一 matcher 校验入口增加单个 `#` ASCII 字符并补回归。只读 `third_party/highlight/**` 作为已冻结生成源；不得修改 vendor 资产或扩大语言集。
+- 禁止修改：md4c/vendor parser、Markdown Level A 语法与 SafeHtml policy、文件打开/保存权限、Agent/Cast/网络能力、CSP `unsafe-inline`/`unsafe-eval`/`connect-src`；禁止 auto-detect、DOM 全页扫描、文档指定 module/path/URL、CDN fallback、worker/plugin 或未经 policy 的 `innerHTML`。
+- 边界：语言 alias 只按 manifest 精确 ASCII token 归一为 canonical grammar；资产在构建期从固定 vendor 目录编译进不可变 catalog，运行期零文件/网络 IO；路由拒绝 credential/port/query/fragment/编码分隔符/未知 ID。只有进入 viewport 的 marked code 触发 core + dependency closure + grammar import，session 内去重；无高亮文档零 runtime 请求。
+- 安全：fence source 始终以 `textContent` 读取并作为 explicit-language API 的数据；第三方 HTML 候选只能经 Browser-owned closed parser 重建为文本与嵌套 `span`，只保留 `hljs-[a-z0-9_-]+` class，其他标签/属性/class/entity/过深/过大结果整块拒绝并回退原 code。generation/revision 或 DOM node 不匹配时丢弃迟到结果。
+- 验收：MR-004 覆盖 canonical/alias/纯文本/未知/恶意 source、不合法候选、嵌套/预算、依赖闭包、无匹配零加载、viewport lazy/session 去重、浅/深主题和资产路由；engine/macOS arm64 全 CTest、macOS x64 可构建 target、真实 CEF 离线高亮/未知回退/零 CSP 违规、format/diff/check 与 v0.8 Review P0/P1/P2=0。Windows 由远程真机会话在拉取后补验，不用 macOS 代替。
+- 明确不做：KaTeX/Mermaid/ECharts/Graphviz/Presentation、通用 JS 执行器、持久化 cache、导出/复制、远程 Markdown、新工具栏动作或任何新权限。
+
+### MRT-06 完成记录（2026-08-28）
+
+- 实现：构建期校验 MRT-05 manifest identity/policy 并把 adapter、core 与 25 grammar 编译进不可变 catalog；新增精确 alias/canonical 路由、Browser-owned inert marker、`crayon://mdv/runtime/highlight/<id>` 精确资源路由、viewport lazy/session import 去重、浅深主题 token CSS，以及仅允许嵌套 `span.hljs-*` 的有界候选 parser。编辑路径复用同一 md4c plan，不复制整份计划；文档 generation/revision/node/text 四重失效后拒绝迟到结果。
+- 自动化：`node --test browser/shared-ui/markdown-runtime/tests/highlight_adapter.test.mjs` 4/4；`node tools/highlight/vendor.mjs --check` 为 25 grammars / 124585 bytes；macOS arm64 Debug CEF build 与 `ctest --test-dir .cache/build/macos-arm64-cef-debug --output-on-failure` 65/65；macOS x64 Debug CEF build 与 MRT/MDV/package scoped CTest 7/7；`bash scripts/check.sh fast`、`bash scripts/check.sh security`、新 C++ 文件 Google clang-format dry-run 与 `git diff --check` 均通过。fast/security 的 loopback 集成测试需在沙箱外运行，沙箱内原始阻断均为 `Operation not permitted`。
+- 真实 CEF：macOS arm64 离线打开本地 fixture，确认 C++/JavaScript/C# 着色、unknown 纯文本回退、恶意 `<img onerror>` 仅作为字符串文本、亮暗主题生效；开启 CEF stderr logging 后无 CSP/resource 错误，退出后无残留主进程/helper。
+- Code Review v0.8：APPROVE，P0/P1/P2/P3=0。registry/catalog immutable；无锁、网络、文件、worker、plugin、auto-detect 或新权限；运行时资产请求和 candidate/node/cache 预算均有界；普通/未知文档零 runtime import。
+- 未覆盖：Windows Debug/Release 构建、Windows x64 真实 CEF 的 viewport lazy/主题/未知回退由已激活的远程 Windows 会话在拉取本提交后补验；在此证据回写前保持 `VERIFIED`，不宣称 `DONE`。KaTeX 与 Mermaid 未在本任务提前实现。`MRT-07` 转为 `READY`。
 
 ## 6. 各阶段共同门禁
 

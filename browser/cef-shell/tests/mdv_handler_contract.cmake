@@ -1,5 +1,5 @@
 # MDV-08 contract: the crayon://mdv handler lives in its own adapter
-# directory, serves only the three fixed in-memory framework resources,
+# directory, serves fixed in-memory framework/runtime resources,
 # issues the shared CSP constant, and never reads files or exposes paths.
 if(NOT DEFINED CRAYON_CEF_SHELL_SOURCE)
   message(FATAL_ERROR "CRAYON_CEF_SHELL_SOURCE must point at browser/cef-shell")
@@ -69,6 +69,19 @@ string(FIND "${impl_text}" "Content-Security-Policy" hit)
 if(hit EQUAL -1)
   message(FATAL_ERROR "handler must set Content-Security-Policy headers")
 endif()
+
+# MRT-06 runtime assets come only from the immutable embedded catalog and the
+# exact MDV route; grammar IDs cannot become filesystem or network paths.
+foreach(required_text IN ITEMS
+        "BuildHighlightAssetCatalog"
+        "FindCompatible"
+        "runtime_resource_id"
+        "RuntimeAssetContentType::")
+  string(FIND "${impl_text}" "${required_text}" hit)
+  if(hit EQUAL -1)
+    message(FATAL_ERROR "MDV handler lost Highlight catalog gate: ${required_text}")
+  endif()
+endforeach()
 
 # The fixture is compile-time content; no network IO and no arbitrary
 # file access.  Bounded reads are only permitted inside the MDV-13

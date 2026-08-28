@@ -1,0 +1,31 @@
+// Generated at CMake configure time from the checked-in MRT-05 manifest/assets.
+#pragma once
+
+#include <cstddef>
+
+namespace crayon::browser_markdown_runtime::internal {
+
+struct EmbeddedHighlightAsset final {
+  const char* resource_id;
+  const char* bytes;
+  std::size_t size;
+};
+
+struct EmbeddedHighlightLanguage final {
+  const char* canonical_id;
+  const char* aliases_csv;
+  const char* dependencies_csv;
+};
+
+@HIGHLIGHT_ASSET_DECLARATIONS@
+
+inline constexpr EmbeddedHighlightAsset kEmbeddedHighlightAssets[] = {
+@HIGHLIGHT_ASSET_ROWS@};
+
+inline constexpr EmbeddedHighlightLanguage kEmbeddedHighlightLanguages[] = {
+@HIGHLIGHT_LANGUAGE_ROWS@};
+
+inline constexpr char kEmbeddedHighlightPlaintextAliases[] =
+    "@HIGHLIGHT_PLAINTEXT_ALIASES@";
+
+}  // namespace crayon::browser_markdown_runtime::internal

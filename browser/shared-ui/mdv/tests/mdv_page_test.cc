@@ -201,13 +201,16 @@ void TestNoNetworkOrInlineHandlers() {
   const std::string& js_fixed = js_sanitized;
   for (const std::string* body : {&document, &css, &js_fixed}) {
     for (const char* marker :
-         {"http://", "https://", "fetch(", "XMLHttpRequest", "import(",
+         {"http://", "https://", "fetch(", "XMLHttpRequest",
           "onclick=", "onload=", "javascript:"}) {
       CHECK(body->find(marker) == std::string::npos);
     }
   }
   CHECK(document.find("src=\"/app.js\"") != std::string::npos);
   CHECK(document.find("href=\"/app.css\"") != std::string::npos);
+  CHECK(Count(js_fixed, "import(") == 1);
+  CHECK(js_fixed.find("import('/runtime/highlight/adapter')") !=
+        std::string::npos);
 }
 
 void TestEntryErrorBannerTakesPriority() {
@@ -355,6 +358,33 @@ void TestInitialViewStateAndCspConstantUnchanged() {
   CHECK(std::string(kMdvCsp).find("default-src 'none'") != std::string::npos);
 }
 
+void TestHighlightRoutesAndLazyBootstrap() {
+  MdvRequestParts request{"GET", "crayon", "mdv",
+                          "/runtime/highlight/adapter"};
+  auto route = crayon::browser_mdv::ClassifyMdvRequest(request);
+  CHECK(route.kind == MdvResourceKind::kRuntimeAsset);
+  CHECK(route.runtime_resource_id == "adapter");
+  CHECK(route.include_body);
+  for (const std::string path : {"/runtime/highlight/../core",
+                                 "/runtime/highlight/core.js",
+                                 "/runtime/highlight/%2fcore",
+                                 "/runtime/highlight/Core",
+                                 "/runtime/highlight/"}) {
+    request.path = path;
+    CHECK(crayon::browser_mdv::ClassifyMdvRequest(request).kind ==
+          MdvResourceKind::kNotFound);
+  }
+  const std::string script = crayon::browser_mdv::RenderMdvScript();
+  CHECK(script.find("IntersectionObserver") != std::string::npos);
+  CHECK(script.find("import('/runtime/highlight/adapter')") !=
+        std::string::npos);
+  CHECK(script.find("highlightAuto") == std::string::npos);
+  CHECK(script.find("highlightAll") == std::string::npos);
+  const std::string css = crayon::browser_mdv::RenderMdvStylesheet();
+  CHECK(css.find("pre code.hljs") != std::string::npos);
+  CHECK(css.find("prefers-color-scheme:dark") != std::string::npos);
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -372,6 +402,7 @@ int main(int argc, char** argv) {
   TestToolbarClosedActionSet();
   TestEmptyAndErrorSurfaces();
   TestInitialViewStateAndCspConstantUnchanged();
+  TestHighlightRoutesAndLazyBootstrap();
   if (g_failures != 0) {
     std::cerr << g_failures << " check(s) failed\n";
     return 1;

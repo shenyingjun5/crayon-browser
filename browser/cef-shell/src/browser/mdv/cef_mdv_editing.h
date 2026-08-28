@@ -73,6 +73,7 @@ class MdvEditController
   std::string current_path_;
   std::string current_doc_dir_;
   std::string pending_url_;
+  std::uint64_t document_generation_ = 0;
   int host_browser_id_ = -1;
   bool conflict_pending_ = false;
 };

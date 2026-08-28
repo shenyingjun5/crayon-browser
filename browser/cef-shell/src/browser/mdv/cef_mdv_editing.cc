@@ -4,6 +4,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -12,6 +13,7 @@
 
 #include "browser/mdv/cef_mdv_entries.h"
 #include "crayon/browser_markdown/markdown_render.h"
+#include "crayon/browser_markdown_runtime/highlight_extension.h"
 #include "crayon/browser_mdv/mdv_entry_guard.h"
 #include "crayon/browser_mdv/mdv_images.h"
 #include "crayon/browser_mdv/mdv_transform.h"
@@ -162,6 +164,9 @@ void MdvEditController::OnDocumentLoaded(CefRefPtr<CefBrowser> browser,
   }
   pending_url_.clear();
   conflict_pending_ = false;
+  if (document_generation_ != std::numeric_limits<std::uint64_t>::max()) {
+    ++document_generation_;
+  }
   viewer_.LoadContent(normalized_text, /*utf8_valid=*/true, NowMs());
   edit_.LoadDocument(normalized_text, /*utf8_valid=*/true, NowMs());
   if (!path_utf8.empty()) {
@@ -426,11 +431,11 @@ void MdvEditController::PerformSave(CefRefPtr<CefBrowser> browser,
 void MdvEditController::RenderAndStore() {
   const std::uint64_t now = NowMs();
   const auto revision = viewer_.RequestRender(now);
-  crayon::browser_markdown::RenderStatus status =
-      crayon::browser_markdown::RenderStatus::kOk;
-  const std::string html = crayon::browser_markdown::RenderMarkdownToSafeHtml(
-      edit_.edit_buffer(), &status);
-  if (status == crayon::browser_markdown::RenderStatus::kOk) {
+  const auto highlighted =
+      crayon::browser_markdown_runtime::RenderHighlightDocument(
+          edit_.edit_buffer(), document_generation_, revision);
+  if (highlighted.render_status ==
+      crayon::browser_markdown::RenderStatus::kOk) {
     // MDV-13: classify engine image markers into their final form
     // (cloud https direct / validated local opaque route / placeholder).
     auto probe = [](const std::string& path_utf8, std::uint64_t* size) {
@@ -449,7 +454,8 @@ void MdvEditController::RenderAndStore() {
     auto snapshot_for_images = state_->snapshot();
     snapshot_for_images.local_images.clear();
     const std::string prepared = crayon::browser_mdv::PreparePreviewHtml(
-        html, current_doc_dir_, probe, &snapshot_for_images.local_images);
+        highlighted.safe_html, current_doc_dir_, probe,
+        &snapshot_for_images.local_images);
     state_->SetSnapshot(std::move(snapshot_for_images));
     viewer_.DeliverRender(revision, prepared);
   }

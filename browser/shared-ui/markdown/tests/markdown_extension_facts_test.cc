@@ -133,6 +133,14 @@ bool InvalidSelectionFailsClosed() {
   return true;
 }
 
+bool CommonLanguagePunctuationIsBounded() {
+  CHECK(crayon::browser_markdown::IsValidExtensionMatcherToken("c++"));
+  CHECK(crayon::browser_markdown::IsValidExtensionMatcherToken("c#"));
+  CHECK(!crayon::browser_markdown::IsValidExtensionMatcherToken("c/sharp"));
+  CHECK(!crayon::browser_markdown::IsValidExtensionMatcherToken("c sharp"));
+  return true;
+}
+
 bool InputFailuresDoNotProduceFacts() {
   RenderStatus expected = RenderStatus::kInvalidUtf8;
   auto plan =
@@ -201,6 +209,7 @@ int main() {
                   ExactFenceMatching() && NestedAndNormalizedFenceFacts() &&
                   FourKindsAreClosedAndUnreviewedKindsEmitNothing() &&
                   InvalidSelectionFailsClosed() &&
+                  CommonLanguagePunctuationIsBounded() &&
                   InputFailuresDoNotProduceFacts() &&
                   NodeAndSourceBudgetsAreBounded() &&
                   NodeIdsAreDeterministicAndGenerationBound();

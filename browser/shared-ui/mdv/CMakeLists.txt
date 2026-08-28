@@ -55,7 +55,8 @@ target_include_directories(crayon-browser-mdv
   PRIVATE
     "${mdv_generated_dir}"
 )
-target_link_libraries(crayon-browser-mdv PUBLIC crayon::browser-markdown)
+target_link_libraries(crayon-browser-mdv
+  PUBLIC crayon::browser-markdown crayon::browser-markdown-runtime)
 target_compile_features(crayon-browser-mdv PUBLIC cxx_std_17)
 set_target_properties(crayon-browser-mdv PROPERTIES
   CXX_EXTENSIONS OFF
