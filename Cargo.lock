@@ -516,6 +516,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "crayon-page-data"
+version = "0.1.0"
+dependencies = [
+ "crayon-domain",
+ "crayon-ipc-schema",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "crayon-platform-api"
 version = "0.1.0"
 

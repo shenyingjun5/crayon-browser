@@ -21,7 +21,7 @@
 
 use crayon_domain::{SessionGeneration, TabId};
 use crayon_ipc_schema::SchemaVersion;
-use serde::{Deserialize, Serialize};
+use serde::{de::Error as _, Deserialize, Deserializer, Serialize};
 use std::fmt::{Display, Formatter};
 
 /// Output detail level; caps differ per level (see the limit constants).
@@ -91,18 +91,26 @@ pub mod limits {
     pub const MAX_LIST_DEPTH: u8 = 8;
 }
 
-/// The only accepted URL schemes for links and images.
-const ALLOWED_SCHEMES: [&str; 2] = ["http://", "https://"];
-
 /// Reports whether `url` fits the closed URL rule: allowed scheme,
 /// bounded length, no control characters or whitespace.
 #[must_use]
 pub fn is_safe_url(url: &str) -> bool {
-    if url.len() > limits::MAX_URL_BYTES || url.bytes().any(|b| b < 0x21 || b == 0x7F) {
+    if url.len() > limits::MAX_URL_BYTES
+        || url.contains('\\')
+        || url
+            .chars()
+            .any(|character| character.is_control() || character.is_whitespace())
+    {
         return false;
     }
-    let lowered = url.to_ascii_lowercase();
-    ALLOWED_SCHEMES.iter().any(|scheme| lowered.starts_with(scheme))
+    let Some((scheme, remainder)) = url.split_once("://") else {
+        return false;
+    };
+    if !scheme.eq_ignore_ascii_case("http") && !scheme.eq_ignore_ascii_case("https") {
+        return false;
+    }
+    let authority = remainder.split(['/', '?', '#']).next().unwrap_or_default();
+    !authority.is_empty() && !authority.contains('@')
 }
 
 /// Closed content block kinds.  Inline formatting is not modelled as
@@ -112,10 +120,7 @@ pub fn is_safe_url(url: &str) -> bool {
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ContentBlock {
     /// Section heading, level 1..=6.
-    Heading {
-        level: u8,
-        text: String,
-    },
+    Heading { level: u8, text: String },
     /// Plain paragraph text.
     Paragraph { text: String },
     /// One list item; `ordinal` is set for ordered lists (starts at 1).
@@ -124,6 +129,8 @@ pub enum ContentBlock {
         ordinal: Option<u64>,
         text: String,
     },
+    /// Visible link label and a Browser-validated absolute destination.
+    Link { href: String, text: String },
     /// Quoted passage.
     Quote { text: String },
     /// Fenced or indented code with an optional language token.
@@ -132,10 +139,7 @@ pub enum ContentBlock {
         text: String,
     },
     /// Reference-only image metadata; images are never loaded inline.
-    ImageRef {
-        src: String,
-        alt: String,
-    },
+    Image { src: String, alt: String },
     /// Table with rectangular row data (header first when present).
     Table { rows: Vec<TableRow> },
     /// Horizontal rule / section separator.
@@ -150,7 +154,7 @@ pub struct TableRow {
 }
 
 /// Why records were omitted by the collector.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub enum TruncationReason {
     LimitBlockCount,
@@ -159,13 +163,13 @@ pub enum TruncationReason {
 }
 
 /// Explicit truncation declaration.  Zero-values mean "nothing omitted".
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TruncationInfo {
     pub truncated: bool,
     pub omitted_blocks: u32,
     pub omitted_bytes: u32,
-    pub reasons: u32, // bitmask over TruncationReason bit positions 0..2
+    pub reasons: Vec<TruncationReason>,
 }
 
 /// Provenance attestation.  `verified_by` must equal
@@ -176,7 +180,21 @@ pub const VERIFIED_BY_BROWSER_PROCESS: &str = "browser_process";
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Provenance {
-    pub verified_by: String,
+    verified_by: String,
+}
+
+impl Provenance {
+    #[must_use]
+    fn browser_verified() -> Self {
+        Self {
+            verified_by: VERIFIED_BY_BROWSER_PROCESS.to_owned(),
+        }
+    }
+
+    #[must_use]
+    pub fn verified_by(&self) -> &str {
+        &self.verified_by
+    }
 }
 
 /// Navigation binding used by consumers to fence stale snapshots.
@@ -187,20 +205,40 @@ pub struct NavigationBinding {
     pub generation: SessionGeneration,
 }
 
+impl NavigationBinding {
+    #[must_use]
+    pub const fn new(tab_id: TabId, generation: SessionGeneration) -> Self {
+        Self { tab_id, generation }
+    }
+}
+
 /// The frozen PageSnapshot envelope.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PageSnapshot {
-    pub schema: SchemaVersion,
-    pub level: OutputLevel,
-    pub navigation: NavigationBinding,
-    pub url: String,
-    pub title: String,
-    pub captured_at_ms: u64,
-    pub revision: u64,
-    pub provenance: Provenance,
-    pub truncation: TruncationInfo,
-    pub blocks: Vec<ContentBlock>,
+    schema_version: SchemaVersion,
+    output_level: OutputLevel,
+    navigation: NavigationBinding,
+    url: String,
+    title: String,
+    revision: u64,
+    provenance: Provenance,
+    truncation: TruncationInfo,
+    blocks: Vec<ContentBlock>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PageSnapshotWire {
+    schema_version: SchemaVersion,
+    output_level: OutputLevel,
+    navigation: NavigationBinding,
+    url: String,
+    title: String,
+    revision: u64,
+    provenance: Provenance,
+    truncation: TruncationInfo,
+    blocks: Vec<ContentBlock>,
 }
 
 /// Snapshot schema failure.  Variants are stable.
@@ -215,7 +253,8 @@ pub enum SnapshotError {
     TotalBytesExceeded,
     BlockCountExceeded,
     TruncatedButNothingOmitted,
-    TruncationFlagsUnknown,
+    TruncationInconsistent,
+    DuplicateTruncationReason,
 }
 
 impl Display for SnapshotError {
@@ -230,7 +269,8 @@ impl Display for SnapshotError {
             Self::TotalBytesExceeded => "total text bytes exceed the level cap",
             Self::BlockCountExceeded => "block count exceeds the level cap",
             Self::TruncatedButNothingOmitted => "truncation flag without omissions",
-            Self::TruncationFlagsUnknown => "truncation reason bits unknown",
+            Self::TruncationInconsistent => "truncation fields are inconsistent",
+            Self::DuplicateTruncationReason => "truncation reasons contain duplicates",
         };
         formatter.write_str(message)
     }
@@ -238,18 +278,22 @@ impl Display for SnapshotError {
 
 impl std::error::Error for SnapshotError {}
 
-const TRUNCATION_REASON_BITS: u32 = 0b111;
-
 fn valid_text(text: &str, max_len: usize) -> bool {
     !text.is_empty()
         && text.len() <= max_len
-        && !text.bytes().any(|byte| byte < 0x20 && byte != b'\n' && byte != b'\t')
+        && !text
+            .chars()
+            .any(|character| character.is_control() && !matches!(character, '\n' | '\t'))
 }
 
-fn validate_block(
-    block: &ContentBlock,
-    level: OutputLevel,
-) -> Result<usize, SnapshotError> {
+fn valid_optional_text(text: &str, max_len: usize) -> bool {
+    text.len() <= max_len
+        && !text
+            .chars()
+            .any(|character| character.is_control() && !matches!(character, '\n' | '\t'))
+}
+
+fn validate_block(block: &ContentBlock, level: OutputLevel) -> Result<usize, SnapshotError> {
     let max_text = level.max_block_text_bytes();
     let bytes = match block {
         ContentBlock::Heading { level, text } => {
@@ -285,8 +329,17 @@ fn validate_block(
             }
             text.len()
         }
+        ContentBlock::Link { href, text } => {
+            if !is_safe_url(href) {
+                return Err(SnapshotError::InvalidUrl);
+            }
+            if !valid_text(text, max_text) {
+                return Err(SnapshotError::BlockOutOfBounds);
+            }
+            href.len() + text.len()
+        }
         ContentBlock::CodeBlock { language, text } => {
-            if text.is_empty() || text.len() > limits::MAX_CODE_BYTES {
+            if !valid_text(text, limits::MAX_CODE_BYTES) {
                 return Err(SnapshotError::BlockOutOfBounds);
             }
             if let Some(language) = language {
@@ -303,9 +356,12 @@ fn validate_block(
             }
             text.len()
         }
-        ContentBlock::ImageRef { src, alt } => {
-            if !is_safe_url(src) || alt.len() > limits::MAX_TABLE_CELL_BYTES {
+        ContentBlock::Image { src, alt } => {
+            if !is_safe_url(src) {
                 return Err(SnapshotError::InvalidUrl);
+            }
+            if !valid_optional_text(alt, max_text) {
+                return Err(SnapshotError::BlockOutOfBounds);
             }
             src.len() + alt.len()
         }
@@ -326,7 +382,7 @@ fn validate_block(
                     return Err(SnapshotError::ShapeInvalid);
                 }
                 for cell in &row.cells {
-                    if cell.len() > limits::MAX_TABLE_CELL_BYTES {
+                    if !valid_optional_text(cell, limits::MAX_TABLE_CELL_BYTES) {
                         return Err(SnapshotError::BlockOutOfBounds);
                     }
                     total += cell.len();
@@ -340,42 +396,142 @@ fn validate_block(
 }
 
 impl PageSnapshot {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        output_level: OutputLevel,
+        navigation: NavigationBinding,
+        url: String,
+        title: String,
+        revision: u64,
+        truncation: TruncationInfo,
+        blocks: Vec<ContentBlock>,
+    ) -> Result<Self, SnapshotError> {
+        let snapshot = Self {
+            schema_version: SchemaVersion::CURRENT,
+            output_level,
+            navigation,
+            url,
+            title,
+            revision,
+            provenance: Provenance::browser_verified(),
+            truncation,
+            blocks,
+        };
+        snapshot.validate()?;
+        Ok(snapshot)
+    }
+
+    #[must_use]
+    pub const fn schema_version(&self) -> SchemaVersion {
+        self.schema_version
+    }
+
+    #[must_use]
+    pub const fn output_level(&self) -> OutputLevel {
+        self.output_level
+    }
+
+    #[must_use]
+    pub const fn navigation(&self) -> &NavigationBinding {
+        &self.navigation
+    }
+
+    #[must_use]
+    pub fn url(&self) -> &str {
+        &self.url
+    }
+
+    #[must_use]
+    pub fn title(&self) -> &str {
+        &self.title
+    }
+
+    #[must_use]
+    pub const fn revision(&self) -> u64 {
+        self.revision
+    }
+
+    #[must_use]
+    pub const fn provenance(&self) -> &Provenance {
+        &self.provenance
+    }
+
+    #[must_use]
+    pub const fn truncation(&self) -> &TruncationInfo {
+        &self.truncation
+    }
+
+    #[must_use]
+    pub fn blocks(&self) -> &[ContentBlock] {
+        &self.blocks
+    }
+
     /// Validates against the closed schema rules and the level-specific
     /// resource limits.  Decoded snapshots MUST pass through here.
     pub fn validate(&self) -> Result<(), SnapshotError> {
-        if self.schema.get() != 1 {
+        if self.schema_version != SchemaVersion::CURRENT {
             return Err(SnapshotError::InvalidSchemaVersion);
         }
         if !is_safe_url(&self.url) {
             return Err(SnapshotError::InvalidUrl);
         }
-        if !valid_text(&self.title, limits::MAX_TITLE_BYTES) {
+        if !valid_text(&self.title, limits::MAX_TITLE_BYTES)
+            || self
+                .title
+                .bytes()
+                .any(|byte| matches!(byte, b'\n' | b'\r' | b'\t'))
+        {
             return Err(SnapshotError::InvalidTitle);
         }
         if self.provenance.verified_by != VERIFIED_BY_BROWSER_PROCESS {
             return Err(SnapshotError::BadProvenance);
         }
-        if self.blocks.len() > self.level.max_blocks() {
+        if self.blocks.len() > self.output_level.max_blocks() {
             return Err(SnapshotError::BlockCountExceeded);
         }
         let mut total = 0_usize;
         for block in &self.blocks {
-            total = total.saturating_add(validate_block(block, self.level)?);
-            if total > self.level.max_total_text_bytes() {
+            total = total.saturating_add(validate_block(block, self.output_level)?);
+            if total > self.output_level.max_total_text_bytes() {
                 return Err(SnapshotError::TotalBytesExceeded);
             }
         }
         // Truncation bookkeeping must be coherent.
-        if self.truncation.truncated
-            && self.truncation.omitted_blocks == 0
-            && self.truncation.omitted_bytes == 0
-        {
+        let has_omissions =
+            self.truncation.omitted_blocks != 0 || self.truncation.omitted_bytes != 0;
+        if self.truncation.truncated && !has_omissions {
             return Err(SnapshotError::TruncatedButNothingOmitted);
         }
-        if self.truncation.reasons & !TRUNCATION_REASON_BITS != 0 {
-            return Err(SnapshotError::TruncationFlagsUnknown);
+        if self.truncation.truncated != has_omissions
+            || self.truncation.truncated != !self.truncation.reasons.is_empty()
+        {
+            return Err(SnapshotError::TruncationInconsistent);
+        }
+        for (index, reason) in self.truncation.reasons.iter().enumerate() {
+            if self.truncation.reasons[index + 1..].contains(reason) {
+                return Err(SnapshotError::DuplicateTruncationReason);
+            }
         }
         Ok(())
+    }
+}
+
+impl<'de> Deserialize<'de> for PageSnapshot {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let wire = PageSnapshotWire::deserialize(deserializer)?;
+        let snapshot = Self {
+            schema_version: wire.schema_version,
+            output_level: wire.output_level,
+            navigation: wire.navigation,
+            url: wire.url,
+            title: wire.title,
+            revision: wire.revision,
+            provenance: wire.provenance,
+            truncation: wire.truncation,
+            blocks: wire.blocks,
+        };
+        snapshot.validate().map_err(D::Error::custom)?;
+        Ok(snapshot)
     }
 }
 

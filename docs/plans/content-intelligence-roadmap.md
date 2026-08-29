@@ -1,6 +1,6 @@
 # CNT 页面数据、Markdown 与第二阶段模型 Roadmap
 
-- 状态：规划中
+- 状态：C1 执行中；`CNT-01 DONE`，`CNT-02 READY`
 - 任务数：16
 - C1 开始门禁：`CEF-15`、`BUX-18`、`SDK-14`、`MED-19`、`PRV-08`
 - M2 开始门禁：`CNT-10`、`AGT-16`、`PRV-13`
@@ -16,8 +16,8 @@
 
 | ID | 状态 | 依赖 | 允许修改路径 | 交付目标 | 验收/测试 | 阶段 |
 |---|---|---|---|---|---|---|
-| CNT-01 | IN_PROGRESS | CEF-15,BUX-18,SDK-14,MED-19,PRV-08 | `crayon-content-contract/**`,`crayon-page-data/**` | 定义 `PageSnapshot`、结构块、provenance、revision、截断与资源上限 | `CT-001`,`CT-002`; schema/golden | C1 |
-| CNT-02 | TODO | CNT-01,CEF-01B | `browser/engine-api/**`,`apps/desktop-cef/**`,`crayon-browser-gateway/**` | 在跨引擎接口增加有界 snapshot stream/cancel，并实现 Renderer 分块采集与 Browser 来源/navigation验证 | `CT-001`,`CT-002`,`CT-007`; interface contract/integration | C1 |
+| CNT-01 | DONE | CEF-15,BUX-18,SDK-14,MED-19,PRV-08 | `crayon-content-contract/**`,`crayon-page-data/**` | 定义 `PageSnapshot`、结构块、provenance、revision、截断与资源上限 | `CT-001`,`CT-002`; schema/golden | C1 |
+| CNT-02 | READY | CNT-01,CEF-01B | `browser/engine-api/**`,`apps/desktop-cef/**`,`crayon-browser-gateway/**` | 在跨引擎接口增加有界 snapshot stream/cancel，并实现 Renderer 分块采集与 Browser 来源/navigation验证 | `CT-001`,`CT-002`,`CT-007`; interface contract/integration | C1 |
 | CNT-03 | TODO | CNT-02 | `crayon-page-data/**`,`crayon-app-runtime/**` | snapshot owner、generation 缓存、取消、分页和旧结果丢弃 | `CT-002`,`CT-007`; integration | C1 |
 | CNT-04 | TODO | CNT-03 | `crayon-content-extract/**` | 确定性主正文、阅读顺序和结构块识别 | `CT-003`,`CT-008`; fixture/unit | C1 |
 | CNT-05 | TODO | CNT-04 | `crayon-content-markdown/**` | 标准 Markdown 转换与稳定转义 | `CT-003`,`CT-004`; golden | C1 |
@@ -44,7 +44,7 @@
 
 ## CNT-01 原子范围（PageSnapshot schema 冻结）
 
-- 状态：`IN_PROGRESS`；依赖（C1 门禁五项全部满足：CEF-15/BUX-18/SDK-14/MED-19/PRV-08）。
+- 状态：`DONE`；依赖（C1 门禁五项全部满足：CEF-15/BUX-18/SDK-14/MED-19/PRV-08）。
 - 路径说明：Roadmap 允许路径含 `crayon-content-contract/**` 与 `crayon-page-data/**` 两个名字；为避免单 schema 双 crate，契约类型落在新 crate **`crayon-page-data`** 的 `snapshot.rs`（CNT-03 的 owner/cache 亦在此 crate 扩展），不建空壳 `crayon-content-contract`。
 - 单一目标：冻结 `PageSnapshot` wire schema——navigation 引用（TabId+SessionGeneration）、脱敏 URL/title、闭合 nine-kind 内容块、provenance 恒等声明、revision 与 truncation 显式信息、compact/standard 两级资源上限；serde deny_unknown_fields 全覆盖 + 构造校验/解码复检 + current/previous golden。本任务不做采集、正文识别与 Markdown 转换。
 - 输入：CT-001（字段/顺序/schema 正确、节点/字节有界）、CT-002 模型部分（超大/畸形拒绝）、CT-003 类型部分（危险 URL 在 schema 层被拒）、PRD §4.3、FND-08 golden 机制与 SchemaVersion、domain TabId/SessionGeneration。
@@ -58,3 +58,12 @@
   - 解码后 `validate()` 复检全覆盖；截断时快照仍须满足同一上限集。
 - 验收与测试：CT-001、CT-002/003 模型部分。矩阵：golden 往返逐字节一致与 previous 镜像、九类块 roundtrip、两级上限差异、危险 URL 拒绝矩阵、伪造 provenance/畸形/未知字段/超限拒绝、确定性伪 fuzz 不 panic。命令：`cargo test -p crayon-page-data`、clippy `-D warnings`、fmt、workspace 回归、`git diff --check`。
 - 明确不做：Renderer 分块采集（CNT-02）、snapshot owner/generation 缓存（CNT-03）、正文识别（CNT-04）、Markdown（CNT-05/06）。
+
+### CNT-01 完成记录（2026-08-30）
+
+- 实现：将既有 WIP 补成可构建的 `crayon-page-data` workspace crate，冻结 `PageSnapshot` v1。Envelope 以 `TabId + SessionGeneration + revision` 形成稳定导航绑定，构造时固定 `SchemaVersion::CURRENT` 与 `browser_process` provenance；wire 解码执行二次 `validate()`。内容块为 heading/paragraph/list_item/link/image/table/code_block/divider/quote 九类闭合集合；URL 仅接受无 userinfo、无控制/空白/反斜杠的绝对 HTTP(S) 引用。standard/compact 的 block、单文本、总文本预算以及 table/code/list/title/URL 形状上限均有命名常量。
+- 截断与兼容：truncation 使用闭合 `TruncationReason` 列表，拒绝缺省原因、零 omitted、非截断却声明 omitted、重复原因和未知枚举；所有 struct/variant 拒绝未知字段。新增 current/previous `page_snapshot_v1.json`，逐字节镜像并由 roundtrip 测试锁定。v1 不携带采集时间、DOM/HTML/CDP、selector、对象指针或独立权限材料；采集、来源验证、缓存和 Markdown 均未越界进入本任务。
+- 测试：新增 7 项 CT-001/002/003 契约测试，覆盖九类块、golden、两级预算差异、危险 URL、伪造 provenance、未知字段、形状/截断异常和 512 组确定性畸形输入不 panic。
+- 验证：`cargo fmt --package crayon-page-data -- --check`、`cargo fmt --all -- --check` 通过；`cargo clippy -p crayon-page-data --all-targets -- -D warnings` 通过；`cargo test -p crayon-page-data` 7/7；`cargo test -p crayon-browser-core --lib` 3/3；`cargo test -p crayon-browser-core --no-default-features --features legacy-dev --lib` 58/58；`cargo test --workspace` 全部通过（Relay 2 个长稳测试按既有配置 ignored）；`bash scripts/check.sh fast` 通过；`bash scripts/check.sh security` 沙箱内首次因 loopback bind 返回 `Operation not permitted`，在获批的沙箱外同命令重跑通过；`git diff --check` 通过。
+- Code Review：按 v0.8 顺序复核需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试与可维护性。Review 关闭既有 WIP 的缺失 link 第九类块、开放 truncation bitmask、URL/Unicode 控制字符、可公开伪造 provenance helper 和 URL 校验热路径分配问题；最终 P0/P1/P2 = 0/0/0。`validate_block` 约 101 行触发一级提醒，保持为九类闭合 enum 的单一穷尽校验与字节计数入口，无锁/IO/回调；拆散会增加形状校验与总预算记账漂移风险。
+- 未覆盖与风险：Renderer 分块采集、Browser 来源/navigation 验证与取消归 `CNT-02`；owner/cache/旧 generation 归 `CNT-03`。无平台或真机门禁；`CNT-02` 依赖满足，转为 `READY`。

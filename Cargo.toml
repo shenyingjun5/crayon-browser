@@ -37,6 +37,7 @@ members = [
     "crates/crayon-legacy-adapter",
     "crates/crayon-media-probe",
     "crates/crayon-media-observer",
+    "crates/crayon-page-data",
     "crates/crayon-cast-policy",
     "crates/crayon-profile",
     "crates/crayon-platform-api",
