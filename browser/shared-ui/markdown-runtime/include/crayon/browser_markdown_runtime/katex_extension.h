@@ -34,6 +34,7 @@ struct P0MarkdownDocumentResult final {
   std::string safe_html;
   std::size_t decorated_code_blocks = 0;
   std::size_t math_placeholders = 0;
+  std::size_t mermaid_blocks = 0;
 };
 
 KatexSourceStatus ValidateKatexSource(const std::string& source);

@@ -199,6 +199,35 @@ foreach(alias_index RANGE 0 ${highlight_plaintext_last})
   string(APPEND HIGHLIGHT_PLAINTEXT_ALIASES "${plaintext_alias}")
 endforeach()
 
+set(mermaid_manifest
+    "${PROJECT_SOURCE_DIR}/third_party/mermaid/manifest.json")
+file(READ "${mermaid_manifest}" mermaid_manifest_json)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+             "${mermaid_manifest}")
+string(JSON mermaid_schema GET "${mermaid_manifest_json}" schema)
+string(JSON mermaid_package_name GET "${mermaid_manifest_json}" package name)
+string(JSON mermaid_package_version GET "${mermaid_manifest_json}" package
+       version)
+string(JSON mermaid_package_license GET "${mermaid_manifest_json}" package
+       license)
+string(JSON mermaid_entry GET "${mermaid_manifest_json}" policy entry)
+string(JSON mermaid_external GET "${mermaid_manifest_json}" policy
+       externalImports)
+string(JSON mermaid_network GET "${mermaid_manifest_json}" policy
+       networkImports)
+string(JSON mermaid_total_bytes GET "${mermaid_manifest_json}" policy
+       totalBytes)
+string(JSON mermaid_file_count LENGTH "${mermaid_manifest_json}" files)
+if(NOT mermaid_schema STREQUAL "crayon-mermaid-assets/v1" OR
+   NOT mermaid_package_name STREQUAL "mermaid" OR
+   NOT mermaid_package_version STREQUAL "11.17.2" OR
+   NOT mermaid_package_license STREQUAL "MIT" OR
+   NOT mermaid_entry STREQUAL "mermaid.esm.min.mjs" OR
+   NOT mermaid_external EQUAL 0 OR NOT mermaid_network EQUAL 0 OR
+   NOT mermaid_file_count EQUAL 104 OR NOT mermaid_total_bytes EQUAL 3522090)
+  message(FATAL_ERROR "Mermaid manifest violates the MDV-14 lock")
+endif()
+
 set(markdown_runtime_generated_dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
 file(MAKE_DIRECTORY "${markdown_runtime_generated_dir}")
 configure_file(
@@ -212,6 +241,7 @@ add_library(crayon-browser-markdown-runtime STATIC
   src/extension_registry.cc
   src/highlight_extension.cc
   src/katex_extension.cc
+  src/mermaid_extension.cc
   src/runtime_assets.cc
   src/runtime_session.cc
 )
@@ -315,4 +345,21 @@ if(CRAYON_BUILD_TESTS)
   endif()
   add_test(NAME markdown_runtime_katex
            COMMAND crayon_browser_markdown_runtime_katex_test)
+
+  add_executable(crayon_browser_markdown_runtime_mermaid_test
+    tests/mermaid_extension_test.cc
+  )
+  target_link_libraries(crayon_browser_markdown_runtime_mermaid_test
+    PRIVATE crayon::browser-markdown-runtime)
+  target_compile_features(crayon_browser_markdown_runtime_mermaid_test
+    PRIVATE cxx_std_17)
+  if(MSVC)
+    target_compile_options(crayon_browser_markdown_runtime_mermaid_test
+      PRIVATE /W4 /WX /permissive-)
+  else()
+    target_compile_options(crayon_browser_markdown_runtime_mermaid_test
+      PRIVATE -Wall -Wextra -Wpedantic -Werror)
+  endif()
+  add_test(NAME markdown_runtime_mermaid
+           COMMAND crayon_browser_markdown_runtime_mermaid_test)
 endif()

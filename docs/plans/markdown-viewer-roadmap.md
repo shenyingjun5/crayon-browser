@@ -33,7 +33,7 @@
 | MDV-12 | VERIFIED | MDV-10 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv`,`docs/current` | 编辑工具栏：15 项闭合动作（包裹/行前缀/骨架三类语义），复用既有编辑通道 | mdv_page 断言 + 实机交互验证 |
 | MDV-13 | VERIFIED | MDV-08..11 | `browser/shared-ui/markdown`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | 图片支持：云端 https 直载 + 本地受控序号路由（文档目录内、格式/大小白名单、路径不入 URL/DOM）+ CSP img-src 修订 | MD-002 图片矩阵 + 实机 |
 | MDV-14 | DONE | MDV-13 | `third_party/mermaid`,`tools`,`docs/current`,`docs/plans` | Mermaid Full 供应链冻结：固定 `mermaid` 11.17.2，vendor 完整浏览器运行时 import closure、LICENSE/NOTICE、hash/MIME/大小 manifest 与可重复生成/校验入口 | MD-008；离线 closure/许可/双次生成 hash |
-| MDV-15 | TODO | MDV-14,MRT-03 | `browser/shared-ui/markdown`,`browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv` | Mermaid adapter：标准 Mermaid fence → 通用 ExtensionNode、不透明 block/占位与有界 DSL；普通 Markdown 保持既有 md4c 安全输出 | MD-002、MD-009、MR-001/002；golden/注入/边界 |
+| MDV-15 | DONE | MDV-14,MRT-03 | `browser/shared-ui/markdown`,`browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv` | Mermaid adapter：标准 Mermaid fence → 通用 ExtensionNode、不透明 block/占位与有界 DSL；普通 Markdown 保持既有 md4c 安全输出 | MD-002、MD-009、MR-001/002；golden/注入/边界 |
 | MDV-16 | TODO | MDV-14,MRT-04 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv`,`browser/cef-shell/resources`,`browser/cef-shell/CMakeLists.txt` | Mermaid ESM 资产路由与打包：消费通用 manifest loader，精确路由、正确 MIME、相对 chunk import、macOS/Windows 同源资源装配；无图零加载 | MD-008、MR-003；路由攻击矩阵 + 离线 CEF smoke |
 | MDV-17 | TODO | MDV-15,MDV-16 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | Mermaid runtime 核心：按需 `import()`、单例初始化、`mermaid.render()`、strict 配置、独立 SVG policy gate、per-block 错误隔离与七类图覆盖 | MD-009；CSP/注入 golden + CEF render |
 | MDV-18 | TODO | MDV-17 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv`,`browser/shared-ui/locales` | 图表交互与主题：viewport lazy render、响应式宽度/横向滚动、浅深主题重绘、全屏查看/源码切换；零新特权 binding | MD-004、MD-009；键鼠/a11y/主题实机 |
@@ -301,7 +301,7 @@ MDV-02..06 按"模型层零 IO / 零 CEF 类型"交付后，产品仍不可见�
 
 ### MDV-15 原子范围（Mermaid Extension Adapter）
 
-- 状态：`TODO`；依赖 `MDV-14 VERIFIED`、`MRT-03 VERIFIED`。
+- 状态：`DONE`；依赖 `MDV-14 DONE`、`MRT-03 DONE`。
 - 单一目标：在 MRT 通用 ExtensionNode/registry 上注册唯一 Mermaid adapter，使精确 ```` ```mermaid ```` fence 变为安全占位 + 有界 DSL；其他 info string 继续是普通代码块，普通 Markdown golden 逐字节不回退。
 - 输入：MRT-02/03 的 ExtensionNode/registry、`RenderMarkdownToSafeHtml`、`MdvViewerModel` revision fencing、`MdvPageSnapshot`、契约 §6/7/15。
 - 允许修改：`browser/shared-ui/markdown/**`、`browser/shared-ui/markdown-runtime/**` 中 Mermaid adapter 注册点、`browser/shared-ui/mdv/**` 及对应独立测试；公共变化限 MDV/MRT 内部 DTO，不进入 `browser/engine-api`。
@@ -309,6 +309,15 @@ MDV-02..06 按"模型层零 IO / 零 CEF 类型"交付后，产品仍不可见�
 - 边界：block 数、单 DSL 字节与总 DSL 字节有命名上限；超界仅对应 block 降级安全代码块/错误占位，不使整篇文档崩溃；源码只作为文本，不进入 URL、HTML 属性、脚本字面量或日志。
 - 验收：`MD-002/009`；七类 DSL 均被识别为同一 `mermaid` kind；大小写/附加 token/未闭合 fence/嵌套 fence/HTML 注入/超界矩阵；旧 Markdown golden 全过；5000 步编辑 revision 风暴无旧 block 落位。
 - 明确不做：加载 Mermaid、输出 SVG、图表主题/交互、磁盘 cache。
+
+### MDV-15 完成记录（2026-08-29）
+
+- 实现：新增 `browser/shared-ui/markdown-runtime` 的 `mermaid_extension.{h,cc}`——闭合 `mermaid` fence adapter：单一精确大小写敏感 matcher（`{kFence, "mermaid"}`）、编译期 registry（manifest id `mermaid`、version 锁定 vendored `11.17.2`、output `kSvg`/policy `kSvgV1`、asset manifest `mermaid-runtime-assets-v1` 留待 MDV-16 接目录、capabilities 全 deny）；`ApplyMermaidDecorations` 对 P0 HTML 中每个预算内且路由成功的 fence 开标签加 inert 占位标记 `data-mdv-mermaid="true"` + `data-mdv-node="<revision 绑定 id>"`，DSL 保持转义文本，不进 URL/脚本字面量/日志。命名预算：单文档 64 block、单 block 64KiB、总量 512KiB，超界仅该 block 降级普通代码块，文档不失败；装饰器对已装饰/不匹配 HTML fail closed（字节不变）。P0 组装（`RenderP0MarkdownDocument`/`HighlightFallback`）统一接入，`P0MarkdownDocumentResult` 新增 `mermaid_blocks`。页面可见行为不变（mermaid fence 仍呈现代码块文本），占位 UI 与 SVG 渲染归 MDV-16/17。
+- CMake：manifest 锁检查（schema/包名/版本/许可/entry/externalImports/networkImports/文件数 104/总字节 3,522,090 任一漂移即 configure 失败）；新增 `mermaid_extension.cc` 与 `markdown_runtime_mermaid` 测试 target。
+- 失败基线：三处先失败后修复——测试暴露未闭合 fence 的 CommonMark 语义（md4c 将其上报为合法 fenced code block，测试期望从"不装饰"改为记录语义后断言装饰+转义）；已装饰 HTML 的二次装饰按 fail closed 处理（stale 组合断言改为字节不变）；风暴变异脚本自身破坏 fence（改为只变异 body 段落）。
+- 自动验证：`markdown_runtime_mermaid` 1/1（七类 DSL 同 kind + 独立 node id、大小写/附加 token/mermaidish 拒绝、未闭合/HTML 注入转义、单 block/数量预算降级、普通 Markdown 零回退、math+highlight+mermaid 三扩展组装、5000 步 revision 风暴无旧 block 落位且 stale 组合字节不变）；engine-api preset 全量 ctest 57/57；macOS arm64 CEF Debug 全量构建 + ctest 68/68；macOS x64 CEF 构建通过 + markdown/mdv scoped ctest 16/16；`scripts/check.sh fast`/`security`、`git diff --check`、新增行 ≤80 列通过。
+- Code Review：按 v0.8 复核需求/边界、正确性、架构/API、安全/隐私、性能、测试和可维护性；P0/P1/P2=0。装饰对齐用顺序 cursor 而非全局查找（多 fence 无歧义）；node id 为定宽 hex 可安全入属性；预算拒绝只降级不失败。
+- 未覆盖与风险：Mermaid ESM 资源路由与打包（MDV-16）、页面占位 UI/动态 import/渲染与 SVG policy gate（MDV-17）、主题/交互（MDV-18）未做；`mermaid-runtime-assets-v1` 目录尚未注册资产目录（MDV-16 消费）。`MDV-15` 转为 `DONE`。
 
 ### MDV-16 原子范围（Mermaid ESM 资产路由与跨平台打包）
 

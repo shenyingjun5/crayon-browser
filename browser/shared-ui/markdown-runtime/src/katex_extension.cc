@@ -11,6 +11,7 @@
 #include "crayon/browser_markdown/markdown_math_facts.h"
 #include "crayon/browser_markdown_runtime/extension_registry.h"
 #include "crayon/browser_markdown_runtime/highlight_extension.h"
+#include "crayon/browser_markdown_runtime/mermaid_extension.h"
 #include "katex_assets_generated.h"
 
 namespace crayon::browser_markdown_runtime {
@@ -182,6 +183,13 @@ P0MarkdownDocumentResult HighlightFallback(
           : facts_status;
   result.safe_html = highlighted.safe_html;
   result.decorated_code_blocks = highlighted.decorated_blocks;
+  if (result.render_status == browser_markdown::RenderStatus::kOk) {
+    const MermaidDecorationResult mermaid = ApplyMermaidDecorations(
+        &result.safe_html, input, document_generation, source_revision);
+    if (mermaid.applied) {
+      result.mermaid_blocks = mermaid.decorated_blocks;
+    }
+  }
   return result;
 }
 
@@ -364,12 +372,22 @@ P0MarkdownDocumentResult RenderP0MarkdownDocument(
     html.replace(found, needle.size(), PlaceholderFor(fact));
   }
 
+  // Mermaid fences survive math masking untouched; mark them on the composed
+  // HTML so the page runtime can address each block by its opaque node ID.
+  std::size_t mermaid_blocks = 0;
+  const MermaidDecorationResult mermaid = ApplyMermaidDecorations(
+      &html, input, document_generation, source_revision);
+  if (mermaid.applied) {
+    mermaid_blocks = mermaid.decorated_blocks;
+  }
+
   P0MarkdownDocumentResult result;
   result.render_status = highlighted.render_status;
   result.facts_status = math.facts_status;
   result.safe_html = std::move(html);
   result.decorated_code_blocks = highlighted.decorated_blocks;
   result.math_placeholders = selected.size();
+  result.mermaid_blocks = mermaid_blocks;
   return result;
 }
 
