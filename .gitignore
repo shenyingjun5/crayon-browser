@@ -8,3 +8,5 @@ demo/gen/
 .cache/cef-archives/
 __pycache__/
 .zcode/
+.cache/
+.workbuddy/
