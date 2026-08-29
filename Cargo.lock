@@ -473,6 +473,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "crayon-content-extract"
+version = "0.1.0"
+dependencies = [
+ "crayon-page-data",
+]
+
+[[package]]
 name = "crayon-domain"
 version = "0.1.0"
 dependencies = [

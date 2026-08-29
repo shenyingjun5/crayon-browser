@@ -1,0 +1,13 @@
+[package]
+name = "crayon-content-extract"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Deterministic bounded main-content extraction for verified page facts"
+publish = false
+
+[dependencies]
+crayon-page-data = { path = "../crayon-page-data" }
+
+[lints]
+workspace = true

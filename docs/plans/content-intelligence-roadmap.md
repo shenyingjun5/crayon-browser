@@ -1,6 +1,6 @@
 # CNT 页面数据、Markdown 与第二阶段模型 Roadmap
 
-- 状态：C1 执行中；`CNT-01..03 DONE`，`CNT-04 READY`
+- 状态：C1 执行中；`CNT-01..04 DONE`，`CNT-05 READY`
 - 任务数：16
 - C1 开始门禁：`CEF-15`、`BUX-18`、`SDK-14`、`MED-19`、`PRV-08`
 - M2 开始门禁：`CNT-10`、`AGT-16`、`PRV-13`
@@ -19,8 +19,8 @@
 | CNT-01 | DONE | CEF-15,BUX-18,SDK-14,MED-19,PRV-08 | `crayon-content-contract/**`,`crayon-page-data/**` | 定义 `PageSnapshot`、结构块、provenance、revision、截断与资源上限 | `CT-001`,`CT-002`; schema/golden | C1 |
 | CNT-02 | DONE | CNT-01,CEF-01B | `browser/engine-api/**`,`apps/desktop-cef/**`,`crayon-browser-gateway/**` | 在跨引擎接口增加有界 snapshot stream/cancel，并实现 Renderer 分块采集与 Browser 来源/navigation验证 | `CT-001`,`CT-002`,`CT-007`; interface contract/integration | C1 |
 | CNT-03 | DONE | CNT-02 | `crayon-page-data/**`,`crayon-app-runtime/**` | snapshot owner、generation 缓存、取消、分页和旧结果丢弃 | `CT-002`,`CT-007`; integration | C1 |
-| CNT-04 | READY | CNT-03 | `crayon-content-extract/**` | 确定性主正文、阅读顺序和结构块识别 | `CT-003`,`CT-008`; fixture/unit | C1 |
-| CNT-05 | TODO | CNT-04 | `crayon-content-markdown/**` | 标准 Markdown 转换与稳定转义 | `CT-003`,`CT-004`; golden | C1 |
+| CNT-04 | DONE | CNT-03 | `crayon-content-extract/**` | 确定性主正文、阅读顺序和结构块识别 | `CT-003`,`CT-004`; fixture/unit | C1 |
+| CNT-05 | READY | CNT-04 | `crayon-content-markdown/**` | 标准 Markdown 转换与稳定转义 | `CT-003`,`CT-004`; golden | C1 |
 | CNT-06 | TODO | CNT-05 | `crayon-content-markdown/**` | 列表、引用、代码、表格、链接和图片引用规范化 | `CT-004`,`CT-005`; golden/security | C1 |
 | CNT-07 | TODO | CNT-03,CNT-06 | `crayon-page-data/**`,`tests/perf/content/**` | 字段索引、增量 revision、流式/背压和 C1 性能基线 | `CT-006`,`CT-008`; benchmark/soak | C1 |
 | CNT-08 | TODO | CNT-06,CNT-07,PRV-08 | `apps/desktop-cef/**`,`crayon-platform-api/**` | 本地预览、复制、保存、取消、覆盖和失败反馈 | `CT-005`,`CT-006`; UI integration | C1 |
@@ -109,3 +109,24 @@
 - 验证：`cargo clippy -p crayon-page-data -p crayon-app-runtime --all-targets -- -D warnings`、`cargo fmt --all -- --check` 通过；`cargo test -p crayon-page-data` 14/14；`cargo test -p crayon-app-runtime --lib` 11/11；`cargo test --workspace` 全部通过（Relay 2 个长稳测试按既有配置 ignored）；`bash scripts/check.sh fast` 与 `bash scripts/check.sh security` 通过；`git diff --check` 通过。
 - Code Review：按 v0.8 复核需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试与可维护性；最终 P0/P1/P2 = 0/0/0。所有集合和单页 clone 均有常数上限，状态机不保存 DOM/HTML/CDP，不新增线程、持久化或 IO。
 - 未覆盖与风险：增量字段索引、流式性能基线归 `CNT-07`；正文识别进入 `CNT-04 READY`。跨进程 IPC 编解码、UI 与文件写入仍不在本任务范围；无平台或真机门禁。
+
+## CNT-04 原子范围（确定性主正文与阅读顺序）
+
+- 状态：`DONE`；依赖 `CNT-03 DONE`。
+- 验收编号校正：原任务行写 `CT-003,CT-008`，但权威 `docs/current/test-cases.md` 中主正文、阅读顺序、空页/导航页/重复节点/无限列表是 `CT-004`；`CT-008` 是预览导航/标签/Profile 生命周期，generation 栅栏由 `CNT-03` 提供、UI 验收归 `CNT-08`。本任务按 `CT-003,CT-004` 执行并已同步任务行。
+- 单一目标：新增纯 Rust、无 IO 的 `crayon-content-extract`，从 Browser 已规范化的可见语义事实中确定性选择主内容区域，按稳定 section/column/row/source 顺序输出 CNT-01 的闭合 `ContentBlock`，并显式统计隐藏、跨源、敏感、非正文、重复、危险引用和预算丢弃。
+- 输入：CNT-02 Browser 验证后的主 frame/current navigation/同源可见事实语义，CNT-01 九类 block/两级预算，CT-003/004；输入不包含 DOM/HTML/selector/CEF handle、表单值、脚本源码、Cookie、Authorization 或页面存储。
+- 输出与允许修改：新 crate `crates/crayon-content-extract/**`、workspace member 和本 Roadmap。公开闭合 region/privacy/content fact、稳定 reading key、提取结果/排除计数和错误；不修改 `PageSnapshot` v1 schema。
+- 禁止修改：Renderer/Browser IPC、page-data owner/app-runtime、Markdown、UI/locales、文件/网络；不得引入 DOM parser、站点规则、模型、第三方依赖或持久化。
+- 边界：standard/compact 最多消费 4096/512 source facts，超出部分计入 budget omission；只保留 visible + same-origin + public facts。主区域按闭合 semantic region、有效文本量、结构块数和 link density 的常数有界评分选择，稳定 tie-break 使用 region id；navigation/header/footer/complementary 不得成为主正文。重复 node id 只取 reading key 最小的一项；危险 link/image URL、空/超限形状不输出。排序只使用整数 key，不读取布局对象或运行时 locale。
+- 验收与测试：fixture/unit 覆盖 CT-003/004 的密码/隐藏/跨源/危险 URL、长文/多栏、空页、纯导航、重复节点、无限列表、区域 tie-break、九类结构与两级预算；package test/clippy/fmt、workspace/fast/security 回归和 `git diff --check`。
+- 明确不做：Markdown 序列化/转义（CNT-05/06）、增量 revision/字段索引/streaming benchmark（CNT-07）、预览导航/UI/无障碍（CNT-08）、真实 DOM/CEF 接线或平台真机门禁。
+
+### CNT-04 完成记录（2026-08-30）
+
+- 实现：新增 `crayon-content-extract` 纯 Rust crate，输入仅为 Browser 规范化的闭合语义 fact；以 main/article/unknown 闭合 region、有效文本量、结构块数和 link density 进行常数有界评分，稳定 tie-break 选择主区域，并按 section/column/row/source key 输出 CNT-01 九类 `ContentBlock`。navigation/header/footer/complementary 永不成为主正文，unknown 的纯链接区域同样明确排除。
+- 安全与预算：仅处理 visible + same-origin + public fact；隐藏、跨源、敏感控件、危险 URL、空/畸形/超限结构、重复 node id 和非正文区域均不输出且分别计数。standard/compact 输入上限 4096/512，输出同时执行对应 block、单字段与总文本预算；被截事实数和字节数显式记录。API 不可表达 DOM/HTML/selector/脚本/表单值/CEF handle，无 IO、线程、锁、网络、站点规则或第三方依赖。
+- 测试：10 项 fixture/unit 覆盖 CT-003/004 的敏感/隐藏/跨源/危险 URL、长文多栏稳定排序、空页、显式/unknown 纯导航、重复节点、无限列表、区域 tie-break、九类结构、畸形形状和两级 source/total-byte 预算。
+- 验证：`cargo test -p crayon-content-extract` 10/10；`cargo clippy -p crayon-content-extract --all-targets -- -D warnings`、`cargo fmt --all -- --check` 通过；`cargo test --workspace` 全部通过（沙箱内首次因既有 loopback 测试 `Operation not permitted`，沙箱外重跑通过，Relay 2 个长稳测试按既有配置 ignored）；`bash scripts/check.sh fast` 与 `bash scripts/check.sh security` 通过；`git diff --check` 通过。
+- Code Review：按 v0.8 完成需求/边界、正确性、架构/API、安全/隐私、性能、测试和可维护性审查；期间补齐总文本预算、omitted bytes 与 unknown 纯链接导航拒绝，最终 P0/P1/P2 = 0/0/0。排序/分组均受 4096/512 上限约束，无锁内调用、递归、日志或整树重复序列化。
+- 未覆盖与风险：真实 Renderer/Browser 语义 fact 接线不在本纯算法任务；Markdown 转换进入 `CNT-05 READY`，列表/表格/链接等规范化归 `CNT-06`，预览生命周期和无障碍归 `CNT-08`。无平台或真机门禁。
