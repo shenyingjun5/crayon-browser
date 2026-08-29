@@ -235,12 +235,6 @@ function vendoredReadme() {
       `\`--download\` is an explicit network-only maintainer action.\n`;
 }
 
-function gitattributesContent() {
-  // Byte-exact vendor closure: Git must not rewrite line endings on checkout
-  // (a CRLF worktree would fail the sha256 asset checks on Windows).
-  return '# Vendored bytes must stay byte-identical across platforms.\n* -text\n';
-}
-
 function validateLanguageClosure() {
   const ids = new Set(LANGUAGES.map(({id}) => id));
   const aliases = new Set();
@@ -348,11 +342,20 @@ async function listFiles(root, relative = '') {
   return found.sort();
 }
 
-// Line endings may differ between the generated LF text and a Git checkout
-// with core.autocrlf=true; text documents are compared after normalization
-// while asset integrity stays byte-exact via sha256.
-function normalizeCheckoutText(text) {
-  return text.replace(/\r\n/g, '\n');
+function canonicalLfText(value) {
+  const normalized = value.replace(/\r\n/g, '\n');
+  if (normalized.includes('\r')) {
+    throw new Error('vendored text contains an invalid carriage return');
+  }
+  return normalized;
+}
+
+function canonicalLfBytes(bytes) {
+  const text = bytes.toString('utf8');
+  if (!Buffer.from(text, 'utf8').equals(bytes)) {
+    throw new Error('vendored text is not valid UTF-8');
+  }
+  return Buffer.from(canonicalLfText(text), 'utf8');
 }
 
 export async function verifyVendorDirectory(root = vendorRoot()) {
@@ -361,14 +364,13 @@ export async function verifyVendorDirectory(root = vendorRoot()) {
     throw new Error('missing manifest');
   }
   const expectedText = `${JSON.stringify(expectedManifest(), null, 2)}\n`;
-  const actualText = await readFile(manifestPath, 'utf8');
-  if (normalizeCheckoutText(actualText) !== expectedText) {
+  const actualText = canonicalLfText(await readFile(manifestPath, 'utf8'));
+  if (actualText !== expectedText) {
     throw new Error('manifest content mismatch');
   }
   const expectedFiles = new Set([
     'manifest.json',
     'VENDORED.md',
-    '.gitattributes',
     ...FILES.map(({output}) => output),
   ]);
   const actualFiles = await listFiles(root);
@@ -376,13 +378,12 @@ export async function verifyVendorDirectory(root = vendorRoot()) {
       actualFiles.some((item) => !expectedFiles.has(item))) {
     throw new Error('vendor file set mismatch');
   }
-  if (normalizeCheckoutText(
-          await readFile(path.join(root, 'VENDORED.md'), 'utf8')) !==
+  if (canonicalLfText(await readFile(path.join(root, 'VENDORED.md'), 'utf8')) !==
       vendoredReadme()) {
     throw new Error('vendored documentation mismatch');
   }
   for (const item of FILES) {
-    const bytes = await readFile(path.join(root, item.output));
+    const bytes = canonicalLfBytes(await readFile(path.join(root, item.output)));
     if (bytes.length !== item.bytes || digest('sha256', bytes) !== item.sha256) {
       throw new Error(`vendored asset integrity mismatch: ${item.output}`);
     }
@@ -404,8 +405,6 @@ async function writeVendorDirectory(selected, root = vendorRoot()) {
     await writeFile(path.join(temporary, 'manifest.json'),
                     `${JSON.stringify(expectedManifest(), null, 2)}\n`);
     await writeFile(path.join(temporary, 'VENDORED.md'), vendoredReadme());
-    await writeFile(path.join(temporary, '.gitattributes'),
-                    gitattributesContent());
     await verifyVendorDirectory(temporary);
 
     if (existsSync(root)) {

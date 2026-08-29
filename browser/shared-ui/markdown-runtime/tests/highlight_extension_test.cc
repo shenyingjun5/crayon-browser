@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -31,6 +32,11 @@ bool LanguageResolutionIsExactAndClosed() {
   CHECK(ResolveHighlightFence("c++").canonical_id == "cpp");
   CHECK(ResolveHighlightFence("c#").canonical_id == "csharp");
   CHECK(ResolveHighlightFence("py").canonical_id == "python");
+  const auto javascript = ResolveHighlightFence("js");
+  CHECK(javascript.kind == HighlightFenceKind::kGrammar);
+  CHECK(javascript.canonical_id == "javascript");
+  CHECK(javascript.load_order ==
+        std::vector<std::string>({"css", "graphql", "xml", "javascript"}));
   CHECK(ResolveHighlightFence("plaintext").kind ==
         HighlightFenceKind::kPlaintext);
   CHECK(ResolveHighlightFence("CPP").kind == HighlightFenceKind::kUnsupported);
@@ -56,6 +62,8 @@ bool DocumentDecorationKeepsFallbacksAndSourceAsText() {
         std::string::npos);
   CHECK(result.safe_html.find("data-mdv-highlight=\"python\"") !=
         std::string::npos);
+  CHECK(result.safe_html.find("class=\"language-cpp hljs\"") ==
+        std::string::npos);
   CHECK(result.safe_html.find("data-mdv-highlight=\"plaintext\"") ==
         std::string::npos);
   CHECK(result.safe_html.find("data-mdv-highlight=\"unknown\"") ==
@@ -66,6 +74,40 @@ bool DocumentDecorationKeepsFallbacksAndSourceAsText() {
   const auto ordinary = RenderHighlightDocument("# Title\n\ntext\n", 7, 12);
   CHECK(ordinary.decorated_blocks == 0);
   CHECK(ordinary.safe_html.find("data-mdv-highlight") == std::string::npos);
+  return true;
+}
+
+bool WindowsViewerFixtureKeepsKnownFencesDecorated() {
+  std::string input =
+      "# MRT-06 Windows Reproduction\n\n"
+      "```cpp\nint main() { return 0; }\n```\n\n"
+      "```plaintext\nconst plaintext = true;\n```\n\n"
+      "```not-a-language\nconst unknown = true;\n```\n\n"
+      "```javascript\nconst hostile = \"<img src=x><script>x</script>\";\n```\n\n";
+  for (int index = 0; index < 10; ++index) {
+    input += "## Spacer\n\nViewport lazy verification spacer.\n\n";
+  }
+  input +=
+      "```js\nconst lazyAlias = (value) => value?.trim();\n```\n\n"
+      "```c#\npublic sealed class AliasSample {}\n```\n";
+
+  const auto result = RenderHighlightDocument(input, 1, 2);
+  CHECK(result.render_status == crayon::browser_markdown::RenderStatus::kOk);
+  CHECK(result.facts_status ==
+        crayon::browser_markdown::ExtensionFactsStatus::kComplete);
+  CHECK(result.decorated_blocks == 4);
+  CHECK(result.safe_html.find("data-mdv-highlight=\"cpp\"") !=
+        std::string::npos);
+  CHECK(result.safe_html.find("data-mdv-highlight=\"javascript\"") !=
+        std::string::npos);
+  CHECK(result.safe_html.find("data-mdv-highlight=\"csharp\"") !=
+        std::string::npos);
+  CHECK(result.safe_html.find("data-mdv-highlight=\"plaintext\"") ==
+        std::string::npos);
+  CHECK(result.safe_html.find("data-mdv-highlight=\"not-a-language\"") ==
+        std::string::npos);
+  CHECK(result.safe_html.find("<img src=x>") == std::string::npos);
+  CHECK(result.safe_html.find("<script>x</script>") == std::string::npos);
   return true;
 }
 
@@ -89,6 +131,7 @@ bool AssetsAreEmbeddedInTheClosedCatalog() {
 int main() {
   if (!LanguageResolutionIsExactAndClosed() ||
       !DocumentDecorationKeepsFallbacksAndSourceAsText() ||
+      !WindowsViewerFixtureKeepsKnownFencesDecorated() ||
       !AssetsAreEmbeddedInTheClosedCatalog()) {
     return EXIT_FAILURE;
   }

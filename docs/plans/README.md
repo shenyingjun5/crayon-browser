@@ -26,7 +26,7 @@
 | CEF | [desktop-cef-browser-roadmap.md](desktop-cef-browser-roadmap.md) | Windows/macOS CEF 壳、共享 UI、媒体观察和 IPC | `CEF-01..15 全部完成`（`CEF-06..14` 模型层 VERIFIED，实机接线归后续装配/切片任务）；Windows 总 Review 证据已补齐 |
 | BUX | [browser-product-experience-roadmap.md](browser-product-experience-roadmap.md) | Chrome-inspired 蜡笔桌面浏览器 UI 与日用基础功能 | `BUX-01..18 DONE`（BUX-17/18 2026-08-26） |
 | MDV | [markdown-viewer-roadmap.md](markdown-viewer-roadmap.md) | 本地 Markdown Runtime：查看/编辑/保存、图标工具栏、图片与 Mermaid Full 离线扩展 | 基线 `MDV-01..13` 已实现/验证；工具栏 `MDV-21..23 DONE`、`MDV-24 VERIFIED`（macOS arm64 与 Windows x64 主矩阵已闭合，Windows Debug/Release 65/65；Narrator、中文 IME 组合态、原生 OS 200% DPI 与原生 macOS x64 待补）；Mermaid `14..20` 保持独立依赖波次 |
-| MRT | [markdown-runtime-roadmap.md](markdown-runtime-roadmap.md) | Markdown Runtime Extension Framework：闭合扩展 API、Highlight/KaTeX 与后续图表/演示门禁 | `MRT-01..05 DONE`，`MRT-06 VERIFIED`（2026-08-29 P1/P2 修复已落地：CORS_ENABLED、失败标记/有界重试、hljs class、vendor CRLF；**Windows 真机复验待运行**），`MRT-07..08 DONE`；`MRT-06..09` 为 P0，`10..19` 分波次推进或仅做 gap analysis |
+| MRT | [markdown-runtime-roadmap.md](markdown-runtime-roadmap.md) | Markdown Runtime Extension Framework：闭合扩展 API、Highlight/KaTeX 与后续图表/演示门禁 | `MRT-01..08 DONE`（MRT-06 Windows blocker 修复与真机复验已收口，2026-08-29 合并）；`MRT-09..19` 分波次推进或仅做 gap analysis |
 | SDK | [cast-sdk-integration-roadmap.md](cast-sdk-integration-roadmap.md) | 固定源码 Cast-SDK facade、发现、连接和控制；后续 Partner Cast facade | `SDK-13 BLOCKED`（需真实接收端 Harness） |
 | PLT | [desktop-platform-adapters-roadmap.md](desktop-platform-adapters-roadmap.md) | Windows/macOS 存储、网络、生命周期、更新和客户端交接 | `PLT-01` |
 | PRV | [privacy-security-roadmap.md](privacy-security-roadmap.md) | Profile、隐私、安全、日志和删除语义 | `PRV-01` |

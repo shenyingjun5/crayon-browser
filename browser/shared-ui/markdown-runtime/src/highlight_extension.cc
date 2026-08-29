@@ -48,7 +48,11 @@ bool AppendLoadOrder(std::string_view canonical_id,
     return true;
   }
   if (visiting->find(id) != visiting->end()) {
-    return false;
+    // Highlight.js grammars may declare cyclic sub-language relationships
+    // (for example javascript <-> xml).  Registration is deferred until the
+    // full closed load order is available, so an active edge is already
+    // accounted for and must not disable the whole document.
+    return true;
   }
   const auto* language = FindLanguage(canonical_id);
   if (language == nullptr) {
@@ -131,7 +135,7 @@ bool DecorateCodeBlocks(const browser_markdown::MarkdownRenderPlan& plan,
         "<pre><code class=\"language-" + original_matchers[index] + "\">";
     const std::string decorated =
         "<pre><code class=\"language-" + original_matchers[index] +
-        " hljs\" data-mdv-highlight=\"" + language.canonical_id +
+        "\" data-mdv-highlight=\"" + language.canonical_id +
         "\" data-mdv-node=\"" + node.node_id + "\">";
     html->replace(openings[index], opening.size(), decorated);
   }
