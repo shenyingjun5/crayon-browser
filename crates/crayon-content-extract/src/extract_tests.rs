@@ -156,7 +156,7 @@ fn ct_004_infinite_list_is_bounded_with_explicit_omissions() {
             same_origin: true,
             privacy: PrivacyClass::Public,
             content: SourceContent::ListItem {
-                depth: 0,
+                depth: 1,
                 ordinal: None,
                 text: format!("item {index}"),
             },
@@ -253,6 +253,11 @@ fn malformed_shapes_are_omitted_without_panicking() {
             text: "bad".into(),
         },
         SourceContent::ListItem {
+            depth: 0,
+            ordinal: None,
+            text: "bad".into(),
+        },
+        SourceContent::ListItem {
             depth: 9,
             ordinal: Some(0),
             text: "bad".into(),
@@ -280,7 +285,7 @@ fn malformed_shapes_are_omitted_without_panicking() {
     facts.push(paragraph(99, 1, RegionKind::Main, "valid"));
     let result = extract_main_content(OutputLevel::Standard, facts).unwrap();
     assert_eq!(result.blocks.len(), 1);
-    assert_eq!(result.exclusions.unsafe_or_invalid, 4);
+    assert_eq!(result.exclusions.unsafe_or_invalid, 5);
 }
 
 #[test]

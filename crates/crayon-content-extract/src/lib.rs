@@ -286,7 +286,7 @@ fn valid_content(level: OutputLevel, content: &SourceContent) -> bool {
             ordinal,
             text,
         } => {
-            *depth <= limits::MAX_LIST_DEPTH
+            (1..=limits::MAX_LIST_DEPTH).contains(depth)
                 && ordinal.is_none_or(|value| value > 0)
                 && valid_text(text, max_text)
         }

@@ -128,7 +128,7 @@
 - 安全与预算：仅处理 visible + same-origin + public fact；隐藏、跨源、敏感控件、危险 URL、空/畸形/超限结构、重复 node id 和非正文区域均不输出且分别计数。standard/compact 输入上限 4096/512，输出同时执行对应 block、单字段与总文本预算；被截事实数和字节数显式记录。API 不可表达 DOM/HTML/selector/脚本/表单值/CEF handle，无 IO、线程、锁、网络、站点规则或第三方依赖。
 - 测试：10 项 fixture/unit 覆盖 CT-003/004 的敏感/隐藏/跨源/危险 URL、长文多栏稳定排序、空页、显式/unknown 纯导航、重复节点、无限列表、区域 tie-break、九类结构、畸形形状和两级 source/total-byte 预算。
 - 验证：`cargo test -p crayon-content-extract` 10/10；`cargo clippy -p crayon-content-extract --all-targets -- -D warnings`、`cargo fmt --all -- --check` 通过；`cargo test --workspace` 全部通过（沙箱内首次因既有 loopback 测试 `Operation not permitted`，沙箱外重跑通过，Relay 2 个长稳测试按既有配置 ignored）；`bash scripts/check.sh fast` 与 `bash scripts/check.sh security` 通过；`git diff --check` 通过。
-- Code Review：按 v0.8 完成需求/边界、正确性、架构/API、安全/隐私、性能、测试和可维护性审查；期间补齐总文本预算、omitted bytes 与 unknown 纯链接导航拒绝，最终 P0/P1/P2 = 0/0/0。排序/分组均受 4096/512 上限约束，无锁内调用、递归、日志或整树重复序列化。
+- Code Review：按 v0.8 完成需求/边界、正确性、架构/API、安全/隐私、性能、测试和可维护性审查；期间补齐总文本预算、omitted bytes 与 unknown 纯链接导航拒绝；CNT-05 跨任务接口复核又关闭 source list depth `0` 与 PageSnapshot `1..=8` 不一致的问题并补回归。最终 P0/P1/P2 = 0/0/0。排序/分组均受 4096/512 上限约束，无锁内调用、递归、日志或整树重复序列化。
 - 未覆盖与风险：真实 Renderer/Browser 语义 fact 接线不在本纯算法任务；Markdown 转换进入 `CNT-05 READY`，列表/表格/链接等规范化归 `CNT-06`，预览生命周期和无障碍归 `CNT-08`。无平台或真机门禁。
 
 ## CNT-05 原子范围（确定性 Markdown 与基础转义）
