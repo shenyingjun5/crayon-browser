@@ -1,0 +1,14 @@
+[package]
+name = "crayon-content-markdown"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Deterministic bounded Markdown rendering for verified page snapshots"
+publish = false
+
+[dependencies]
+crayon-domain = { path = "../crayon-domain" }
+crayon-page-data = { path = "../crayon-page-data" }
+
+[lints]
+workspace = true

@@ -480,6 +480,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "crayon-content-markdown"
+version = "0.1.0"
+dependencies = [
+ "crayon-domain",
+ "crayon-page-data",
+]
+
+[[package]]
 name = "crayon-domain"
 version = "0.1.0"
 dependencies = [

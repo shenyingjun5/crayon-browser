@@ -33,6 +33,7 @@ members = [
     "crates/crayon-capability-hub",
     "crates/crayon-cast-adapter",
     "crates/crayon-content-extract",
+    "crates/crayon-content-markdown",
     "crates/crayon-domain",
     "crates/crayon-ipc-schema",
     "crates/crayon-legacy-adapter",
