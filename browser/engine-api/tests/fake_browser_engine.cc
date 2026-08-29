@@ -33,6 +33,8 @@ CommandResult FakeBrowserEngine::Stop() noexcept {
   tabs_.clear();
   subscriptions_.clear();
   pending_permissions_.clear();
+  snapshots_.clear();
+  pending_snapshot_events_.clear();
   return CommandResult::Accepted();
 }
 
@@ -111,6 +113,8 @@ CommandResult FakeBrowserEngine::CloseTab(const TabId& tab_id) {
     return CommandResult::Rejected(EngineErrorCode::kNotFound);
   }
   const auto profile_id = tab->second.profile_id;
+  TerminateSnapshots(tab_id, SnapshotTerminalStatus::kCancelled,
+                     EngineErrorCode::kNone);
   std::vector<SubscriptionId> removed_subscriptions;
   for (const auto& item : subscriptions_) {
     if (item.second.tab_id == tab_id) {
@@ -215,6 +219,124 @@ CommandResult FakeBrowserEngine::Unsubscribe(
   return CommandResult::Accepted();
 }
 
+CommandResult FakeBrowserEngine::StartSnapshot(const SnapshotRequest& request,
+                                               SnapshotStreamSink& sink) {
+  if (const auto state = RequireTab(request.tab_id); !state.accepted()) {
+    return state;
+  }
+  if (!IsValid(request.mode)) {
+    return CommandResult::Rejected(EngineErrorCode::kInvalidArgument);
+  }
+  if (request.navigation_id.value() == 0 ||
+      !IsCurrentNavigation(request.tab_id, request.navigation_id)) {
+    return CommandResult::Rejected(EngineErrorCode::kStaleNavigation);
+  }
+  if (snapshots_.count(request.request_id) != 0 ||
+      retired_snapshots_.count(request.request_id) != 0) {
+    return CommandResult::Rejected(EngineErrorCode::kAlreadyExists);
+  }
+  if (snapshots_.size() >= kMaxSnapshotStreams) {
+    return CommandResult::Rejected(EngineErrorCode::kCapacityExceeded);
+  }
+  snapshots_.emplace(request.request_id,
+                     SnapshotState{request, &sink, 0, 0, 0, false});
+  return CommandResult::Accepted();
+}
+
+CommandResult FakeBrowserEngine::CancelSnapshot(
+    const SnapshotRequestId& request_id) {
+  if (const auto state = RequireRunning(); !state.accepted()) {
+    return state;
+  }
+  if (retired_snapshots_.count(request_id) != 0) {
+    return CommandResult::Accepted();
+  }
+  const auto snapshot = snapshots_.find(request_id);
+  if (snapshot == snapshots_.end()) {
+    return CommandResult::Rejected(EngineErrorCode::kNotFound);
+  }
+  TerminateSnapshot(request_id, SnapshotTerminalStatus::kCancelled,
+                    EngineErrorCode::kNone);
+  return CommandResult::Accepted();
+}
+
+CommandResult FakeBrowserEngine::EmitSnapshotChunk(const SnapshotChunk& chunk) {
+  const auto snapshot = snapshots_.find(chunk.request_id);
+  if (snapshot == snapshots_.end()) {
+    return CommandResult::Rejected(EngineErrorCode::kNotFound);
+  }
+  auto& state = snapshot->second;
+  if (!IsValid(chunk, state.request.mode)) {
+    return CommandResult::Rejected(EngineErrorCode::kInvalidArgument);
+  }
+  const auto tab = tabs_.find(chunk.tab_id);
+  if (chunk.sequence == 0 &&
+      (tab == tabs_.end() || !tab->second.current_url.has_value() ||
+       !(chunk.document->url == *tab->second.current_url))) {
+    return CommandResult::Rejected(EngineErrorCode::kStaleNavigation);
+  }
+  std::size_t chunk_fact_bytes = 0;
+  for (const auto& fact : chunk.facts) {
+    const auto fact_bytes = SnapshotFactByteSize(fact);
+    if (!fact_bytes.has_value()) {
+      return CommandResult::Rejected(EngineErrorCode::kInvalidArgument);
+    }
+    chunk_fact_bytes += *fact_bytes;
+  }
+  if (chunk.facts.size() >
+          SnapshotModeMaxFacts(state.request.mode) - state.fact_count ||
+      chunk_fact_bytes >
+          SnapshotModeMaxBytes(state.request.mode) - state.byte_count) {
+    return CommandResult::Rejected(EngineErrorCode::kCapacityExceeded);
+  }
+  if (state.terminal_queued || chunk.tab_id != state.request.tab_id ||
+      chunk.navigation_id != state.request.navigation_id ||
+      chunk.sequence != state.next_sequence ||
+      chunk.sequence >= kMaxSnapshotChunks) {
+    return CommandResult::Rejected(EngineErrorCode::kInvalidArgument);
+  }
+  ++state.next_sequence;
+  state.fact_count += chunk.facts.size();
+  state.byte_count += chunk_fact_bytes;
+  pending_snapshot_events_.push_back([this, chunk]() {
+    const auto current = snapshots_.find(chunk.request_id);
+    if (current != snapshots_.end() &&
+        IsCurrentNavigation(chunk.tab_id, chunk.navigation_id)) {
+      current->second.sink->OnSnapshotChunk(chunk);
+    }
+  });
+  return CommandResult::Accepted();
+}
+
+CommandResult FakeBrowserEngine::CompleteSnapshot(
+    const SnapshotRequestId& request_id) {
+  const auto snapshot = snapshots_.find(request_id);
+  if (snapshot == snapshots_.end()) {
+    return CommandResult::Rejected(EngineErrorCode::kNotFound);
+  }
+  if (snapshot->second.next_sequence == 0) {
+    return CommandResult::Rejected(EngineErrorCode::kInvalidState);
+  }
+  if (snapshot->second.terminal_queued) {
+    return CommandResult::Accepted();
+  }
+  snapshot->second.terminal_queued = true;
+  const auto request = snapshot->second.request;
+  pending_snapshot_events_.push_back([this, request]() {
+    const auto current = snapshots_.find(request.request_id);
+    if (current == snapshots_.end()) {
+      return;
+    }
+    auto* sink = current->second.sink;
+    snapshots_.erase(current);
+    retired_snapshots_.insert(request.request_id);
+    sink->OnSnapshotTerminal(SnapshotTerminal{
+        request.request_id, request.tab_id, request.navigation_id,
+        SnapshotTerminalStatus::kCompleted, EngineErrorCode::kNone});
+  });
+  return CommandResult::Accepted();
+}
+
 CommandResult FakeBrowserEngine::EmitPermissionRequest(
     const PermissionRequest& request) {
   if (const auto state = RequireTab(request.tab_id); !state.accepted()) {
@@ -294,6 +416,12 @@ std::size_t FakeBrowserEngine::DispatchEvents() {
     callback(*event_sink_);
     ++dispatched;
   }
+  while (event_sink_ != nullptr && !pending_snapshot_events_.empty()) {
+    auto callback = std::move(pending_snapshot_events_.front());
+    pending_snapshot_events_.pop_front();
+    callback();
+    ++dispatched;
+  }
   return dispatched;
 }
 
@@ -333,6 +461,8 @@ void FakeBrowserEngine::QueueTabEvent(TabEvent event) {
 
 void FakeBrowserEngine::QueueNavigation(const TabId& tab_id,
                                         const BrowserUrl& url) {
+  TerminateSnapshots(tab_id, SnapshotTerminalStatus::kStaleNavigation,
+                     EngineErrorCode::kStaleNavigation);
   const auto navigation_id = NavigationId::FromRaw(next_navigation_id_++);
   auto& tab = tabs_.at(tab_id);
   tab.current_url = url;
@@ -350,6 +480,38 @@ void FakeBrowserEngine::QueueNavigation(const TabId& tab_id,
       }
     });
   }
+}
+
+void FakeBrowserEngine::TerminateSnapshots(const TabId& tab_id,
+                                           SnapshotTerminalStatus status,
+                                           EngineErrorCode error) {
+  std::vector<SnapshotRequestId> request_ids;
+  for (const auto& entry : snapshots_) {
+    if (entry.second.request.tab_id == tab_id) {
+      request_ids.push_back(entry.first);
+    }
+  }
+  for (const auto& request_id : request_ids) {
+    TerminateSnapshot(request_id, status, error);
+  }
+}
+
+void FakeBrowserEngine::TerminateSnapshot(const SnapshotRequestId& request_id,
+                                          SnapshotTerminalStatus status,
+                                          EngineErrorCode error) {
+  const auto snapshot = snapshots_.find(request_id);
+  if (snapshot == snapshots_.end()) {
+    return;
+  }
+  const auto request = snapshot->second.request;
+  auto* sink = snapshot->second.sink;
+  snapshots_.erase(snapshot);
+  retired_snapshots_.insert(request_id);
+  pending_snapshot_events_.push_back([request, sink, status, error]() {
+    sink->OnSnapshotTerminal(
+        SnapshotTerminal{request.request_id, request.tab_id,
+                         request.navigation_id, status, error});
+  });
 }
 
 }  // namespace crayon::browser_engine::testing

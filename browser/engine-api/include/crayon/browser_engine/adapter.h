@@ -2,6 +2,7 @@
 
 #include "crayon/browser_engine/event_sink.h"
 #include "crayon/browser_engine/result.h"
+#include "crayon/browser_engine/snapshot.h"
 #include "crayon/browser_engine/types.h"
 
 namespace crayon::browser_engine {
@@ -30,6 +31,9 @@ class BrowserEngineAdapter {
   virtual CommandResult Subscribe(
       const ObservationSubscription& subscription) = 0;
   virtual CommandResult Unsubscribe(const SubscriptionId& subscription_id) = 0;
+  virtual CommandResult StartSnapshot(const SnapshotRequest& request,
+                                      SnapshotStreamSink& sink) = 0;
+  virtual CommandResult CancelSnapshot(const SnapshotRequestId& request_id) = 0;
 };
 
 }  // namespace crayon::browser_engine

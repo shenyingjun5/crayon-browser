@@ -5,6 +5,7 @@ project(crayon_browser_engine_api VERSION 0.1.0 LANGUAGES CXX)
 option(CRAYON_ENGINE_API_BUILD_TESTS "Build browser engine API contract tests" OFF)
 
 add_library(crayon-browser-engine-api STATIC
+  src/snapshot.cc
   src/types.cc
 )
 add_library(crayon::browser-engine-api ALIAS crayon-browser-engine-api)

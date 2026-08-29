@@ -33,6 +33,16 @@ using crayon::browser_engine::ProfileEvent;
 using crayon::browser_engine::ProfileEventKind;
 using crayon::browser_engine::ProfileId;
 using crayon::browser_engine::ProfileMode;
+using crayon::browser_engine::SnapshotChunk;
+using crayon::browser_engine::SnapshotDocumentMetadata;
+using crayon::browser_engine::SnapshotFact;
+using crayon::browser_engine::SnapshotFactKind;
+using crayon::browser_engine::SnapshotMode;
+using crayon::browser_engine::SnapshotRequest;
+using crayon::browser_engine::SnapshotRequestId;
+using crayon::browser_engine::SnapshotStreamSink;
+using crayon::browser_engine::SnapshotTerminal;
+using crayon::browser_engine::SnapshotTerminalStatus;
 using crayon::browser_engine::SubscriptionId;
 using crayon::browser_engine::TabCreateRequest;
 using crayon::browser_engine::TabEvent;
@@ -101,6 +111,20 @@ class RecordingSink final : public EngineEventSink {
   }
 
   std::vector<std::string> events;
+};
+
+class RecordingSnapshotSink final : public SnapshotStreamSink {
+ public:
+  void OnSnapshotChunk(const SnapshotChunk& chunk) override {
+    sequences.push_back(chunk.sequence);
+  }
+
+  void OnSnapshotTerminal(const SnapshotTerminal& terminal) override {
+    terminals.push_back(terminal.status);
+  }
+
+  std::vector<std::uint32_t> sequences;
+  std::vector<SnapshotTerminalStatus> terminals;
 };
 
 void TestStrongTypesAndErrors() {
@@ -330,6 +354,158 @@ void TestSubscriptionAndReleaseFences() {
         "destructor must suppress pending callbacks");
 }
 
+void TestBoundedSnapshotStreamAndCancellation() {
+  FakeBrowserEngine engine;
+  RecordingSink event_sink;
+  RecordingSnapshotSink snapshot_sink;
+  const auto profile_id = MakeId<ProfileId>("profile-snapshot");
+  const auto tab_id = MakeId<TabId>("tab-snapshot");
+  const auto request_id = MakeId<SnapshotRequestId>("snapshot-01");
+  const auto stale_request_id = MakeId<SnapshotRequestId>("snapshot-stale");
+  Check(engine.Start(event_sink).accepted(), "snapshot engine start must pass");
+  Check(engine.CreateProfile(ProfileConfig{profile_id, ProfileMode::kPrivate})
+            .accepted(),
+        "snapshot profile must pass");
+  Check(engine
+            .CreateTab(TabCreateRequest{
+                profile_id, tab_id, MakeUrl("https://example.test/article")})
+            .accepted(),
+        "snapshot tab must pass");
+  Check(engine.DispatchEvents() == 5, "initial navigation must dispatch");
+
+  Check(engine
+            .StartSnapshot(
+                SnapshotRequest{request_id, tab_id, NavigationId::FromRaw(1),
+                                SnapshotMode::kStandard},
+                snapshot_sink)
+            .accepted(),
+        "current navigation snapshot must start");
+  Check(engine.StartSnapshot(SnapshotRequest{stale_request_id, tab_id,
+                                             NavigationId::FromRaw(0),
+                                             SnapshotMode::kStandard},
+                             snapshot_sink)
+                .error() == EngineErrorCode::kStaleNavigation,
+        "stale navigation snapshot must fail");
+  Check(engine.CompleteSnapshot(request_id).error() ==
+            EngineErrorCode::kInvalidState,
+        "completed stream must carry document metadata");
+
+  SnapshotFact paragraph;
+  paragraph.kind = SnapshotFactKind::kParagraph;
+  paragraph.text = "Visible paragraph";
+  Check(engine
+            .EmitSnapshotChunk(SnapshotChunk{
+                request_id,
+                tab_id,
+                NavigationId::FromRaw(1),
+                0,
+                SnapshotDocumentMetadata{
+                    MakeUrl("https://example.test/article"), "Article"},
+                {paragraph}})
+            .accepted(),
+        "first bounded chunk must queue");
+  Check(snapshot_sink.sequences.empty(), "snapshot callback must be async");
+  Check(engine.CompleteSnapshot(request_id).accepted(),
+        "snapshot completion must queue");
+  Check(engine.DispatchEvents() == 2, "chunk and terminal must dispatch");
+  Check(snapshot_sink.sequences == std::vector<std::uint32_t>{0},
+        "snapshot sequence must be stable");
+  Check(snapshot_sink.terminals ==
+            std::vector<SnapshotTerminalStatus>{
+                SnapshotTerminalStatus::kCompleted},
+        "snapshot must complete exactly once");
+
+  const auto cancel_id = MakeId<SnapshotRequestId>("snapshot-cancel");
+  Check(engine
+            .StartSnapshot(
+                SnapshotRequest{cancel_id, tab_id, NavigationId::FromRaw(1),
+                                SnapshotMode::kCompact},
+                snapshot_sink)
+            .accepted(),
+        "cancellable snapshot must start");
+  Check(engine
+            .EmitSnapshotChunk(SnapshotChunk{
+                cancel_id,
+                tab_id,
+                NavigationId::FromRaw(1),
+                0,
+                SnapshotDocumentMetadata{
+                    MakeUrl("https://example.test/article"), "Article"},
+                {paragraph}})
+            .accepted(),
+        "cancelled chunk may queue before cancellation");
+  Check(engine.CancelSnapshot(cancel_id).accepted(), "cancel must pass");
+  Check(engine.CancelSnapshot(cancel_id).accepted(),
+        "cancel must be idempotent");
+  Check(engine.DispatchEvents() == 2,
+        "suppressed chunk slot and cancellation terminal must drain");
+  Check(snapshot_sink.sequences == std::vector<std::uint32_t>{0},
+        "cancel must suppress queued chunk callback");
+  Check(snapshot_sink.terminals.back() == SnapshotTerminalStatus::kCancelled,
+        "cancel must emit one terminal");
+
+  const auto navigation_id =
+      MakeId<SnapshotRequestId>("snapshot-navigation-fence");
+  Check(engine
+            .StartSnapshot(
+                SnapshotRequest{navigation_id, tab_id, NavigationId::FromRaw(1),
+                                SnapshotMode::kStandard},
+                snapshot_sink)
+            .accepted(),
+        "navigation-fenced snapshot must start");
+  Check(engine
+            .Navigate(
+                NavigationRequest{tab_id, MakeUrl("https://example.test/next")})
+            .accepted(),
+        "new navigation must pass");
+  Check(engine.DispatchEvents() == 4,
+        "stale terminal and navigation events must dispatch");
+  Check(snapshot_sink.terminals.back() ==
+            SnapshotTerminalStatus::kStaleNavigation,
+        "navigation must fence snapshot");
+}
+
+void TestSnapshotFactContract() {
+  SnapshotFact paragraph;
+  paragraph.kind = SnapshotFactKind::kParagraph;
+  paragraph.text = "visible";
+  Check(crayon::browser_engine::IsValid(paragraph),
+        "normal paragraph must be valid");
+  paragraph.text = std::string("bad\0text", 8);
+  Check(!crayon::browser_engine::IsValid(paragraph),
+        "control characters must fail");
+  paragraph.text = std::string("\xF0\x28\x8C\x28", 4);
+  Check(!crayon::browser_engine::IsValid(paragraph),
+        "malformed UTF-8 must fail");
+  paragraph.text.assign(
+      crayon::browser_engine::kMaxCompactSnapshotFactTextBytes + 1, 'a');
+  Check(crayon::browser_engine::IsValid(paragraph, SnapshotMode::kStandard) &&
+            !crayon::browser_engine::IsValid(paragraph, SnapshotMode::kCompact),
+        "compact text budget must be narrower");
+
+  SnapshotFact list_item;
+  list_item.kind = SnapshotFactKind::kListItem;
+  list_item.text = "item";
+  list_item.depth = 1;
+  list_item.ordered = true;
+  list_item.ordinal = 0;
+  Check(!crayon::browser_engine::IsValid(list_item),
+        "ordered list ordinal must start at one");
+  list_item.ordinal = 1;
+  Check(crayon::browser_engine::IsValid(list_item),
+        "bounded ordered list item must pass");
+
+  SnapshotFact code;
+  code.kind = SnapshotFactKind::kCodeBlock;
+  code.text.assign(20 * 1024, 'x');
+  code.language = "cpp";
+  Check(crayon::browser_engine::IsValid(code, SnapshotMode::kCompact),
+        "code uses its dedicated schema budget");
+  code.language = "C++";
+  Check(!crayon::browser_engine::IsValid(code),
+        "language token must follow closed syntax");
+}
+
 }  // namespace
 
 int main() {
@@ -338,6 +514,8 @@ int main() {
     TestLifecycleAndEventOrder();
     TestInvalidCommandsAndPermission();
     TestSubscriptionAndReleaseFences();
+    TestBoundedSnapshotStreamAndCancellation();
+    TestSnapshotFactContract();
     std::cout << "browser_engine_contract: passed\n";
     return 0;
   } catch (const std::exception& error) {

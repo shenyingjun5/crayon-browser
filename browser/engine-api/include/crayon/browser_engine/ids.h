@@ -47,11 +47,13 @@ struct ProfileIdTag;
 struct TabIdTag;
 struct PermissionRequestIdTag;
 struct SubscriptionIdTag;
+struct SnapshotRequestIdTag;
 
 using ProfileId = OpaqueId<ProfileIdTag>;
 using TabId = OpaqueId<TabIdTag>;
 using PermissionRequestId = OpaqueId<PermissionRequestIdTag>;
 using SubscriptionId = OpaqueId<SubscriptionIdTag>;
+using SnapshotRequestId = OpaqueId<SnapshotRequestIdTag>;
 
 class NavigationId final {
  public:

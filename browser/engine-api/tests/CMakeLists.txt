@@ -21,6 +21,7 @@ add_executable(browser-engine-headers
   headers/ids.cc
   headers/main.cc
   headers/result.cc
+  headers/snapshot.cc
   headers/types.cc
 )
 target_link_libraries(browser-engine-headers PRIVATE crayon::browser-engine-api)
