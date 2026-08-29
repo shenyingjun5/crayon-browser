@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   attributeAllowed,
+  MermaidRenderScheduler,
   parseMermaidSvgCandidate,
   rebuildCssRules
 } from "../assets/mermaid-adapter.js";
@@ -244,4 +245,119 @@ test("gate rejects active content and escaping references", () => {
   // Oversized candidates fail regardless of content.
   const oversized = "<svg>" + "<g/>".repeat(1200000) + "</svg>";
   assert.equal(parseMermaidSvgCandidate(oversized, RENDER_ID), null);
+});
+
+test("scheduler bounds concurrency and queue, coalesces and caches", async () => {
+  const scheduler = new MermaidRenderScheduler({
+    maxConcurrent: 2, maxPending: 3, maxCacheEntries: 2,
+    maxCachedResultBytes: 32, maxCacheBytes: 48
+  });
+  const releases = [];
+  let running = 0;
+  let peak = 0;
+  let produced = 0;
+  const producer = (value) => () => new Promise((resolve) => {
+    produced += 1;
+    running += 1;
+    peak = Math.max(peak, running);
+    releases.push(() => {
+      running -= 1;
+      resolve({value, bytes: value.length});
+    });
+  });
+
+  const first = scheduler.schedule("same", producer("cached"));
+  const duplicate = scheduler.schedule("same", producer("never"));
+  const second = scheduler.schedule("second", producer("two"));
+  const queued = scheduler.schedule("queued", producer("three"));
+  const queued2 = scheduler.schedule("queued2", producer("four"));
+  const queued3 = scheduler.schedule("queued3", producer("five"));
+  const overflow = await scheduler.schedule("overflow", producer("six"));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(peak, 2);
+  assert.equal(produced, 2);
+  assert.equal(overflow.status, "capacity_exceeded");
+  assert.equal(scheduler.stats().dropped, 1);
+
+  while (releases.length > 0) {
+    releases.shift()();
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  const results = await Promise.all(
+    [first, duplicate, second, queued, queued2, queued3]);
+  assert.ok(results.every((result) => result.status === "ready"));
+  assert.equal(produced, 5);
+  assert.equal(results[0].value, "cached");
+  assert.equal(results[1].value, "cached");
+  const hit = await scheduler.schedule("queued3", producer("miss"));
+  assert.equal(hit.status, "ready");
+  assert.equal(hit.cacheHit, true);
+  assert.equal(hit.value, "five");
+  assert.equal(produced, 5);
+  assert.ok(scheduler.stats().cacheEntries <= 2);
+  assert.ok(scheduler.stats().cacheBytes <= 48);
+});
+
+test("scheduler fences generations and clears lifecycle resources", async () => {
+  const scheduler = new MermaidRenderScheduler({
+    maxConcurrent: 1, maxPending: 2, maxCacheEntries: 2,
+    maxCachedResultBytes: 32, maxCacheBytes: 32
+  });
+  let releaseActive;
+  const active = scheduler.schedule("active", () => new Promise((resolve) => {
+    releaseActive = () => resolve({value: "old", bytes: 3});
+  }));
+  const pending = scheduler.schedule("pending", async () =>
+    ({value: "pending", bytes: 7}));
+  await new Promise((resolve) => setImmediate(resolve));
+  scheduler.advanceGeneration();
+  assert.equal((await pending).status, "stale");
+  releaseActive();
+  assert.equal((await active).status, "stale");
+  await new Promise((resolve) => setImmediate(resolve));
+  const fresh = await scheduler.schedule("fresh", async () =>
+    ({value: "fresh", bytes: 5}));
+  assert.equal(fresh.status, "ready");
+  assert.equal(scheduler.stats().cacheEntries, 1);
+  scheduler.clearCache();
+  assert.equal(scheduler.stats().cacheEntries, 0);
+  assert.equal(scheduler.stats().cacheBytes, 0);
+  scheduler.shutdown();
+  assert.equal((await scheduler.schedule("closed", async () =>
+    ({value: "x", bytes: 1}))).status, "cancelled");
+});
+
+test("50-block repeated and failing burst stays bounded", async () => {
+  const scheduler = new MermaidRenderScheduler({
+    maxConcurrent: 4, maxPending: 16, maxCacheEntries: 8,
+    maxCachedResultBytes: 64, maxCacheBytes: 256
+  });
+  let running = 0;
+  let peak = 0;
+  let produced = 0;
+  const producers = new Map();
+  for (let group = 0; group < 5; group += 1) {
+    producers.set("group-" + group, async () => {
+      produced += 1;
+      running += 1;
+      peak = Math.max(peak, running);
+      await new Promise((resolve) => setImmediate(resolve));
+      running -= 1;
+      if (group === 4) throw new Error("fixture render failure");
+      const value = "svg-" + group;
+      return {value, bytes: value.length};
+    });
+  }
+  const burst = Array.from({length: 50}, (_, index) => {
+    const key = "group-" + (index % 5);
+    return scheduler.schedule(key, producers.get(key));
+  });
+  const results = await Promise.all(burst);
+  assert.equal(results.filter((result) => result.status === "ready").length, 40);
+  assert.equal(results.filter((result) => result.status === "failed").length, 10);
+  assert.equal(produced, 5);
+  assert.ok(peak <= 4);
+  assert.equal(scheduler.stats().pending, 0);
+  assert.equal(scheduler.stats().active, 0);
+  assert.equal(scheduler.stats().cacheEntries, 4);
 });

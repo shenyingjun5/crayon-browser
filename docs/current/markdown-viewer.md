@@ -219,6 +219,7 @@ frame-ancestors 'none'
 
 - 构建期生成 manifest，Release 扫描逐文件核对路径、hash、MIME、总字节、许可证与 import closure；运行时路由只接受 manifest 中的精确相对路径，拒绝 query/fragment、`..`、编码分隔符、未知扩展和目录枚举。
 - Mermaid 初始化 promise 每个文档页至多一个；block 数、单 block DSL 字节、并发渲染、内存 cache 与错误文本均有命名上限。默认值由 `MDV-19` benchmark 冻结，不在业务代码散落 magic value。
+- `MDV-19` 冻结值（2026-08-29）：单文档最多 `64` 个 Mermaid block，单 block DSL `64 KiB`、总 DSL `512 KiB`；同一页最多 `4` 个并发 render、`16` 个等待项，单次 deadline `30 s`；会话 cache 最多 `128` 项/`16 MiB`，单项保守 retained accounting 最多 `2 MiB`；局部错误文案最多 `1024` UTF-8 字节。等待队列满载时当前 block 保留源码并局部失败，cache 按 LRU 逐项淘汰；所有计数只记录 active/pending/cache-hit/dropped/evicted/stale 数字，不含 DSL、digest、路径或第三方错误。
 - cache 仅限会话内存，key 至少包含 `source hash + theme + mermaid version + runtime policy version`；文档关闭、导航、Profile 销毁、无痕窗口关闭或内存压力时清除，不新增磁盘缓存或最近文档痕迹。
 - 无 Mermaid 文档的启动/首屏不得读取 Mermaid 资产；多图文档使用 viewport lazy render 与有界并发。性能验收必须记录首个普通 Markdown paint、首次 Mermaid import、首图完成、全部可见图完成、CPU/RSS/UI delay 与资源字节。
 - 文档切换、编辑、主题切换和退出均推进 generation；上游 `render()` 不可取消时只允许结果失效丢弃，不能让旧 SVG 覆盖新文档，也不能在退出后回调已销毁页面。

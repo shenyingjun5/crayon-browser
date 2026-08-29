@@ -853,36 +853,49 @@ void AppendMdvMathScript(std::ostringstream& js) {
 }
 
 void AppendMdvMermaidScript(std::ostringstream& js) {
-  // MDV-18: blocks render lazily through the mermaid adapter
+  // MDV-19: blocks render lazily through the mermaid adapter
   // (/runtime/mermaid/adapter), which owns the strict runtime singleton,
   // the color scheme and the fail-closed SVG policy gate. Without
-  // IntersectionObserver the first screen renders through the same
-  // sequential queue; the adapter drops results whose node id or
-  // connection state no longer matches.
+  // IntersectionObserver the first screen renders through the same bounded
+  // adapter scheduler; the adapter owns cache/generation state and drops
+  // results whose page generation, node id or connection no longer matches.
   js << "var mermaidObserver=null;"
-     << "var mermaidQueue=Promise.resolve();"
+     << "var mermaidAdapterPromise=null;"
+     << "var mermaidPageGeneration=1;"
+     << "var maxMermaidErrorBytes=1024;"
      << "var mermaidDark=window.matchMedia&&window.matchMedia("
         "'(prefers-color-scheme: dark)').matches;"
+     << "function getMermaidAdapter(){if(!mermaidAdapterPromise){"
+     << "mermaidAdapterPromise=import('/runtime/mermaid/adapter');}"
+     << "return mermaidAdapterPromise;}"
      << "function markMermaidError(node){"
      << "if(!node||node.getAttribute('data-mdv-mermaid-error')!=='true'||node."
         "querySelector('.mdv-mermaid-error-card')){return;}"
      << "var card=document.createElement('span');"
      << "card.className='mdv-mermaid-error-card';card.setAttribute('role',"
         "'status');"
-     << "card.textContent=preview.getAttribute('data-mermaid-error-text')||"
-        "'';"
+     << "var errorText=preview.getAttribute('data-mermaid-error-text')||'';"
+     << "if(new TextEncoder().encode(errorText).byteLength>"
+        "maxMermaidErrorBytes){errorText='';}card.textContent=errorText;"
      << "node.insertBefore(card,node.firstChild);}"
      << "function queueMermaid(node){"
      << "if(!node||node.getAttribute('data-mdv-mermaid')!=='true'){return;}"
      << "var nodeId=node.getAttribute('data-mdv-node');"
-     << "if(!nodeId){return;}"
-     << "mermaidQueue=mermaidQueue.then(function(){"
-     << "return import('/runtime/mermaid/adapter').then(function(adapter){"
+     << "if(!nodeId||node.getAttribute('data-mdv-mermaid-loading')==='true')"
+        "{return;}"
+     << "var generation=mermaidPageGeneration;"
+     << "node.setAttribute('data-mdv-mermaid-loading','true');"
+     << "getMermaidAdapter().then(function(adapter){"
+     << "if(generation!==mermaidPageGeneration||!node.isConnected){return "
+        "false;}"
      << "return adapter.renderMermaid(node,nodeId,mermaidDark?'dark':'light');"
-        "}).then(function(ok){if(!ok){markMermaidError(node);}},function(){});"
-        "});}"
+     << "}).then(function(ok){node.removeAttribute('data-mdv-mermaid-loading');"
+     << "if(generation===mermaidPageGeneration&&!ok){markMermaidError(node);}},"
+        "function(){node.removeAttribute('data-mdv-mermaid-loading');});}"
      << "function resetMermaid(){if(mermaidObserver){mermaidObserver."
-        "disconnect();mermaidObserver=null;}}"
+        "disconnect();mermaidObserver=null;}mermaidPageGeneration++;"
+     << "if(mermaidAdapterPromise){mermaidAdapterPromise.then(function(adapter)"
+        "{adapter.advanceMermaidGeneration();},function(){});}}"
      << "function observeMermaid(root){"
      << "if(!root){return;}"
      << "var nodes=root.querySelectorAll('code[data-mdv-mermaid]');"
@@ -898,6 +911,7 @@ void AppendMdvMermaidScript(std::ostringstream& js) {
      << "if(nodes[j].getAttribute('data-mdv-mermaid-rendered')!=='true'){"
         "mermaidObserver.observe(nodes[j]);}}}"
      << "function rethemeMermaid(){"
+     << "resetMermaid();"
      << "var nodes=document.querySelectorAll('code[data-mdv-mermaid]');"
      << "for(var i=0;i<nodes.length;i++){"
      << "var node=nodes[i];node.removeAttribute('data-mdv-mermaid-error');"
@@ -909,10 +923,17 @@ void AppendMdvMermaidScript(std::ostringstream& js) {
      << "observeMermaid(preview);"
      << "if(window.matchMedia){var darkQuery=window.matchMedia('(prefers-"
         "color-scheme: dark)');var onDark=function(e){mermaidDark=e.matches;"
-     << "rethemeMermaid();observeMermaid(preview);};"
+     << "rethemeMermaid();};"
      << "if(darkQuery.addEventListener){darkQuery.addEventListener('change',"
         "onDark);}else if(darkQuery.addListener){darkQuery.addListener("
         "onDark);}}"
+     << "window.addEventListener('memorypressure',function(){"
+     << "if(mermaidAdapterPromise){mermaidAdapterPromise.then(function(adapter)"
+        "{adapter.clearMermaidCache();},function(){});}});"
+     << "window.addEventListener('pagehide',function(event){"
+     << "if(mermaidAdapterPromise){mermaidAdapterPromise.then(function(adapter)"
+        "{if(event.persisted){adapter.advanceMermaidGeneration();}else{"
+        "adapter.shutdownMermaidSession();}},function(){});}});"
      // Fullscreen view and source toggle: page-local overlay, no new
      // Browser binding; Escape closes and focus returns to the opener.
      << "var mermaidView=document.getElementById('md-mermaid-view');"

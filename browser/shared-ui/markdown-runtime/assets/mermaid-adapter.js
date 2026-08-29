@@ -12,6 +12,17 @@ const MAX_ATTRIBUTES = 24;
 const MAX_IDS = 4096;
 const MAX_TEXT_BYTES = 64 * 1024;
 const RENDER_DEADLINE_MS = 30 * 1000;
+const MAX_CONCURRENT_RENDERS = 4;
+const MAX_PENDING_RENDERS = 16;
+const MAX_CACHE_ENTRIES = 128;
+const MAX_CACHED_RESULT_BYTES = 2 * 1024 * 1024;
+const MAX_CACHE_BYTES = 16 * 1024 * 1024;
+const MERMAID_VERSION = "11.17.2";
+const SVG_POLICY_VERSION = "mdv-svg-policy-v1";
+// SHA-256 of the canonical fixed initialize() options below. Documents cannot
+// override it; including it keeps cache identity closed if defaults change.
+const NORMALIZED_OPTIONS_DIGEST =
+  "0191c446a6a83aa0f22ae68524f5ad2098148fbd29412b270a75a1d76bb19253";
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const ID_PATTERN = /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/;
@@ -92,6 +103,153 @@ const CSS_DENY_PATTERN = new RegExp(
     "data:|vbscript:|behavior|binding", "i");
 
 let mermaidPromise;
+
+// Page-session-only scheduler. It owns all queue/cache/generation state and
+// never persists source or diagnostics. A generation change invalidates queued
+// work immediately; Mermaid has no cancellation API, so already-running work
+// is allowed to finish but its result is reported stale and cannot reach DOM.
+export class MermaidRenderScheduler {
+  constructor(limits = {}) {
+    this.maxConcurrent = limits.maxConcurrent ?? MAX_CONCURRENT_RENDERS;
+    this.maxPending = limits.maxPending ?? MAX_PENDING_RENDERS;
+    this.maxCacheEntries = limits.maxCacheEntries ?? MAX_CACHE_ENTRIES;
+    this.maxCachedResultBytes = limits.maxCachedResultBytes ??
+      MAX_CACHED_RESULT_BYTES;
+    this.maxCacheBytes = limits.maxCacheBytes ?? MAX_CACHE_BYTES;
+    this.generation = 1;
+    this.active = 0;
+    this.activeGeneration = 0;
+    this.pending = [];
+    this.cache = new Map();
+    this.cacheBytes = 0;
+    this.inflight = new Map();
+    this.dropped = 0;
+    this.evicted = 0;
+    this.stale = 0;
+    this.cacheHits = 0;
+    this.closed = false;
+  }
+
+  schedule(key, producer) {
+    if (this.closed) return Promise.resolve({status: "cancelled"});
+    const cached = this.takeCached(key);
+    if (cached !== undefined) {
+      return Promise.resolve({status: "ready", value: cached, cacheHit: true});
+    }
+    const shared = this.inflight.get(key);
+    if (shared && shared.generation === this.generation) return shared.promise;
+    if (this.pending.length >= this.maxPending) {
+      this.dropped += 1;
+      return Promise.resolve({status: "capacity_exceeded"});
+    }
+    const generation = this.generation;
+    let resolveJob;
+    const promise = new Promise((resolve) => { resolveJob = resolve; });
+    this.pending.push({key, producer, generation, resolve: resolveJob});
+    this.inflight.set(key, {generation, promise});
+    this.pump();
+    return promise;
+  }
+
+  pump() {
+    while (!this.closed && this.active < this.maxConcurrent &&
+           this.pending.length > 0) {
+      if (this.active > 0 &&
+          this.pending[0].generation !== this.activeGeneration) return;
+      const job = this.pending.shift();
+      if (job.generation !== this.generation) {
+        this.finishStale(job);
+        continue;
+      }
+      if (this.active === 0) this.activeGeneration = job.generation;
+      this.active += 1;
+      Promise.resolve().then(job.producer).then((result) => {
+        if (job.generation !== this.generation || this.closed) {
+          this.finishStale(job);
+          return;
+        }
+        if (!result || typeof result.value !== "string") {
+          job.resolve({status: "failed"});
+          return;
+        }
+        this.insertCached(job.key, result.value, result.bytes);
+        job.resolve({status: "ready", value: result.value, cacheHit: false});
+      }, () => job.resolve({status: "failed"})).finally(() => {
+        this.active -= 1;
+        if (this.active === 0) this.activeGeneration = 0;
+        const current = this.inflight.get(job.key);
+        if (current && current.generation === job.generation) {
+          this.inflight.delete(job.key);
+        }
+        this.pump();
+      });
+    }
+  }
+
+  finishStale(job) {
+    this.stale += 1;
+    job.resolve({status: "stale"});
+  }
+
+  takeCached(key) {
+    const entry = this.cache.get(key);
+    if (!entry) return undefined;
+    this.cacheHits += 1;
+    this.cache.delete(key);
+    this.cache.set(key, entry);
+    return entry.value;
+  }
+
+  insertCached(key, value, bytes) {
+    if (!Number.isSafeInteger(bytes) || bytes <= 0 ||
+        bytes > this.maxCachedResultBytes || bytes > this.maxCacheBytes) return;
+    const existing = this.cache.get(key);
+    if (existing) {
+      this.cacheBytes -= existing.bytes;
+      this.cache.delete(key);
+    }
+    while (this.cache.size >= this.maxCacheEntries ||
+           this.cacheBytes + bytes > this.maxCacheBytes) {
+      const oldest = this.cache.keys().next().value;
+      if (oldest === undefined) break;
+      const removed = this.cache.get(oldest);
+      this.cache.delete(oldest);
+      this.cacheBytes -= removed.bytes;
+      this.evicted += 1;
+    }
+    this.cache.set(key, {value, bytes});
+    this.cacheBytes += bytes;
+  }
+
+  advanceGeneration() {
+    if (this.closed) return;
+    this.generation += 1;
+    for (const job of this.pending.splice(0)) this.finishStale(job);
+    this.inflight.clear();
+    this.clearCache();
+  }
+
+  clearCache() {
+    this.cache.clear();
+    this.cacheBytes = 0;
+  }
+
+  shutdown() {
+    if (this.closed) return;
+    this.advanceGeneration();
+    this.closed = true;
+    this.clearCache();
+  }
+
+  stats() {
+    return Object.freeze({
+      active: this.active, pending: this.pending.length,
+      cacheEntries: this.cache.size, cacheBytes: this.cacheBytes,
+      cacheHits: this.cacheHits, dropped: this.dropped,
+      evicted: this.evicted, stale: this.stale
+    });
+  }
+}
 
 function withDeadline(promise) {
   let timer;
@@ -481,6 +639,57 @@ function staleResult(container, nodeId) {
 }
 
 let renderSequence = 0;
+const renderScheduler = new MermaidRenderScheduler();
+const encoder = new TextEncoder();
+let isolationNonce;
+
+function sessionIsolationNonce() {
+  if (isolationNonce) return isolationNonce;
+  const bytes = new Uint8Array(32);
+  if (globalThis.crypto && typeof globalThis.crypto.getRandomValues ===
+      "function") {
+    globalThis.crypto.getRandomValues(bytes);
+    isolationNonce = Array.from(bytes, (value) =>
+      value.toString(16).padStart(2, "0")).join("");
+  } else {
+    // No weak fallback: without a cryptographic page isolation nonce the
+    // renderer remains functional but every request deliberately misses cache.
+    isolationNonce = "cache-disabled";
+  }
+  return isolationNonce;
+}
+
+async function sourceCacheKey(source, scheme) {
+  if (!globalThis.crypto || !globalThis.crypto.subtle ||
+      typeof globalThis.crypto.subtle.digest !== "function" ||
+      sessionIsolationNonce() === "cache-disabled") return null;
+  const digest = await globalThis.crypto.subtle.digest(
+    "SHA-256", encoder.encode(source));
+  const hex = Array.from(new Uint8Array(digest), (value) =>
+    value.toString(16).padStart(2, "0")).join("");
+  return sessionIsolationNonce() + "\0mermaid\0" + MERMAID_VERSION + "\0" +
+    hex + "\0" + scheme + "\0" + NORMALIZED_OPTIONS_DIGEST + "\0" +
+    SVG_POLICY_VERSION;
+}
+
+export function advanceMermaidGeneration() {
+  renderScheduler.advanceGeneration();
+}
+
+export function clearMermaidCache() {
+  renderScheduler.clearCache();
+}
+
+export function shutdownMermaidSession() {
+  renderScheduler.shutdown();
+  mermaidPromise = undefined;
+  currentTheme = null;
+}
+
+// Counts only; no source, digest, path or third-party error reaches diagnostics.
+export function mermaidSessionStats() {
+  return renderScheduler.stats();
+}
 
 export async function renderMermaid(container, nodeId, theme) {
   const scheme = theme === "dark" ? "dark" : "light";
@@ -490,22 +699,39 @@ export async function renderMermaid(container, nodeId, theme) {
   }
   const source = container.textContent;
   if (typeof source !== "string" || !source.trim() ||
-      new TextEncoder().encode(source).byteLength > MAX_SOURCE_BYTES) {
+      encoder.encode(source).byteLength > MAX_SOURCE_BYTES) {
     markFailure(container);
     return false;
   }
   try {
-    const mermaid = await withDeadline(loadMermaid());
+    const cacheKey = await sourceCacheKey(source, scheme);
     if (staleResult(container, nodeId)) return false;
-    ensureTheme(mermaid, scheme);
-    // Unique per attempt: re-renders (theme redraw) must not collide on
-    // mermaid's internal element ids. Every emitted id stays prefixed with
-    // this render id, so references remain confined to this block.
     renderSequence += 1;
     const renderId = "mdv-mermaid-" + nodeId + "-r" + renderSequence;
-    const rendered = await withDeadline(mermaid.render(renderId, source));
-    const candidate = rendered && typeof rendered.svg === "string"
-      ? rendered.svg : "";
+    const requestKey = cacheKey ?? renderId;
+    const scheduled = await renderScheduler.schedule(requestKey, async () => {
+      const mermaid = await withDeadline(loadMermaid());
+      ensureTheme(mermaid, scheme);
+      const rendered = await withDeadline(mermaid.render(renderId, source));
+      const candidate = rendered && typeof rendered.svg === "string"
+        ? rendered.svg : "";
+      // Cache only output that has already passed the Browser-owned gate.
+      // Every consumer rebuilds it again with a new block-scoped render id.
+      if (!parseMermaidSvgCandidate(candidate, renderId)) return null;
+      const utf8Bytes = encoder.encode(candidate).byteLength;
+      // V8 may retain a one-byte or two-byte string. Account the conservative
+      // representation so the 16 MiB cap is an upper bound, not wishful math.
+      const retainedBytes = Math.max(utf8Bytes, candidate.length * 2);
+      return {value: candidate, bytes: retainedBytes};
+    });
+    if (scheduled.status === "capacity_exceeded" ||
+        scheduled.status === "failed") {
+      // Capacity/render failure is a local, source-preserving degradation.
+      markFailure(container);
+      return false;
+    }
+    if (scheduled.status !== "ready") return false;
+    const candidate = scheduled.value;
     if (staleResult(container, nodeId)) return false;
     const rebuilt = parseMermaidSvgCandidate(candidate, renderId);
     if (!rebuilt) {

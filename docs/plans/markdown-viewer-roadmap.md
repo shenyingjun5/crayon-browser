@@ -1,6 +1,6 @@
 # MDV：本地 Markdown 查看器 Roadmap
 
-状态：`MDV-01 DONE`，`MDV-02..07,10..13 VERIFIED`，`MDV-08/09/21..23 DONE`，`MDV-24 VERIFIED`；Mermaid Full 集成波次为 `MDV-14..18 DONE`、`MDV-19..20 TODO`（按依赖顺序接续）。macOS arm64/x64 Debug 包、受管图标消费和 CEF 嵌套签名闭包已验证；Helper/Renderer 装配、deployment target、默认页/公网导航、macOS arm64 UI/VoiceOver/主题真机问题已闭合，原生 x64、Windows 与当前自动化无法替代的 IME/窄窗交互真机仍待补。本 Roadmap 承接“浏览器内查看本地 Markdown 文档、渲染预览、分栏编辑与标准 Mermaid 图表”的产品增量（PRD v0.8 §4.1）：`crayon://mdv` 内置查看页复用 `crayon://newtab` 的自定义 scheme、应用内资源与严格 CSP 模式；本地 `.md` 只经用户手势的受控入口打开，保存走原子写。MDV 是纯用户能力，不进入 CAAP tool registry；Agent 侧任意文件访问禁令不变。新增图表按当前 macOS 先行策略完成共享层/arm64 CEF 验证，最后补 Windows 回归。
+状态：`MDV-01 DONE`，`MDV-02..07,10..13 VERIFIED`，`MDV-08/09/21..23 DONE`，`MDV-24 VERIFIED`；Mermaid Full 集成波次为 `MDV-14..19 DONE`、`MDV-20 TODO`（按依赖顺序接续）。macOS arm64/x64 Debug 包、受管图标消费和 CEF 嵌套签名闭包已验证；Helper/Renderer 装配、deployment target、默认页/公网导航、macOS arm64 UI/VoiceOver/主题真机问题已闭合，原生 x64、Windows 与当前自动化无法替代的 IME/窄窗交互真机仍待补。本 Roadmap 承接“浏览器内查看本地 Markdown 文档、渲染预览、分栏编辑与标准 Mermaid 图表”的产品增量（PRD v0.8 §4.1）：`crayon://mdv` 内置查看页复用 `crayon://newtab` 的自定义 scheme、应用内资源与严格 CSP 模式；本地 `.md` 只经用户手势的受控入口打开，保存走原子写。MDV 是纯用户能力，不进入 CAAP tool registry；Agent 侧任意文件访问禁令不变。新增图表按当前 macOS 先行策略完成共享层/arm64 CEF 验证，最后补 Windows 回归。
 
 ## 产品设计结论
 
@@ -37,7 +37,7 @@
 | MDV-16 | DONE | MDV-14,MRT-04 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv`,`browser/cef-shell/resources`,`browser/cef-shell/CMakeLists.txt` | Mermaid ESM 资产路由与打包：消费通用 manifest loader，精确路由、正确 MIME、相对 chunk import、macOS/Windows 同源资源装配；无图零加载 | MD-008、MR-003；路由攻击矩阵 + 离线 CEF smoke |
 | MDV-17 | DONE | MDV-15,MDV-16 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | Mermaid runtime 核心：按需 `import()`、单例初始化、`mermaid.render()`、strict 配置、独立 SVG policy gate、per-block 错误隔离与七类图覆盖 | MD-009；CSP/注入 golden + CEF render |
 | MDV-18 | DONE | MDV-17 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv`,`browser/shared-ui/locales` | 图表交互与主题：viewport lazy render、响应式宽度/横向滚动、浅深主题重绘、全屏查看/源码切换；零新特权 binding | MD-004、MD-009；键鼠/a11y/主题实机 |
-| MDV-19 | TODO | MDV-17,MDV-18 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | 编辑/多图性能与生命周期：有界并发和内存 cache、revision fencing、迟到结果丢弃、关闭/导航/内存压力清理 | MD-004、MD-010；50-block perf/风暴/资源回落 |
+| MDV-19 | DONE | MDV-17,MDV-18 | `browser/shared-ui/markdown-runtime/assets/mermaid-adapter.js`,`browser/shared-ui/markdown-runtime/tests/mermaid_adapter.test.mjs`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv`,`tests/e2e/desktop/browser`,`docs/current/markdown-viewer.md` | 编辑/多图性能与生命周期：有界并发和内存 cache、revision fencing、迟到结果丢弃、关闭/导航/内存压力清理 | MD-004、MD-010；50-block perf/风暴/资源回落 |
 | MDV-20 | TODO | MDV-14..19,MDV-07,MDV-10..13 | `docs/current`,`docs/plans`,`tests/e2e/desktop`,`tools/repo-guard` | Mermaid Full 跨平台收口：macOS arm64 先行、Windows x64 回归、安装包/SBOM/NOTICE/零公网、模块总 Review | MD-007..010；Debug/Release + 实机 + Review P0/P1=0 |
 | MDV-21 | DONE | MDV-12 | `docs/current`,`docs/plans`,`browser/shared-ui/mdv/design` | 工具栏设计契约与原创 glyph 资产：动作/tooltip/快捷键/上下文矩阵、24×24 图标 manifest 与安全验证；不接页面行为 | MD-011；design contract + `git diff --check` |
 | MDV-22 | DONE | MDV-21 | `browser/shared-ui/mdv` | 可测试编辑变换层：修复行前缀重复正文，统一包裹/标题/多行列表/骨架/缩进/表格列对齐与选区保持 | MD-012；独立 ctest + 回归矩阵 |
@@ -382,14 +382,23 @@ MDV-02..06 按"模型层零 IO / 零 CEF 类型"交付后，产品仍不可见�
 
 ### MDV-19 原子范围（编辑并发、缓存与资源预算）
 
-- 状态：`TODO`；依赖 `MDV-17/18 VERIFIED`。
+- 状态：`DONE`；依赖 `MDV-17/18 VERIFIED`。
 - 单一目标：在快速编辑和多图文档下提供有界渲染调度与会话内 cache，复用 MDV revision fencing，确保旧图、主题旧代际和关闭后的 promise 结果不可落位，并给出资源/响应预算。
 - 输入：MDV-05/10 编辑去抖、MDV-17/18 runtime、测试标准性能口径。
-- 允许修改：`browser/shared-ui/mdv/**`、CEF MDV 页面生命周期窄接线与 perf fixture/harness。
+- 允许修改：Mermaid 单一运行时 owner `browser/shared-ui/markdown-runtime/assets/mermaid-adapter.js` 及其专项测试、`browser/shared-ui/mdv/**`、CEF MDV 页面生命周期窄接线、`tests/e2e/desktop/browser` perf harness 与 `docs/current/markdown-viewer.md` 预算冻结。
 - 禁止修改：磁盘/Profile cache、最近文件、全局 worker pool、公共 telemetry；不得在 render/scroll/input 热路径默认打日志。
 - 边界：cache key = source hash + theme + Mermaid version + SVG policy version；容量/单项/并发/等待队列/错误文本均有上限和满载行为；文档关闭、导航、Profile 销毁、无痕窗口关闭、Renderer termination、内存压力清空。Mermaid 无取消 API 时只做 generation invalidation，不假装已取消上游 CPU。
 - 验收：`MD-004/010`；50 block（含离屏、重复、错误、超大 DSL）fixture，快速编辑/主题/导航/关闭风暴；记录普通首屏、首次 import、首图、全部可见图、CPU/RSS/UI delay/资产字节；停止后资源回落且 dropped/evicted 可诊断但无正文。
 - 明确不做：跨会话 cache、后台预渲染、Worker/OffscreenCanvas 架构迁移。
+
+### MDV-19 完成记录（2026-08-29，编辑并发、缓存与生命周期）
+
+- 实现：Mermaid adapter 成为页会话唯一调度 owner，冻结 `4` 并发/`16` 等待、`30 s` deadline、`128` 项/`16 MiB` LRU 与 `2 MiB` 单项保守 retained accounting；相同 source digest/theme/version/options/policy 的在途工作合并，已通过 Browser-owned SVG gate 的 candidate 会话内复用且每次重新净化/重写 block ID。cache key 含 32-byte 源摘要、light/dark、`mermaid@11.17.2`、固定 options 摘要、`mdv-svg-policy-v1` 与 32-byte 页隔离 nonce，无密码学隔离能力时 fail closed 禁用 cache。
+- 生命周期：预览替换、主题切换推进 generation；旧 generation 的已运行 Mermaid CPU 不假装取消，结果仅记 stale 并禁止落 DOM。`pagehide`、Renderer/页销毁关闭会话，BFCache 只推进 generation；`memorypressure` 清 cache。满载/渲染失败保留当前源码并显示上限 `1024` UTF-8 字节的本地化局部错误，诊断只含计数。
+- 自动化：`node --test browser/shared-ui/markdown-runtime/tests/mermaid_adapter.test.mjs` 为 7/7，覆盖满载、合并、LRU 双上限、失败、代际、清理/关闭与 50-block burst；macOS arm64 全量 `ctest --preset macos-arm64-cef-debug --output-on-failure` 为 68/68，macOS x64 编译 + `markdown_extension_facts|markdown_runtime_*|mdv_*` 为 14/14（Rosetta 只作编译/自动化）。
+- 真实 CEF perf：`node tests/e2e/desktop/browser/run_mdv_mermaid_perf.mjs --port=9333` 通过；50 block = 47 ready + 3 预期局部失败 + 0 unresolved，普通首屏 FCP `112 ms`，首图 `709.1 ms`，全部遍历 `1561.3 ms`，最大事件环延迟 `170.2 ms`，JS heap used/total `9,070,128/20,185,088` bytes，ProcessTime `3.2142 s`；5 cache entries/`167,040` accounted bytes、32 hits、5 stale、0 dropped/evicted；无 Mermaid 文档 `0` 资产请求，含图文档加载 35 个同源资产/`1,144,468` encoded bytes，公网请求 `0`；返回 `crayon://newtab/` 后页会话销毁。
+- Code Review：按 v0.8 审查需求/边界、正确性、架构、并发/生命周期、安全/隐私、性能、测试与可维护性，P0/P1/P2 = 0/0/0；主题新代际会等待旧代际在途 render 回收，避免 Mermaid 全局 initialize 跨主题并发竞态。
+- 未覆盖与风险：原生 macOS x64 长跑按 Rosetta 边界归 QAR；Windows x64 Debug/Release 真机、Release 包/SBOM/NOTICE 与模块总 Review 归 `MDV-20`。
 
 ### MDV-20 原子范围（跨平台、发布与模块总 Review）
 

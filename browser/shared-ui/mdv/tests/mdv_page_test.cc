@@ -475,14 +475,17 @@ void TestMermaidRuntimeBootstrap() {
             "adapter.renderMermaid(node,nodeId,mermaidDark?'dark':'light')") !=
         std::string::npos);
   CHECK(script.find("code[data-mdv-mermaid]") != std::string::npos);
-  // One render in flight: blocks queue behind the shared promise.
-  CHECK(script.find("mermaidQueue=mermaidQueue.then(") != std::string::npos);
+  // Queue/cache/generation ownership stays in the adapter, not page globals.
+  CHECK(script.find("mermaidQueue=mermaidQueue.then(") == std::string::npos);
+  CHECK(script.find("mermaidAdapterPromise") != std::string::npos);
+  CHECK(script.find("adapter.advanceMermaidGeneration()") !=
+        std::string::npos);
   // Full-page scan and direct runtime access never enter the page script.
   CHECK(script.find("mermaid.run(") == std::string::npos);
   CHECK(script.find("securityLevel") == std::string::npos);
   CHECK(script.find("parseMermaidSvgCandidate") == std::string::npos);
   // Adapter failures are swallowed per block; no unhandled rejections.
-  CHECK(script.find("if(!ok){markMermaidError(node);}},function(){});") !=
+  CHECK(script.find("generation===mermaidPageGeneration&&!ok") !=
         std::string::npos);
   // MDV-18: viewport lazy render with a bounded first-screen fallback.
   CHECK(script.find("mermaidObserver=new IntersectionObserver(") !=
@@ -491,6 +494,13 @@ void TestMermaidRuntimeBootstrap() {
                     "queueMermaid(entries[i].target)") != std::string::npos);
   CHECK(script.find("Math.min(nodes.length,8)") != std::string::npos);
   CHECK(script.find("function resetMermaid()") != std::string::npos);
+  CHECK(script.find("data-mdv-mermaid-loading") != std::string::npos);
+  CHECK(script.find("maxMermaidErrorBytes=1024") != std::string::npos);
+  CHECK(script.find("memorypressure") != std::string::npos);
+  CHECK(script.find("adapter.clearMermaidCache()") != std::string::npos);
+  CHECK(script.find("pagehide") != std::string::npos);
+  CHECK(script.find("adapter.shutdownMermaidSession()") !=
+        std::string::npos);
   // Light/dark theme mapping and redraw.
   CHECK(script.find("prefers-color-scheme: dark") != std::string::npos);
   CHECK(script.find("function rethemeMermaid()") != std::string::npos);
