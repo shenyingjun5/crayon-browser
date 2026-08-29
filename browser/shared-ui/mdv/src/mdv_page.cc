@@ -235,29 +235,91 @@ std::string StatusBanner(const std::string& error_text,
 
 }  // namespace
 
+std::optional<std::string> PercentDecodePath(const std::string& path) {
+  auto hex_value = [](char c) -> int {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+  };
+  std::string decoded;
+  decoded.reserve(path.size());
+  for (std::size_t index = 0; index < path.size(); ++index) {
+    if (path[index] != '%') {
+      decoded.push_back(path[index]);
+      continue;
+    }
+    if (index + 2 >= path.size()) {
+      return std::nullopt;
+    }
+    const int high = hex_value(path[index + 1]);
+    const int low = hex_value(path[index + 2]);
+    if (high < 0 || low < 0) {
+      return std::nullopt;
+    }
+    decoded.push_back(static_cast<char>((high << 4) | low));
+    index += 2;
+  }
+  // A surviving percent or separator-escape is a double-encoding attempt.
+  if (decoded.find('%') != std::string::npos ||
+      decoded.find('\\') != std::string::npos ||
+      decoded.find('\0') != std::string::npos) {
+    return std::nullopt;
+  }
+  return decoded;
+}
+
 MdvRoute ClassifyMdvRequest(const MdvRequestParts& request) {
   if (request.scheme != kMdvScheme || request.host != kMdvHost ||
       request.has_credentials || request.has_port || request.has_query ||
       request.has_fragment) {
     return {};
   }
+  // Encoded separators never survive: `%2f`/`%5c` would change the segment
+  // structure of a path whose resource ids are plain ASCII. Everything else
+  // decodes exactly once and re-validates against the closed grammars.
+  {
+    std::string lower;
+    lower.reserve(request.path.size());
+    for (const char c : request.path) {
+      lower.push_back(static_cast<char>(
+          c >= 'A' && c <= 'Z' ? c - 'A' + 'a' : c));
+    }
+    if (lower.find("%2f") != std::string::npos ||
+        lower.find("%5c") != std::string::npos) {
+      return {MdvResourceKind::kNotFound, 404, false, 0, {}, {}};
+    }
+  }
+  const std::optional<std::string> decoded_path =
+      PercentDecodePath(request.path);
+  if (!decoded_path || decoded_path->find("//") != std::string::npos ||
+      decoded_path->find("/./") != std::string::npos) {
+    return {MdvResourceKind::kNotFound, 404, false, 0, {}, {}};
+  }
+  const MdvRequestParts decoded_request = [&] {
+    MdvRequestParts parts = request;
+    parts.path = *decoded_path;
+    return parts;
+  }();
+  const MdvRequestParts& request_ref = decoded_request;
   const bool is_get = request.method == "GET";
   const bool is_head = request.method == "HEAD";
   if (!is_get && !is_head) {
     return {MdvResourceKind::kMethodNotAllowed, 405, false, 0, {}, {}};
   }
-  if (request.path == "/" || request.path == kResourceAppHtml) {
+  if (request_ref.path == "/" || request_ref.path == kResourceAppHtml) {
     return {MdvResourceKind::kDocument, 200, is_get, 0, {}, {}};
   }
-  if (request.path == kResourceAppCss) {
+  if (request_ref.path == kResourceAppCss) {
     return {MdvResourceKind::kStylesheet, 200, is_get, 0, {}, {}};
   }
-  if (request.path == kResourceAppJs) {
+  if (request_ref.path == kResourceAppJs) {
     return {MdvResourceKind::kScript, 200, is_get, 0, {}, {}};
   }
   constexpr std::string_view kRuntimePrefix = "/runtime/highlight/";
-  if (request.path.compare(0, kRuntimePrefix.size(), kRuntimePrefix) == 0) {
-    const std::string resource_id = request.path.substr(kRuntimePrefix.size());
+  if (request_ref.path.compare(0, kRuntimePrefix.size(), kRuntimePrefix) == 0) {
+    const std::string resource_id =
+        request_ref.path.substr(kRuntimePrefix.size());
     if (crayon::browser_markdown_runtime::IsValidManifestId(resource_id)) {
       MdvRoute route{MdvResourceKind::kRuntimeAsset, 200, is_get, 0, {}, {}};
       route.runtime_resource_id = resource_id;
@@ -266,8 +328,9 @@ MdvRoute ClassifyMdvRequest(const MdvRequestParts& request) {
     }
   }
   constexpr std::string_view kKatexPrefix = "/runtime/katex/";
-  if (request.path.compare(0, kKatexPrefix.size(), kKatexPrefix) == 0) {
-    const std::string resource_id = request.path.substr(kKatexPrefix.size());
+  if (request_ref.path.compare(0, kKatexPrefix.size(), kKatexPrefix) == 0) {
+    const std::string resource_id =
+        request_ref.path.substr(kKatexPrefix.size());
     if (crayon::browser_markdown_runtime::IsKatexRuntimeResourceId(
             resource_id)) {
       MdvRoute route{MdvResourceKind::kRuntimeAsset, 200, is_get, 0, {}, {}};
@@ -276,10 +339,25 @@ MdvRoute ClassifyMdvRequest(const MdvRequestParts& request) {
       return route;
     }
   }
+  constexpr std::string_view kMermaidPrefix = "/runtime/mermaid/";
+  if (request_ref.path.compare(0, kMermaidPrefix.size(), kMermaidPrefix) ==
+      0) {
+    const std::string resource_id =
+        request_ref.path.substr(kMermaidPrefix.size());
+    // Exact resource ids are nested upstream paths; the closed grammar plus
+    // the handler's exact bundle lookup reject manifest-external paths.
+    if (crayon::browser_markdown_runtime::IsValidRuntimeResourceId(
+            resource_id)) {
+      MdvRoute route{MdvResourceKind::kRuntimeAsset, 200, is_get, 0, {}, {}};
+      route.runtime_resource_id = resource_id;
+      route.runtime_namespace = "mermaid";
+      return route;
+    }
+  }
   // Opaque validated local image: /img/<digits>, 1-6 digits only.
   constexpr const char* kImagePrefix = "/img/";
-  if (request.path.compare(0, 5, kImagePrefix) == 0) {
-    const std::string digits = request.path.substr(5);
+  if (request_ref.path.compare(0, 5, kImagePrefix) == 0) {
+    const std::string digits = request_ref.path.substr(5);
     if (!digits.empty() && digits.size() <= 6 &&
         std::all_of(digits.begin(), digits.end(),
                     [](char c) { return c >= '0' && c <= '9'; })) {

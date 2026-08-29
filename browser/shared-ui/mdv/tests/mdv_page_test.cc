@@ -121,6 +121,45 @@ void TestRouteMatrix() {
   CHECK(ClassifyMdvRequest(BaseRequest("/runtime/katex/unknown")).kind ==
         MdvResourceKind::kNotFound);
 
+  // MDV-16: Mermaid runtime route keeps upstream-relative resource ids.
+  route = ClassifyMdvRequest(
+      BaseRequest("/runtime/mermaid/mermaid.esm.min.mjs"));
+  CHECK(route.kind == MdvResourceKind::kRuntimeAsset &&
+        route.runtime_namespace == "mermaid" &&
+        route.runtime_resource_id == "mermaid.esm.min.mjs");
+  route = ClassifyMdvRequest(
+      BaseRequest("/runtime/mermaid/chunks/mermaid.esm.min/chunk-IJBDOHL6.mjs"));
+  CHECK(route.kind == MdvResourceKind::kRuntimeAsset &&
+        route.runtime_namespace == "mermaid" &&
+        route.runtime_resource_id == "chunks/mermaid.esm.min/chunk-IJBDOHL6.mjs");
+  // Traversal, encoded separators and escapes never classify; grammar-valid
+  // but manifest-unknown ids classify and are 404'd by the handler's exact
+  // bundle lookup (same split as the highlight/katex namespaces).
+  for (const char* hostile : {
+           "/runtime/mermaid/chunks/../core.mjs",
+           "/runtime/mermaid/chunks%2fmermaid.esm.min",
+           "/runtime/mermaid/chunks/mermaid.esm.min/%2fcore",
+           "/runtime/mermaid/mermaid.esm.min.mjs/../../x",
+           "/runtime/mermaid/%2e%2e/x",
+           "/runtime/mermaid/a%22b",
+           "/runtime/mermaid/a%2fb",
+           "/runtime/mermaid/%zz",
+           "/runtime/mermaid/%2",
+       }) {
+    CHECK(ClassifyMdvRequest(BaseRequest(hostile)).kind ==
+          MdvResourceKind::kNotFound);
+  }
+  // Unknown and case-aliased ids classify but are 404'd by the handler's
+  // exact, case-sensitive bundle lookup.
+  for (const char* manifest_absent : {
+           "/runtime/mermaid/chunks/mermaid.esm.min/unknown.mjs",
+           "/runtime/mermaid/CHUNKS/mermaid.esm.min/chunk-IJBDOHL6.mjs",
+       }) {
+    auto route = ClassifyMdvRequest(BaseRequest(manifest_absent));
+    CHECK(route.kind == MdvResourceKind::kRuntimeAsset &&
+          route.runtime_namespace == "mermaid");
+  }
+
   // HEAD is accepted with the body suppressed.
   auto head = BaseRequest();
   head.method = "HEAD";

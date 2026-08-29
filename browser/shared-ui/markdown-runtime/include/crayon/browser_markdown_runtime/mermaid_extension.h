@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "crayon/browser_markdown/markdown_extension_facts.h"
+#include "crayon/browser_markdown_runtime/runtime_assets.h"
 
 namespace crayon::browser_markdown_runtime {
 
@@ -40,7 +41,12 @@ struct MermaidDecorationResult final {
 /// (`data-mdv-mermaid`/`data-mdv-node`), keeping the DSL as escaped text.
 /// The DSL never enters URLs, script literals or logs.
 MermaidDecorationResult ApplyMermaidDecorations(
-    std::string* html, const std::string& input,
-    std::uint64_t document_generation, std::uint64_t source_revision);
+    std::string* html, const std::string& input, std::uint64_t document_generation,
+    std::uint64_t source_revision);
+
+/// Builds the immutable embedded asset catalog for the vendored Mermaid Full
+/// closure (MDV-14 manifest, MDV-16 embedding). Entry resource id is
+/// `mermaid.esm.min.mjs`; every resource id is the upstream-relative path.
+AssetCatalogBuildResult BuildMermaidAssetCatalog();
 
 }  // namespace crayon::browser_markdown_runtime

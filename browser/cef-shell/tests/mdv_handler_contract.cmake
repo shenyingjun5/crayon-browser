@@ -75,6 +75,7 @@ endif()
 foreach(required_text IN ITEMS
         "BuildHighlightAssetCatalog"
         "BuildKatexAssetCatalog"
+        "BuildMermaidAssetCatalog"
         "FindCompatible"
         "runtime_resource_id"
         "ContentType::kJavaScript"

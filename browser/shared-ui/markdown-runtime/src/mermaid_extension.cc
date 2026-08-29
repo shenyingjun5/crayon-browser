@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "crayon/browser_markdown_runtime/extension_registry.h"
+#include "mermaid_assets_generated.h"
 
 namespace crayon::browser_markdown_runtime {
 namespace {
@@ -67,6 +68,24 @@ const std::vector<browser_markdown::ExtensionMatcher>& MermaidFenceSelection() {
         {browser_markdown::ExtensionNodeKind::kFence, "mermaid"}};
   }();
   return selection;
+}
+
+AssetCatalogBuildResult BuildMermaidAssetCatalog() {
+  RuntimeAssetBundle bundle;
+  bundle.manifest_id = kMermaidAssetManifestId;
+  bundle.extension_id = kMermaidExtensionId;
+  bundle.extension_version = kMermaidExtensionVersion;
+  bundle.entry_resource_id = "mermaid.esm.min.mjs";
+  bundle.resources.reserve(internal::kEmbeddedMermaidAssetCount);
+  for (const auto& embedded : internal::kEmbeddedMermaidAssets) {
+    bundle.resources.push_back(
+        {embedded.resource_id, RuntimeAssetContentType::kJavaScript,
+         std::string(reinterpret_cast<const char*>(embedded.bytes),
+                     embedded.size)});
+  }
+  std::vector<RuntimeAssetBundle> bundles;
+  bundles.push_back(std::move(bundle));
+  return BuildRuntimeAssetCatalog(std::move(bundles));
 }
 
 MermaidDecorationResult ApplyMermaidDecorations(

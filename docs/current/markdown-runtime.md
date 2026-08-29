@@ -202,7 +202,7 @@ Extension 返回的是不可信候选，不是可直接写 DOM 的可信结果�
 
 所有值必须是有限正数，由对应实现任务的 benchmark 冻结为命名常量；`0 = unlimited`、负数、缺失、文档 override 和运行时自动扩容均非法。达到 node/source/depth 上限时只保留 Level A fallback；达到队列/cache 上限时返回 `capacity_exceeded` 并记录不含正文的 dropped counter。
 
-MRT-02/04 当前固定实现值：单 plan `1024` node、单 source `256 KiB`、总 source `2 MiB`；单 request 最大 deadline `30 s`，并发 loading/rendering `4`、等待 queued `16`、终态 history `256`；cache `128` 项/总 `16 MiB`/单项 accounting `2 MiB`；asset catalog `64` bundle × 每 bundle `64` resource，单 resource `16 MiB`、单 bundle `32 MiB`、总 catalog `64 MiB`。这些都是 Browser 编译期上限，不是页面配置；未启用的 inline/block/container nesting 仍为零发射，不借 API 预留绕过语法审核。
+MRT-02/04 当前固定实现值：单 plan `1024` node、单 source `256 KiB`、总 source `2 MiB`；单 request 最大 deadline `30 s`，并发 loading/rendering `4`、等待 queued `16`、终态 history `256`；cache `128` 项/总 `16 MiB`/单项 accounting `2 MiB`；asset catalog `64` bundle × 每 bundle `256` resource（2026-08-29 由 `64` 修订，Mermaid Full 104 文件闭包为第一个超 64 资源的合法 bundle），单 resource `16 MiB`、单 bundle `32 MiB`、总 catalog `64 MiB`。这些都是 Browser 编译期上限，不是页面配置；未启用的 inline/block/container nesting 仍为零发射，不借 API 预留绕过语法审核。
 
 ## 9. Generation、状态机与取消
 

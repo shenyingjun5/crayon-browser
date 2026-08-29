@@ -228,6 +228,56 @@ if(NOT mermaid_schema STREQUAL "crayon-mermaid-assets/v1" OR
   message(FATAL_ERROR "Mermaid manifest violates the MDV-14 lock")
 endif()
 
+set(MERMAID_ASSET_DECLARATIONS "")
+set(MERMAID_ASSET_ROWS "")
+set(mermaid_asset_index 0)
+function(crayon_embed_mermaid_asset resource_id source_path)
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+               "${source_path}")
+  file(READ "${source_path}" asset_hex HEX)
+  string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," asset_literals
+         "${asset_hex}")
+  set(asset_symbol "kMermaidAsset${mermaid_asset_index}")
+  string(APPEND MERMAID_ASSET_DECLARATIONS
+         "inline constexpr unsigned char ${asset_symbol}[] = {${asset_literals}};\n")
+  string(APPEND MERMAID_ASSET_ROWS
+         "  {\"${resource_id}\", ${asset_symbol}, sizeof(${asset_symbol})},\n")
+  math(EXPR mermaid_asset_index "${mermaid_asset_index} + 1")
+  set(MERMAID_ASSET_DECLARATIONS "${MERMAID_ASSET_DECLARATIONS}"
+      PARENT_SCOPE)
+  set(MERMAID_ASSET_ROWS "${MERMAID_ASSET_ROWS}" PARENT_SCOPE)
+  set(mermaid_asset_index "${mermaid_asset_index}" PARENT_SCOPE)
+endfunction()
+
+crayon_embed_mermaid_asset(
+  "mermaid.esm.min.mjs"
+  "${PROJECT_SOURCE_DIR}/third_party/mermaid/assets/mermaid.esm.min.mjs")
+math(EXPR mermaid_file_last "${mermaid_file_count} - 1")
+foreach(mermaid_index RANGE 0 ${mermaid_file_last})
+  string(JSON asset_path GET "${mermaid_manifest_json}" files ${mermaid_index}
+         path)
+  if(asset_path STREQUAL "mermaid.esm.min.mjs")
+    continue()
+  endif()
+  string(JSON expected_bytes GET "${mermaid_manifest_json}" files
+         ${mermaid_index} bytes)
+  string(JSON expected_sha256 GET "${mermaid_manifest_json}" files
+         ${mermaid_index} sha256)
+  set(source_path
+      "${PROJECT_SOURCE_DIR}/third_party/mermaid/assets/${asset_path}")
+  file(SIZE "${source_path}" actual_bytes)
+  file(SHA256 "${source_path}" actual_sha256)
+  if(NOT actual_bytes EQUAL expected_bytes OR
+     NOT actual_sha256 STREQUAL expected_sha256)
+    message(FATAL_ERROR "Mermaid asset does not match manifest: ${asset_path}")
+  endif()
+  crayon_embed_mermaid_asset("${asset_path}" "${source_path}")
+endforeach()
+if(NOT mermaid_asset_index EQUAL 104)
+  message(FATAL_ERROR
+          "Mermaid embedded runtime closure must contain 104 assets")
+endif()
+
 set(markdown_runtime_generated_dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
 file(MAKE_DIRECTORY "${markdown_runtime_generated_dir}")
 configure_file(
@@ -236,6 +286,9 @@ configure_file(
 configure_file(
   src/katex_assets_generated.h.in
   "${markdown_runtime_generated_dir}/katex_assets_generated.h" @ONLY)
+configure_file(
+  src/mermaid_assets_generated.h.in
+  "${markdown_runtime_generated_dir}/mermaid_assets_generated.h" @ONLY)
 
 add_library(crayon-browser-markdown-runtime STATIC
   src/extension_registry.cc

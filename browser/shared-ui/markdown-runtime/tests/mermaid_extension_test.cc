@@ -5,11 +5,18 @@
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <algorithm>
 #include <string>
+#include <vector>
 
 namespace {
 
 using crayon::browser_markdown_runtime::ApplyMermaidDecorations;
+using crayon::browser_markdown_runtime::AssetCatalogBuildStatus;
+using crayon::browser_markdown_runtime::BuildMermaidAssetCatalog;
+using crayon::browser_markdown_runtime::kMermaidAssetManifestId;
+using crayon::browser_markdown_runtime::kMermaidExtensionId;
+using crayon::browser_markdown_runtime::kMermaidExtensionVersion;
 using crayon::browser_markdown_runtime::kMaxMermaidBlocksPerDocument;
 using crayon::browser_markdown_runtime::MermaidDecorationResult;
 using crayon::browser_markdown_runtime::RenderP0MarkdownDocument;
@@ -244,6 +251,56 @@ bool RevisionStormNeverPlacesStaleBlocks() {
   return true;
 }
 
+/// MDV-16: the embedded closure is a single immutable bundle whose relative
+/// imports all resolve inside the served namespace.
+bool EmbeddedCatalogServesTheFullClosure() {
+  const auto built = BuildMermaidAssetCatalog();
+  CHECK(built.status == AssetCatalogBuildStatus::kReady);
+  CHECK(built.catalog);
+  const auto bundle = built.catalog->FindCompatible(
+      kMermaidAssetManifestId, kMermaidExtensionId, kMermaidExtensionVersion);
+  CHECK(bundle);
+  CHECK(bundle->resources.size() == 104);
+  CHECK(bundle->entry_resource_id == "mermaid.esm.min.mjs");
+  CHECK(built.catalog->total_bytes() == 3522090);
+
+  // Every relative import in every resource resolves to another resource of
+  // the same bundle, so CEF can resolve the whole ESM graph from the entry.
+  for (const auto& asset : bundle->resources) {
+    const std::string source = asset.bytes;
+    for (const std::string_view keyword : {"from\"./", "import(\"./"}) {
+      std::size_t cursor = 0;
+      while ((cursor = source.find(keyword, cursor)) != std::string::npos) {
+        const std::size_t begin = cursor + keyword.size() - 2;
+        const std::size_t end = source.find('"', begin);
+        CHECK(end != std::string::npos);
+        const std::string specifier = source.substr(begin, end - begin);
+        std::string directory = asset.resource_id;
+        const std::size_t slash = directory.rfind('/');
+        directory = slash == std::string::npos ? "" : directory.substr(0, slash + 1);
+        std::string resolved;
+        for (std::size_t piece = 0; piece < specifier.size();) {
+          if (specifier.compare(piece, 2, "./") == 0) {
+            piece += 2;
+            continue;
+          }
+          resolved.push_back(specifier[piece]);
+          ++piece;
+        }
+        const std::string target = directory + resolved;
+        const bool found = std::any_of(
+            bundle->resources.begin(), bundle->resources.end(),
+            [&](const auto& candidate) {
+              return candidate.resource_id == target;
+            });
+        CHECK(found);
+        cursor = end;
+      }
+    }
+  }
+  return true;
+}
+
 }  // namespace
 
 int main() {
@@ -253,6 +310,7 @@ int main() {
       !BudgetOverflowDegradesOnlyTheOffendingBlocks() ||
       !OrdinaryMarkdownIsUnchanged() ||
       !P0ComposesMathHighlightAndMermaid() ||
+      !EmbeddedCatalogServesTheFullClosure() ||
       !RevisionStormNeverPlacesStaleBlocks()) {
     return EXIT_FAILURE;
   }

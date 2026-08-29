@@ -11,6 +11,7 @@
 #include "crayon/browser_markdown/markdown_render.h"
 #include "crayon/browser_markdown_runtime/highlight_extension.h"
 #include "crayon/browser_markdown_runtime/katex_extension.h"
+#include "crayon/browser_markdown_runtime/mermaid_extension.h"
 #include "crayon/browser_mdv/mdv_images.h"
 #include "crayon/browser_mdv/mdv_page.h"
 #include "include/cef_parser.h"
@@ -175,11 +176,15 @@ class MdvSchemeHandlerFactory final : public CefSchemeHandlerFactory {
                           std::shared_ptr<const crayon::browser_markdown_runtime::
                                                     RuntimeAssetBundle>
                               katex_assets,
+                          std::shared_ptr<const crayon::browser_markdown_runtime::
+                                                    RuntimeAssetBundle>
+                              mermaid_assets,
                           std::string stylesheet, std::string script)
       : strings_(std::move(strings)),
         state_(std::move(state)),
         highlight_assets_(std::move(highlight_assets)),
         katex_assets_(std::move(katex_assets)),
+        mermaid_assets_(std::move(mermaid_assets)),
         stylesheet_(std::move(stylesheet)),
         script_(std::move(script)) {}
 
@@ -235,6 +240,8 @@ class MdvSchemeHandlerFactory final : public CefSchemeHandlerFactory {
       case crayon::browser_mdv::MdvResourceKind::kRuntimeAsset: {
         const auto& bundle = route.runtime_namespace == "katex"
                                  ? katex_assets_
+                             : route.runtime_namespace == "mermaid"
+                                 ? mermaid_assets_
                                  : highlight_assets_;
         if (!bundle) {
           return new MdvMemoryResourceHandler(404, "Not Found", kTextMimeType,
@@ -321,6 +328,9 @@ class MdvSchemeHandlerFactory final : public CefSchemeHandlerFactory {
   const std::shared_ptr<const crayon::browser_markdown_runtime::
                             RuntimeAssetBundle>
       katex_assets_;
+  const std::shared_ptr<const crayon::browser_markdown_runtime::
+                            RuntimeAssetBundle>
+      mermaid_assets_;
   const std::string stylesheet_;
   const std::string script_;
 
@@ -411,11 +421,26 @@ bool RegisterMdvSchemeHandlerFactory(
   if (!katex_assets) {
     return false;
   }
+  const auto mermaid_catalog =
+      crayon::browser_markdown_runtime::BuildMermaidAssetCatalog();
+  if (mermaid_catalog.status != crayon::browser_markdown_runtime::
+                                    AssetCatalogBuildStatus::kReady ||
+      !mermaid_catalog.catalog) {
+    return false;
+  }
+  auto mermaid_assets = mermaid_catalog.catalog->FindCompatible(
+      crayon::browser_markdown_runtime::kMermaidAssetManifestId,
+      crayon::browser_markdown_runtime::kMermaidExtensionId,
+      crayon::browser_markdown_runtime::kMermaidExtensionVersion);
+  if (!mermaid_assets) {
+    return false;
+  }
   return CefRegisterSchemeHandlerFactory(
       kMdvScheme, kMdvHost,
       new MdvSchemeHandlerFactory(std::move(strings), state,
                                   std::move(highlight_assets),
                                   std::move(katex_assets),
+                                  std::move(mermaid_assets),
                                   crayon::browser_mdv::RenderMdvStylesheet(),
                                   crayon::browser_mdv::RenderMdvScript()));
 }

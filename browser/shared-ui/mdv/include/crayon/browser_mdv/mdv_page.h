@@ -10,6 +10,7 @@
 // golden-locked kMdvCsp from mdv_viewer.h.
 #pragma once
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -113,6 +114,11 @@ struct MdvRoute {
 /// Classifies one request against the fixed route table.  Anything off
 /// the exact triple (scheme, host, path) or carrying credentials, port,
 /// query or fragment is rejected.
+/// Percent-decodes a URL path exactly once. Fails (nullopt) on malformed
+/// escapes, a NUL byte, a backslash, or any remaining percent after decode
+/// (double-encoding escapes). ClassifyMdvRequest consumes only decoded paths.
+std::optional<std::string> PercentDecodePath(const std::string& path);
+
 MdvRoute ClassifyMdvRequest(const MdvRequestParts& request);
 
 /// Server-side snapshot of what the page shows this round.

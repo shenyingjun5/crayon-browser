@@ -34,7 +34,7 @@
 | MDV-13 | VERIFIED | MDV-08..11 | `browser/shared-ui/markdown`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | 图片支持：云端 https 直载 + 本地受控序号路由（文档目录内、格式/大小白名单、路径不入 URL/DOM）+ CSP img-src 修订 | MD-002 图片矩阵 + 实机 |
 | MDV-14 | DONE | MDV-13 | `third_party/mermaid`,`tools`,`docs/current`,`docs/plans` | Mermaid Full 供应链冻结：固定 `mermaid` 11.17.2，vendor 完整浏览器运行时 import closure、LICENSE/NOTICE、hash/MIME/大小 manifest 与可重复生成/校验入口 | MD-008；离线 closure/许可/双次生成 hash |
 | MDV-15 | DONE | MDV-14,MRT-03 | `browser/shared-ui/markdown`,`browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv` | Mermaid adapter：标准 Mermaid fence → 通用 ExtensionNode、不透明 block/占位与有界 DSL；普通 Markdown 保持既有 md4c 安全输出 | MD-002、MD-009、MR-001/002；golden/注入/边界 |
-| MDV-16 | TODO | MDV-14,MRT-04 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv`,`browser/cef-shell/resources`,`browser/cef-shell/CMakeLists.txt` | Mermaid ESM 资产路由与打包：消费通用 manifest loader，精确路由、正确 MIME、相对 chunk import、macOS/Windows 同源资源装配；无图零加载 | MD-008、MR-003；路由攻击矩阵 + 离线 CEF smoke |
+| MDV-16 | DONE | MDV-14,MRT-04 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv`,`browser/cef-shell/resources`,`browser/cef-shell/CMakeLists.txt` | Mermaid ESM 资产路由与打包：消费通用 manifest loader，精确路由、正确 MIME、相对 chunk import、macOS/Windows 同源资源装配；无图零加载 | MD-008、MR-003；路由攻击矩阵 + 离线 CEF smoke |
 | MDV-17 | TODO | MDV-15,MDV-16 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | Mermaid runtime 核心：按需 `import()`、单例初始化、`mermaid.render()`、strict 配置、独立 SVG policy gate、per-block 错误隔离与七类图覆盖 | MD-009；CSP/注入 golden + CEF render |
 | MDV-18 | TODO | MDV-17 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv`,`browser/shared-ui/locales` | 图表交互与主题：viewport lazy render、响应式宽度/横向滚动、浅深主题重绘、全屏查看/源码切换；零新特权 binding | MD-004、MD-009；键鼠/a11y/主题实机 |
 | MDV-19 | TODO | MDV-17,MDV-18 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | 编辑/多图性能与生命周期：有界并发和内存 cache、revision fencing、迟到结果丢弃、关闭/导航/内存压力清理 | MD-004、MD-010；50-block perf/风暴/资源回落 |
@@ -321,7 +321,7 @@ MDV-02..06 按"模型层零 IO / 零 CEF 类型"交付后，产品仍不可见�
 
 ### MDV-16 原子范围（Mermaid ESM 资产路由与跨平台打包）
 
-- 状态：`TODO`；依赖 `MDV-14 VERIFIED`、`MRT-04 VERIFIED`，可在 MDV-15 之后或独立领取。
+- 状态：`DONE`；依赖 `MDV-14 DONE`、`MRT-04 DONE`，可在 MDV-15 之后或独立领取。
 - 单一目标：让 `crayon://mdv` 只读 resource handler 消费 MRT 通用 manifest loader，按 MDV-14 manifest 提供 Mermaid ESM 入口与相对 chunk，完成 macOS App bundle/Windows resource 的同一资产装配，并保证无 Mermaid 文档不读取任何 Mermaid 字节。
 - 输入：MRT-04 loader/lifecycle、`ClassifyMdvRequest`、`MdvMemoryResourceHandler`、CEF CMake/平台资源打包、Mermaid manifest。
 - 允许修改：`browser/shared-ui/markdown-runtime/**` 的 Mermaid manifest adapter、`browser/shared-ui/mdv/**`、`browser/cef-shell/src/browser/mdv/**`、`browser/cef-shell/resources/{macos,windows}/**`、`browser/cef-shell/CMakeLists.txt` 与路由/打包测试。
@@ -329,6 +329,16 @@ MDV-02..06 按"模型层零 IO / 零 CEF 类型"交付后，产品仍不可见�
 - 边界：仅 GET/HEAD；路径先 percent-decode 一次再规范化，拒绝 `..`、反斜杠、NUL、二次编码分隔符、query/fragment、大小写别名与 manifest 外路径；MIME 至少闭合 `.mjs/.js/.css/.wasm/.json` 的实际 closure，`nosniff` 保持；响应读有界并支持取消。
 - 验收：`MD-008`；manifest 每项 200/正确 MIME/hash，未知/穿越/编码逃逸 404，POST 405；CEF 150 可从入口解析全部相对 import；断网环境普通文档和七类 fixture 均无公网请求；macOS arm64 build/smoke 先行，Windows build 回归。
 - 明确不做：调用 Mermaid API、SVG 注入、图表 UI。
+
+### MDV-16 完成记录（2026-08-29）
+
+- 实现：Mermaid Full 104 文件闭包经 CMake 从 `crayon-mermaid-assets/v1` manifest 逐文件校验 bytes/SHA-256 后以 HEX 字节数组编译期嵌入（`mermaid_assets_generated.h`，配置依赖逐资产挂接，任一漂移即 configure 失败）；`BuildMermaidAssetCatalog` 产出单一不可变 bundle（manifest id `mermaid-runtime-assets-v1`、entry `mermaid.esm.min.mjs`、resource id=upstream 相对路径、全部 `kJavaScript`）。`crayon://mdv` 路由新增 `/runtime/mermaid/<upstream-relative-path>` 命名空间，handler 以精确、大小写敏感的 bundle 查找供出（不在 manifest 的 id 404）。分类器加固：路径先做 encoded-separator 前置拒绝（`%2f`/`%5c`），再 `PercentDecodePath` 恰好解码一次（畸形/残留 `%`/反斜杠/NUL 全拒），`//`、`/./` 形状拒绝；仅 GET/HEAD 语义不变。macOS App bundle 与 Windows 均消费同一编译期嵌入资产，无需平台资源差异；无 Mermaid 文档不产生任何 mermaid 请求（页面侧 import 由 MDV-17 接线，供出纯按需）。
+- 契约修订：`markdown-runtime.md` §8 asset catalog 每 bundle resource 上限 `64`→`256`（Mermaid Full 104 文件闭包为首个超限合法 bundle，修订日期与理由已注明）；代码 `kMaxAssetsPerBundle` 同步。
+- 失败基线：三次先失败后修复——`configure_file(@ONLY)` 模板占位符误用 `${}`；raw-string 嵌入触发 `-Woverlength-strings`（>64KiB 字面量），切换 katex 式 HEX 字节数组；测试期望两处与实现语义不符（编码分隔符 `%2f` 前置拒绝、大小写别名归 handler 精确查找 404）。
+- 自动验证：`markdown_runtime_mermaid` 扩展 1/1（catalog ready/104 资源/entry/总字节 3,522,090/全部资源相对 import 在 bundle 内闭合解析）；`mdv_page` 路由矩阵扩展（entry/chunk 正确分类、穿越/编码逃逸/大小写别名/未知 id/`%zz`/`%2` 拒绝矩阵）；`mdv_handler_contract` 增 `BuildMermaidAssetCatalog` 必需 token；engine-api 全量 ctest 57/57；macOS arm64 CEF 全量构建 + ctest 68/68（含 handler 契约）；macOS x64 构建 + markdown/mdv scoped ctest 16/16；`scripts/check.sh fast`/`security`、`git diff --check`、新增行 ≤80 列通过。
+- 实机 smoke：arm64 Debug `CrayonBrowser.app` 正常启动（6 进程）、退出零残留。
+- Code Review：按 v0.8 复核供应链完整性、路由/逃逸边界、原子性与预算、测试与维护性；P0/P1/P2=0。资源 id 语法层只做形状校验、闭合集合校验在 handler 精确查找——与 highlight/katex 命名空间既有分工一致。
+- 未覆盖与风险：真实 CEF 内从入口的动态 import 链与图表渲染归 `MDV-17`（本任务的"可从入口解析全部相对 import"由闭包内解析测试结构性保证）；Windows 真机回归归 MDV-20 收口。`MDV-16` 转为 `DONE`。
 
 ### MDV-17 原子范围（Mermaid 渲染 runtime 与安全隔离）
 

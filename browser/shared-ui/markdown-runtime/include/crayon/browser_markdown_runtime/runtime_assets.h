@@ -9,7 +9,9 @@
 namespace crayon::browser_markdown_runtime {
 
 inline constexpr std::size_t kMaxAssetBundles = 64;
-inline constexpr std::size_t kMaxAssetsPerBundle = 64;
+// MDV-16: raised from 64 for the Mermaid Full 104-file closure (contract
+// markdown-runtime.md §8 amended 2026-08-29).
+inline constexpr std::size_t kMaxAssetsPerBundle = 256;
 inline constexpr std::size_t kMaxAssetResourceIdBytes = 64;
 inline constexpr std::size_t kMaxRuntimeAssetBytes = 16 * 1024 * 1024;
 inline constexpr std::size_t kMaxRuntimeBundleBytes = 32 * 1024 * 1024;
