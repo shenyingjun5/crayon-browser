@@ -226,9 +226,15 @@ void RegisterCrayonCustomSchemes(CefRawPtr<CefSchemeRegistrar> registrar) {
   if (!registrar) {
     return;
   }
+  // CEF recommends CORS_ENABLED for standard schemes (cef_types.h); without
+  // it same-origin dynamic module imports fail on some platforms (MRT-06
+  // Windows evidence). CSP and same-origin policy still apply; the handlers
+  // never send Access-Control-Allow-Origin, so cross-origin access stays
+  // closed.
   constexpr int kSchemeOptions = CEF_SCHEME_OPTION_STANDARD |
                                  CEF_SCHEME_OPTION_SECURE |
-                                 CEF_SCHEME_OPTION_DISPLAY_ISOLATED;
+                                 CEF_SCHEME_OPTION_DISPLAY_ISOLATED |
+                                 CEF_SCHEME_OPTION_CORS_ENABLED;
   registrar->AddCustomScheme(browser_new_tab::kNewTabScheme, kSchemeOptions);
 }
 

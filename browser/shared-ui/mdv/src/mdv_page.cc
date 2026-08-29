@@ -686,15 +686,26 @@ void AppendMdvDividerScript(std::ostringstream& js) {
 }
 
 void AppendMdvHighlightScript(std::ostringstream& js) {
+  // Import failures must not be silently swallowed: every attempt is marked
+  // on the element (data-mdv-highlight-failed/attempts) and retried at most
+  // three times via the observer before staying in a visible failed state.
   js << "var highlightObserver=null;"
      << "function resetHighlights(){if(highlightObserver){highlightObserver."
         "disconnect();highlightObserver=null;}}"
+     << "function markHighlightFailure(code,retry){var attempts=(parseInt(code."
+        "getAttribute('data-mdv-highlight-attempts')||'0',10)||0)+1;code."
+        "setAttribute('data-mdv-highlight-attempts',String(attempts));code."
+        "setAttribute('data-mdv-highlight-failed','true');if(retry&&attempts<3"
+        "&&highlightObserver){highlightObserver.observe(code);}}"
      << "function startHighlight(code){if(!code||code.getAttribute('data-mdv-"
-        "highlighted')==='true'){return;}var language=code.getAttribute('data-"
-        "mdv-highlight');var nodeId=code.getAttribute('data-mdv-node');if(!"
-        "language||!nodeId){return;}import('/runtime/highlight/adapter').then("
-        "function(adapter){return adapter.highlightCode(code,language,nodeId);})"
-        ".catch(function(){});}"
+        "highlighted')==='true'){return;}var attempts=parseInt(code."
+        "getAttribute('data-mdv-highlight-attempts')||'0',10)||0;if(attempts>=3"
+        "){return;}var language=code.getAttribute('data-mdv-highlight');var "
+        "nodeId=code.getAttribute('data-mdv-node');if(!language||!nodeId){"
+        "return;}import('/runtime/highlight/adapter').then(function(adapter){"
+        "return adapter.highlightCode(code,language,nodeId);}).then(function("
+        "ok){if(ok===false){markHighlightFailure(code,false);}}).catch("
+        "function(){markHighlightFailure(code,true);});}"
      << "function observeHighlights(root){if(!root||typeof IntersectionObserver"
         "!=='function'){return;}if(!highlightObserver){highlightObserver=new "
         "IntersectionObserver(function(entries){for(var i=0;i<entries.length;i++)"

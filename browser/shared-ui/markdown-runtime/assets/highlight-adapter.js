@@ -118,6 +118,18 @@ function appendTokenTree(parent, tokens) {
   }
 }
 
+export function applyHighlightedCode(code, candidate, source, nodeId) {
+  const tokens = parseHighlightCandidate(candidate);
+  if (!tokens || !code.isConnected || code.textContent !== source ||
+      code.getAttribute("data-mdv-node") !== nodeId) return false;
+  const fragment = document.createDocumentFragment();
+  appendTokenTree(fragment, tokens);
+  code.replaceChildren(fragment);
+  code.classList.add("hljs");
+  code.setAttribute("data-mdv-highlighted", "true");
+  return true;
+}
+
 export async function highlightCode(code, canonical, nodeId) {
   const order = loadOrderForLanguage(canonical);
   if (!code || !order || code.getAttribute("data-mdv-node") !== nodeId) return false;
@@ -128,14 +140,7 @@ export async function highlightCode(code, canonical, nodeId) {
       language: canonical,
       ignoreIllegals: true
     }).value;
-    const tokens = parseHighlightCandidate(candidate);
-    if (!tokens || !code.isConnected || code.textContent !== source ||
-        code.getAttribute("data-mdv-node") !== nodeId) return false;
-    const fragment = document.createDocumentFragment();
-    appendTokenTree(fragment, tokens);
-    code.replaceChildren(fragment);
-    code.setAttribute("data-mdv-highlighted", "true");
-    return true;
+    return applyHighlightedCode(code, candidate, source, nodeId);
   } catch (_) {
     return false;
   }

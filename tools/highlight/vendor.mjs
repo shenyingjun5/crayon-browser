@@ -235,6 +235,12 @@ function vendoredReadme() {
       `\`--download\` is an explicit network-only maintainer action.\n`;
 }
 
+function gitattributesContent() {
+  // Byte-exact vendor closure: Git must not rewrite line endings on checkout
+  // (a CRLF worktree would fail the sha256 asset checks on Windows).
+  return '# Vendored bytes must stay byte-identical across platforms.\n* -text\n';
+}
+
 function validateLanguageClosure() {
   const ids = new Set(LANGUAGES.map(({id}) => id));
   const aliases = new Set();
@@ -342,6 +348,13 @@ async function listFiles(root, relative = '') {
   return found.sort();
 }
 
+// Line endings may differ between the generated LF text and a Git checkout
+// with core.autocrlf=true; text documents are compared after normalization
+// while asset integrity stays byte-exact via sha256.
+function normalizeCheckoutText(text) {
+  return text.replace(/\r\n/g, '\n');
+}
+
 export async function verifyVendorDirectory(root = vendorRoot()) {
   const manifestPath = path.join(root, 'manifest.json');
   if (!existsSync(manifestPath)) {
@@ -349,12 +362,13 @@ export async function verifyVendorDirectory(root = vendorRoot()) {
   }
   const expectedText = `${JSON.stringify(expectedManifest(), null, 2)}\n`;
   const actualText = await readFile(manifestPath, 'utf8');
-  if (actualText !== expectedText) {
+  if (normalizeCheckoutText(actualText) !== expectedText) {
     throw new Error('manifest content mismatch');
   }
   const expectedFiles = new Set([
     'manifest.json',
     'VENDORED.md',
+    '.gitattributes',
     ...FILES.map(({output}) => output),
   ]);
   const actualFiles = await listFiles(root);
@@ -362,7 +376,8 @@ export async function verifyVendorDirectory(root = vendorRoot()) {
       actualFiles.some((item) => !expectedFiles.has(item))) {
     throw new Error('vendor file set mismatch');
   }
-  if (await readFile(path.join(root, 'VENDORED.md'), 'utf8') !==
+  if (normalizeCheckoutText(
+          await readFile(path.join(root, 'VENDORED.md'), 'utf8')) !==
       vendoredReadme()) {
     throw new Error('vendored documentation mismatch');
   }
@@ -389,6 +404,8 @@ async function writeVendorDirectory(selected, root = vendorRoot()) {
     await writeFile(path.join(temporary, 'manifest.json'),
                     `${JSON.stringify(expectedManifest(), null, 2)}\n`);
     await writeFile(path.join(temporary, 'VENDORED.md'), vendoredReadme());
+    await writeFile(path.join(temporary, '.gitattributes'),
+                    gitattributesContent());
     await verifyVendorDirectory(temporary);
 
     if (existsSync(root)) {

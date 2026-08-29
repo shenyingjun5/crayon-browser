@@ -403,6 +403,11 @@ void TestHighlightRoutesAndLazyBootstrap() {
         std::string::npos);
   CHECK(script.find("highlightAuto") == std::string::npos);
   CHECK(script.find("highlightAll") == std::string::npos);
+  CHECK(script.find("data-mdv-highlight-failed") != std::string::npos);
+  CHECK(script.find("data-mdv-highlight-attempts") != std::string::npos);
+  CHECK(script.find("attempts<3") != std::string::npos);
+  CHECK(script.find(".catch(function(){markHighlightFailure(code,true);});") !=
+        std::string::npos);
   const std::string css = crayon::browser_mdv::RenderMdvStylesheet();
   CHECK(css.find("pre code.hljs") != std::string::npos);
   CHECK(css.find("prefers-color-scheme:dark") != std::string::npos);

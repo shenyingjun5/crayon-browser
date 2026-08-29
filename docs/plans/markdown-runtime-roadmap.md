@@ -172,6 +172,18 @@ Gate:       MRT-18 TV/Cast gap / MRT-19 AI source-producer gap only
 - Windows 独立 Code Review v0.8（2026-08-28）：CHANGES_REQUIRED，P0=0、P1=2、P2=1。P1：Windows CEF 中 dynamic module/highlight 未启动，`crayon` scheme 仅注册 `STANDARD|SECURE|DISPLAY_ISOLATED`，未带 CEF 建议给 standard scheme 的 `CORS_ENABLED`，同时 `mdv_page.cc` 在 observer 先 unobserve 后吞掉 import 错误，失败后无重试/可观测状态；adapter 成功路径仅写 `data-mdv-highlighted` 而不写 `hljs` class，与 `pre code.hljs` 浅/深基础主题 selector 不匹配。P2：vendor manifest check 对 Git 合法 CRLF checkout 不稳定。本会话按授权仅回写 MRT-06 Windows 证据，未夹带生产修复。
 - 未覆盖与状态：Windows 真实 CEF 的 canonical/alias 高亮、viewport lazy、高亮亮/暗主题与零 CSP/resource/网络错误均未闭合，保持 `VERIFIED`，不转 `DONE`；需先修复上述 P1/P2 并在 Windows x64 真实 CEF 复验。KaTeX 与 Mermaid 未在本任务提前实现；保留远程已完成的 `MRT-07 DONE`，`MRT-08` 为 `READY`。
 
+### MRT-06 Windows P1/P2 修复记录（2026-08-29，macOS 会话）
+
+- 修复四项，均先立失败基线再实现：
+  - P1（CORS_ENABLED）：`RegisterCrayonCustomSchemes` 补 `CEF_SCHEME_OPTION_CORS_ENABLED`（CEF 150 `cef_types.h` 明示 standard scheme 应设置）；`new_tab_adapter_contract.cmake` 同步把该选项从禁止清单移到必需清单（`CSP_BYPASSING`/`FETCH_ENABLED` 保持禁止）。handler 不发送 `Access-Control-Allow-Origin`，跨源访问仍关闭。
+  - P1（吞错/无重试）：`mdv_page.cc` highlight 脚本改为 `markHighlightFailure`——每次失败在元素上写 `data-mdv-highlight-failed`/`data-mdv-highlight-attempts`，import 拒绝经 observer 重入队有界重试（上限 3 次），adapter 返回 `false`（stale/拒绝）标记失败不重试；不再存在静默 `catch(function(){})`。
+  - P1（hljs class）：`highlight-adapter.js` 提取可测的 `applyHighlightedCode`，成功路径幂等 `classList.add('hljs')` 保证 `pre code.hljs` 主题 selector 命中；`highlightCode` 行为不变。
+  - P2（CRLF）：`vendor.mjs` 对 `manifest.json`/`VENDORED.md` 文本比较做 CRLF 归一（资产 sha256 保持字节级）；新增 `third_party/highlight/.gitattributes`（`* -text`）纳入 file set 并由 `writeVendorDirectory` 写出，阻止 Git 在 Windows checkout 改写字节。
+- 失败基线：`node --test tools/highlight/vendor.test.mjs` 在旧实现下 CRLF 用例与 file-set 用例失败；撤回 `classList.add('hljs')` 时 `applyHighlightedCode` 测试失败、恢复后通过；契约在源码缺 `CORS_ENABLED` 时必然失败。
+- 自动验证：`node --test browser/shared-ui/markdown-runtime/tests/highlight_adapter.test.mjs` 6/6；`node --test tools/highlight/vendor.test.mjs` 5/5；`node tools/highlight/vendor.mjs --check` 25 grammars/124585 bytes；macOS arm64 Debug CEF build + 串行 `ctest` 67/67（含 `mdv_page`、new-tab contract）；macOS x64 CEF build 0 error + scoped ctest 17/17；`bash scripts/check.sh fast`、`security`、`git diff --check` 通过；新增行均 ≤80 列。
+- macOS smoke：arm64 Debug `CrayonBrowser.app` 以新 scheme 选项正常启动（main + GPU/network/storage/renderer 全进程树）、退出零残留。
+- 未覆盖与风险：**Windows x64 真实 CEF 复验未运行**（canonical/alias 高亮、viewport lazy、亮暗主题、`vendor.mjs --check`、零 CSP/resource/网络错误）；已有 CRLF 工作区在 `.gitattributes` 生效后需 re-vendor 或 fresh checkout 才能字节一致；本机无 clang-format 19.1.5，Xcode 版本对既有代码也报违规不能作判据，格式复核待补。同根因候选遗留：`tools/katex/vendor.mjs` 存在同类 CRLF 暴露、`mdv_page.cc` math 脚本存在同类吞错模式，分别归 MRT-08/后续 Review 处理，本任务未夹带。`MRT-06` 保持 `VERIFIED`，Windows 复验通过后转 `DONE`。
+
 ## 5F. MRT-07 原子范围（KaTeX 语法与供应链）
 
 - 状态：`DONE`；依赖 `MRT-04 DONE`。单一目标是冻结 KaTeX 的 Markdown 数学定界、安全 option/macro policy 与可离线复验的最小浏览器 runtime/CSS/font 闭包；不改变 MDV/Markdown 生产行为。
