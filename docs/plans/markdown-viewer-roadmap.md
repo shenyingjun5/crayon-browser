@@ -1,6 +1,6 @@
 # MDV：本地 Markdown 查看器 Roadmap
 
-状态：`MDV-01 DONE`，`MDV-02..07,10..13 VERIFIED`，`MDV-08/09/21..23 DONE`，`MDV-24 VERIFIED`；Mermaid Full 集成波次为 `MDV-14..19 DONE`、`MDV-20 TODO`（按依赖顺序接续）。macOS arm64/x64 Debug 包、受管图标消费和 CEF 嵌套签名闭包已验证；Helper/Renderer 装配、deployment target、默认页/公网导航、macOS arm64 UI/VoiceOver/主题真机问题已闭合，原生 x64、Windows 与当前自动化无法替代的 IME/窄窗交互真机仍待补。本 Roadmap 承接“浏览器内查看本地 Markdown 文档、渲染预览、分栏编辑与标准 Mermaid 图表”的产品增量（PRD v0.8 §4.1）：`crayon://mdv` 内置查看页复用 `crayon://newtab` 的自定义 scheme、应用内资源与严格 CSP 模式；本地 `.md` 只经用户手势的受控入口打开，保存走原子写。MDV 是纯用户能力，不进入 CAAP tool registry；Agent 侧任意文件访问禁令不变。新增图表按当前 macOS 先行策略完成共享层/arm64 CEF 验证，最后补 Windows 回归。
+状态：`MDV-01 DONE`，`MDV-02..07,10..13 VERIFIED`，`MDV-08/09/21..23 DONE`，`MDV-24 VERIFIED`；Mermaid Full 集成波次为 `MDV-14..19 DONE`、`MDV-20 VERIFIED`。macOS arm64 Debug/Release 的七类 Mermaid、50-block、离线发布目录、SBOM/NOTICE、CEF 嵌套签名与退出零残留已闭合；MDV-20 仍需 Windows x64 Debug/Release 发布包回归后才能转 `DONE`。原生 macOS x64、Windows Narrator/中文 IME/原生 200% DPI 与当前自动化无法替代的窄窗交互真机仍待补。本 Roadmap 承接“浏览器内查看本地 Markdown 文档、渲染预览、分栏编辑与标准 Mermaid 图表”的产品增量（PRD v0.8 §4.1）：`crayon://mdv` 内置查看页复用 `crayon://newtab` 的自定义 scheme、应用内资源与严格 CSP 模式；本地 `.md` 只经用户手势的受控入口打开，保存走原子写。MDV 是纯用户能力，不进入 CAAP tool registry；Agent 侧任意文件访问禁令不变。
 
 ## 产品设计结论
 
@@ -38,7 +38,7 @@
 | MDV-17 | DONE | MDV-15,MDV-16 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | Mermaid runtime 核心：按需 `import()`、单例初始化、`mermaid.render()`、strict 配置、独立 SVG policy gate、per-block 错误隔离与七类图覆盖 | MD-009；CSP/注入 golden + CEF render |
 | MDV-18 | DONE | MDV-17 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv`,`browser/shared-ui/locales` | 图表交互与主题：viewport lazy render、响应式宽度/横向滚动、浅深主题重绘、全屏查看/源码切换；零新特权 binding | MD-004、MD-009；键鼠/a11y/主题实机 |
 | MDV-19 | DONE | MDV-17,MDV-18 | `browser/shared-ui/markdown-runtime/assets/mermaid-adapter.js`,`browser/shared-ui/markdown-runtime/tests/mermaid_adapter.test.mjs`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv`,`tests/e2e/desktop/browser`,`docs/current/markdown-viewer.md` | 编辑/多图性能与生命周期：有界并发和内存 cache、revision fencing、迟到结果丢弃、关闭/导航/内存压力清理 | MD-004、MD-010；50-block perf/风暴/资源回落 |
-| MDV-20 | TODO | MDV-14..19,MDV-07,MDV-10..13 | `docs/current`,`docs/plans`,`tests/e2e/desktop`,`tools/repo-guard` | Mermaid Full 跨平台收口：macOS arm64 先行、Windows x64 回归、安装包/SBOM/NOTICE/零公网、模块总 Review | MD-007..010；Debug/Release + 实机 + Review P0/P1=0 |
+| MDV-20 | VERIFIED | MDV-14..19,MDV-07,MDV-10..13 | `docs/current`,`docs/plans`,`tests/e2e/desktop`,`tools/repo-guard` | Mermaid Full 跨平台收口：macOS arm64 先行、Windows x64 回归、安装包/SBOM/NOTICE/零公网、模块总 Review | MD-007..010；Debug/Release + 实机 + Review P0/P1=0 |
 | MDV-21 | DONE | MDV-12 | `docs/current`,`docs/plans`,`browser/shared-ui/mdv/design` | 工具栏设计契约与原创 glyph 资产：动作/tooltip/快捷键/上下文矩阵、24×24 图标 manifest 与安全验证；不接页面行为 | MD-011；design contract + `git diff --check` |
 | MDV-22 | DONE | MDV-21 | `browser/shared-ui/mdv` | 可测试编辑变换层：修复行前缀重复正文，统一包裹/标题/多行列表/骨架/缩进/表格列对齐与选区保持 | MD-012；独立 ctest + 回归矩阵 |
 | MDV-23 | DONE | MDV-22 | `browser/shared-ui/mdv`,`browser/shared-ui/locales`,`browser/cef-shell/resources/windows` | 图标工具栏接线：tooltip、平台快捷键、overflow、roving tabindex、IME 门禁与既有 `mdvQuery` 集成；零新 Browser binding | MD-004、MD-011..013；页面/快捷键/a11y contract |
@@ -402,7 +402,7 @@ MDV-02..06 按"模型层零 IO / 零 CEF 类型"交付后，产品仍不可见�
 
 ### MDV-20 原子范围（跨平台、发布与模块总 Review）
 
-- 状态：`TODO`；依赖 `MDV-14..19 VERIFIED` 以及既有 `MDV-07/10..13` 的交互门禁完成。
+- 状态：`VERIFIED`；依赖 `MDV-14..19 VERIFIED` 以及既有 `MDV-07/10..13` 的交互门禁完成；macOS arm64 发布门禁已闭合，等待 Windows x64 Debug/Release 真机回归后转 `DONE`。
 - 单一目标：以发布产物验证 Mermaid Full 能力闭环：先完成 macOS arm64 App/Helper 的离线资源、七类图、编辑/主题/全屏/退出与签名 smoke，再做 Windows x64 Debug/Release 回归；同步 SBOM/NOTICE、任务状态、实际指标和模块 Review。
 - 输入：MD-007..010、QAR 包体/性能/Release surface 口径、`code-review-standard.md` v0.8。
 - 允许修改：`tests/e2e/desktop/**`、`tools/repo-guard` 的 Mermaid release scan、NOTICE/SBOM 输出入口、`docs/current/**`、`docs/plans/**`；发现生产缺陷时退回对应原子任务修复，不在收口任务夹带大补丁。
@@ -410,6 +410,14 @@ MDV-02..06 按"模型层零 IO / 零 CEF 类型"交付后，产品仍不可见�
 - 边界：安装包不含 tiny、npm cache/node_modules/source tests；所有 manifest 文件存在且 hash 匹配，未知动态 import 为零；无图文档零 Mermaid 资产读取，含图文档零公网请求；退出/Renderer crash 后无残留进程与旧回调。
 - 验收：macOS arm64 与 Windows x64 的 Debug/Release build+ctest、发布包离线七类图 smoke、恶意 DSL/security suite、50-block perf、SBOM/NOTICE/release scan；Code Review P0/P1=0，P2 延期必须有后续任务 ID。macOS/Windows 任一缺证据只能 `VERIFIED`，不得 `DONE`。
 - 明确不做：HarmonyOS 真机（后续 HM 专项）、Markdown Presentation/TV/Cast、模型/AI 修改图表。
+
+### MDV-20 macOS 完成记录（2026-08-30，跨平台发布收口）
+
+- 实现：`repo-guard` 新增 `RG-009`，锁定 Mermaid 11.17.2 的 104 文件/3,522,090 bytes manifest、MIT NOTICE/LICENSE、发布目录中唯一主程序的 104 个内嵌资源 ID，并提供确定性 `THIRD_PARTY_NOTICES.md`、SPDX 2.3 SBOM 与发布 manifest 生成入口；`RG-006` 只对官方 CEF framework 精确路径豁免 Chromium 自带的 `remote-debugging-port` 字符串，App/Helper 仍 fail closed。真实 CEF harness 扩展为 flowchart、sequence、mindmap、architecture-beta、class、state、ER 七类图，并同时检查普通文档零 Mermaid、含图文档零公网、50-block 终态、generation/cache 上限和内存压力回落。
+- macOS arm64 自动验证：Debug 全量 CTest `68/68`（MDV-19 同一代码基线）；Release 先执行全目标 build `204/204`，再执行 `ctest --test-dir .cache/build/macos-arm64-cef-release --output-on-failure` 为 `68/68`；`codesign --verify --deep --strict --verbose=2 CrayonBrowser.app` 验证 App、5 个 Helper 与 CEF framework 有效；`node tools/mermaid/vendor.mjs --check` 为 `104 files, 3522090 bytes`；恶意 SVG/外链/事件属性/逃逸引用与调度生命周期 `node --test browser/shared-ui/markdown-runtime/tests/mermaid_adapter.test.mjs` 为 `7/7`；`cargo test -p repo-guard` 为 `28/28`。
+- macOS arm64 发布/实机验证：正式 staging 只含签名 App、NOTICE、SPDX SBOM 与 manifest，`repo-guard scan --artifact-path .cache/dist/mdv20-macos-arm64-release-20260830` 的 `RG-006/RG-009` 及全部 hard gate 通过（既有 `RG-003/RG-004` warning 不阻断）；真实 Release CEF 七类/50-block 为 `47 rendered / 3 expected errors / 0 unresolved`，FCP `72 ms`、首图 `133.4 ms`、全部访问 `414.6 ms`、最大 UI delay `29.8 ms`，普通文档 Mermaid 请求 `0`、公网请求 `0`，cache `7 entries / 254,002 bytes` 且 memory pressure 后 `0/0`；无调试参数的 `run_smoke.py smoke` 通过完整进程树、loopback-only 与退出零残留。App 包体 `323,452 KiB`。
+- Code Review：按 v0.8 覆盖需求/边界、发布误装测试资产、安全例外、离线供应链、性能热路径、错误与退出生命周期、测试与文档；新增反向用例证明主 App 出现 `remote-debugging-port` 仍被 `RG-006` 拒绝。P0/P1/P2=`0/0/0`。
+- 未覆盖与风险：Windows x64 Debug/Release build+CTest、正式 staging、七类真实 CEF/50-block/零公网/退出零残留与 `RG-006/RG-009` 尚未取得本次代码基线的真机证据，因此任务维持 `VERIFIED`；原生 macOS x64 长稳按既有 Rosetta 边界归 QAR，不阻塞本任务当前 macOS arm64 门禁。
 
 ## 编辑器工具栏优化波次（MDV-21..24）
 

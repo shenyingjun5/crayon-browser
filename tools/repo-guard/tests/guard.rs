@@ -1,4 +1,4 @@
-use repo_guard::{run, CheckStatus, GuardConfig};
+use repo_guard::{run, write_mermaid_release_metadata, CheckStatus, GuardConfig};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -421,6 +421,111 @@ fn legacy_route_bytes_fail_release_scan() {
     repo.write("dist/app.bin", "prefix /api/extract suffix\n");
     let mut config = GuardConfig::new(&repo.path);
     config.artifact_dir = Some(repo.path.join("dist"));
+    let report = run(&config).unwrap();
+    assert_eq!(report.check("RG-006").unwrap().status, CheckStatus::Failed);
+}
+
+fn write_mermaid_release_fixture(repo: &TestRepo, omit_last_resource: bool) {
+    let files: Vec<serde_json::Value> = (0..104)
+        .map(|index| {
+            let path = if index == 103 {
+                "mermaid.esm.min.mjs".to_owned()
+            } else {
+                format!("chunks/chunk-{index:03}.mjs")
+            };
+            repo.write(
+                &format!("third_party/mermaid/assets/{path}"),
+                &format!("asset-{index}\n"),
+            );
+            serde_json::json!({
+                "path": path,
+                "bytes": index + 1,
+                "sha256": format!("{:064x}", index + 1),
+                "mime": "text/javascript"
+            })
+        })
+        .collect();
+    let manifest = serde_json::json!({
+        "schema": "crayon-mermaid-assets/v1",
+        "package": {
+            "name": "mermaid",
+            "version": "11.17.2",
+            "license": "MIT",
+            "source": "https://registry.npmjs.org/mermaid/-/mermaid-11.17.2.tgz",
+            "npmIntegrity": "sha512-fixture",
+            "tarballSha256": "6ad2f42c3fc26bbf9e45cbb6d11898972573ea52b33a5f4ff51952899f950ffd"
+        },
+        "policy": {
+            "entry": "mermaid.esm.min.mjs",
+            "externalImports": 0,
+            "networkImports": 0,
+            "totalBytes": 3522090
+        },
+        "files": files
+    });
+    repo.write(
+        "third_party/mermaid/manifest.json",
+        &format!("{}\n", serde_json::to_string_pretty(&manifest).unwrap()),
+    );
+    repo.write(
+        "third_party/mermaid/VENDORED.md",
+        "mermaid@11.17.2 MIT https://registry.npmjs.org/mermaid/-/mermaid-11.17.2.tgz 6ad2f42c3fc26bbf9e45cbb6d11898972573ea52b33a5f4ff51952899f950ffd\n",
+    );
+    repo.write(
+        "third_party/mermaid/LICENSE",
+        "MIT License\nPermission is hereby granted\n",
+    );
+    write_mermaid_release_metadata(&repo.path, &repo.path.join("dist")).unwrap();
+    let end = if omit_last_resource { 103 } else { 104 };
+    let mut executable = String::new();
+    for index in 0..end {
+        let path = if index == 103 {
+            "mermaid.esm.min.mjs".to_owned()
+        } else {
+            format!("chunks/chunk-{index:03}.mjs")
+        };
+        executable.push_str(&path);
+        executable.push('\0');
+    }
+    repo.write("dist/CrayonBrowser", &executable);
+}
+
+#[test]
+fn mermaid_release_closure_passes_rg_009_and_missing_id_fails() {
+    let clean = TestRepo::new("mermaid-release");
+    clean.write("Cargo.toml", &basic_manifest("mermaid-release"));
+    clean.write("src/lib.rs", "pub fn value() {}\n");
+    write_mermaid_release_fixture(&clean, false);
+    let mut config = GuardConfig::new(&clean.path);
+    config.artifact_dir = Some(clean.path.join("dist"));
+    let report = run(&config).unwrap();
+    assert_eq!(report.check("RG-009").unwrap().status, CheckStatus::Passed);
+
+    let missing = TestRepo::new("mermaid-release-missing");
+    missing.write("Cargo.toml", &basic_manifest("mermaid-release-missing"));
+    missing.write("src/lib.rs", "pub fn value() {}\n");
+    write_mermaid_release_fixture(&missing, true);
+    let mut config = GuardConfig::new(&missing.path);
+    config.artifact_dir = Some(missing.path.join("dist"));
+    let report = run(&config).unwrap();
+    assert_eq!(report.check("RG-009").unwrap().status, CheckStatus::Failed);
+}
+
+#[test]
+fn upstream_cef_binary_remote_debug_string_is_not_a_crayon_entry_point() {
+    let repo = TestRepo::new("cef-release-marker");
+    repo.write("Cargo.toml", &basic_manifest("cef-release-marker"));
+    repo.write("src/lib.rs", "pub fn value() {}\n");
+    repo.write(
+        "dist/Contents/Frameworks/Chromium Embedded Framework.framework/Versions/A/Chromium Embedded Framework",
+        "remote-debugging-port\n",
+    );
+    let mut config = GuardConfig::new(&repo.path);
+    config.artifact_dir = Some(repo.path.join("dist"));
+    let report = run(&config).unwrap();
+    assert_eq!(report.check("RG-006").unwrap().status, CheckStatus::Passed);
+
+    repo.write("dist/CrayonBrowser", "remote-debugging-port\n");
     let report = run(&config).unwrap();
     assert_eq!(report.check("RG-006").unwrap().status, CheckStatus::Failed);
 }

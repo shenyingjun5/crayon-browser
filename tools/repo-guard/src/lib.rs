@@ -1,9 +1,11 @@
 mod delivery_rules;
 mod manifest_rules;
+mod mermaid_rules;
 mod model;
 mod source_rules;
 mod walk;
 
+pub use mermaid_rules::write_release_metadata as write_mermaid_release_metadata;
 pub use model::{CheckResult, CheckStatus, Finding, Report, Severity};
 
 use std::io;
@@ -30,6 +32,10 @@ pub fn run(config: &GuardConfig) -> io::Result<Report> {
     let mut checks = Vec::new();
     checks.extend(manifest_rules::inspect(&root, &files));
     checks.extend(source_rules::inspect(&root, &files));
+    checks.push(mermaid_rules::release_assets(
+        &root,
+        config.artifact_dir.as_deref(),
+    ));
     checks.push(delivery_rules::release_assets(
         config.artifact_dir.as_deref(),
     ));

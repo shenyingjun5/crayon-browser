@@ -52,6 +52,8 @@ await delay(800);
 const diagrams = [
   "flowchart LR\n  A --> B",
   "sequenceDiagram\n  Alice->>Bob: hello",
+  "mindmap\n  root((MDV))\n    Offline\n    Safe",
+  "architecture-beta\n  service api(server)[API]\n  service db(database)[DB]\n  api:R --> L:db",
   "classDiagram\n  Animal <|-- Duck",
   "stateDiagram-v2\n  [*] --> Ready",
   "erDiagram\n  USER ||--o{ ORDER : places"
@@ -107,7 +109,8 @@ const expression = `
   window.dispatchEvent(new Event('memorypressure'));
   await new Promise((resolve)=>setTimeout(resolve,0));
   const memoryPressureStats=adapter.mermaidSessionStats();
-  return {blockCount:nodes.length,rendered,errors,unresolved,
+  const diagramTypes=diagrams.map((source)=>source.split('\\n',1)[0]);
+  return {blockCount:nodes.length,rendered,errors,unresolved,diagramTypes,
     firstDiagramMs,allVisitedMs:performance.now()-start,
     maxUiDelayMs:maxDelay,paints,stats,memoryPressureStats};
 })()`;
@@ -153,6 +156,9 @@ const failures = [];
 if (report.page.blockCount !== 50 || report.page.rendered !== 47 ||
     report.page.errors !== 3 || report.page.unresolved.length !== 0) {
   failures.push("50-block terminal counts mismatch");
+}
+if (report.page.diagramTypes.length !== 7) {
+  failures.push("seven diagram type coverage mismatch");
 }
 if (report.page.stats.active !== 0 || report.page.stats.pending !== 0 ||
     report.page.stats.cacheEntries > 128 ||

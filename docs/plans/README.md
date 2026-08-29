@@ -25,7 +25,7 @@
 | MED | [media-policy-relay-roadmap.md](media-policy-relay-roadmap.md) | 媒体观察、策略、LAN Relay、外部客户端交接迁移 | `MED-01..19 DONE` |
 | CEF | [desktop-cef-browser-roadmap.md](desktop-cef-browser-roadmap.md) | Windows/macOS CEF 壳、共享 UI、媒体观察和 IPC | `CEF-01..15 全部完成`（`CEF-06..14` 模型层 VERIFIED，实机接线归后续装配/切片任务）；Windows 总 Review 证据已补齐 |
 | BUX | [browser-product-experience-roadmap.md](browser-product-experience-roadmap.md) | Chrome-inspired 蜡笔桌面浏览器 UI 与日用基础功能 | `BUX-01..18 DONE`（BUX-17/18 2026-08-26） |
-| MDV | [markdown-viewer-roadmap.md](markdown-viewer-roadmap.md) | 本地 Markdown Runtime：查看/编辑/保存、图标工具栏、图片与 Mermaid Full 离线扩展 | 基线 `MDV-01..14 DONE`（`MDV-14` Mermaid Full 供应链 2026-08-29 冻结，104 文件/3.5MB 闭包双次生成 hash 一致）；工具栏 `MDV-21..23 DONE`、`MDV-24 VERIFIED`（macOS arm64 与 Windows x64 主矩阵已闭合，Windows Debug/Release 65/65；Narrator、中文 IME 组合态、原生 OS 200% DPI 与原生 macOS x64 待补）；Mermaid `MDV-15..19 DONE`（adapter/离线闭包/安全 SVG、七类图、viewport lazy/主题/全屏、有界并发/cache/generation 与 50-block 真实 CEF perf 已闭合，2026-08-29）；`MDV-20` 跨平台发布收口可接续 |
+| MDV | [markdown-viewer-roadmap.md](markdown-viewer-roadmap.md) | 本地 Markdown Runtime：查看/编辑/保存、图标工具栏、图片与 Mermaid Full 离线扩展 | 基线 `MDV-01..14 DONE`（`MDV-14` Mermaid Full 供应链 2026-08-29 冻结，104 文件/3.5MB 闭包双次生成 hash 一致）；工具栏 `MDV-21..23 DONE`、`MDV-24 VERIFIED`（macOS arm64 与 Windows x64 主矩阵已闭合，Windows Debug/Release 65/65；Narrator、中文 IME 组合态、原生 OS 200% DPI 与原生 macOS x64 待补）；Mermaid `MDV-15..19 DONE`；`MDV-20 VERIFIED`（macOS arm64 Debug/Release 七类图、50-block、签名、NOTICE/SPDX、零公网与零残留已闭合，等待 Windows x64 发布回归后转 `DONE`） |
 | MRT | [markdown-runtime-roadmap.md](markdown-runtime-roadmap.md) | Markdown Runtime Extension Framework：闭合扩展 API、Highlight/KaTeX 与后续图表/演示门禁 | `MRT-01..08 DONE`（MRT-06 Windows blocker 修复与真机复验已收口，2026-08-29 合并）；`MRT-09..19` 分波次推进或仅做 gap analysis |
 | SDK | [cast-sdk-integration-roadmap.md](cast-sdk-integration-roadmap.md) | 固定源码 Cast-SDK facade、发现、连接和控制；后续 Partner Cast facade | `SDK-13 BLOCKED`（需真实接收端 Harness） |
 | PLT | [desktop-platform-adapters-roadmap.md](desktop-platform-adapters-roadmap.md) | Windows/macOS 存储、网络、生命周期、更新和客户端交接 | `PLT-01` |
@@ -53,7 +53,7 @@
 | 6 | `ACT-01` | TODO | 等 `CNT-03/AGT-01`；不提前发明第二页面数据面 |
 | 7 | `MRT-08` | DONE | KaTeX inline/block facts、受控 HTML/MathML policy、离线资源/字体路由与 generation/lazy 生命周期已在 macOS arm64 真实 CEF 和 x64 编译矩阵闭合；Windows 真机不属此任务 |
 | 8 | `MDV-24` | VERIFIED | macOS arm64 与 Windows x64 主矩阵已闭合，Windows Debug/Release 65/65 且真实 CEF 三视图/快捷键/窄宽/主题通过；Narrator、中文 IME 组合态、原生 OS 200% DPI 与原生 macOS x64 待补 |
-| 9 | `MDV-19` | DONE | Mermaid 编辑/多图收口：4 并发/16 等待、会话 LRU、generation fencing、关闭/内存压力清理与 50-block 真实 CEF perf 闭合；下一项为 `MDV-20` 跨平台发布收口 |
+| 9 | `MDV-20` | VERIFIED | Mermaid Full macOS arm64 发布门禁已闭合；等待 Windows x64 Debug/Release build+CTest、正式 staging、七类真实 CEF、50-block、零公网与退出零残留回归后转 `DONE` |
 | 10 | 后续任务 | TODO | WFL/HUB 严格按语义动作、权限和隐私依赖领取 |
 
 `CNT-01` 必须等 `CEF-15`、`BUX-18`、`SDK-14`、`MED-19`、`PRV-08` 完成后才能进入 `READY`。`CNT-11` 必须等 `CNT-10`、`AGT-16`、`PRV-13` 完成且模型/provider ADR 获批；不得提前接真实 provider。

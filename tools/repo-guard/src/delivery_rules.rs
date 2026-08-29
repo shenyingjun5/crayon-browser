@@ -61,7 +61,7 @@ pub fn release_assets(artifact_path: Option<&Path>) -> CheckResult {
                     message: "test/debug asset found in release artifact".to_owned(),
                 });
             }
-            if let Ok(Some(marker)) = find_forbidden_content(&base.join(&file)) {
+            if let Ok(Some(marker)) = find_forbidden_content(&base.join(&file), &lower) {
                 findings.push(Finding {
                     severity: Severity::Error,
                     path: display_path(&file),
@@ -80,7 +80,10 @@ pub fn release_assets(artifact_path: Option<&Path>) -> CheckResult {
     )
 }
 
-fn find_forbidden_content(path: &Path) -> std::io::Result<Option<&'static str>> {
+fn find_forbidden_content(
+    path: &Path,
+    display_path_lower: &str,
+) -> std::io::Result<Option<&'static str>> {
     let mut file = fs::File::open(path)?;
     let overlap = FORBIDDEN_RELEASE_MARKERS
         .iter()
@@ -97,6 +100,16 @@ fn find_forbidden_content(path: &Path) -> std::io::Result<Option<&'static str>> 
         }
         carry.extend_from_slice(&chunk[..read]);
         for marker in FORBIDDEN_RELEASE_MARKERS {
+            // The locked upstream CEF framework necessarily contains its own
+            // Chromium command-line parser string. It is not a Crayon debug
+            // entry point; application and helper binaries remain scanned.
+            if *marker == b"remote-debugging-port"
+                && display_path_lower.ends_with(
+                    "chromium embedded framework.framework/versions/a/chromium embedded framework",
+                )
+            {
+                continue;
+            }
             if carry.windows(marker.len()).any(|window| window == *marker) {
                 return Ok(Some(std::str::from_utf8(marker).unwrap_or("<binary>")));
             }
