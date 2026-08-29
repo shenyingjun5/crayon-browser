@@ -251,8 +251,9 @@ bool RevisionStormNeverPlacesStaleBlocks() {
   return true;
 }
 
-/// MDV-16: the embedded closure is a single immutable bundle whose relative
-/// imports all resolve inside the served namespace.
+/// MDV-16/17: the embedded closure is a single immutable bundle whose
+/// relative imports all resolve inside the served namespace, plus the
+/// Crayon-owned page adapter for the SVG policy gate.
 bool EmbeddedCatalogServesTheFullClosure() {
   const auto built = BuildMermaidAssetCatalog();
   CHECK(built.status == AssetCatalogBuildStatus::kReady);
@@ -260,9 +261,25 @@ bool EmbeddedCatalogServesTheFullClosure() {
   const auto bundle = built.catalog->FindCompatible(
       kMermaidAssetManifestId, kMermaidExtensionId, kMermaidExtensionVersion);
   CHECK(bundle);
-  CHECK(bundle->resources.size() == 104);
+  CHECK(bundle->resources.size() == 105);
   CHECK(bundle->entry_resource_id == "mermaid.esm.min.mjs");
-  CHECK(built.catalog->total_bytes() == 3522090);
+  std::size_t vendored_bytes = 0;
+  std::size_t adapter_bytes = 0;
+  for (const auto& asset : bundle->resources) {
+    if (asset.resource_id == "adapter") {
+      CHECK(asset.content_type ==
+            crayon::browser_markdown_runtime::RuntimeAssetContentType::
+                kJavaScript);
+      CHECK(asset.bytes.find("securityLevel") != std::string::npos);
+      CHECK(asset.bytes.find("parseMermaidSvgCandidate") != std::string::npos);
+      adapter_bytes = asset.bytes.size();
+    } else {
+      vendored_bytes += asset.bytes.size();
+    }
+  }
+  CHECK(adapter_bytes > 0);
+  CHECK(vendored_bytes == 3522090);
+  CHECK(built.catalog->total_bytes() == vendored_bytes + adapter_bytes);
 
   // Every relative import in every resource resolves to another resource of
   // the same bundle, so CEF can resolve the whole ESM graph from the entry.

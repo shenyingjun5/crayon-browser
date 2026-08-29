@@ -121,12 +121,17 @@ void TestRouteMatrix() {
   CHECK(ClassifyMdvRequest(BaseRequest("/runtime/katex/unknown")).kind ==
         MdvResourceKind::kNotFound);
 
-  // MDV-16: Mermaid runtime route keeps upstream-relative resource ids.
+  // MDV-16/17: Mermaid runtime route keeps upstream-relative resource ids;
+  // the Crayon-owned page adapter rides the same closed namespace.
   route = ClassifyMdvRequest(
       BaseRequest("/runtime/mermaid/mermaid.esm.min.mjs"));
   CHECK(route.kind == MdvResourceKind::kRuntimeAsset &&
         route.runtime_namespace == "mermaid" &&
         route.runtime_resource_id == "mermaid.esm.min.mjs");
+  route = ClassifyMdvRequest(BaseRequest("/runtime/mermaid/adapter"));
+  CHECK(route.kind == MdvResourceKind::kRuntimeAsset &&
+        route.runtime_namespace == "mermaid" &&
+        route.runtime_resource_id == "adapter");
   route = ClassifyMdvRequest(
       BaseRequest("/runtime/mermaid/chunks/mermaid.esm.min/chunk-IJBDOHL6.mjs"));
   CHECK(route.kind == MdvResourceKind::kRuntimeAsset &&
@@ -263,11 +268,14 @@ void TestNoNetworkOrInlineHandlers() {
   }
   CHECK(document.find("src=\"/app.js\"") != std::string::npos);
   CHECK(document.find("href=\"/app.css\"") != std::string::npos);
-  CHECK(Count(js_fixed, "import(") == 2);
+  CHECK(Count(js_fixed, "import(") == 3);
   CHECK(js_fixed.find("import('/runtime/highlight/adapter')") !=
         std::string::npos);
   CHECK(js_fixed.find("import('/runtime/katex/adapter')") != std::string::npos);
+  CHECK(js_fixed.find("import('/runtime/mermaid/adapter')") !=
+        std::string::npos);
   CHECK(js_fixed.find("observeMath(preview)") != std::string::npos);
+  CHECK(js_fixed.find("observeMermaid(preview)") != std::string::npos);
 }
 
 void TestEntryErrorBannerTakesPriority() {
@@ -452,6 +460,31 @@ void TestHighlightRoutesAndLazyBootstrap() {
   CHECK(css.find("prefers-color-scheme:dark") != std::string::npos);
 }
 
+void TestMermaidRuntimeBootstrap() {
+  // The page only discovers decorated blocks and queues adapter renders;
+  // the strict runtime singleton and the SVG policy gate live in the
+  // /runtime/mermaid/adapter resource, never in the page script.
+  const std::string script = crayon::browser_mdv::RenderMdvScript();
+  CHECK(script.find("import('/runtime/mermaid/adapter')") !=
+        std::string::npos);
+  CHECK(script.find("adapter.renderMermaid(node,nodeId)") !=
+        std::string::npos);
+  CHECK(script.find("code[data-mdv-mermaid]") != std::string::npos);
+  // One render in flight: blocks queue behind the shared promise.
+  CHECK(script.find("mermaidQueue=mermaidQueue.then(") != std::string::npos);
+  // Full-page scan and direct runtime access never enter the page script.
+  CHECK(script.find("mermaid.run(") == std::string::npos);
+  CHECK(script.find("securityLevel") == std::string::npos);
+  CHECK(script.find("parseMermaidSvgCandidate") == std::string::npos);
+  // Adapter failures are swallowed per block; no unhandled rejections.
+  CHECK(script.find(".catch(function(){})") != std::string::npos);
+
+  const std::string css = crayon::browser_mdv::RenderMdvStylesheet();
+  CHECK(css.find("data-mdv-mermaid-rendered=true]") != std::string::npos);
+  CHECK(css.find("data-mdv-mermaid-error=true]") != std::string::npos);
+  CHECK(css.find("svg{max-width:100%") != std::string::npos);
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -470,6 +503,7 @@ int main(int argc, char** argv) {
   TestEmptyAndErrorSurfaces();
   TestInitialViewStateAndCspConstantUnchanged();
   TestHighlightRoutesAndLazyBootstrap();
+  TestMermaidRuntimeBootstrap();
   if (g_failures != 0) {
     std::cerr << g_failures << " check(s) failed\n";
     return 1;

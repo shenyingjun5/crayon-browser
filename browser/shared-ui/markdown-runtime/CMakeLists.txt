@@ -249,6 +249,11 @@ function(crayon_embed_mermaid_asset resource_id source_path)
   set(mermaid_asset_index "${mermaid_asset_index}" PARENT_SCOPE)
 endfunction()
 
+# MDV-17: the page-side SVG policy gate adapter ships inside the Mermaid
+# bundle as the `adapter` resource; it is Crayon-owned code, not vendored
+# upstream content, so it sits on top of the 104-file manifest closure.
+crayon_embed_mermaid_asset(
+  adapter "${CMAKE_CURRENT_SOURCE_DIR}/assets/mermaid-adapter.js")
 crayon_embed_mermaid_asset(
   "mermaid.esm.min.mjs"
   "${PROJECT_SOURCE_DIR}/third_party/mermaid/assets/mermaid.esm.min.mjs")
@@ -273,9 +278,9 @@ foreach(mermaid_index RANGE 0 ${mermaid_file_last})
   endif()
   crayon_embed_mermaid_asset("${asset_path}" "${source_path}")
 endforeach()
-if(NOT mermaid_asset_index EQUAL 104)
+if(NOT mermaid_asset_index EQUAL 105)
   message(FATAL_ERROR
-          "Mermaid embedded runtime closure must contain 104 assets")
+          "Mermaid embedded runtime closure must contain 105 assets")
 endif()
 
 set(markdown_runtime_generated_dir "${CMAKE_CURRENT_BINARY_DIR}/generated")

@@ -517,6 +517,12 @@ std::string RenderMdvStylesheet() {
          "1px 4px;border-radius:4px}.md-math-block>.md-math-source{display:"
          "block;text-align:left;padding:10px 12px}.md-math[data-mdv-math-"
          "rendered=true]>.katex-display{margin:0;}"
+      << "pre code[data-mdv-mermaid-rendered=true]{display:block;overflow-x:"
+         "auto;padding:12px 14px;border-radius:8px;background:#f5f6f7;}"
+      << "pre code[data-mdv-mermaid-rendered=true] svg{max-width:100%;"
+         "height:auto;}"
+      << "pre code[data-mdv-mermaid-error=true]{display:block;outline:1px "
+         "dashed rgba(192,54,57,.55);outline-offset:4px;border-radius:4px;}"
       << ".view-bar .md-dirty{display:none;width:8px;height:8px;"
          "border-radius:50%;background:darkorange;align-self:center;}"
       << "body[data-dirty=true] .md-dirty{display:inline-block;}"
@@ -542,7 +548,10 @@ std::string RenderMdvStylesheet() {
          ".hljs-string,.hljs-title,.hljs-name,.hljs-type,.hljs-attribute,"
          ".hljs-symbol,.hljs-bullet,.hljs-addition{color:#81c995;}"
          ".hljs-number,.hljs-meta,.hljs-built_in,.hljs-builtin-name,"
-         ".hljs-params{color:#fdd663;}.hljs-deletion{color:#f28b82;}}";
+         ".hljs-params{color:#fdd663;}.hljs-deletion{color:#f28b82;}"
+         "pre code[data-mdv-mermaid-rendered=true]{background:#202124;}"
+         "pre code[data-mdv-mermaid-error=true]{outline-color:rgba(242,139,"
+         "130,.6);}}";
   return css.str();
 }
 
@@ -809,6 +818,27 @@ void AppendMdvMathScript(std::ostringstream& js) {
      << "observeMath(preview);";
 }
 
+void AppendMdvMermaidScript(std::ostringstream& js) {
+  // MDV-17: every discovered block renders through the mermaid adapter
+  // (/runtime/mermaid/adapter), which owns the strict runtime singleton and
+  // the fail-closed SVG policy gate. Blocks are queued so renders stay
+  // sequential until MDV-19 formalizes the bounded scheduler; the adapter
+  // drops results whose node id or connection state no longer matches.
+  js << "var mermaidQueue=Promise.resolve();"
+     << "function startMermaid(node){"
+     << "if(!node||node.getAttribute('data-mdv-mermaid')!=='true'){return;}"
+     << "var nodeId=node.getAttribute('data-mdv-node');"
+     << "if(!nodeId){return;}"
+     << "mermaidQueue=mermaidQueue.then(function(){"
+     << "return import('/runtime/mermaid/adapter').then(function(adapter){"
+     << "return adapter.renderMermaid(node,nodeId);}).catch(function(){});});}"
+     << "function observeMermaid(root){"
+     << "if(!root){return;}"
+     << "var nodes=root.querySelectorAll('code[data-mdv-mermaid]');"
+     << "for(var i=0;i<nodes.length;i++){startMermaid(nodes[i]);}}"
+     << "observeMermaid(preview);";
+}
+
 std::string RenderMdvScript() {
   // One IIFE is assembled from bounded, single-purpose sections so the script
   // shares state without turning the C++ renderer into a >200-line function.
@@ -817,6 +847,7 @@ std::string RenderMdvScript() {
   AppendMdvToolbarScript(js);
   AppendMdvHighlightScript(js);
   AppendMdvMathScript(js);
+  AppendMdvMermaidScript(js);
   AppendMdvDividerScript(js);
   return js.str();
 }

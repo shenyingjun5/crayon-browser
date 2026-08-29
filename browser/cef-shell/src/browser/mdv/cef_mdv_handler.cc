@@ -50,14 +50,16 @@ std::filesystem::path FilesystemPath(const std::string& path_utf8) {
 }
 
 // Deterministic fixture document exercising the enabled syntax set
-// (headings, table, fenced code, math, task list, safe link, raw-HTML escape).
-// Real file entries arrive with MDV-09; this slice is content-driven.
+// (headings, table, fenced code, math, task list, safe link, mermaid fence,
+// raw-HTML escape). Real file entries arrive with MDV-09; this slice is
+// content-driven.
 constexpr char kFixtureMarkdown[] =
     "# 蜡笔文档查看器\n\n"
     "这是内置 Markdown 查看器的**只读**示例文档。\n\n"
     "| 特性 | 状态 |\n|---|---|\n| 表格 | 支持 |\n| 任务列表 | 只读展示 |\n\n"
     "- [x] 渲染引擎接入\n- [ ] 文件入口（后续切片）\n\n"
     "```cpp\nint answer = 42;\n```\n\n"
+    "```mermaid\nflowchart LR\n  A[蜡笔] --> B[投屏]\n```\n\n"
     "行内公式：$E = mc^2$。\n\n"
     "$$\n\\frac{x^2 + 1}{\\sqrt{2}}\n$$\n\n"
     "安全链接：<https://example.com/ok> 与原始 HTML "
