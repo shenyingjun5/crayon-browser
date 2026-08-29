@@ -204,6 +204,8 @@ frame-ancestors 'none'
 | 跨平台 | 纯 JS/ESM 在 CEF Renderer 内执行；Windows/macOS 共用同一 vendored 资产与共享 runtime，平台层只负责资源打包/读取。HarmonyOS 接线后置且不得用 CEF 证据宣称完成 |
 | 运行方式 | `/app.js` 先扫描标准 Mermaid block；仅命中时 `import()` 本地 ESM 入口，具体 diagram chunk 再由 Mermaid 从同 origin manifest 路由加载；无 CDN、无 npm runtime、无公网 fallback |
 
+`MDV-14` vendor 记录（2026-08-29）：锁定 `mermaid@11.17.2`（npm integrity `sha512-V6K3C8EBdEsPFZXSKMJe6ppQOENxuHARr9GvHX4hh47lAbhMRD9qf4oEK7LoaRQxULMa80/qt5gHO73aCleBBg==`，tarball SHA-256 `6ad2f42c3fc26bbf9e45cbb6d11898972573ea52b33a5f4ff51952899f950ffd`，上游 tag `v11.17.2`，MIT）。离线 ESM 运行时闭包为入口 `dist/mermaid.esm.min.mjs` + 103 个可达 chunk，共 104 个文件、3,522,090 字节，逐文件 SHA-256/MIME 由 `crayon-mermaid-assets/v1` manifest 机器锁定；闭包零外部/bare/网络 import（npm 的源码消费 runtime 依赖均已被上游预打包），无 source map、无 tiny、未裁剪图类型。同一 tarball 两次生成的资产与 manifest 逐字节一致；离线校验入口为 `node tools/mermaid/vendor.mjs --check`。资源字符串中出现的 http URL 均为文案字面量，不构成 import 或网络请求。
+
 `MRT-01..04` 先冻结通用扩展节点、编译期 registry 与 loader/lifecycle；`MDV-14` 独立完成 Mermaid 供应链与运行时闭包冻结。`MDV-15..20` 只交付 Mermaid adapter、资源路由、渲染、安全、交互/懒加载、有界缓存与跨平台收口。任何一步失败时普通 Markdown 必须保持可用。
 
 ## 15. Markdown Runtime 扩展边界

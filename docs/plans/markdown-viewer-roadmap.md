@@ -1,6 +1,6 @@
 # MDV：本地 Markdown 查看器 Roadmap
 
-状态：`MDV-01 DONE`，`MDV-02..07,10..13 VERIFIED`，`MDV-08/09/21..23 DONE`，`MDV-24 VERIFIED`；Mermaid Full 集成波次为 `MDV-14 READY`、`MDV-15..20 TODO`，其中 `MDV-15/16` 分别等待 `MRT-03/04` 的通用 framework 门禁。macOS arm64/x64 Debug 包、受管图标消费和 CEF 嵌套签名闭包已验证；Helper/Renderer 装配、deployment target、默认页/公网导航、macOS arm64 UI/VoiceOver/主题真机问题已闭合，原生 x64、Windows 与当前自动化无法替代的 IME/窄窗交互真机仍待补。本 Roadmap 承接“浏览器内查看本地 Markdown 文档、渲染预览、分栏编辑与标准 Mermaid 图表”的产品增量（PRD v0.8 §4.1）：`crayon://mdv` 内置查看页复用 `crayon://newtab` 的自定义 scheme、应用内资源与严格 CSP 模式；本地 `.md` 只经用户手势的受控入口打开，保存走原子写。MDV 是纯用户能力，不进入 CAAP tool registry；Agent 侧任意文件访问禁令不变。新增图表按当前 macOS 先行策略完成共享层/arm64 CEF 验证，最后补 Windows 回归。
+状态：`MDV-01 DONE`，`MDV-02..07,10..13 VERIFIED`，`MDV-08/09/21..23 DONE`，`MDV-24 VERIFIED`；Mermaid Full 集成波次为 `MDV-14 READY`、`MDV-14 DONE`、`MDV-15..20 TODO`，其中 `MDV-15/16` 分别等待 `MRT-03/04`（均已 DONE，可接续领取）。macOS arm64/x64 Debug 包、受管图标消费和 CEF 嵌套签名闭包已验证；Helper/Renderer 装配、deployment target、默认页/公网导航、macOS arm64 UI/VoiceOver/主题真机问题已闭合，原生 x64、Windows 与当前自动化无法替代的 IME/窄窗交互真机仍待补。本 Roadmap 承接“浏览器内查看本地 Markdown 文档、渲染预览、分栏编辑与标准 Mermaid 图表”的产品增量（PRD v0.8 §4.1）：`crayon://mdv` 内置查看页复用 `crayon://newtab` 的自定义 scheme、应用内资源与严格 CSP 模式；本地 `.md` 只经用户手势的受控入口打开，保存走原子写。MDV 是纯用户能力，不进入 CAAP tool registry；Agent 侧任意文件访问禁令不变。新增图表按当前 macOS 先行策略完成共享层/arm64 CEF 验证，最后补 Windows 回归。
 
 ## 产品设计结论
 
@@ -32,7 +32,7 @@
 | MDV-11 | VERIFIED | MDV-08..10 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv`,`docs/current` | 编辑回归修复（textarea 化被覆盖丢失）+ 拖放打开 + 右键上下文菜单入口（E4）+ 分栏间隔条可拖动 | MD-001..006 回归 + 新交互实机验证 |
 | MDV-12 | VERIFIED | MDV-10 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv`,`docs/current` | 编辑工具栏：15 项闭合动作（包裹/行前缀/骨架三类语义），复用既有编辑通道 | mdv_page 断言 + 实机交互验证 |
 | MDV-13 | VERIFIED | MDV-08..11 | `browser/shared-ui/markdown`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | 图片支持：云端 https 直载 + 本地受控序号路由（文档目录内、格式/大小白名单、路径不入 URL/DOM）+ CSP img-src 修订 | MD-002 图片矩阵 + 实机 |
-| MDV-14 | READY | MDV-13 | `third_party/mermaid`,`tools`,`docs/current`,`docs/plans` | Mermaid Full 供应链冻结：固定 `mermaid` 11.17.2，vendor 完整浏览器运行时 import closure、LICENSE/NOTICE、hash/MIME/大小 manifest 与可重复生成/校验入口 | MD-008；离线 closure/许可/双次生成 hash |
+| MDV-14 | DONE | MDV-13 | `third_party/mermaid`,`tools`,`docs/current`,`docs/plans` | Mermaid Full 供应链冻结：固定 `mermaid` 11.17.2，vendor 完整浏览器运行时 import closure、LICENSE/NOTICE、hash/MIME/大小 manifest 与可重复生成/校验入口 | MD-008；离线 closure/许可/双次生成 hash |
 | MDV-15 | TODO | MDV-14,MRT-03 | `browser/shared-ui/markdown`,`browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv` | Mermaid adapter：标准 Mermaid fence → 通用 ExtensionNode、不透明 block/占位与有界 DSL；普通 Markdown 保持既有 md4c 安全输出 | MD-002、MD-009、MR-001/002；golden/注入/边界 |
 | MDV-16 | TODO | MDV-14,MRT-04 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv`,`browser/cef-shell/resources`,`browser/cef-shell/CMakeLists.txt` | Mermaid ESM 资产路由与打包：消费通用 manifest loader，精确路由、正确 MIME、相对 chunk import、macOS/Windows 同源资源装配；无图零加载 | MD-008、MR-003；路由攻击矩阵 + 离线 CEF smoke |
 | MDV-17 | TODO | MDV-15,MDV-16 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | Mermaid runtime 核心：按需 `import()`、单例初始化、`mermaid.render()`、strict 配置、独立 SVG policy gate、per-block 错误隔离与七类图覆盖 | MD-009；CSP/注入 golden + CEF render |
@@ -281,7 +281,7 @@ MDV-02..06 按"模型层零 IO / 零 CEF 类型"交付后，产品仍不可见�
 
 ### MDV-14 原子范围（Mermaid Full 供应链与离线运行时闭包）
 
-- 状态：`READY`；依赖 `MDV-13 VERIFIED`。本任务替代旧 tiny 集成定义，不写页面渲染行为。
+- 状态：`DONE`；依赖 `MDV-13 VERIFIED`。本任务替代旧 tiny 集成定义，不写页面渲染行为。
 - 单一目标：固定官方 `mermaid` 11.17.2，建立可重复的 vendor/verify 流程，产出应用真正需要的完整浏览器运行时 import closure（ESM 入口、全部可达 diagram/layout chunk 与必需静态资源）、LICENSE/NOTICE、上游 provenance、npm integrity、逐文件 SHA-256/MIME/大小和总包体 manifest。
 - 输入：参考方案 §3/4/8/16/17/32/33，当前契约 §14..16，官方 full/tiny 能力差异；现有离线 CEF 构建与第三方依赖锁定惯例。
 - 允许修改：`third_party/mermaid/**`、专用 `tools/vendor-mermaid/**` 或等价窄脚本、第三方 NOTICE/SBOM 输入、`docs/current/markdown-viewer.md`、本 Roadmap。生成脚本不得依赖系统全局状态；实际下载只在显式 vendor 更新时发生，普通 build/test 必须完全离线。
@@ -289,6 +289,15 @@ MDV-02..06 按"模型层零 IO / 零 CEF 类型"交付后，产品仍不可见�
 - 边界：复核所有运行时依赖许可证、维护与已知安全公告；manifest 路径必须相对、规范化、无重复/大小写冲突/符号链接，import closure 不得含 `http(s):`/CDN/动态任意 specifier；入口和 chunk 的 CEF 150 ESM 语法兼容必须静态检查。
 - 验收：`MD-008`；两次从同一锁定 tarball 生成的 manifest 与资产 hash 全同；离线 import closure 检查零缺失/零多余网络 import；许可证/NOTICE/SBOM 一致；记录实际命令、文件数、总字节与审计结论。
 - 明确不做：路由、页面加载、SVG 渲染、图表 UI、性能优化。
+
+### MDV-14 完成记录（2026-08-29）
+
+- 实现：新增 `tools/mermaid/vendor.mjs`（`--check` 离线校验 / `--archive <tgz>` 从锁定 tarball 重建 / `--download` 显式网络维护动作）与 `third_party/mermaid`（`assets/` 104 个 ESM 文件 + LICENSE + VENDORED.md + manifest.json）。manifest schema `crayon-mermaid-assets/v1`：package（name/version/license/npm integrity/tarball SHA-256/upstream tag v11.17.2）、policy（entry `mermaid.esm.min.mjs`、externalImports/networkImports=0、总字节 3,522,090 / 预算 16MiB）、files 104 项逐文件 path/bytes/sha256/mime（全部 text/javascript）。闭包行走以语句/运算符边界 + 关键词与引号零间隔的正则只接受 `./` 相对 specifier，`http(s):`/`data:`/bare 一律 fail closed；每文件经 `node --check` 静态 ESM 语法检查（CEF 150 V8 新于工具链 Node，属保守兼容）。npm manifest 的 22 个源码消费 runtime 依赖均在上游预打包，vendor 闭包零依赖；无 .map、无 docs/test/dev 依赖、无 tiny、未 tree-shake 图类型（flow/sequence/class/state/er/gantt/pie/gitGraph/journey/mindmap/architecture/c4/xychart/quadrant/venn/sankey/requirement/block 等 chunk 全在）。
+- 审计：npm registry integrity `sha512-V6K3C8...BBg==` 与 tarball SHA-256 `6ad2f42c...950ffd` 双重锁定；上游 github.com/mermaid-js/mermaid tag `v11.17.2`，MIT LICENSE 全文校验；SBOM 输入（包名/版本/许可/integrity/来源 URL）机器记录于 manifest；资源字符串中出现的 http URL 均为文案字面量，非 import 语句（正则与人工裁定双向确认）。
+- 失败基线：开发中先失败后修复——tar 条目预算（13MB 源映射超 8MiB 上限）、正则误报三连（`" from (",n,` 字符串、`data-from"` 属性、`=>import(` 前缀缺失）分别以真实数据复现后收紧/放宽边界并回归。
+- 自动验证：`node --test tools/mermaid/vendor.test.mjs` 6/6（tar 边界、身份/integrity fail closed、specifier 分类与字符串陷阱、闭包与 manifest 一致、篡改/缺失/多余/CRLF/乱序矩阵）；`node tools/mermaid/vendor.mjs --check` 104 files/3,522,090 bytes 离线通过；同一锁定 tarball 两次 `--archive` 生成的全部 107 个文件 SHA-256 逐字节一致（可复现性）。
+- Code Review：按 v0.8 复核供应链、路径/归档边界、原子替换、网络入口、运行能力、包体、测试与维护性；P0/P1/P2=0。
+- 未覆盖与风险：本任务不改页面行为，Mermaid ESM 资源路由、adapter、渲染与安全 gate 归 `MDV-15..20`（`MRT-03/04` 已 DONE，可领取）；CEF 真机内的实际动态 import 行为由 MDV-16 离线 CEF smoke 验证。`MDV-14` 转为 `DONE`。
 
 ### MDV-15 原子范围（Mermaid Extension Adapter）
 
