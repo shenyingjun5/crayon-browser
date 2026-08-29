@@ -62,7 +62,7 @@ fn all_blocks() -> Vec<ContentBlock> {
 
 #[test]
 fn ct_005_basic_golden_is_byte_stable() {
-    let document = render_snapshot(&snapshot(OutputLevel::Standard, all_blocks())).unwrap();
+    let document = render_basic_snapshot(&snapshot(OutputLevel::Standard, all_blocks())).unwrap();
     let expected = include_str!("../tests/golden/basic.md");
     assert_eq!(document.markdown(), expected);
     assert_eq!(expected, include_str!("../tests/golden/previous/basic.md"));
@@ -132,4 +132,53 @@ fn empty_image_alt_does_not_create_spurious_separators() {
     ))
     .unwrap();
     assert_eq!(document.markdown(), "visible\n");
+}
+
+#[test]
+fn ct_005_006_normalized_golden_is_stable_and_private_url_parts_are_removed() {
+    let document = render_snapshot(&snapshot(OutputLevel::Standard, all_blocks())).unwrap();
+    assert_eq!(
+        document.markdown(),
+        include_str!("../tests/golden/normalized.md")
+    );
+    assert!(!document.markdown().contains("secret"));
+    assert!(!document.markdown().contains("token"));
+}
+
+#[test]
+fn nested_ordered_lists_and_dynamic_fences_are_deterministic() {
+    let value = snapshot(
+        OutputLevel::Standard,
+        vec![
+            ContentBlock::ListItem {
+                depth: 3,
+                ordinal: Some(12),
+                text: "first\ncontinuation".to_owned(),
+            },
+            ContentBlock::CodeBlock {
+                language: Some("rust".to_owned()),
+                text: "```` inside".to_owned(),
+            },
+        ],
+    );
+    let rendered = render_snapshot(&value).unwrap();
+    assert!(rendered
+        .markdown()
+        .starts_with("    12. first\n        continuation"));
+    assert!(rendered
+        .markdown()
+        .contains("`````rust\n```` inside\n`````"));
+}
+
+#[test]
+fn normalized_render_repeats_references_without_loading_or_dedup_state() {
+    let link = ContentBlock::Link {
+        href: "https://example.test/a?q=1#x".to_owned(),
+        text: "same".to_owned(),
+    };
+    let value = snapshot(OutputLevel::Standard, vec![link.clone(), link]);
+    assert_eq!(
+        render_snapshot(&value).unwrap().markdown(),
+        "[same](https://example.test/a)\n\n[same](https://example.test/a)\n"
+    );
 }

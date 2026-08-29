@@ -1,6 +1,6 @@
 # CNT 页面数据、Markdown 与第二阶段模型 Roadmap
 
-- 状态：C1 执行中；`CNT-01..05 DONE`，`CNT-06 READY`
+- 状态：C1 执行中；`CNT-01..06 DONE`，`CNT-07 READY`
 - 任务数：16
 - C1 开始门禁：`CEF-15`、`BUX-18`、`SDK-14`、`MED-19`、`PRV-08`
 - M2 开始门禁：`CNT-10`、`AGT-16`、`PRV-13`
@@ -21,8 +21,8 @@
 | CNT-03 | DONE | CNT-02 | `crayon-page-data/**`,`crayon-app-runtime/**` | snapshot owner、generation 缓存、取消、分页和旧结果丢弃 | `CT-002`,`CT-007`; integration | C1 |
 | CNT-04 | DONE | CNT-03 | `crayon-content-extract/**` | 确定性主正文、阅读顺序和结构块识别 | `CT-003`,`CT-004`; fixture/unit | C1 |
 | CNT-05 | DONE | CNT-04 | `crayon-content-markdown/**` | 标准 Markdown 转换与稳定转义 | `CT-003`,`CT-005`; golden | C1 |
-| CNT-06 | READY | CNT-05 | `crayon-content-markdown/**` | 列表、引用、代码、表格、链接和图片引用规范化 | `CT-004`,`CT-005`; golden/security | C1 |
-| CNT-07 | TODO | CNT-03,CNT-06 | `crayon-page-data/**`,`tests/perf/content/**` | 字段索引、增量 revision、流式/背压和 C1 性能基线 | `CT-006`,`CT-008`; benchmark/soak | C1 |
+| CNT-06 | DONE | CNT-05 | `crayon-content-markdown/**` | 列表、引用、代码、表格、链接和图片引用规范化 | `CT-005`,`CT-006`; golden/security | C1 |
+| CNT-07 | READY | CNT-03,CNT-06 | `crayon-page-data/**`,`tests/perf/content/**` | 字段索引、增量 revision、流式/背压和 C1 性能基线 | `CT-006`,`CT-008`; benchmark/soak | C1 |
 | CNT-08 | TODO | CNT-06,CNT-07,PRV-08 | `apps/desktop-cef/**`,`crayon-platform-api/**` | 本地预览、复制、保存、取消、覆盖和失败反馈 | `CT-005`,`CT-006`; UI integration | C1 |
 | CNT-09 | TODO | CNT-08 | `tests/**`,`test-support/**` | 正确性、安全、导航竞争、超大页面、资源释放与 E2E | `CT-001..008`; E2E/security/perf | C1 |
 | CNT-10 | TODO | CNT-09 | `docs/current/**`,`docs/plans/**` | C1 独立 Review 与 Agent data-plane 接口冻结 | CT-001..008；P0/P1=0 | C1 |
@@ -151,3 +151,23 @@
 - 验证：`cargo test -p crayon-content-markdown` 6/6；`cargo clippy -p crayon-content-markdown --all-targets -- -D warnings`、`cargo fmt --all -- --check` 通过；`cargo test --workspace` 全部通过（Relay 2 个长稳测试按既有配置 ignored）；`bash scripts/check.sh fast` 与 `bash scripts/check.sh security` 通过；`git diff --check` 通过。
 - Code Review：按 v0.8 复核需求/边界、正确性、架构/API、安全/隐私、性能、测试与可维护性；关闭空 block 分隔、末尾多 LF 和预算追加时机问题，最终 P0/P1/P2 = 0/0/0。单 block 临时缓冲受 PageSnapshot 1 MiB/128 KiB 总预算约束，无递归、锁、IO 或不受控增长。
 - 未覆盖与风险：列表层级/有序号、动态 fence/language、GFM 表格和 link/image 引用规范化进入 `CNT-06 READY`；流式/增量和 UI/文件能力不在本任务。无平台或真机门禁。
+
+## CNT-06 原子范围（复合结构与引用规范化）
+
+- 状态：`DONE`；依赖 `CNT-05 DONE`。
+- 验收编号校正：原任务行写 `CT-004,CT-005`；CT-004 的正文/顺序已由 CNT-04 完成，复合结构超量、重复、超长与稳定截断属于权威 `CT-006`。本任务按 `CT-005,CT-006` 执行。
+- 单一目标：在 `crayon-content-markdown` 内把 CNT-05 安全基础表示升级为规范化 Markdown：嵌套有序/无序列表、逐行引用、不会被正文闭合的动态 code fence/language、矩形 GFM table，以及默认移除 query/fragment 的 link/image 引用；保持 basic golden 兼容入口。
+- 输入/输出：仅消费 CNT-01 已验证的九类 `ContentBlock`，主 `render_snapshot` 输出规范化 Markdown；`render_basic_snapshot` 保留 CNT-05 逐字节行为。允许修改 `crates/crayon-content-markdown/**` 与本 Roadmap，零新增网络/IO/模型能力。
+- 禁止修改：page-data schema/owner、content-extract、Renderer/Browser、UI/locales、文件/剪贴板/网络；不得输出原始 HTML、userinfo、query、fragment 或加载图片。
+- 边界：列表 indent 和 continuation 从 depth/marker 宽度确定；code fence 长度为正文最大连续 backtick + 1 且至少 3；table 首行为 header、固定 `---` delimiter，cell 中 pipe 转义、换行规范为空格；link/image destination 仅保留既有安全 HTTP(S) URL 的 scheme/authority/path，并转义括号/反斜杠。沿用 CNT-05 输出硬上限，超限整体失败；空 alt 仍不生成图片引用。
+- 验收与测试：CT-005/006 normalized golden/security 覆盖嵌套/有序/多行列表、引用、正文内 fence、language、Unicode table/pipe/newline、链接/图片 query/fragment/userinfo、重复引用、空 alt、超量和 deterministic repeat；package test/clippy/fmt、workspace/fast/security、`git diff --check`。
+- 明确不做：字段索引/增量 revision/streaming 与性能 soak（CNT-07）、UI/复制/保存（CNT-08）、Markdown 反解析、远程资源加载或本地 MDV Runtime 接线。
+
+### CNT-06 完成记录（2026-08-30）
+
+- 实现：主 `render_snapshot` 升级为规范化 Markdown，`render_basic_snapshot` 保留 CNT-05 basic golden 行为。list 按 depth 输出两空格层级、有序 ordinal 与 marker 对齐 continuation；quote 逐行前缀；code fence 取正文最大连续 backtick + 1（至少 3）并保留闭合 language；table 输出矩形 GFM header/delimiter/body，cell pipe 转义、换行归一为空格。
+- 引用与安全：link/image 使用内联引用，destination 默认删除 query/fragment 并转义反斜杠/括号；PageSnapshot 已拒绝 userinfo/危险 scheme，renderer 不加载 URL 或图片。空 alt 不输出引用；重复引用确定性重复呈现，无全局 dedup/cache 状态。沿用 CNT-05 整体输出预算，动态 fence/table 扩张仍在提交 block 前 fail closed。
+- Golden 与测试：新增 `normalized.md` golden，并保持 current/previous basic golden 逐字节不变；9 项 unit/golden 覆盖 CT-005/006 的 Unicode/HTML 转义、嵌套有序多行列表、正文内四 backtick、language、GFM table/pipe/newline、link/image query/fragment、重复引用、空 alt、预算与重复渲染。
+- 验证：`cargo test -p crayon-content-markdown` 9/9；`cargo clippy -p crayon-content-markdown --all-targets -- -D warnings`、`cargo fmt --all -- --check` 通过；`cargo test --workspace` 全部通过（Relay 2 个长稳测试按既有配置 ignored）；`bash scripts/check.sh fast` 与 `bash scripts/check.sh security` 通过；`git diff --check` 通过。
+- Code Review：按 v0.8 复核需求/边界、正确性、架构/API、安全/隐私、性能、测试和可维护性；修正 basic table 兼容回归，最终 P0/P1/P2 = 0/0/0。所有扫描受 PageSnapshot 预算约束，无网络、资源加载、HTML、锁、IO、递归或正文日志。
+- 未覆盖与风险：字段索引、增量 revision、stream/backpressure 与 C1 性能基线进入 `CNT-07 READY`；UI/复制/保存仍归 CNT-08。无平台或真机门禁。
