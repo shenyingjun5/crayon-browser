@@ -2,6 +2,7 @@
 
 pub mod cast_usecase;
 pub mod delivery;
+pub mod page_snapshot_runtime;
 
 use crayon_domain::{ProductIdentity, ProductIdentityError, ProductMode};
 use crayon_ipc_schema::Handshake;

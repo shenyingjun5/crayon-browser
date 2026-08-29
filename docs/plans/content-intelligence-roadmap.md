@@ -1,6 +1,6 @@
 # CNT 页面数据、Markdown 与第二阶段模型 Roadmap
 
-- 状态：C1 执行中；`CNT-01..02 DONE`，`CNT-03 READY`
+- 状态：C1 执行中；`CNT-01..03 DONE`，`CNT-04 READY`
 - 任务数：16
 - C1 开始门禁：`CEF-15`、`BUX-18`、`SDK-14`、`MED-19`、`PRV-08`
 - M2 开始门禁：`CNT-10`、`AGT-16`、`PRV-13`
@@ -18,8 +18,8 @@
 |---|---|---|---|---|---|---|
 | CNT-01 | DONE | CEF-15,BUX-18,SDK-14,MED-19,PRV-08 | `crayon-content-contract/**`,`crayon-page-data/**` | 定义 `PageSnapshot`、结构块、provenance、revision、截断与资源上限 | `CT-001`,`CT-002`; schema/golden | C1 |
 | CNT-02 | DONE | CNT-01,CEF-01B | `browser/engine-api/**`,`apps/desktop-cef/**`,`crayon-browser-gateway/**` | 在跨引擎接口增加有界 snapshot stream/cancel，并实现 Renderer 分块采集与 Browser 来源/navigation验证 | `CT-001`,`CT-002`,`CT-007`; interface contract/integration | C1 |
-| CNT-03 | READY | CNT-02 | `crayon-page-data/**`,`crayon-app-runtime/**` | snapshot owner、generation 缓存、取消、分页和旧结果丢弃 | `CT-002`,`CT-007`; integration | C1 |
-| CNT-04 | TODO | CNT-03 | `crayon-content-extract/**` | 确定性主正文、阅读顺序和结构块识别 | `CT-003`,`CT-008`; fixture/unit | C1 |
+| CNT-03 | DONE | CNT-02 | `crayon-page-data/**`,`crayon-app-runtime/**` | snapshot owner、generation 缓存、取消、分页和旧结果丢弃 | `CT-002`,`CT-007`; integration | C1 |
+| CNT-04 | READY | CNT-03 | `crayon-content-extract/**` | 确定性主正文、阅读顺序和结构块识别 | `CT-003`,`CT-008`; fixture/unit | C1 |
 | CNT-05 | TODO | CNT-04 | `crayon-content-markdown/**` | 标准 Markdown 转换与稳定转义 | `CT-003`,`CT-004`; golden | C1 |
 | CNT-06 | TODO | CNT-05 | `crayon-content-markdown/**` | 列表、引用、代码、表格、链接和图片引用规范化 | `CT-004`,`CT-005`; golden/security | C1 |
 | CNT-07 | TODO | CNT-03,CNT-06 | `crayon-page-data/**`,`tests/perf/content/**` | 字段索引、增量 revision、流式/背压和 C1 性能基线 | `CT-006`,`CT-008`; benchmark/soak | C1 |
@@ -89,3 +89,23 @@
 - 验证：`cmake -S . -B .cache/build/cnt02 -G Ninja -DCRAYON_BUILD_TESTS=ON -DCRAYON_ENABLE_CEF=OFF`、`cmake --build .cache/build/cnt02` 通过；`ctest --test-dir .cache/build/cnt02 --output-on-failure` 59/59 通过（含 `cef_build_graph_contract`）；最终 Review 修正后目标集再次 4/4；`bash scripts/check.sh fast` 沙箱内因 9 项 loopback bind 返回 `Operation not permitted`，沙箱外同命令重跑通过；沙箱外 `bash scripts/check.sh security` 通过；clang-format dry-run 与 `git diff --check` 通过。
 - Code Review：按 v0.8 完成需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性审查。Review 期间关闭缺失 document URL/title、Browser URL 复核、completed-without-metadata、开放文本控制字符/畸形 UTF-8、compact 总预算、列表/表格/code 形状、热路径复制和无界 retired 集合；最终 P0/P1/P2 = 0/0/0。
 - 未覆盖与风险：真实 CEF IPC 编解码接线随平台 adapter 集成推进；本任务交付的是平台中立接口和 Renderer/Browser 可独立验证状态机，无真机门禁。Snapshot owner、generation cache、分页和旧结果替换进入 `CNT-03 READY`。
+
+## CNT-03 原子范围（snapshot owner 与 generation 分页缓存）
+
+- 状态：`DONE`；依赖 `CNT-02 DONE`。
+- 单一目标：为 Browser 验证完成的 `PageSnapshot` 建立唯一 owner，按 tab/generation/revision 接收或丢弃结果，并向当前页消费者提供有界、可取消、不会跨导航漂移的分页读取。page-data 拥有纯状态机与分页值类型，app-runtime 只负责线程安全装配，不复制缓存规则。
+- 输入：CNT-01 `PageSnapshot`/`NavigationBinding`/revision，CNT-02 cancel/terminal 与 generation fence，CT-002/007，app-runtime 既有“锁内不做外部调用”纪律。
+- 输出与允许修改：`crayon-page-data/src/owner.rs` 与独立测试，公开 bounded owner/read/page/error/stats；`crayon-app-runtime/src/page_snapshot_runtime.rs` 与独立测试，装配 `Arc<Mutex<SnapshotOwner>>` 并提供导航、publish、begin/next/cancel/close/shutdown 用例；对应 Cargo 依赖和本 Roadmap。
+- 禁止修改：PageSnapshot v1 wire schema/golden、CNT-02 C++ contract、正文识别、Markdown、UI、文件/网络 IO；不得缓存 DOM/HTML/CDP、不得新增持久化或后台线程。
+- 边界：最多 16 个 tab snapshot、32 个 active read、每页 1..=256 blocks、128 个 bounded retired read ID；新 generation 原子清除旧 snapshot/read，旧 generation/revision 永不覆盖；同 revision 相同值幂等，不同值拒绝；pagination 固定绑定 tab+generation+revision，publish 新 revision 立即使旧 read stale。容量先逐出无 active read 的最旧 tab，否则显式 backpressure；cancel/close/shutdown 幂等且释放 clone。
+- 验收与测试：CT-002/007 integration，覆盖正常/空快照、多页、非法页大小、旧 generation/revision、同 revision 冲突、新 revision/导航竞争、取消重复、close/shutdown、tab/read/retired 容量和 mutex poison 恢复；运行 package test/clippy/fmt、workspace/fast/security 回归和 `git diff --check`。
+- 明确不做：增量字段索引与性能 soak（CNT-07）、正文提取（CNT-04）、跨进程 IPC 编解码、持久化恢复、UI/文件写入。
+
+### CNT-03 完成记录（2026-08-30）
+
+- 实现：`crayon-page-data` 新增纯内存 `SnapshotOwner`，以 tab/generation/revision 为唯一缓存键语义；旧 generation/revision 丢弃、同 revision 同值幂等而异值拒绝，新导航或新 revision 原子失效进行中的 read。分页 read 固定绑定创建时的 navigation 与 revision，页大小限制 1..=256 blocks；cancel、close、shutdown 均幂等释放状态并保留有界终态原因。
+- 资源与装配：缓存最多 16 tabs、32 active reads、128 retired reads；容量满时仅 LRU 逐出无 active read 的 tab，否则显式 `CapacityExceeded`。`PageSnapshotRuntime` 作为 app-runtime 唯一线程安全装配入口，用 `Mutex<SnapshotOwner>` 保护纯内存状态，锁内无回调、网络、文件 IO 或等待，并在 mutex poison 后恢复状态访问。
+- 测试：新增 10 项 owner/runtime 测试，覆盖 CT-002/007 的空快照、多页与终止、非法页大小、旧 generation/revision、同 revision 冲突、导航/新 revision 竞争、重复取消、close/shutdown、tab/read/retired 容量、LRU 和 mutex poison 恢复。
+- 验证：`cargo clippy -p crayon-page-data -p crayon-app-runtime --all-targets -- -D warnings`、`cargo fmt --all -- --check` 通过；`cargo test -p crayon-page-data` 14/14；`cargo test -p crayon-app-runtime --lib` 11/11；`cargo test --workspace` 全部通过（Relay 2 个长稳测试按既有配置 ignored）；`bash scripts/check.sh fast` 与 `bash scripts/check.sh security` 通过；`git diff --check` 通过。
+- Code Review：按 v0.8 复核需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试与可维护性；最终 P0/P1/P2 = 0/0/0。所有集合和单页 clone 均有常数上限，状态机不保存 DOM/HTML/CDP，不新增线程、持久化或 IO。
+- 未覆盖与风险：增量字段索引、流式性能基线归 `CNT-07`；正文识别进入 `CNT-04 READY`。跨进程 IPC 编解码、UI 与文件写入仍不在本任务范围；无平台或真机门禁。

@@ -16,6 +16,7 @@ crayon-domain = { path = "../crayon-domain" }
 crayon-ipc-schema = { path = "../crayon-ipc-schema" }
 crayon-media-observer = { path = "../crayon-media-observer" }
 crayon-media-probe = { path = "../crayon-media-probe" }
+crayon-page-data = { path = "../crayon-page-data" }
 crayon-relay = { path = "../crayon-relay" }
 url = "2"
 

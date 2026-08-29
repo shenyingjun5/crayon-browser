@@ -401,6 +401,7 @@ dependencies = [
  "crayon-ipc-schema",
  "crayon-media-observer",
  "crayon-media-probe",
+ "crayon-page-data",
  "crayon-relay",
  "reqwest",
  "serde_json",
