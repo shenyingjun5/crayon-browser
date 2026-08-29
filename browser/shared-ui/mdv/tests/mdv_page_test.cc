@@ -90,6 +90,10 @@ crayon::browser_mdv::MdvPageStrings SampleStrings() {
       "Markdown 格式",
       "列表或引用层级",
       "表格列对齐",
+      "全屏查看图表",
+      "查看源码",
+      "关闭",
+      "图表无法渲染，已保留源码",
       crayon::browser_mdv::MdvShortcutPlatform::kWindows,
   };
 }
@@ -461,13 +465,14 @@ void TestHighlightRoutesAndLazyBootstrap() {
 }
 
 void TestMermaidRuntimeBootstrap() {
-  // The page only discovers decorated blocks and queues adapter renders;
-  // the strict runtime singleton and the SVG policy gate live in the
-  // /runtime/mermaid/adapter resource, never in the page script.
+  // The page discovers decorated blocks and renders them lazily through the
+  // mermaid adapter (/runtime/mermaid/adapter), which owns the strict
+  // runtime singleton, the color scheme and the SVG policy gate.
   const std::string script = crayon::browser_mdv::RenderMdvScript();
   CHECK(script.find("import('/runtime/mermaid/adapter')") !=
         std::string::npos);
-  CHECK(script.find("adapter.renderMermaid(node,nodeId)") !=
+  CHECK(script.find(
+            "adapter.renderMermaid(node,nodeId,mermaidDark?'dark':'light')") !=
         std::string::npos);
   CHECK(script.find("code[data-mdv-mermaid]") != std::string::npos);
   // One render in flight: blocks queue behind the shared promise.
@@ -477,12 +482,59 @@ void TestMermaidRuntimeBootstrap() {
   CHECK(script.find("securityLevel") == std::string::npos);
   CHECK(script.find("parseMermaidSvgCandidate") == std::string::npos);
   // Adapter failures are swallowed per block; no unhandled rejections.
-  CHECK(script.find(".catch(function(){})") != std::string::npos);
+  CHECK(script.find("if(!ok){markMermaidError(node);}},function(){});") !=
+        std::string::npos);
+  // MDV-18: viewport lazy render with a bounded first-screen fallback.
+  CHECK(script.find("mermaidObserver=new IntersectionObserver(") !=
+        std::string::npos);
+  CHECK(script.find("mermaidObserver.unobserve(entries[i].target);"
+                    "queueMermaid(entries[i].target)") != std::string::npos);
+  CHECK(script.find("Math.min(nodes.length,8)") != std::string::npos);
+  CHECK(script.find("function resetMermaid()") != std::string::npos);
+  // Light/dark theme mapping and redraw.
+  CHECK(script.find("prefers-color-scheme: dark") != std::string::npos);
+  CHECK(script.find("function rethemeMermaid()") != std::string::npos);
+  CHECK(script.find("removeAttribute('data-mdv-mermaid-rendered')") !=
+        std::string::npos);
+  // Fullscreen view: page-local overlay, Escape close, focus restore,
+  // source toggle; no new Browser binding.
+  CHECK(script.find("getElementById('md-mermaid-view')") !=
+        std::string::npos);
+  CHECK(script.find("function closeMermaidView()") != std::string::npos);
+  CHECK(script.find("mermaidViewOpener.focus()") != std::string::npos);
+  CHECK(script.find("event.key==='Escape'&&!mermaidView.hidden") !=
+        std::string::npos);
+  CHECK(script.find("svg.cloneNode(true)") != std::string::npos);
+  CHECK(script.find(".mdv-mermaid-view-source") != std::string::npos);
+  CHECK(script.find("setAttribute('aria-pressed','true')") !=
+        std::string::npos);
+  // Local error card carries the localized text, never a stack or path.
+  CHECK(script.find("data-mermaid-error-text") != std::string::npos);
+  CHECK(script.find("mdv-mermaid-error-card") != std::string::npos);
+
+  // The fullscreen overlay ships with the document surface, localized and
+  // hidden by default; the error text rides an escaped data attribute.
+  MdvPageSnapshot snapshot;
+  snapshot.has_document = true;
+  const std::string document =
+      crayon::browser_mdv::RenderMdvDocument(snapshot, SampleStrings());
+  CHECK(document.find("id=\"md-mermaid-view\"") != std::string::npos);
+  CHECK(document.find("role=\"dialog\" aria-modal=\"true\"") !=
+        std::string::npos);
+  CHECK(document.find("aria-label=\"全屏查看图表\"") != std::string::npos);
+  CHECK(document.find("data-mermaid-view=\"close\"") != std::string::npos);
+  CHECK(document.find(">关闭</button>") != std::string::npos);
+  CHECK(document.find("aria-pressed=\"false\"") != std::string::npos);
+  CHECK(document.find("data-mermaid-error-text=\"图表无法渲染，已保留源码\"") !=
+        std::string::npos);
 
   const std::string css = crayon::browser_mdv::RenderMdvStylesheet();
   CHECK(css.find("data-mdv-mermaid-rendered=true]") != std::string::npos);
   CHECK(css.find("data-mdv-mermaid-error=true]") != std::string::npos);
   CHECK(css.find("svg{max-width:100%") != std::string::npos);
+  CHECK(css.find("cursor:zoom-in") != std::string::npos);
+  CHECK(css.find(".md-mermaid-view{position:fixed") != std::string::npos);
+  CHECK(css.find(".mdv-mermaid-error-card") != std::string::npos);
 }
 
 }  // namespace

@@ -146,7 +146,11 @@ foreach(resource IN ITEMS
         IDS_CRAYON_MDV_TOOLTIP_VIEW
         IDS_CRAYON_MDV_TOOLTIP_MARKDOWN
         IDS_CRAYON_MDV_TOOLTIP_STRUCTURE
-        IDS_CRAYON_MDV_TOOLTIP_TABLE_ALIGNMENT)
+        IDS_CRAYON_MDV_TOOLTIP_TABLE_ALIGNMENT
+        IDS_CRAYON_MDV_MERMAID_FULLSCREEN
+        IDS_CRAYON_MDV_MERMAID_SOURCE
+        IDS_CRAYON_MDV_MERMAID_CLOSE
+        IDS_CRAYON_MDV_MERMAID_ERROR)
   foreach(surface IN ITEMS windows_ids windows_rc windows_app)
     string(FIND "${${surface}}" "${resource}" resource_hit)
     if(resource_hit EQUAL -1)

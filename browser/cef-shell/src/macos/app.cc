@@ -118,6 +118,10 @@ browser_mdv::MdvPageStrings DefaultMdvStrings() {
       Localized("mdv.tooltip.markdown"),
       Localized("mdv.tooltip.structure"),
       Localized("mdv.tooltip.table_alignment"),
+      Localized("mdv.mermaid.fullscreen"),
+      Localized("mdv.mermaid.source"),
+      Localized("mdv.mermaid.close"),
+      Localized("mdv.mermaid.error"),
       browser_mdv::MdvShortcutPlatform::kMacOS,
   };
 }

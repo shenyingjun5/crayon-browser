@@ -114,6 +114,10 @@ browser_mdv::MdvPageStrings LoadMdvStrings(HINSTANCE resource_module) {
       LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOLTIP_MARKDOWN),
       LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOLTIP_STRUCTURE),
       LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOLTIP_TABLE_ALIGNMENT),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_MERMAID_FULLSCREEN),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_MERMAID_SOURCE),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_MERMAID_CLOSE),
+      LoadUtf8String(resource_module, IDS_CRAYON_MDV_MERMAID_ERROR),
       browser_mdv::MdvShortcutPlatform::kWindows,
   };
 }

@@ -70,6 +70,10 @@ struct MdvPageStrings {
   std::string tooltip_markdown;
   std::string tooltip_structure;
   std::string tooltip_table_alignment;
+  std::string mermaid_fullscreen;
+  std::string mermaid_source;
+  std::string mermaid_close;
+  std::string mermaid_error;
   MdvShortcutPlatform shortcut_platform = MdvShortcutPlatform::kWindows;
 };
 

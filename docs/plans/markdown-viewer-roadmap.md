@@ -1,6 +1,6 @@
 # MDV：本地 Markdown 查看器 Roadmap
 
-状态：`MDV-01 DONE`，`MDV-02..07,10..13 VERIFIED`，`MDV-08/09/21..23 DONE`，`MDV-24 VERIFIED`；Mermaid Full 集成波次为 `MDV-14..17 DONE`、`MDV-18..20 TODO`（按 `17 -> 18 -> 19 -> 20` 依赖顺序接续）。macOS arm64/x64 Debug 包、受管图标消费和 CEF 嵌套签名闭包已验证；Helper/Renderer 装配、deployment target、默认页/公网导航、macOS arm64 UI/VoiceOver/主题真机问题已闭合，原生 x64、Windows 与当前自动化无法替代的 IME/窄窗交互真机仍待补。本 Roadmap 承接“浏览器内查看本地 Markdown 文档、渲染预览、分栏编辑与标准 Mermaid 图表”的产品增量（PRD v0.8 §4.1）：`crayon://mdv` 内置查看页复用 `crayon://newtab` 的自定义 scheme、应用内资源与严格 CSP 模式；本地 `.md` 只经用户手势的受控入口打开，保存走原子写。MDV 是纯用户能力，不进入 CAAP tool registry；Agent 侧任意文件访问禁令不变。新增图表按当前 macOS 先行策略完成共享层/arm64 CEF 验证，最后补 Windows 回归。
+状态：`MDV-01 DONE`，`MDV-02..07,10..13 VERIFIED`，`MDV-08/09/21..23 DONE`，`MDV-24 VERIFIED`；Mermaid Full 集成波次为 `MDV-14..18 DONE`、`MDV-19..20 TODO`（按依赖顺序接续）。macOS arm64/x64 Debug 包、受管图标消费和 CEF 嵌套签名闭包已验证；Helper/Renderer 装配、deployment target、默认页/公网导航、macOS arm64 UI/VoiceOver/主题真机问题已闭合，原生 x64、Windows 与当前自动化无法替代的 IME/窄窗交互真机仍待补。本 Roadmap 承接“浏览器内查看本地 Markdown 文档、渲染预览、分栏编辑与标准 Mermaid 图表”的产品增量（PRD v0.8 §4.1）：`crayon://mdv` 内置查看页复用 `crayon://newtab` 的自定义 scheme、应用内资源与严格 CSP 模式；本地 `.md` 只经用户手势的受控入口打开，保存走原子写。MDV 是纯用户能力，不进入 CAAP tool registry；Agent 侧任意文件访问禁令不变。新增图表按当前 macOS 先行策略完成共享层/arm64 CEF 验证，最后补 Windows 回归。
 
 ## 产品设计结论
 
@@ -36,7 +36,7 @@
 | MDV-15 | DONE | MDV-14,MRT-03 | `browser/shared-ui/markdown`,`browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv` | Mermaid adapter：标准 Mermaid fence → 通用 ExtensionNode、不透明 block/占位与有界 DSL；普通 Markdown 保持既有 md4c 安全输出 | MD-002、MD-009、MR-001/002；golden/注入/边界 |
 | MDV-16 | DONE | MDV-14,MRT-04 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv`,`browser/cef-shell/resources`,`browser/cef-shell/CMakeLists.txt` | Mermaid ESM 资产路由与打包：消费通用 manifest loader，精确路由、正确 MIME、相对 chunk import、macOS/Windows 同源资源装配；无图零加载 | MD-008、MR-003；路由攻击矩阵 + 离线 CEF smoke |
 | MDV-17 | DONE | MDV-15,MDV-16 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | Mermaid runtime 核心：按需 `import()`、单例初始化、`mermaid.render()`、strict 配置、独立 SVG policy gate、per-block 错误隔离与七类图覆盖 | MD-009；CSP/注入 golden + CEF render |
-| MDV-18 | TODO | MDV-17 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv`,`browser/shared-ui/locales` | 图表交互与主题：viewport lazy render、响应式宽度/横向滚动、浅深主题重绘、全屏查看/源码切换；零新特权 binding | MD-004、MD-009；键鼠/a11y/主题实机 |
+| MDV-18 | DONE | MDV-17 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv`,`browser/shared-ui/locales` | 图表交互与主题：viewport lazy render、响应式宽度/横向滚动、浅深主题重绘、全屏查看/源码切换；零新特权 binding | MD-004、MD-009；键鼠/a11y/主题实机 |
 | MDV-19 | TODO | MDV-17,MDV-18 | `browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | 编辑/多图性能与生命周期：有界并发和内存 cache、revision fencing、迟到结果丢弃、关闭/导航/内存压力清理 | MD-004、MD-010；50-block perf/风暴/资源回落 |
 | MDV-20 | TODO | MDV-14..19,MDV-07,MDV-10..13 | `docs/current`,`docs/plans`,`tests/e2e/desktop`,`tools/repo-guard` | Mermaid Full 跨平台收口：macOS arm64 先行、Windows x64 回归、安装包/SBOM/NOTICE/零公网、模块总 Review | MD-007..010；Debug/Release + 实机 + Review P0/P1=0 |
 | MDV-21 | DONE | MDV-12 | `docs/current`,`docs/plans`,`browser/shared-ui/mdv/design` | 工具栏设计契约与原创 glyph 资产：动作/tooltip/快捷键/上下文矩阵、24×24 图标 manifest 与安全验证；不接页面行为 | MD-011；design contract + `git diff --check` |
@@ -362,7 +362,7 @@ MDV-02..06 按"模型层零 IO / 零 CEF 类型"交付后，产品仍不可见�
 
 ### MDV-18 原子范围（viewport lazy、主题与图表交互）
 
-- 状态：`TODO`；依赖 `MDV-17 VERIFIED`。
+- 状态：`IN_PROGRESS`（2026-08-29 领取；`MDV-17 DONE` 依赖满足）。
 - 单一目标：增加 `IntersectionObserver` viewport lazy render、响应式容器/横向滚动、浅深主题映射与重绘、全屏查看和查看源码；所有动作只改变本页内存/UI，不新增 Browser 特权。
 - 输入：MDV-17 block runtime、现有视图切换/分栏/toolbar/滚动联动、浏览器主题事件。
 - 允许修改：`browser/shared-ui/mdv/**`、必要的 MDV 主题窄事件与双语 locale；复用自有 glyph，不引入远程图标/字体。
@@ -370,6 +370,15 @@ MDV-02..06 按"模型层零 IO / 零 CEF 类型"交付后，产品仍不可见�
 - 边界：无 `IntersectionObserver` 时退化为有界首屏队列；主题变化推进 block generation；全屏关闭/Escape/焦点恢复/读屏名称完整；错误卡片提供源码但不显示堆栈或绝对路径。
 - 验收：`MD-004/009`；离屏图不 render、进入 viewport 仅 render 一次、滚动回收不重复布局；light/dark 对比与主题重绘无旧 SVG；键盘/Escape/焦点/a11y 实机通过。
 - 明确不做：持久化偏好、导出、zoom/pan、Presentation/TV mode。
+
+### MDV-18 完成记录（2026-08-29）
+
+- 实现：mermaid block 渲染改为 `IntersectionObserver` viewport lazy（进入 viewport 触发一次 `unobserve`+render；无 IO 环境退化为有界首屏队列 `Math.min(nodes.length,8)`，仍经共享顺序队列）；`apply()` 预览更新链补上 `resetMermaid()`/`observeMermaid(preview)`（修复 MDV-17 中 mdvPush 驱动的更新不会重新观察 block 的缺口）。adapter 新增 color-scheme 参数（`light`/`dark` 白名单，`initialize` 增补 `theme`，仅在实际变化时重设），render id 增加单调序号后缀保证重绘/多图下 mermaid 内部 id 永不冲突且所有导出 id 仍以 `mdv-mermaid-<nodeId>-r<N>` 为前缀块内封闭；渲染成功后将转义 DSL 以 hidden `span.mdv-mermaid-source` 保留在 block 内。页面新增 page-local 全屏查看 overlay（`#md-mermaid-view`，`role=dialog aria-modal`，克隆已过 gate 的 SVG，查看源码切换 `aria-pressed`，Escape 关闭、焦点落到关闭按钮并在关闭后还原到触发 block，无新 Browser binding）；渲染 block 呈现 `cursor:zoom-in` 与 focus-visible；SVG policy gate 值校验从"禁一切括号"改为"禁可抓取/可执行函数名"（`url(`/`expression(`/`image(`/`element(`/`cross-fade(`/`paint(`/`@`/转义/HTML/scheme 等），放行 dark 主题合法的 `hsl()/rgb()` 颜色函数；inline style 无冒号垃圾槽位（`undefined;;;undefined`）丢弃、真实声明仍强制校验。错误卡片本地化文案经转义 `data-mermaid-error-text` 注入，无堆栈/路径。新增 4 条双语 locale（mdv.mermaid.fullscreen/source/close/error），四件套接齐：`MdvPageStrings`、shared-ui locales json、macOS `Localizable.strings`（zh-Hans/en）、Windows `IDS_CRAYON_MDV_MERMAID_*`（253..256）+ `app.cc` + `mdv_handler_contract`。
+- 失败基线（先失败后修复）：(1) mdvPush 注入 block 不渲染——`apply()` 缺 mermaid 重新观察（见上）；(2) dark 主题渲染整块失败——mermaid dark 在 `stop-color=hsl(...)` 与 CSS 值使用颜色函数，旧"禁括号"规则误杀，改为函数名黑名单；(3) macOS 错误卡片显示 key 而非文案——bundle 资源未随 `.strings` 刷新（CEF POST_BUILD 拷贝仅在重链时执行），touch 源码强制重链后修复；(4) 负向测试断言与其他扩展既有 `.catch` 文本冲突，改为正向断言。
+- 自动验证：`node --test browser/shared-ui/markdown-runtime/tests/mermaid_adapter.test.mjs` 4/4；engine-api preset ctest 57/57（含 `mdv_page` MDV-18 契约：lazy/主题/全屏/错误卡/aria 断言）；macOS arm64 CEF Debug 全量构建 + ctest 68/68；macOS x64 构建 + markdown/mdv scoped ctest 16/16；`bash scripts/check.sh fast`（全部步骤通过）与 `bash scripts/check.sh security` 通过；`git diff --check` 通过；mdv_page.cc >80 列行均为 HEAD 存量。
+- 实机验证（macOS arm64 Debug 真实 CEF，CDP 驱动）：fixture block 经 IO lazy 路径渲染并保留隐藏源码 span；注入 3000px 间隔的离屏 block——离屏不渲染、`scrollIntoView` 后仅可见块渲染一次（`svgCount=1`，另一块保持未渲染）；`Emulation.setEmulatedMedia` 切换 prefers-color-scheme——全部 block 以 dark 主题重绘（text fill=`rgb(204,204,204)` 证实 dark 生效）、切回 light 再次重绘、零错误；全屏 overlay 打开/克隆 SVG/`aria-modal`/焦点落到关闭按钮/查看源码显示 DSL 且 `aria-pressed` 翻转/Escape 关闭/焦点还原/overlay 清空全部通过；错误块仅自身标记并显示本地化卡片，其余 block 继续渲染；全程零外部网络请求。
+- Code Review：按 v0.8 复核需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试与可维护性。P0/P1/P2=0。全屏只消费已过 policy gate 的 SVG 克隆与 block 自有隐藏文本；主题仅内存态；render-once 由 `unobserve` 保证；失败基线 (1) 属 MDV-17 遗留缺口并在本任务闭合。
+- 未覆盖与风险：有界并发/cache/revision 风暴与性能口径（MDV-19）；Windows x64 真机交互、VoiceOver/键盘实机细节归 MDV-20 收口；mermaid 内部被 CSP 阻断的 `<style>` 尝试（MDV-17 P2 已知限制）在重绘时同样出现，无执行无网络。`MDV-18` 转为 `DONE`。
 
 ### MDV-19 原子范围（编辑并发、缓存与资源预算）
 

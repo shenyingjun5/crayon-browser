@@ -120,5 +120,9 @@
   "mdv.tooltip.view": "切换文档视图",
   "mdv.tooltip.markdown": "Markdown 格式",
   "mdv.tooltip.structure": "列表或引用层级",
-  "mdv.tooltip.table_alignment": "表格列对齐"
+  "mdv.tooltip.table_alignment": "表格列对齐",
+  "mdv.mermaid.fullscreen": "全屏查看图表",
+  "mdv.mermaid.source": "查看源码",
+  "mdv.mermaid.close": "关闭",
+  "mdv.mermaid.error": "图表无法渲染，已保留源码"
 }

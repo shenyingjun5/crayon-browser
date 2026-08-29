@@ -120,5 +120,9 @@
   "mdv.tooltip.view": "Switch document view",
   "mdv.tooltip.markdown": "Markdown format",
   "mdv.tooltip.structure": "List or quote level",
-  "mdv.tooltip.table_alignment": "Table column alignment"
+  "mdv.tooltip.table_alignment": "Table column alignment",
+  "mdv.mermaid.fullscreen": "View diagram fullscreen",
+  "mdv.mermaid.source": "View source",
+  "mdv.mermaid.close": "Close",
+  "mdv.mermaid.error": "Diagram failed to render; source kept"
 }

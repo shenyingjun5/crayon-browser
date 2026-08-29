@@ -83,9 +83,13 @@ const STYLE_PROPERTIES = new Set([
   "padding", "padding-left", "padding-right", "padding-top", "padding-bottom"
 ]);
 
+// Dangerous CSS value shapes: fetch-capable or script-capable functions,
+// at-rules, escapes, HTML and scheme literals. Color and shape functions
+// (rgb/hsl/drop-shadow/translate, ...) stay allowed.
 const CSS_DENY_PATTERN = new RegExp(
-  "[@\\\\<>{}]|url\\s*\\(|expression\\s*\\(|" +
-    "javascript:|data:|vbscript:|behavior|binding", "i");
+  "url\\s*\\(|expression\\s*\\(|image-set?\\s*\\(|element\\s*\\(|" +
+    "cross-fade\\s*\\(|paint\\s*\\(|@|\\\\|<|>|\\{|\\}|javascript:|" +
+    "data:|vbscript:|behavior|binding", "i");
 
 let mermaidPromise;
 
@@ -149,8 +153,7 @@ function fragmentValueAllowed(value) {
       CONTROL_PATTERN.test(value)) return false;
   if (FRAGMENT_URL_PATTERN.test(value)) return true;
   if (FRAGMENT_REFERENCE_PATTERN.test(value)) return true;
-  return !SCHEME_PATTERN.test(value) && !/[()]/.test(value) &&
-    /^[A-Za-z0-9_. -]*$/.test(value);
+  return !SCHEME_PATTERN.test(value) && !CSS_DENY_PATTERN.test(value);
 }
 
 export function attributeAllowed(name, value) {
@@ -188,8 +191,7 @@ export function attributeAllowed(name, value) {
       !/url\s*\(/i.test(value);
   }
   if (REFERENCE_ATTRIBUTES.has(lower)) return fragmentValueAllowed(value);
-  return !SCHEME_PATTERN.test(value) && !/[()<>]/.test(value) &&
-    !/url\s*\(/i.test(value);
+  return !SCHEME_PATTERN.test(value) && !CSS_DENY_PATTERN.test(value);
 }
 
 /// Rewrites every fragment reference in a reference-attribute value to its
@@ -437,6 +439,20 @@ export function parseMermaidSvgCandidate(candidate, renderId) {
   return rebuilt;
 }
 
+/// Applies the requested color scheme. initialize() may be called again
+/// between renders; the theme only changes when it actually differs.
+let currentTheme = null;
+
+function ensureTheme(mermaid, theme) {
+  if (currentTheme === theme) return;
+  mermaid.initialize({
+    startOnLoad: false, securityLevel: "strict", htmlLabels: false,
+    flowchart: {htmlLabels: false}, class: {htmlLabels: false},
+    theme: theme === "dark" ? "dark" : "default"
+  });
+  currentTheme = theme;
+}
+
 function loadMermaid() {
   if (!mermaidPromise) {
     mermaidPromise = import(RUNTIME_URL).then((module) => {
@@ -445,10 +461,6 @@ function loadMermaid() {
           typeof mermaid.initialize !== "function") {
         throw new Error("runtime unavailable");
       }
-      mermaid.initialize({
-        startOnLoad: false, securityLevel: "strict", htmlLabels: false,
-        flowchart: {htmlLabels: false}, class: {htmlLabels: false}
-      });
       return mermaid;
     });
   }
@@ -468,7 +480,10 @@ function staleResult(container, nodeId) {
     container.getAttribute("data-mdv-mermaid-rendered") === "true";
 }
 
-export async function renderMermaid(container, nodeId) {
+let renderSequence = 0;
+
+export async function renderMermaid(container, nodeId, theme) {
+  const scheme = theme === "dark" ? "dark" : "light";
   if (!container || typeof nodeId !== "string" || !nodeId ||
       staleResult(container, nodeId)) {
     return false;
@@ -482,7 +497,12 @@ export async function renderMermaid(container, nodeId) {
   try {
     const mermaid = await withDeadline(loadMermaid());
     if (staleResult(container, nodeId)) return false;
-    const renderId = "mdv-mermaid-" + nodeId;
+    ensureTheme(mermaid, scheme);
+    // Unique per attempt: re-renders (theme redraw) must not collide on
+    // mermaid's internal element ids. Every emitted id stays prefixed with
+    // this render id, so references remain confined to this block.
+    renderSequence += 1;
+    const renderId = "mdv-mermaid-" + nodeId + "-r" + renderSequence;
     const rendered = await withDeadline(mermaid.render(renderId, source));
     const candidate = rendered && typeof rendered.svg === "string"
       ? rendered.svg : "";
@@ -493,7 +513,13 @@ export async function renderMermaid(container, nodeId) {
       return false;
     }
     if (staleResult(container, nodeId)) return false;
-    container.replaceChildren(rebuilt);
+    // The escaped DSL is preserved as hidden text so "view source" works
+    // without re-reading anything outside this block.
+    const sourceText = document.createElement("span");
+    sourceText.className = "mdv-mermaid-source";
+    sourceText.hidden = true;
+    sourceText.textContent = source;
+    container.replaceChildren(sourceText, rebuilt);
     container.setAttribute("data-mdv-mermaid-rendered", "true");
     return true;
   } catch (_) {
