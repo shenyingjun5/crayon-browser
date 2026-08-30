@@ -387,6 +387,7 @@ dependencies = [
 name = "crayon-agent-gateway"
 version = "0.1.0"
 dependencies = [
+ "crayon-content-markdown",
  "crayon-domain",
  "crayon-ipc-schema",
  "crayon-page-data",

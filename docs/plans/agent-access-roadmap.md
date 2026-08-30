@@ -1,6 +1,6 @@
 # AGT CAAP / CLI / MCP Agent 访问 Roadmap
 
-- 状态：`A0 权限内核完成（AGT-01..05/11）`；`AGT-08/AGT-10 DONE`（2026-08-24）、`AGT-06/09/12B/15 VERIFIED`（2026-08-30）；`AGT-07 READY`，`AGT-12` 整体待产品装配切片，`AGT-13/14` 继续等待 `AGT-07 + AGT-12`
+- 状态：`A0 权限内核完成（AGT-01..05/11）`；`AGT-08/AGT-10 DONE`（2026-08-24）、`AGT-06/07/09/12B/15 VERIFIED`（2026-08-30）；`AGT-12` 整体待产品装配切片，`AGT-13/14` 继续等待 AGT-12
 - 任务数：16
 - 目标：用自有 CAAP、入站 tool registry 和 capability guard，为 AI Agent 提供高性能读页，并把受控操作接到 `ACT` 的可验证语义动作运行时
 - 非目标：远程控制、原始 CDP/WebDriver、任意 JavaScript、Cookie/凭证、密码/支付、文件上传、任意文件/网络工具
@@ -25,7 +25,7 @@
 | AGT-04 | VERIFIED | AGT-02,AGT-03,PRV-08 | `crayon-agent-gateway/grant/**` | 单次/任务/App 会话 grant、Profile 隔离、撤销和目标变化失效 | `AG-003`,`AG-005`; default deny | A0 |
 | AGT-05 | VERIFIED | AGT-04,CEF-08 | `apps/desktop-cef/**/agent-confirm/**`,locales | 确认 UI：client、工具、route、目标、参数摘要、数据披露、到期和无障碍 | `AG-004`; UI integration | A0 |
 | AGT-06 | VERIFIED | CNT-03,AGT-03 | `crayon-page-data/**`,`crayon-agent-gateway/page_stream/**` | generation-scoped 快照缓存、分页/流式/增量、索引、背压和性能 instrumentation | `AG-006`,`AG-015`; benchmark/soak | A1 |
-| AGT-07 | READY | AGT-04,AGT-06,CNT-08 | `crayon-agent-gateway/tools/content/**`,`crayon-app-runtime/**` | R1 target/标题/选区/结构化页面/Markdown 读取工具 | `AG-006`; 跨 Profile/后台/过期/超量拒绝 | A1 |
+| AGT-07 | VERIFIED | AGT-04,AGT-06,CNT-08 | `crayon-agent-gateway/tools/content/**`,`crayon-app-runtime/**` | R1 target/标题/选区/结构化页面/Markdown 读取工具 | `AG-006`; 跨 Profile/后台/过期/超量拒绝 | A1 |
 | AGT-08 | DONE | AGT-04,SDK-08 | `crayon-agent-gateway/tools/cast_read/**` | R0/R1 接收端能力和投屏状态读取，不返回 IP/URL/token | `AG-007`; adapter tests | A1 |
 | AGT-09 | VERIFIED | AGT-05,CEF-07,ACT-07,ACT-11 | `crayon-agent-gateway/tools/navigation/**`,`crayon-app-runtime/**` | R2 打开/切换/关闭标签、导航、后退、刷新、滚动及人工接管结果 | `AG-008`; scheme/redirect/download/popup/cancel | A2 |
 | AGT-10 | DONE | AGT-05,SDK-12,MED-19 | `crayon-agent-gateway/tools/cast_control/**` | R3 选择设备、开始/暂停/seek/停止；沿用正常投屏门禁 | `AG-009`; 目标变化重确认；不控制外部镜像客户端 | A2 |
@@ -293,7 +293,26 @@
 - 实现：`page_stream/mod.rs`：`StreamClientId`（闭合校验）、`PageStreamHub`（subscribe/publish/next_chunk/cancel/advance_generation/close_profile/shut_down/stats），`StreamChunk{seq,snapshot}` 与 `StreamStats` 有界计数。
 - 验证：`cargo test -p crayon-agent-gateway` 82/82（新增 stream 7 场景）；`cargo clippy -p crayon-agent-gateway -p crayon-page-data --all-targets -- -D warnings` 通过；`cargo fmt --check` 通过；`bash scripts/check.sh security` 全绿。
 - Code Review：按 v0.8 复核。P0/P1/P2 = 0/0/0。
-- 未覆盖与风险：真实 CAAP 传输与 grant 接线归 AGT-12/07；soak/benchmark（AG-015 的长稳）归 QAR harness。`CNT-08 VERIFIED` 后 `AGT-07 READY`；`AGT-09` 已于 2026-08-30 转 `VERIFIED`。
+- 未覆盖与风险：真实 CAAP 传输与 grant 接线归 AGT-12C；soak/benchmark（AG-015 的长稳）归 QAR harness。`AGT-07/09` 已于 2026-08-30 转 `VERIFIED`。
+
+## AGT-07 原子范围（R1 内容读取工具）
+
+- 状态：`VERIFIED`（2026-08-30）。
+- 单一目标：在冻结的 `page.list_targets/get_title/get_selection/snapshot/markdown` 工具名下，复用 AGT-04 grant、CNT-03 generation-scoped snapshot owner 与 CNT-05/06 Markdown renderer，交付一个平台中立、默认拒绝的 R1 读取入口。
+- 输入：`AGT-04/06 VERIFIED`、`CNT-08 VERIFIED`、AG-006、v1 registry 参数集和现有 `PageSnapshotRuntime`。
+- 允许修改：`crates/crayon-agent-gateway/src/tools/content*`、`crates/crayon-agent-gateway/src/tools/mod.rs`、`crates/crayon-agent-gateway/Cargo.toml`、`crates/crayon-app-runtime/src/page_snapshot_runtime*`、`crates/crayon-app-runtime/src/lib.rs`、本 Roadmap/索引。
+- 禁止修改：CAAP/schema/golden、CEF/ArkWeb/平台 adapter、CLI/MCP transport、页面 collector/提取/Markdown 规则、grant 签发语义、模型/provider、Cast-SDK。
+- 边界：只读取 Browser 已验证快照；Profile、target、active-tab、generation 与 grant 任一不匹配均在返回正文前拒绝；后台 tab 只可被列举，不可读取；选区、target 数、分页和最终输出均有硬上限；导航/关闭/取消/shutdown 后旧读取不可恢复；错误不携带页面内容。
+- 验收：5 个冻结 R1 工具正常路径；无 grant、跨 Profile、后台、未知/旧 generation、关闭、超量、重复取消与 shutdown 稳定拒绝；结构化快照与 Markdown 确定性且不含隐藏/跨源/敏感字段；`cargo test -p crayon-agent-gateway -p crayon-app-runtime`、相关 Clippy、fmt、workspace/fast/security、`git diff --check`；按 v0.8 Review P0/P1/P2=0。
+- 明确不做：CAAP chunk 编码/accept loop/session dispatch/receipt（AGT-12C）、CLI/MCP（AGT-13/14）、真实 CEF source 接线、墙钟 benchmark/soak（QAR）。
+
+### AGT-07 完成记录（2026-08-30）
+
+- 实现：新增 `tools::content`，冻结的五个 R1 工具共用 `ContentReader + GrantManager + ContentReadPort`；授权只读取 session/Profile/capability/target/clock，页面内容不参与授权。target 列表、标题、选区、结构化快照和 Markdown 均保留 generation binding；最终 snapshot JSON、Markdown、选区和 target 数有命名上限，port 返回值再次校验 tab/generation/shape。
+- app-runtime：`PageSnapshotRuntime` 原子维护 Profile/active/selection 元数据与 CNT-03 owner；跨 Profile、后台、旧 generation、导航未就绪、关闭与 shutdown 全部在返回正文前 fail closed。非 Agent `publish()` 因没有 Profile/foreground attestation 会清空 Agent 元数据；Agent target 与底层缓存同为 16 项有界，不允许元数据越过 owner 容量。
+- 验证：`cargo test -p crayon-agent-gateway -p crayon-app-runtime` 通过（gateway 101/101、app-runtime lib 25/25，另有 integration/doc-tests 全通过）；`cargo clippy -p crayon-agent-gateway -p crayon-app-runtime --all-targets --no-deps -- -D warnings`、`cargo fmt --all -- --check`、`cargo test --workspace`、`scripts/check.ps1 fast`、`scripts/check.ps1 security`、`git diff --check` 全通过。
+- Code Review：按 v0.8 独立复核需求/边界、授权与 binding、状态所有权、mutex 生命周期、页面内容不可信、输出预算和热路径。Review 中关闭 target 元数据无界/owner 漂移与 port 返回 binding 缺少纵深校验两项；最终 P0/P1/P2=`0/0/0`。
+- 未覆盖与风险：真实 CEF collector 到 `publish_content`、CAAP chunk/session dispatch/receipt/accept loop 归 AGT-12C；CLI/MCP 归 AGT-13/14；墙钟 P95/soak 归 QAR。当前为 `VERIFIED`，不以纯 Rust 证据冒充产品进程 `DONE`。
 
 
 ## AGT-09 原子范围（R2 导航工具）
@@ -331,9 +350,9 @@
 
 ## 6. 下一领取顺序（2026-08-30）
 
-1. `AGT-07 READY`：依赖 `AGT-04/06` 与 `CNT-08 VERIFIED` 已满足；先完成 R1 target/标题/选区/结构化页面/Markdown 工具，不夹带 transport 或 CLI/MCP。
+1. `AGT-07 VERIFIED`：R1 内容读取工具与 app-runtime 端口已闭合；真实 CEF/CAAP 装配归 AGT-12C。
 2. `AGT-12C TODO`：AGT-12B 已闭合 Windows named pipe/macOS UDS 端点与 CAAP 连接；产品进程 accept loop、生命周期 stop、session/grant/tool dispatch 仍需先拆成可审查装配切片，再实施。
-3. `AGT-13/14 TODO`：只在 `AGT-07` 与 AGT-12 产品装配同时闭合后领取；CLI/MCP 继续共用 registry/guard/app-runtime，不建立第二套工具路径。
+3. `AGT-13/14 TODO`：只在 AGT-12 产品装配闭合后领取；CLI/MCP 继续共用 registry/guard/app-runtime，不建立第二套工具路径。
 4. `AGT-16 TODO`：等待 `AGT-13/14` 与现有 `AGT-15 VERIFIED`，执行 CAAP/CLI/MCP 总 Review 与独立 GO/NO-GO。
 
 `AGT-15` 不再是下一开发项；其真实 CEF executor/confirm/receipt 接线属于上述产品装配，不回填为已经完成。

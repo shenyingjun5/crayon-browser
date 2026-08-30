@@ -2,6 +2,9 @@
 
 pub mod cast_control;
 pub mod cast_read;
+pub mod content;
+#[cfg(test)]
+mod content_tests;
 pub mod navigation;
 #[cfg(test)]
 mod navigation_tests;

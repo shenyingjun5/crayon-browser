@@ -9,7 +9,7 @@
 ## 1. 当前结论
 
 - 已收口：`BRD-01..04`、Foundation、`MED-01..19`、`BUX-01..18`、`SDK-01..14`、`RNM-01..08`；CEF 为 `CEF-01..05/15 DONE`、`CEF-06..14 VERIFIED`，`ACT-01..12` 已完成契约/模型层总 Review，`MRT-01..08 DONE`。
-- 页面数据与 Agent 主线已进入后半段：`CNT-01..07 DONE`、`CNT-08 VERIFIED`、`CNT-09 READY`；AGT A0 权限内核完成，`AGT-06/09/12B/15 VERIFIED`、`AGT-07 READY`。CLI/MCP 仍未开放，继续等待 R1 工具与产品 transport 装配。
+- 页面数据与 Agent 主线已进入后半段：`CNT-01..07 DONE`、`CNT-08 VERIFIED`、`CNT-09 READY`；AGT A0 权限内核完成，`AGT-06/07/09/12B/15 VERIFIED`。CLI/MCP 仍未开放，继续等待产品 transport 装配。
 - Workflow/Hub：`WFL-01 VERIFIED`，`WFL-02/04/06 READY`；`HUB-01..06 DONE`，后续 Site Skill/入站发现/Partner connector 严格等待各自依赖。
 - 平台剩余重点：`PLT-W05` Windows 产品装配、`PLT-M05 IN_PROGRESS`、`MDV-20/24 VERIFIED` 的明确真机缺口，以及 AGT-12C 产品进程装配。模型/provider 与 Partner Cast 仍处于独立后置门禁。
 - 产品仍按“浏览器与 LAN 投屏 -> 页面数据/Markdown -> Agent 协议与语义动作 -> Workflow/Challenge -> Capability Hub/合作方 -> 模型”的依赖顺序交付。
@@ -222,12 +222,11 @@ flowchart LR
 
 ## 7. 当前领取顺序
 
-1. `AGT-07 READY`：完成 R1 内容读取工具，是后续 CLI/MCP 的直接前置。
-2. `CNT-09 READY`：闭合 C1 E2E/security/perf 后再进入 `CNT-10` 总 Review。
-3. `WFL-02/04/06 READY`：三项彼此独立，但一次只领取一个原子任务。
-4. Windows 优先收口项：`MDV-20` 发布回归、`PLT-W05` 产品装配；后者领取前先补齐原子范围与真实设备条件。
-5. `AGT-12C TODO`：先拆 CEF 产品 accept loop/lifecycle 与 session/grant/tool dispatch 装配，闭合后才解锁 `AGT-13/14`。
-6. `MDV-24 VERIFIED` 的 Narrator/中文 IME/原生 200% DPI 与原生 macOS x64、`PLT-M05 IN_PROGRESS` 按平台矩阵继续，不用单平台证据冒充完成。
+1. `CNT-09 READY`：闭合 C1 E2E/security/perf 后再进入 `CNT-10` 总 Review。
+2. `WFL-02/04/06 READY`：三项彼此独立，但一次只领取一个原子任务。
+3. Windows 优先收口项：`MDV-20` 发布回归、`PLT-W05` 产品装配；后者领取前先补齐原子范围与真实设备条件。
+4. `AGT-12C TODO`：先拆 CEF 产品 accept loop/lifecycle 与 session/grant/tool dispatch 装配，闭合后才解锁 `AGT-13/14`。
+5. `MDV-24 VERIFIED` 的 Narrator/中文 IME/原生 200% DPI 与原生 macOS x64、`PLT-M05 IN_PROGRESS` 按平台矩阵继续，不用单平台证据冒充完成。
 
 后置依赖：`AGT-16` 等 `AGT-13/14`；`HUB-07/08` 分别等 `WFL-12/AGT-14`；`CNT-11` 等 `CNT-10 + AGT-16 + PRV-13 + provider ADR`；`SDK-15/16` 等 HUB 总 Review和外部已批准 Cast API。
 
