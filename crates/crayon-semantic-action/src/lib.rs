@@ -13,6 +13,7 @@ mod detail;
 mod handle;
 mod precondition;
 mod risk;
+mod runtime;
 
 pub use detail::{
     render_compact, render_internal_full, render_standard, CompactAction, CompactMap, CompactNode,
@@ -29,3 +30,7 @@ pub use precondition::{
     PreconditionViolation, MAX_PRECONDITION_VIOLATIONS,
 };
 pub use risk::{assess, RiskDecision, RiskFacts, MAX_EXECUTABLE_RISK};
+pub use runtime::{
+    ApprovalOutcome, ApprovedAction, ConfirmationRef, ConfirmationRefError, ExecutionRequest,
+    SemanticActionGate, MAX_CONFIRMATION_REF_BYTES,
+};

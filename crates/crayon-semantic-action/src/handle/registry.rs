@@ -217,6 +217,14 @@ impl HandleRegistry {
         before - self.handles.len()
     }
 
+    /// Drops every handle regardless of state; returns how many were
+    /// dropped. Used by idempotent shutdown.
+    pub fn invalidate_all(&mut self) -> usize {
+        let dropped = self.handles.len();
+        self.handles.clear();
+        dropped
+    }
+
     /// Drops every expired handle at the injected clock reading; returns
     /// how many were dropped. Bounded work per call.
     pub fn sweep_expired(&mut self, now_ms: u64) -> usize {

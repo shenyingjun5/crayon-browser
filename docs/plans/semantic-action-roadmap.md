@@ -1,6 +1,6 @@
 # ACT：页面语义地图与可验证动作 Roadmap
 
-- 状态：执行中；`ACT-01 DONE`、`ACT-02..06 VERIFIED`（均 2026-08-30）
+- 状态：执行中；`ACT-01 DONE`、`ACT-02..07 VERIFIED`（均 2026-08-30）
 - 任务数：12
 - 目标：把已验证页面事实转换为 Agent 可高效读取的语义地图，并通过短期 `action_id`、前置条件和效果验证执行受控操作
 - 非目标：原始 DOM/HTML/CDP 输出、长期 CSS/XPath、任意 JavaScript、截图/OCR 常规控制、密码/支付/通用文件上传
@@ -22,7 +22,7 @@
 | ACT-04 | VERIFIED | ACT-03,CEF-05 | `browser/engine-api/**`,`browser/cef-shell/**/semantic/**` | 多信号 action discovery 与内部 locator evidence | `AC-004`; 外部无 selector；重复/遮挡/动态页 |
 | ACT-05 | VERIFIED | ACT-04 | `crayon-semantic-action/precondition/**` | 可见、唯一、可操作、同源、页面状态前置条件 | `AC-005`; stale/hidden/cross-origin fail closed |
 | ACT-06 | VERIFIED | ACT-01,PRV-10 | `crayon-semantic-action/risk/**` | 确定性、单调 risk policy 与敏感元素排除 | `AC-006`; password/payment/file 不可执行 |
-| ACT-07 | TODO | ACT-05,ACT-06,AGT-05,CEF-07 | `crayon-semantic-action/runtime/**`,`crayon-app-runtime/**` | action_id 到正常浏览器用例的受控执行 | `AC-007`; cancel/deadline/generation/确认绑定 |
+| ACT-07 | VERIFIED | ACT-05,ACT-06,AGT-05,CEF-07 | `crayon-semantic-action/runtime/**`,`crayon-app-runtime/**` | action_id 到正常浏览器用例的受控执行 | `AC-007`; cancel/deadline/generation/确认绑定 |
 | ACT-08 | TODO | ACT-07 | `crayon-semantic-action/effect/**` | 有界效果等待、verified/failed/indeterminate 和幂等语义 | `AC-008`; 不确定副作用不重放 |
 | ACT-09 | TODO | ACT-04,ACT-06 | `crayon-semantic-action/form/**` | FormMap 字段/约束/错误/filled 状态 | `AC-009`; 不包含字段值；敏感/file 排除 |
 | ACT-10 | TODO | ACT-01,CNT-04 | `crayon-semantic-action/change/**`,`crayon-page-data/**` | revision/ChangeSet 生成、分页、截断和旧增量丢弃 | `AC-010`; 动态页/高频变化/背压 |
@@ -145,3 +145,22 @@
 - 验证：`cargo test -p crayon-semantic-action` 33/33（detail 8 + handle 9 + precondition 10 + risk 6）；`cargo clippy --all-targets -- -D warnings` 通过；`cargo fmt --check` 通过；`cargo test -p crayon-domain -p crayon-ipc-schema` 回归 13 suite 全 ok。
 - Code Review：按 v0.8 复核；移除未使用的 `action` 参数（评估仅由 kind + facts 决定，避免伪输入）。P0/P1/P2 = 0/0/0。
 - 未覆盖与风险：offsite/download/cross-origin 等事实的真实引擎判定归 CEF 侧 discovery/execution 接线；本层仅冻结单调合并语义。`ACT-07 READY`（依赖 AGT-05/CEF-07 均已完成）。
+
+
+## ACT-07 原子范围（action_id 到正常浏览器用例的受控执行）
+
+- 状态：`VERIFIED`（模型层审批门 + app-runtime 执行用例）；依赖 `ACT-05/06 VERIFIED`、`AGT-05/CEF-07 DONE`。
+- 单一目标：把单次 `action_id` 经 fail-closed 审批序列（确认绑定 → 风险 → handle 消费 → 前置条件）转换为对注入 executor port 的恰好一次派发。
+- 输入与输出：输出仅限 `crates/crayon-semantic-action/src/runtime/**`、`crates/crayon-app-runtime/src/semantic_action_runtime.rs(+tests)`、`lib.rs` re-export、Cargo 依赖登记与本 Roadmap。
+- 审批顺序：确认缺失先拒绝（不烧 handle）；风险拒绝次之（不烧 handle，调用方可重读后重试）；handle 消费（单次，重放 Unknown）；前置条件最后评估（violated 时 handle 已消费，须重读换新 handle）。`ApprovedAction` 冻结 node/action/tab/generation/deadline/confirmation，executor 不得放大。
+- 边界：`ConfirmationRef` 为 ≤128B 闭合字符集 opaque token（归 AGT-05 mint）；`ActionExecutor` port 只接收 ApprovedAction，永不接触 handle/page map/未验证页面输入；runtime 计数为有界诊断计数器，不参与正确性；无锁/IO/系统时钟。
+- 验收：AC-007 契约侧：恰好一次派发、重放拒绝、取消等价于不派发（无状态可残留）、generation/profile/tab 绑定拒绝、deadline 随 handle 冻结、executor 拒绝不静默重试、shutdown 幂等。
+- 明确不做：effect 验证与幂等（ACT-08）、CEF 实机接线（后续装配切片）、grant/确认 UI 实现（AGT-04/05）。
+
+### ACT-07 完成记录（2026-08-30）
+
+- 实现：semantic-action `runtime` 模块（`SemanticActionGate.approve` 四层审批、`ApprovedAction`、`ConfirmationRef`、`ExecutionRequest`）；app-runtime `SemanticActionRuntime`（`ActionExecutor` port、有界计数、sweep/invalidate_tab/幂等 shut_down、`HandleRegistry::invalidate_all`）。
+- 安全边界：审批每层 fail closed 且拒绝原因闭合；风险拒绝保留 handle、前置条件拒绝消费 handle 的差异语义被测试锁定（后者要求重读换新 handle）；executor 只见冻结的 ApprovedAction。
+- 验证：`cargo test -p crayon-semantic-action -p crayon-app-runtime` 72/72（含 runtime 7 场景）；`cargo test -p crayon-domain -p crayon-ipc-schema` 13 suite 回归全 ok；`cargo clippy --all-targets -- -D warnings` 通过；`cargo fmt --check` 通过。
+- Code Review：按 v0.8 复核；`gate_mut` 限 `pub(crate)` 未扩大公共 API。P0/P1/P2 = 0/0/0。
+- 未覆盖与风险：真实 CEF executor 接线归后续 cef-shell 切片；effect 等待/幂等/indeterminate 由 ACT-08 续作。`ACT-08 READY`。

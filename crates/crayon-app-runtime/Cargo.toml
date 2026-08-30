@@ -13,6 +13,7 @@ workspace = true
 crayon-cast-adapter = { path = "../crayon-cast-adapter" }
 crayon-cast-policy = { path = "../crayon-cast-policy" }
 crayon-domain = { path = "../crayon-domain" }
+crayon-semantic-action = { path = "../crayon-semantic-action" }
 crayon-ipc-schema = { path = "../crayon-ipc-schema" }
 crayon-media-observer = { path = "../crayon-media-observer" }
 crayon-media-probe = { path = "../crayon-media-probe" }

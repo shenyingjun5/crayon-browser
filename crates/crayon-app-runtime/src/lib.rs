@@ -3,6 +3,9 @@
 pub mod cast_usecase;
 pub mod delivery;
 pub mod page_snapshot_runtime;
+pub mod semantic_action_runtime;
+#[cfg(test)]
+mod semantic_action_runtime_tests;
 
 use crayon_domain::{ProductIdentity, ProductIdentityError, ProductMode};
 use crayon_ipc_schema::Handshake;

@@ -403,6 +403,7 @@ dependencies = [
  "crayon-media-probe",
  "crayon-page-data",
  "crayon-relay",
+ "crayon-semantic-action",
  "reqwest",
  "serde_json",
  "test-support",
