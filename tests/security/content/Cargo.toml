@@ -1,0 +1,18 @@
+[package]
+name = "crayon-content-security-tests"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "C1 content data-plane security tests (CNT-09, CT-002/003/006/008)"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+crayon-agent-gateway = { path = "../../../crates/crayon-agent-gateway" }
+crayon-app-runtime = { path = "../../../crates/crayon-app-runtime" }
+crayon-content-extract = { path = "../../../crates/crayon-content-extract" }
+crayon-domain = { path = "../../../crates/crayon-domain" }
+crayon-page-data = { path = "../../../crates/crayon-page-data" }
+serde_json = "1"

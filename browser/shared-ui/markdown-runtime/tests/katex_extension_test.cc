@@ -32,7 +32,7 @@ using crayon::browser_markdown_runtime::ValidateKatexSource;
 
 bool SourcePolicyIsClosed() {
   CHECK(ValidateKatexSource("\\frac{x^2+1}{2}") == KatexSourceStatus::kAllowed);
-  for (const std::string& denied :
+  for (const char* denied :
        {"\\href{https://example.test}{x}", "\\url{file:///tmp/x}",
         "\\includegraphics{x}", "\\htmlFuture{x}", "\\gdef\\x{y}",
         "\\csname href\\endcsname{x}"}) {

@@ -1,0 +1,18 @@
+[package]
+name = "crayon-content-e2e-tests"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Deterministic C1 content pipeline E2E tests (CNT-09, CT-001..008)"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+crayon-agent-gateway = { path = "../../../crates/crayon-agent-gateway" }
+crayon-app-runtime = { path = "../../../crates/crayon-app-runtime" }
+crayon-content-extract = { path = "../../../crates/crayon-content-extract" }
+crayon-content-markdown = { path = "../../../crates/crayon-content-markdown" }
+crayon-domain = { path = "../../../crates/crayon-domain" }
+crayon-page-data = { path = "../../../crates/crayon-page-data" }

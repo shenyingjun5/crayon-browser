@@ -11,3 +11,13 @@
 # on Windows checkouts (core.autocrlf=true) would break them.
 /crates/**/tests/*.txt text eol=lf
 /crates/crayon-content-markdown/tests/golden/** text eol=lf
+
+# Vendored KaTeX text assets are byte-locked by the MRT-07 manifest and
+# embedded during CMake configure. Keep checkout bytes identical to Git blobs.
+/third_party/katex/LICENSE text eol=lf
+/third_party/katex/assets/katex.mjs text eol=lf
+/third_party/katex/assets/katex.min.css text eol=lf
+
+# Mermaid's 104-file runtime closure is likewise byte-locked and contains
+# only JavaScript modules.
+/third_party/mermaid/assets/** text eol=lf

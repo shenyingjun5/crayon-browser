@@ -49,6 +49,8 @@ members = [
     "tests/security/privacy",
     "tests/security/semantic",
     "tests/security/agent",
+    "tests/security/content",
+    "tests/e2e/content",
     "tests/perf/content",
     "tests/perf/semantic",
     "tests/perf/agent",

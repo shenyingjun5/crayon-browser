@@ -1,6 +1,7 @@
 #ifndef CRAYON_BROWSER_CEF_SHELL_SRC_BROWSER_MDV_CEF_MDV_EDITING_H_
 #define CRAYON_BROWSER_CEF_SHELL_SRC_BROWSER_MDV_CEF_MDV_EDITING_H_
 
+#include <cstdint>
 #include <memory>
 #include <string>
 

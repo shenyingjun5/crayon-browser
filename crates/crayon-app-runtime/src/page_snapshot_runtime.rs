@@ -208,14 +208,14 @@ fn resolve_target<'a>(
     if resolved.profile != *profile {
         return Err(ContentReadRejection::TargetInvalid);
     }
+    if resolved.generation != generation {
+        return Err(ContentReadRejection::StaleGeneration);
+    }
     if !resolved.ready {
         return Err(ContentReadRejection::SourceUnavailable);
     }
     if !resolved.active {
         return Err(ContentReadRejection::BackgroundTarget);
-    }
-    if resolved.generation != generation {
-        return Err(ContentReadRejection::StaleGeneration);
     }
     Ok(resolved)
 }

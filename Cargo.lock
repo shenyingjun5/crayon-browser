@@ -504,6 +504,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "crayon-content-e2e-tests"
+version = "0.1.0"
+dependencies = [
+ "crayon-agent-gateway",
+ "crayon-app-runtime",
+ "crayon-content-extract",
+ "crayon-content-markdown",
+ "crayon-domain",
+ "crayon-page-data",
+]
+
+[[package]]
 name = "crayon-content-extract"
 version = "0.1.0"
 dependencies = [
@@ -525,6 +537,18 @@ dependencies = [
  "crayon-content-markdown",
  "crayon-domain",
  "crayon-page-data",
+]
+
+[[package]]
+name = "crayon-content-security-tests"
+version = "0.1.0"
+dependencies = [
+ "crayon-agent-gateway",
+ "crayon-app-runtime",
+ "crayon-content-extract",
+ "crayon-domain",
+ "crayon-page-data",
+ "serde_json",
 ]
 
 [[package]]
