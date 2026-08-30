@@ -1,6 +1,6 @@
 # AGT CAAP / CLI / MCP Agent 访问 Roadmap
 
-- 状态：`A0 权限内核完成（AGT-01..05/11）`；`AGT-08/AGT-10 DONE`（2026-08-24）、`AGT-12B VERIFIED`（Windows/macOS OS 组合回归闭合，AGT-12 整体待产品装配）；`AGT-06/09 VERIFIED`（2026-08-30）；`AGT-07 等 CNT-08`
+- 状态：`A0 权限内核完成（AGT-01..05/11）`；`AGT-08/AGT-10 DONE`（2026-08-24）、`AGT-12B VERIFIED`（Windows/macOS OS 组合回归闭合，AGT-12 整体待产品装配）；`AGT-06/09/15 VERIFIED`（2026-08-30）；`AGT-07 等 CNT-08`
 - 任务数：16
 - 目标：用自有 CAAP、入站 tool registry 和 capability guard，为 AI Agent 提供高性能读页，并把受控操作接到 `ACT` 的可验证语义动作运行时
 - 非目标：远程控制、原始 CDP/WebDriver、任意 JavaScript、Cookie/凭证、密码/支付、文件上传、任意文件/网络工具
@@ -33,7 +33,7 @@
 | AGT-12 | VERIFIED | AGT-04,AGT-11,PRV-10,PLT-01 | `apps/desktop-cef/agent-transport/**`,`crayon-platform-api/**` | Windows named pipe/macOS UDS CAAP transport；当前用户 ACL、限流、单客户端、stop | `AG-012`; 恶意本机 client/replay/oversize | A1 |
 | AGT-13 | TODO | AGT-05,AGT-07,AGT-08,AGT-12 | `apps/agent-cli/**`,docs/tests | R0/R1 CLI Developer Preview；机器可读结果、版本、cancel | `AG-013`; 无交互不绕确认 | A1 |
 | AGT-14 | TODO | AGT-05,AGT-07,AGT-08,AGT-12 | `apps/mcp/**`,MCP contracts | 只读 MCP Developer Preview，将 initialize/list/call/cancel 映射到 CAAP | `AG-014`; schema 同源、loopback only | A1 |
-| AGT-15 | TODO | AGT-06,AGT-09,AGT-10,ACT-12 | `crayon-agent-gateway/tools/semantic/**`,`tests/security/agent/**`,`tests/perf/agent/**` | 把 R4 Action Map/action_id/effect 接入 CAAP，并完成提示注入/fuzz/恶意 client/性能专项 | `AG-005`,`AG-010`,`AG-015`; 不复制 locator/runtime；永久禁止 surface 零命中 | A2 |
+| AGT-15 | VERIFIED | AGT-06,AGT-09,AGT-10,ACT-12 | `crayon-agent-gateway/tools/semantic/**`,`tests/security/agent/**`,`tests/perf/agent/**` | 把 R4 Action Map/action_id/effect 接入 CAAP，并完成提示注入/fuzz/恶意 client/性能专项 | `AG-005`,`AG-010`,`AG-015`; 不复制 locator/runtime；永久禁止 surface 零命中 | A2 |
 | AGT-16 | TODO | AGT-09,AGT-10,AGT-13,AGT-14,AGT-15,ACT-12 | threat model,Review,`docs/current/**` | CAAP/CLI/入站 MCP 总 Review、数据流、benchmark、默认开关与 GO/NO-GO | 全 AG、适用 AC；P0/P1=0；独立发布决策 | A2 |
 
 ## 3. 垂直切片
@@ -311,3 +311,20 @@
 - 验证：`cargo test -p crayon-agent-gateway -p crayon-app-runtime` 129 项全通过（新增 navigation 8 场景）；`cargo clippy --all-targets -- -D warnings` 通过；`cargo fmt --check` 通过。
 - Code Review：按 v0.8 复核；修正两处（OpenTab 意外 tab 字段未拒绝；receipt 优先级 url>scroll>tab）。P0/P1/P2 = 0/0/0。
 - 未覆盖与风险：`NavigationEngine` 的真实 CEF adapter 归后续装配切片；redirect/download 语义由引擎拒绝统一表达。下一任务 `WFL-01 READY`（依赖 ACT-12/AGT-03）。
+
+## AGT-15 原子范围（R4 semantic action CAAP adapter 与专项门禁）
+
+- 状态：`VERIFIED`；依赖 `AGT-06 VERIFIED`、`AGT-09 VERIFIED`、`AGT-10 DONE`、`ACT-12 DONE`。
+- 单一目标：在 agent gateway 把冻结的 `act.invoke` CAAP 请求收敛为一个闭合、可审计的 semantic action port 调用，并返回 ACT 冻结的 terminal `EffectReport`；补齐提示注入、敏感/隐藏/跨源/过期拒绝、恶意输入与有界性能专项。不复制 action handle、locator、precondition、risk 或 effect runtime。
+- 输入与允许修改：`crates/crayon-agent-gateway/src/tools/semantic.rs(+tests)`、`tools/mod.rs`、gateway manifest；`tests/security/agent/**`、`tests/perf/agent/**` 与 workspace members；本 Roadmap。输入只消费 AGT-01 `CaapRequest`、AGT-02 冻结的 `act.invoke(action_id!,args?)`、ACT-03 `ActionHandleId` 与 ACT-08 `EffectReport`/幂等 key。
+- 禁止修改：CAAP current/previous golden、AGT-02 registry snapshot、ACT schema/handle/locator/precondition/risk/effect 实现、CEF/平台/Cast/Relay；不得新增 selector、任意 JS/CDP、密码/支付/file action、第二工具调度、远程 transport、日志或持久化。
+- 边界：只接受 tool=`act.invoke` 且参数键精确为必填 `action_id` 与可选 `args`；action id、幂等 key 复用 ACT 强类型校验，argument UTF-8 ≤512B 且禁止 NUL/非空白控制字符；页面/参数中的指令只作为 opaque untrusted data，一次请求最多调用一次 `SemanticActionPort`，不能改 target、扩大 grant 或触发第二工具。Browser/app-runtime port 唯一拥有当前 verified node/risk/precondition/confirmation/effect；其闭合拒绝映射到稳定 CAAP 错误。terminal effect 序列化必须 ≤一个 CAAP chunk，`indeterminate` 是成功传输的终态结果但不可重放。
+- 验收与测试：`AG-005`、`AG-010`、`AG-015`。覆盖正常 effect、错误映射、参数闭合/边界、提示注入不解释、密码/支付/file/隐藏/跨源/过期/旧 generation 拒绝且 port 零副作用、同幂等 key 只执行一次、LCG mutation/fuzz 无 panic、永久禁止 surface scan、最大合法参数与批量拒绝保持调用数/输出字节有界。命令：目标 crate/security/perf tests、clippy `-D warnings`、fmt、workspace、fast/security、`git diff --check`。
+- 明确不做：Action Map 生产/读页（AGT-07/CNT-08）、真实 CEF locator/executor 装配、grant/确认 UI 签发、CLI/MCP（AGT-13/14）、AGT-12C 产品 accept loop、墙钟 benchmark/soak（QAR）。
+
+### AGT-15 完成记录（2026-08-30）
+
+- 实现：gateway 新增 `tools/semantic.rs`，将冻结的 `act.invoke(action_id!,args?)` 从经复检的 `CaapRequest` 收敛为 `SemanticInvokeRequest`；复用 ACT 强类型 `ActionHandleId`/`IdempotencyKey`，参数键闭合、argument ≤512B 且控制字符受限。唯一 `SemanticActionPort` 不暴露 selector/DOM/JS/CDP/文件/网络能力，Browser-owned port 继续唯一拥有 verified facts、risk/precondition/confirmation/effect；terminal `EffectReport` 只产生一个 final CAAP chunk。新增 agent security/perf workspace Harness，无第三方依赖。
+- 验证：`cargo test -p crayon-agent-gateway` 97/97；`cargo test -p crayon-agent-security-tests -p crayon-agent-perf-tests` 5/5 + 2/2；其中 2000 组 LCG hostile 参数、13 类永久禁止 surface、提示注入 opaque、敏感/隐藏/跨源/旧 generation 零执行、AGT-03 同幂等 key 只派发一次、1024 次线性调用与最大参数单 chunk 全通过。`cargo clippy -p crayon-agent-gateway -p crayon-agent-security-tests -p crayon-agent-perf-tests --all-targets --no-deps -- -D warnings`、`cargo fmt --all -- --check`、`cargo test --workspace`、`scripts/check.ps1 fast`、`scripts/check.ps1 security`、`git diff --check` 全通过；Windows workspace Markdown golden 无 CRLF 回归。
+- Code Review：按 v0.8 独立复核需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性；增加 typed request 进入 adapter 时的 `validate()` 纵深复检。P0/P1/P2=`0/0/0`。纯同步无锁/IO/日志；argument 与 effect 都有硬上限；页面/参数指令不参与授权、目标或第二工具选择。
+- 未覆盖与风险：真实 CEF locator/executor、grant/确认 UI、session/tool dispatch/receipt 的产品进程装配仍归 AGT-12C/后续装配；Action Map 生产仍等 `CNT-08/AGT-07`；墙钟 benchmark/soak 归 QAR。因这些平台装配尚未闭合，`AGT-15` 为 `VERIFIED` 而非 `DONE`。

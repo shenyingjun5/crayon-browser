@@ -393,8 +393,30 @@ dependencies = [
  "crayon-platform-api",
  "crayon-platform-macos",
  "crayon-platform-windows",
+ "crayon-semantic-action",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "crayon-agent-perf-tests"
+version = "0.1.0"
+dependencies = [
+ "crayon-agent-gateway",
+ "crayon-domain",
+ "crayon-ipc-schema",
+ "crayon-semantic-action",
+ "serde_json",
+]
+
+[[package]]
+name = "crayon-agent-security-tests"
+version = "0.1.0"
+dependencies = [
+ "crayon-agent-gateway",
+ "crayon-domain",
+ "crayon-ipc-schema",
+ "crayon-semantic-action",
 ]
 
 [[package]]

@@ -1,0 +1,16 @@
+[package]
+name = "crayon-agent-security-tests"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "CAAP agent gateway security tests (AGT-15, AG-005/010/015)"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+crayon-agent-gateway = { path = "../../../crates/crayon-agent-gateway" }
+crayon-domain = { path = "../../../crates/crayon-domain" }
+crayon-ipc-schema = { path = "../../../crates/crayon-ipc-schema" }
+crayon-semantic-action = { path = "../../../crates/crayon-semantic-action" }
