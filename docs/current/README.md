@@ -56,7 +56,7 @@ Cast-SDK source lock 的当前事实位于 `config/cast-sdk-source.toml`、`.git
 - CEF 固定基线为 `150.0.10+g8042e43+chromium-150.0.7871.101` Standard。历史四平台 hash 已锁定，Windows x64 archive 已校验；后续产品构建只推进 Windows/macOS。
 - Cast-SDK source revision 已由 `SDK-01` 固定并通过 `RG-008`；`SDK-01..14 DONE`，包括真实接收端 Harness 与总 Review。`SDK-15/16` 只承接后续 Partner/TV Cast gap 与正式外部 facade。
 - `MED-19` 已完成：投屏决策集合为 `Direct/Relay/ExternalClientHandoff/Reject`，旧 `mirror` wire 值保留兼容读取窗口且不再发出；`tab_video`/`system_audio` 仅作为 `crayon-domain` 遗留字段存在，策略与 runtime 代码不再引用，不得继续扩张。
-- 当前开发前沿：`CNT-17 DONE` 已在 macOS arm64 产品 CEF 壳接通 Browser-issued 主 frame snapshot request、Renderer DOM adapter、版本化 IPC 与 Browser gateway；网页 Markdown 仍需 `CNT-18..21`，下一任务为 `CNT-18 READY`。`PLT-M05b1 READY` 与 `MDV-25 READY` 同样触及 CEF 装配，继续串行。测试与产品启动固定 `use-mock-keychain`，真实 SecureStore/Keychain 验证放到最后，不得作为一期启动障碍。Direct/Relay 可使用 ADB 在线手机的正式接收端取证；Windows x64 同一期回归。Agent/CLI/MCP、Workflow、Hub、Partner、模型与 HarmonyOS 统一为第二期且默认关闭。
+- 当前开发前沿：`CNT-17 DONE` 已在 macOS arm64 产品 CEF 壳接通 Browser-issued 主 frame snapshot request、Renderer DOM adapter、版本化 IPC 与 Browser gateway；`CNT-18 IN_PROGRESS` 已按跨语言协议、Rust host、macOS Core 进程装配和真 CEF E2E 拆为 18a..18d，当前只领取 `CNT-18a IN_PROGRESS`。`PLT-M05b1 READY` 与 `MDV-25 READY` 同样触及 CEF 装配，继续串行。测试与产品启动固定 `use-mock-keychain`，真实 SecureStore/Keychain 验证放到最后，不得作为一期启动障碍。Direct/Relay 可使用 ADB 在线手机的正式接收端取证；Windows x64 同一期回归。Agent/CLI/MCP、Workflow、Hub、Partner、模型与 HarmonyOS 统一为第二期且默认关闭。
 
 ## 5. 权威与历史
 
