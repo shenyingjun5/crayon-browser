@@ -1,7 +1,10 @@
 //! Core API v1 contract tests (FND-08): golden roundtrip, previous-version
 //! compatibility window, unknown field/version rejection, and secret denial.
 
-use crayon_domain::{CoreError, PlatformCapabilities, ReceiverCapabilities};
+use crayon_domain::{
+    ChangeSet, CoreError, EffectReport, PageMap, PlatformCapabilities, ReceiverCapabilities,
+    SemanticError,
+};
 use crayon_ipc_schema::{
     CastPolicyDecision, CastPolicyInput, ExternalClientHandoff, HandoffConfirmation, HandoffReason,
     Handshake, MediaCandidate, SchemaVersion, SessionGrant, SessionSecret, SourceObservation,
@@ -61,6 +64,16 @@ const CASES: &[VectorCase] = &[
     ),
     ("session_grant.json", roundtrip::<SessionGrant>),
     ("core_error.json", roundtrip::<CoreError>),
+    // ACT-01: frozen semantic map family (page map, change set, effect
+    // reports and the closed error codes).
+    ("semantic_page_map.json", roundtrip::<PageMap>),
+    ("semantic_change_set.json", roundtrip::<ChangeSet>),
+    ("semantic_effect_report.json", roundtrip::<EffectReport>),
+    (
+        "semantic_effect_report_failed.json",
+        roundtrip::<EffectReport>,
+    ),
+    ("semantic_error.json", roundtrip::<SemanticError>),
 ];
 
 // 注：`cast_policy_decision_mirror.json` 同时存在于 current/previous，但不进入
@@ -189,7 +202,10 @@ fn unknown_fields_are_rejected() {
         // core_error 是字符串型错误码，没有可注入的字段；cast_policy_decision_*
         // 是 Core 出方向消息（内部 tag 枚举，serde 对 unit variant 的未知键不拒绝），
         // 入方向未知字段拒绝由上面的结构体类型保证。
-        if *name == "core_error.json" || name.starts_with("cast_policy_decision_") {
+        if *name == "core_error.json"
+            || *name == "semantic_error.json"
+            || name.starts_with("cast_policy_decision_")
+        {
             continue;
         }
         let mutated = with_extra_field(&vector("current", name));

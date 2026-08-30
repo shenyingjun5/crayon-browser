@@ -8,6 +8,7 @@ mod diagnostics;
 mod diagnostics_outbound;
 mod error;
 mod ids;
+mod semantic;
 
 pub use agent::{AgentCapability, AgentTarget, CaapError, RiskLevel};
 pub use capabilities::{
@@ -34,6 +35,12 @@ pub use diagnostics_outbound::{
 };
 pub use error::CoreError;
 pub use ids::{DeviceId, IdError, ResourceId, SessionGeneration, SessionId, TabId};
+pub use semantic::{
+    is_valid_origin, ActionKind, ActionOffer, ChangeSet, EffectOutcome, EffectReason, EffectReport,
+    ElementState, FormField, FormMap, MediaElement, MediaKind, MediaState, PageMap, RiskEntry,
+    RiskReason, SemanticError, SemanticNode, SemanticNodeId, SemanticNodeKind, SemanticSchemaError,
+    SemanticTruncation, SEMANTIC_MAP_SCHEMA_VERSION,
+};
 
 use serde::{Deserialize, Serialize};
 use std::error::Error;
