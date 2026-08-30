@@ -48,7 +48,7 @@
 
 | 顺序 | 任务 | 状态 | 说明 |
 |---:|---|---|---|
-| 1 | `CNT-18c` | READY | macOS CEF Browser 装配真实 Core host spawn/pipe/health/kill/reap 与 gateway drain |
+| 1 | `CNT-18c` | IN_PROGRESS | macOS CEF Browser 装配真实 Core host spawn/pipe/health/kill/reap 与 gateway drain |
 | 2 | `PLT-M05b1` | READY | 接通真实 CEF 媒体观察；与 CNT-17 均改 CEF 装配，必须串行避免冲突 |
 | 3 | `MDV-25` | READY | 移除 `BuildFixtureSnapshot()` 生产初始化；与前两项同样触及 CEF App/CMake，串行领取 |
 
