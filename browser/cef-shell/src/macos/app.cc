@@ -3,6 +3,7 @@
 #include <CoreFoundation/CoreFoundation.h>
 
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <utility>
@@ -13,13 +14,18 @@
 #include "browser/mdv/cef_mdv_handler.h"
 #include "browser/new_tab/cef_new_tab_handler.h"
 #include "browser/permission/permission_store.h"
+#include "include/base/cef_callback.h"
 #include "include/cef_app.h"
+#include "include/cef_task.h"
+#include "include/wrapper/cef_closure_task.h"
 #include "include/wrapper/cef_helpers.h"
 
 namespace crayon::browser::cef_shell {
 namespace {
 
 constexpr char kInitialUrl[] = "crayon://newtab";
+constexpr std::size_t kContentHostStartupChecks = 500;
+constexpr std::int64_t kContentHostTickMilliseconds = 20;
 
 browser_new_tab::NewTabPageStrings DefaultNewTabStrings() {
   return browser_new_tab::NewTabPageStrings{
@@ -71,6 +77,20 @@ std::string PreferredLanguage() {
   }
   if (languages) CFRelease(languages);
   return language;
+}
+
+std::string ContentHostExecutablePath() {
+  CFURLRef bundle_url = CFBundleCopyBundleURL(CFBundleGetMainBundle());
+  if (!bundle_url) return {};
+  CFStringRef bundle_path =
+      CFURLCopyFileSystemPath(bundle_url, kCFURLPOSIXPathStyle);
+  CFRelease(bundle_url);
+  const std::string path = Utf8(bundle_path);
+  if (bundle_path) CFRelease(bundle_path);
+  if (path.empty()) return {};
+  return (std::filesystem::path(path) / "Contents" / "Helpers" /
+          "crayon-content-host")
+      .string();
 }
 
 browser_mdv::MdvPageStrings DefaultMdvStrings() {
@@ -138,6 +158,7 @@ BrowserApp::BrowserApp(std::string product_name)
       mdv_editing_(std::make_shared<mdv::MdvEditController>(mdv_runtime_,
                                                             mdv_strings_)),
       permission_store_(std::make_unique<permission::PermissionStore>()),
+      content_host_(std::make_unique<macos::ContentHostAdapter>()),
       tab_controller_(new window::TabController(
           kInitialUrl, window::TabController::BrowserCreatedCallback{},
           std::nullopt, permission_store_.get())) {}
@@ -214,9 +235,61 @@ void BrowserApp::OnContextInitialized() {
         return editing->OnPageQuery(browser, frame, query_id, request,
                                     persistent, std::move(callback));
       });
-  if (!tab_controller_->CreateMainWindow()) {
+  tab_controller_->SetPageSnapshotObserver(content_host_.get());
+  tab_controller_->SetPageSnapshotAdmission(
+      [host = content_host_.get()] { return host->healthy(); });
+  tab_controller_->SetPageSnapshotEventsReadyCallback([this] {
+    content_host_->Consume(tab_controller_->DrainPageSnapshots(16));
+  });
+  tab_controller_->SetBrowsersClosedCallback([this] {
+    content_host_tick_active_ = false;
+    content_host_->Stop();
+  });
+  if (!content_host_->Start(ContentHostExecutablePath())) {
     CefQuitMessageLoop();
+    return;
   }
+  ContinueContentHostStartup();
+}
+
+void BrowserApp::ContinueContentHostStartup() {
+  CEF_REQUIRE_UI_THREAD();
+  if (content_host_->healthy()) {
+    if (!tab_controller_->CreateMainWindow()) {
+      content_host_->Stop();
+      CefQuitMessageLoop();
+      return;
+    }
+    content_host_tick_active_ = true;
+    ScheduleContentHostTick();
+    return;
+  }
+  if (++content_host_start_checks_ >= kContentHostStartupChecks) {
+    content_host_->Stop();
+    CefQuitMessageLoop();
+    return;
+  }
+  CefPostDelayedTask(
+      TID_UI,
+      CefCreateClosureTask(base::BindOnce(
+          &BrowserApp::ContinueContentHostStartup, CefRefPtr<BrowserApp>(this))),
+      kContentHostTickMilliseconds);
+}
+
+void BrowserApp::ScheduleContentHostTick() {
+  CefPostDelayedTask(
+      TID_UI,
+      CefCreateClosureTask(base::BindOnce(&BrowserApp::ContentHostTick,
+                                          CefRefPtr<BrowserApp>(this))),
+      kContentHostTickMilliseconds);
+}
+
+void BrowserApp::ContentHostTick() {
+  CEF_REQUIRE_UI_THREAD();
+  if (!content_host_tick_active_) return;
+  content_host_->Consume(tab_controller_->DrainPageSnapshots(16));
+  content_host_->Tick();
+  ScheduleContentHostTick();
 }
 
 CefRefPtr<CefClient> BrowserApp::GetDefaultClient() {

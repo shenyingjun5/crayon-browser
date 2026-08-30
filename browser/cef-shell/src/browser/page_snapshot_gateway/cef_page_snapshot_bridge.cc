@@ -47,6 +47,7 @@ CefPageSnapshotBridge::StartSnapshot(CefRefPtr<CefBrowser> browser,
     return std::nullopt;
   }
   active_.emplace(*request_id, ActiveCefRequest{*engine_tab_id, frame});
+  if (observer_) observer_->OnSnapshotStarted(request);
   frame->SendProcessMessage(PID_RENDERER,
                             snapshot_ipc::CreateRequestMessage(request));
   return request_id;
@@ -63,7 +64,11 @@ SnapshotGatewayResult CefPageSnapshotBridge::CancelSnapshot(
     }
     active_.erase(active);
   }
-  return gateway_.Cancel(request_id);
+  const auto result = gateway_.Cancel(request_id);
+  if (result == SnapshotGatewayResult::kAccepted && observer_) {
+    observer_->OnSnapshotCancelled(request_id);
+  }
+  return result;
 }
 
 bool CefPageSnapshotBridge::OnProcessMessageReceived(
@@ -118,6 +123,10 @@ void CefPageSnapshotBridge::AdvanceNavigation(CefRefPtr<CefBrowser> /*browser*/,
   SendCancelForTab(*engine_tab_id);
   gateway_.AdvanceNavigation(
       *engine_tab_id, browser_engine::NavigationId::FromRaw(navigation_id));
+  if (observer_) {
+    observer_->OnSnapshotNavigation(
+        *engine_tab_id, browser_engine::NavigationId::FromRaw(navigation_id));
+  }
   EraseTab(*engine_tab_id);
 }
 
@@ -128,6 +137,7 @@ void CefPageSnapshotBridge::CloseBrowser(CefRefPtr<CefBrowser> /*browser*/,
   if (!engine_tab_id) return;
   SendCancelForTab(*engine_tab_id);
   gateway_.CloseTab(*engine_tab_id);
+  if (observer_) observer_->OnSnapshotClosed(*engine_tab_id);
   EraseTab(*engine_tab_id);
 }
 
@@ -139,6 +149,7 @@ void CefPageSnapshotBridge::RendererGone(CefRefPtr<CefBrowser> /*browser*/,
   SendCancelForTab(*engine_tab_id);
   gateway_.FailTab(*engine_tab_id,
                    browser_engine::EngineErrorCode::kNavigationFailed);
+  if (observer_) observer_->OnSnapshotClosed(*engine_tab_id);
   EraseTab(*engine_tab_id);
 }
 
@@ -147,6 +158,7 @@ void CefPageSnapshotBridge::ShutDown() {
   shut_down_ = true;
   active_.clear();
   gateway_.ShutDown();
+  if (observer_) observer_->OnSnapshotShutdown();
 }
 
 RendererSource CefPageSnapshotBridge::Source(CefRefPtr<CefBrowser> browser,

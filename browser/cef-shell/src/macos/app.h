@@ -9,6 +9,7 @@
 #include "browser/permission/permission_store.h"
 #include "browser/window/tab_controller.h"
 #include "crayon/browser_mdv/mdv_page.h"
+#include "macos/content_host_adapter_mac.h"
 
 #include "include/cef_app.h"
 
@@ -41,13 +42,20 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   }
 
  private:
+  void ContinueContentHostStartup();
+  void ScheduleContentHostTick();
+  void ContentHostTick();
+
   const std::string product_name_;
   const browser_mdv::MdvPageStrings mdv_strings_;
   const std::shared_ptr<mdv::MdvRuntimeState> mdv_runtime_;
   const std::shared_ptr<mdv::MdvEntryController> mdv_entries_;
   const std::shared_ptr<mdv::MdvEditController> mdv_editing_;
   std::unique_ptr<permission::PermissionStore> permission_store_;
+  std::unique_ptr<macos::ContentHostAdapter> content_host_;
   CefRefPtr<window::TabController> tab_controller_;
+  std::size_t content_host_start_checks_ = 0;
+  bool content_host_tick_active_ = false;
 
   IMPLEMENT_REFCOUNTING(BrowserApp);
   DISALLOW_COPY_AND_ASSIGN(BrowserApp);

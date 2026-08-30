@@ -380,6 +380,17 @@ void TabController::SetPageSnapshotEventsReadyCallback(
   page_snapshot_events_ready_callback_ = std::move(callback);
 }
 
+void TabController::SetPageSnapshotObserver(
+    gateway::PageSnapshotObserver* observer) {
+  CEF_REQUIRE_UI_THREAD();
+  client_->SetPageSnapshotObserver(observer);
+}
+
+void TabController::SetPageSnapshotAdmission(std::function<bool()> admission) {
+  CEF_REQUIRE_UI_THREAD();
+  page_snapshot_admission_ = std::move(admission);
+}
+
 void TabController::OnPageSnapshotEventsReady() {
   CEF_REQUIRE_UI_THREAD();
   if (page_snapshot_events_ready_callback_) {
@@ -391,7 +402,9 @@ std::optional<browser_engine::SnapshotRequestId>
 TabController::StartPageSnapshot(CefRefPtr<CefBrowser> browser,
                                  browser_engine::SnapshotMode mode) {
   CEF_REQUIRE_UI_THREAD();
-  if (!browser) return std::nullopt;
+  if (!browser || (page_snapshot_admission_ && !page_snapshot_admission_())) {
+    return std::nullopt;
+  }
   const TabSnapshot* tab = model_.FindByBrowser(browser->GetIdentifier());
   if (!tab || tab->lifecycle != TabLifecycle::kReady || tab->loading ||
       tab->navigation_generation == 0) {

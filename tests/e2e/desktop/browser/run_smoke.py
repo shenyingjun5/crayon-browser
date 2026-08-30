@@ -32,6 +32,7 @@ EXPECTED_HELPERS = (
     "CrayonBrowser Helper (Plugin)",
     "CrayonBrowser Helper (Alerts)",
 )
+EXPECTED_CONTENT_HOST = "crayon-content-host"
 
 # Redaction rules: query values, cookies, authorization, bearer tokens,
 # signed URLs and userinfo — mirrors the repo LeakScanner semantics.
@@ -65,7 +66,11 @@ def app_processes():
         if len(parts) != 2:
             continue
         name = Path(parts[1]).name
-        if name == "CrayonBrowser" or name.startswith("CrayonBrowser Helper"):
+        if (
+            name == "CrayonBrowser"
+            or name.startswith("CrayonBrowser Helper")
+            or name == EXPECTED_CONTENT_HOST
+        ):
             processes.append({"pid": parts[0], "name": name})
     return processes
 
@@ -99,6 +104,8 @@ def selfcheck() -> int:
 
     if len(EXPECTED_HELPERS) != 5:
         failures.append("expected helper set changed")
+    if EXPECTED_CONTENT_HOST != "crayon-content-host":
+        failures.append("expected content host changed")
 
     if failures:
         for failure in failures:
@@ -130,13 +137,13 @@ def smoke(bundle: str, out_path: str) -> int:
     for _ in range(20):  # poll: helper spawn can lag a cold start
         time.sleep(1)
         processes = app_processes()
-        if len(processes) >= 6:
+        if len(processes) >= 7:
             break
     names = sorted({p["name"] for p in processes})
     report["phases"]["launch"] = {"process_count": len(processes), "names": names}
-    if len(processes) < 6:
+    if len(processes) < 7:
         report["failed"].append(
-            f"expected >=6 processes (main + 5 helpers), saw {len(processes)}: {names}"
+            f"expected >=7 processes (main + 5 helpers + Core), saw {len(processes)}: {names}"
         )
 
     sockets = non_loopback_sockets([p["pid"] for p in processes])

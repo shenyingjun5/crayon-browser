@@ -6,6 +6,10 @@ rust-version.workspace = true
 description = "Platform-neutral Crayon product runtime composition"
 publish = false
 
+[[bin]]
+name = "crayon-content-host"
+path = "src/bin/crayon-content-host.rs"
+
 [lints]
 workspace = true
 

@@ -205,6 +205,10 @@ if(OS_MAC)
       src/browser/window/tab_model.cc
       src/macos/app.cc
       src/macos/app.h
+      src/macos/content_host_adapter_mac.cc
+      src/macos/content_host_adapter_mac.h
+      src/macos/content_host_process_mac.cc
+      src/macos/content_host_process_mac.h
       src/macos/main_mac.mm)
   set(crayon_macos_helper_sources
       src/browser/new_tab/cef_new_tab_handler.cc
@@ -216,6 +220,55 @@ if(OS_MAC)
       src/macos/process_helper_mac.cc)
   set(CRAYON_MACOS_APP
       "${CEF_TARGET_OUT_DIR}/${CRAYON_MACOS_EXECUTABLE}.app")
+  if(PROJECT_ARCH STREQUAL "arm64")
+    set(crayon_content_host_triple "aarch64-apple-darwin")
+  elseif(PROJECT_ARCH STREQUAL "x86_64")
+    set(crayon_content_host_triple "x86_64-apple-darwin")
+  else()
+    message(FATAL_ERROR "Unsupported macOS content-host arch: ${PROJECT_ARCH}")
+  endif()
+  find_program(CRAYON_CARGO_EXECUTABLE NAMES cargo REQUIRED)
+  set(crayon_content_host_target_dir
+      "${CMAKE_CURRENT_BINARY_DIR}/content-host-target")
+  if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    set(crayon_content_host_profile "release")
+    set(crayon_content_host_profile_argument "--release")
+  else()
+    set(crayon_content_host_profile "debug")
+    set(crayon_content_host_profile_argument "")
+  endif()
+  set(crayon_content_host_cargo_binary
+      "${crayon_content_host_target_dir}/${crayon_content_host_triple}/${crayon_content_host_profile}/crayon-content-host")
+  set(crayon_content_host_binary
+      "${CMAKE_CURRENT_BINARY_DIR}/content-host-stage/crayon-content-host")
+  set(crayon_bundled_content_host
+      "${CRAYON_MACOS_APP}/Contents/Helpers/crayon-content-host")
+  file(
+    GLOB_RECURSE crayon_content_host_rust_sources CONFIGURE_DEPENDS
+    "${PROJECT_SOURCE_DIR}/crates/*.rs"
+    "${PROJECT_SOURCE_DIR}/crates/*/Cargo.toml"
+    "${PROJECT_SOURCE_DIR}/third_party/cast-sdk/*.rs"
+    "${PROJECT_SOURCE_DIR}/third_party/cast-sdk/*/Cargo.toml")
+  add_custom_command(
+    OUTPUT "${crayon_content_host_binary}"
+    COMMAND
+      "${CMAKE_COMMAND}" -E env
+      "CARGO_TARGET_DIR=${crayon_content_host_target_dir}"
+      "${CRAYON_CARGO_EXECUTABLE}" build -p crayon-app-runtime --bin
+      crayon-content-host --target "${crayon_content_host_triple}"
+      ${crayon_content_host_profile_argument}
+    COMMAND "${CMAKE_COMMAND}" -E make_directory
+            "${CMAKE_CURRENT_BINARY_DIR}/content-host-stage"
+    COMMAND "${CMAKE_COMMAND}" -E copy "${crayon_content_host_cargo_binary}"
+            "${crayon_content_host_binary}"
+    DEPENDS
+      "${PROJECT_SOURCE_DIR}/Cargo.toml"
+      "${PROJECT_SOURCE_DIR}/Cargo.lock"
+      ${crayon_content_host_rust_sources}
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+    COMMENT "Building the bundled Rust content host"
+    VERBATIM)
+  add_custom_target(crayon_content_host DEPENDS "${crayon_content_host_binary}")
 
   add_executable(${CRAYON_BROWSER_TARGET} MACOSX_BUNDLE
                  ${crayon_macos_sources} ${crayon_macos_resources})
@@ -230,12 +283,17 @@ if(OS_MAC)
                               PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
   target_include_directories(${CRAYON_BROWSER_TARGET}
                              PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
-  add_dependencies(${CRAYON_BROWSER_TARGET} libcef_dll_wrapper)
+  add_dependencies(${CRAYON_BROWSER_TARGET} libcef_dll_wrapper
+                   crayon_content_host)
+  set_property(TARGET ${CRAYON_BROWSER_TARGET} APPEND PROPERTY LINK_DEPENDS
+               "${crayon_content_host_binary}")
   target_link_libraries(${CRAYON_BROWSER_TARGET}
                         PRIVATE libcef_dll_wrapper ${CEF_STANDARD_LIBS}
                                 crayon::browser-mdv crayon::browser-new-tab
                                 crayon::browser-page-snapshot-gateway
-                                crayon::cef-page-snapshot-collector)
+                                crayon::cef-page-snapshot-collector
+                                crayon::cef-shell-core-client
+                                crayon::cef-shell-ipc)
   set_target_properties(
     ${CRAYON_BROWSER_TARGET}
     PROPERTIES OUTPUT_NAME "${CRAYON_MACOS_EXECUTABLE}"
@@ -244,6 +302,13 @@ if(OS_MAC)
 
   COPY_MAC_FRAMEWORK("${CRAYON_BROWSER_TARGET}" "${CEF_BINARY_DIR}"
                      "${CRAYON_MACOS_APP}")
+  add_custom_command(
+    TARGET ${CRAYON_BROWSER_TARGET} POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E make_directory
+            "${CRAYON_MACOS_APP}/Contents/Helpers"
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "${crayon_content_host_binary}" "${crayon_bundled_content_host}"
+    VERBATIM)
 
   set(crayon_macos_helper_names "")
   foreach(helper_suffix_list ${CEF_HELPER_APP_SUFFIXES})
@@ -316,12 +381,49 @@ if(OS_MAC)
     COMMAND
       "${CMAKE_COMMAND}" "-DCRAYON_APP_BUNDLE=${CRAYON_MACOS_APP}"
       "-DCRAYON_HELPER_MANIFEST=${CMAKE_CURRENT_BINARY_DIR}/crayon-macos-helper-apps.txt"
+      "-DCRAYON_CONTENT_HOST=${crayon_bundled_content_host}"
       "-DCRAYON_CEF_SHELL_SOURCE=${CMAKE_CURRENT_SOURCE_DIR}" -P
       "${CMAKE_CURRENT_SOURCE_DIR}/macos_adhoc_sign.cmake"
     COMMENT "Ad-hoc signing CrayonBrowser bundles for the macOS sandbox"
     VERBATIM)
 
   if(CRAYON_BUILD_TESTS)
+    add_executable(
+      crayon_content_host_process_mac_test
+      tests/content_host_process_mac_test.cc
+      src/macos/content_host_process_mac.cc)
+    target_compile_features(crayon_content_host_process_mac_test
+                            PRIVATE cxx_std_17)
+    target_include_directories(crayon_content_host_process_mac_test
+                               PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_definitions(
+      crayon_content_host_process_mac_test
+      PRIVATE CRAYON_CONTENT_HOST_TEST_PATH="${crayon_content_host_binary}")
+    target_link_libraries(
+      crayon_content_host_process_mac_test
+      PRIVATE crayon::cef-shell-core-client crayon::cef-shell-ipc)
+    add_dependencies(crayon_content_host_process_mac_test crayon_content_host)
+    add_test(NAME content_host_process_mac
+             COMMAND crayon_content_host_process_mac_test)
+
+    add_executable(
+      crayon_content_host_adapter_mac_test
+      tests/content_host_adapter_mac_test.cc
+      src/macos/content_host_adapter_mac.cc
+      src/macos/content_host_process_mac.cc)
+    target_compile_features(crayon_content_host_adapter_mac_test
+                            PRIVATE cxx_std_17)
+    target_include_directories(crayon_content_host_adapter_mac_test
+                               PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(
+      crayon_content_host_adapter_mac_test
+      PRIVATE crayon::browser-page-snapshot-gateway
+              crayon::cef-shell-core-client crayon::cef-shell-ipc)
+    add_test(NAME content_host_adapter_mac
+             COMMAND crayon_content_host_adapter_mac_test)
+    set_tests_properties(content_host_process_mac content_host_adapter_mac
+                         PROPERTIES LABELS "cef;shell;macos;content")
+
     add_test(
       NAME macos_cef_shell_source_contract
       COMMAND "${CMAKE_COMMAND}"

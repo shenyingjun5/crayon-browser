@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "browser/page_snapshot_gateway/page_snapshot_gateway.h"
+#include "browser/page_snapshot_gateway/page_snapshot_observer.h"
 #include "include/cef_browser.h"
 #include "include/cef_process_message.h"
 
@@ -23,6 +24,7 @@ using SnapshotGatewayStats = ::crayon::cef_shell::gateway::SnapshotGatewayStats;
 // renderer messages are admitted against the exact browser/main-frame source.
 class CefPageSnapshotBridge final {
  public:
+  void SetObserver(PageSnapshotObserver* observer) { observer_ = observer; }
   std::optional<browser_engine::SnapshotRequestId> StartSnapshot(
       CefRefPtr<CefBrowser> browser, std::uint64_t tab_id,
       std::uint64_t navigation_id, browser_engine::SnapshotMode mode);
@@ -59,6 +61,7 @@ class CefPageSnapshotBridge final {
   std::map<browser_engine::SnapshotRequestId, ActiveCefRequest> active_;
   std::uint64_t next_request_id_ = 1;
   bool shut_down_ = false;
+  PageSnapshotObserver* observer_ = nullptr;
 };
 
 }  // namespace crayon::browser::cef_shell::gateway

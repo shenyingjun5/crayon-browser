@@ -64,6 +64,13 @@ foreach(helper_name IN LISTS helper_names)
   sign_bundle("${embedded_helper}")
 endforeach()
 
+if(DEFINED CRAYON_CONTENT_HOST AND NOT "${CRAYON_CONTENT_HOST}" STREQUAL "")
+  if(NOT EXISTS "${CRAYON_CONTENT_HOST}")
+    message(FATAL_ERROR "bundled content host missing: ${CRAYON_CONTENT_HOST}")
+  endif()
+  sign_bundle("${CRAYON_CONTENT_HOST}")
+endif()
+
 sign_bundle("${CRAYON_APP_BUNDLE}")
 message(STATUS
         "Ad-hoc signed ${CRAYON_APP_BUNDLE} (CEF dylibs/framework + embedded helpers) for the macOS sandbox")

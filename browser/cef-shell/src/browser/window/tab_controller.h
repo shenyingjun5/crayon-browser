@@ -95,6 +95,9 @@ class WindowClient final : public CefClient,
       std::size_t max_events);
   gateway::SnapshotGatewayResult CancelPageSnapshot(
       const browser_engine::SnapshotRequestId& request_id);
+  void SetPageSnapshotObserver(gateway::PageSnapshotObserver* observer) {
+    page_snapshot_bridge_.SetObserver(observer);
+  }
   void AdvancePageSnapshotNavigation(CefRefPtr<CefBrowser> browser,
                                      std::uint64_t tab_id,
                                      std::uint64_t navigation_id);
@@ -231,6 +234,8 @@ class TabController final : public CefBaseRefCounted {
   void SetPageLoadCompletedCallback(PageLoadCompletedCallback callback);
   void SetPageSnapshotEventsReadyCallback(
       PageSnapshotEventsReadyCallback callback);
+  void SetPageSnapshotObserver(gateway::PageSnapshotObserver* observer);
+  void SetPageSnapshotAdmission(std::function<bool()> admission);
   void OnPageSnapshotEventsReady();
 
   std::optional<browser_engine::SnapshotRequestId> StartPageSnapshot(
@@ -273,6 +278,7 @@ class TabController final : public CefBaseRefCounted {
   BrowsersClosedCallback browsers_closed_callback_;
   PageLoadCompletedCallback page_load_completed_callback_;
   PageSnapshotEventsReadyCallback page_snapshot_events_ready_callback_;
+  std::function<bool()> page_snapshot_admission_;
   TabModel model_;
   permission::PermissionStore* permission_store_;
   CefRefPtr<WindowClient> client_;
