@@ -148,8 +148,7 @@ pub fn evaluate(input: &PreconditionInput<'_>) -> Result<PreconditionReport, Sem
         return Err(SemanticSchemaError::OriginInvalid);
     }
     let mut violations = Vec::new();
-    let push = |violation: PreconditionViolation,
-                    violations: &mut Vec<PreconditionViolation>| {
+    let push = |violation: PreconditionViolation, violations: &mut Vec<PreconditionViolation>| {
         if violations.len() == MAX_PRECONDITION_VIOLATIONS {
             return Err(SemanticSchemaError::BudgetExceeded("violations"));
         }

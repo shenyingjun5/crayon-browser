@@ -1,6 +1,6 @@
 # ACT：页面语义地图与可验证动作 Roadmap
 
-- 状态：执行中；`ACT-01 DONE`、`ACT-02..05 VERIFIED`（均 2026-08-30）
+- 状态：执行中；`ACT-01 DONE`、`ACT-02..06 VERIFIED`（均 2026-08-30）
 - 任务数：12
 - 目标：把已验证页面事实转换为 Agent 可高效读取的语义地图，并通过短期 `action_id`、前置条件和效果验证执行受控操作
 - 非目标：原始 DOM/HTML/CDP 输出、长期 CSS/XPath、任意 JavaScript、截图/OCR 常规控制、密码/支付/通用文件上传
@@ -21,7 +21,7 @@
 | ACT-03 | VERIFIED | ACT-01,AGT-03 | `crayon-semantic-action/handle/**` | action_id 签发、target/generation/TTL/nonce 绑定与失效 | `AC-003`; property/replay/跨 Profile |
 | ACT-04 | VERIFIED | ACT-03,CEF-05 | `browser/engine-api/**`,`browser/cef-shell/**/semantic/**` | 多信号 action discovery 与内部 locator evidence | `AC-004`; 外部无 selector；重复/遮挡/动态页 |
 | ACT-05 | VERIFIED | ACT-04 | `crayon-semantic-action/precondition/**` | 可见、唯一、可操作、同源、页面状态前置条件 | `AC-005`; stale/hidden/cross-origin fail closed |
-| ACT-06 | TODO | ACT-01,PRV-10 | `crayon-semantic-action/risk/**` | 确定性、单调 risk policy 与敏感元素排除 | `AC-006`; password/payment/file 不可执行 |
+| ACT-06 | VERIFIED | ACT-01,PRV-10 | `crayon-semantic-action/risk/**` | 确定性、单调 risk policy 与敏感元素排除 | `AC-006`; password/payment/file 不可执行 |
 | ACT-07 | TODO | ACT-05,ACT-06,AGT-05,CEF-07 | `crayon-semantic-action/runtime/**`,`crayon-app-runtime/**` | action_id 到正常浏览器用例的受控执行 | `AC-007`; cancel/deadline/generation/确认绑定 |
 | ACT-08 | TODO | ACT-07 | `crayon-semantic-action/effect/**` | 有界效果等待、verified/failed/indeterminate 和幂等语义 | `AC-008`; 不确定副作用不重放 |
 | ACT-09 | TODO | ACT-04,ACT-06 | `crayon-semantic-action/form/**` | FormMap 字段/约束/错误/filled 状态 | `AC-009`; 不包含字段值；敏感/file 排除 |
@@ -127,3 +127,21 @@
 - 验证：`cargo test -p crayon-semantic-action` 27/27（detail 8 + handle 9 + precondition 10）；`cargo test -p crayon-domain -p crayon-ipc-schema` 13 suite 全 ok；`cargo clippy --all-targets -- -D warnings` 通过；`cargo fmt --check` 通过。
 - Code Review：按 v0.8 复核；将 violations 上限改为独立命名常量（复用 risk 常量为跨域耦合）。P0/P1/P2 = 0/0/0。
 - 未覆盖与风险：与真实 discovery/handle 的集成评估由 ACT-07 接线；revision 相等性判断偏严格（页面演进依赖 ACT-10 ChangeSet/重读，非本层放宽）。`ACT-06 READY`（依赖 PRV-10 已 DONE）。
+
+
+## ACT-06 原子范围（确定性单调 risk policy 与敏感元素排除）
+
+- 状态：`VERIFIED`；依赖 `ACT-01 DONE`、`PRV-10 VERIFIED`。
+- 单一目标：在 `crayon-semantic-action/risk/**` 冻结确定性、单调的风险评估：由 verified 事实推导 `RiskDecision`（level + reasons + executable），敏感元素永久排除执行。
+- 输入与输出：输入为 `SemanticNodeKind` 与 `RiskFacts`（7 个 verified 布尔事实）；输出仅限 `crates/crayon-semantic-action/src/risk/**`、`tests/risk.rs`、`lib.rs` re-export 与本 Roadmap。
+- 单调语义：policy 不接受任何风险"输入"，只接受事实；每个事实只能抬升 level（payment/credential/file→R4，offsite/download/cross-origin→R3，ambiguous/low-confidence/unverified-effect→R2），reasons 排序去重；`MAX_EXECUTABLE_RISK=R2`，R3/R4 与 sensitive（password→SensitiveCredential、file→FileUpload）一律 `executable=false`。
+- 验收：AC-006 契约侧：风险只升不降（superset 事实单调）、敏感元素零可执行路径、确定性（同事实同决策）、wire `deny_unknown_fields` 且无 lowering 表面、闭合 reasons 与稳定 wire 名。
+- 明确不做：确认/grant（AGT-04/05）、执行（ACT-07）、effect（ACT-08）、page 收集（ACT-04/CEF 侧）。
+
+### ACT-06 完成记录（2026-08-30）
+
+- 实现：`risk/mod.rs`：`RiskFacts` 事实包（无降低路径）、`RiskDecision`（deny_unknown_fields wire）、`assess` 确定性评估与 `MAX_EXECUTABLE_RISK` 常量；`lib.rs` re-export。
+- 安全边界：策略无系统时钟、无 IO、无锁；页面/模型请求在类型层面无法降低风险；确认与 grant 语义未进入本层。
+- 验证：`cargo test -p crayon-semantic-action` 33/33（detail 8 + handle 9 + precondition 10 + risk 6）；`cargo clippy --all-targets -- -D warnings` 通过；`cargo fmt --check` 通过；`cargo test -p crayon-domain -p crayon-ipc-schema` 回归 13 suite 全 ok。
+- Code Review：按 v0.8 复核；移除未使用的 `action` 参数（评估仅由 kind + facts 决定，避免伪输入）。P0/P1/P2 = 0/0/0。
+- 未覆盖与风险：offsite/download/cross-origin 等事实的真实引擎判定归 CEF 侧 discovery/execution 接线；本层仅冻结单调合并语义。`ACT-07 READY`（依赖 AGT-05/CEF-07 均已完成）。

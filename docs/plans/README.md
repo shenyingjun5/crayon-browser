@@ -32,7 +32,7 @@
 | PRV | [privacy-security-roadmap.md](privacy-security-roadmap.md) | Profile、隐私、安全、日志和删除语义 | `PRV-01` |
 | CNT | [content-intelligence-roadmap.md](content-intelligence-roadmap.md) | 页面数据/Markdown 与第二阶段模型总结 | `CNT-01` 等待主链路；`CNT-11` 等待模型门禁 |
 | AGT | [agent-access-roadmap.md](agent-access-roadmap.md) | CAAP、tool registry、CLI/MCP、高性能读页和授权操作 | `AGT-01`，依赖满足后开始 |
-| ACT | [semantic-action-roadmap.md](semantic-action-roadmap.md) | Page/Action/Form/Media/Risk Map、action_id、前置条件和效果验证 | `ACT-01..05 DONE/VERIFIED`（2026-08-30）；`ACT-06` 起 READY |
+| ACT | [semantic-action-roadmap.md](semantic-action-roadmap.md) | Page/Action/Form/Media/Risk Map、action_id、前置条件和效果验证 | `ACT-01..06 DONE/VERIFIED`（2026-08-30）；`ACT-07` 起 READY |
 | WFL | [workflow-learning-roadmap.md](workflow-learning-roadmap.md) | Challenge 接管、Workflow Learning、个人 Site Skill、健康与受控修复 | `WFL-01` 等待 `ACT-12/AGT-03` |
 | HUB | [capability-hub-roadmap.md](capability-hub-roadmap.md) | Capability Registry/Router、入站发现与出站 Partner connector | `HUB-01..06 DONE`；`HUB-07+ 待依赖` |
 | HM | [harmony-browser-roadmap.md](harmony-browser-roadmap.md) | 鸿蒙电脑 PC 形态 ArkUI/ArkWeb 技术预览 | `HM-01`，后续启动 |
@@ -50,7 +50,7 @@
 | 3 | `CEF-01E`/`CEF-02M` | VERIFIED/TODO | macOS bootstrap 已实现但平台证据后置；不得阻塞 Windows 主线，也不得用 Windows 证据完成 macOS |
 | 4 | `AGT-01` | TODO | 依赖满足后冻结 CAAP v1；不提前开放 CLI/MCP transport |
 | 5 | `CNT-01` | TODO | 等浏览器/投屏/隐私门禁后开始正式 page-data/Markdown |
-| 6 | `ACT-01` | DONE | 语义地图/ChangeSet/effect/错误 schema 已冻结并入 golden 兼容窗口（e45d086）；`ACT-02/03/04 VERIFIED`（detail profile、单次 action handle、多信号 discovery 契约、fail-closed 前置条件），`ACT-05` 起按依赖领取 |
+| 6 | `ACT-01` | DONE | 语义地图/ChangeSet/effect/错误 schema 已冻结并入 golden 兼容窗口（e45d086）；`ACT-02/03/04 VERIFIED`（detail profile、单次 action handle、多信号 discovery 契约、fail-closed 前置条件、单调 risk policy），`ACT-05` 起按依赖领取 |
 | 7 | `MRT-08` | DONE | KaTeX inline/block facts、受控 HTML/MathML policy、离线资源/字体路由与 generation/lazy 生命周期已在 macOS arm64 真实 CEF 和 x64 编译矩阵闭合；Windows 真机不属此任务 |
 | 8 | `MDV-24` | VERIFIED | macOS arm64 与 Windows x64 主矩阵已闭合，Windows Debug/Release 65/65 且真实 CEF 三视图/快捷键/窄宽/主题通过；Narrator、中文 IME 组合态、原生 OS 200% DPI 与原生 macOS x64 待补 |
 | 9 | `MDV-20` | VERIFIED | Mermaid Full macOS arm64 发布门禁已闭合；等待 Windows x64 Debug/Release build+CTest、正式 staging、七类真实 CEF、50-block、零公网与退出零残留回归后转 `DONE` |

@@ -12,6 +12,7 @@
 mod detail;
 mod handle;
 mod precondition;
+mod risk;
 
 pub use detail::{
     render_compact, render_internal_full, render_standard, CompactAction, CompactMap, CompactNode,
@@ -27,3 +28,4 @@ pub use precondition::{
     evaluate, is_actionable, PreconditionCheck, PreconditionInput, PreconditionReport,
     PreconditionViolation, MAX_PRECONDITION_VIOLATIONS,
 };
+pub use risk::{assess, RiskDecision, RiskFacts, MAX_EXECUTABLE_RISK};
