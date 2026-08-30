@@ -11,6 +11,7 @@
 
 mod detail;
 mod handle;
+mod precondition;
 
 pub use detail::{
     render_compact, render_internal_full, render_standard, CompactAction, CompactMap, CompactNode,
@@ -21,4 +22,8 @@ pub use handle::{
     ActionHandle, ActionHandleDescriptor, ActionHandleId, ConsumeOutcome, HandleIdError,
     HandleIssueError, HandleNonce, HandleRegistry, IssueOutcome, ProfileScope, ProfileScopeError,
     Resolution, MAX_ACTIVE_HANDLES, MAX_HANDLE_TTL_MS,
+};
+pub use precondition::{
+    evaluate, is_actionable, PreconditionCheck, PreconditionInput, PreconditionReport,
+    PreconditionViolation, MAX_PRECONDITION_VIOLATIONS,
 };

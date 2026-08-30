@@ -1,6 +1,6 @@
 # ACT：页面语义地图与可验证动作 Roadmap
 
-- 状态：执行中；`ACT-01 DONE`、`ACT-02/03/04 VERIFIED`（均 2026-08-30）
+- 状态：执行中；`ACT-01 DONE`、`ACT-02..05 VERIFIED`（均 2026-08-30）
 - 任务数：12
 - 目标：把已验证页面事实转换为 Agent 可高效读取的语义地图，并通过短期 `action_id`、前置条件和效果验证执行受控操作
 - 非目标：原始 DOM/HTML/CDP 输出、长期 CSS/XPath、任意 JavaScript、截图/OCR 常规控制、密码/支付/通用文件上传
@@ -20,7 +20,7 @@
 | ACT-02 | VERIFIED | ACT-01 | `crayon-semantic-action/detail/**` | `compact/standard/internal-full` 字段和资源预算 | `AC-002`; raw DOM/HTML/CDP 永不出界 |
 | ACT-03 | VERIFIED | ACT-01,AGT-03 | `crayon-semantic-action/handle/**` | action_id 签发、target/generation/TTL/nonce 绑定与失效 | `AC-003`; property/replay/跨 Profile |
 | ACT-04 | VERIFIED | ACT-03,CEF-05 | `browser/engine-api/**`,`browser/cef-shell/**/semantic/**` | 多信号 action discovery 与内部 locator evidence | `AC-004`; 外部无 selector；重复/遮挡/动态页 |
-| ACT-05 | TODO | ACT-04 | `crayon-semantic-action/precondition/**` | 可见、唯一、可操作、同源、页面状态前置条件 | `AC-005`; stale/hidden/cross-origin fail closed |
+| ACT-05 | VERIFIED | ACT-04 | `crayon-semantic-action/precondition/**` | 可见、唯一、可操作、同源、页面状态前置条件 | `AC-005`; stale/hidden/cross-origin fail closed |
 | ACT-06 | TODO | ACT-01,PRV-10 | `crayon-semantic-action/risk/**` | 确定性、单调 risk policy 与敏感元素排除 | `AC-006`; password/payment/file 不可执行 |
 | ACT-07 | TODO | ACT-05,ACT-06,AGT-05,CEF-07 | `crayon-semantic-action/runtime/**`,`crayon-app-runtime/**` | action_id 到正常浏览器用例的受控执行 | `AC-007`; cancel/deadline/generation/确认绑定 |
 | ACT-08 | TODO | ACT-07 | `crayon-semantic-action/effect/**` | 有界效果等待、verified/failed/indeterminate 和幂等语义 | `AC-008`; 不确定副作用不重放 |
@@ -109,3 +109,21 @@
 - 验证：独立构建 `cmake -S browser/engine-api -B /tmp/engine-api-build -DCRAYON_ENGINE_API_BUILD_TESTS=ON && cmake --build && ctest`：4/4 通过（browser_engine_contract、browser_engine_discovery 5 场景、headers compile、forbidden scan）。`git diff --check` 通过。
 - Code Review：按 v0.8 复核；修正两处（evidence target 改 `std::optional` 表达无匹配；`ActionCandidate` 显式构造拒绝无主候选）。P0/P1/P2 = 0/0/0。
 - 未覆盖与风险：CEF 真实引擎接线与遮挡/动态页真机证据未做（本任务为契约模型层，实机归后续 cef-shell 切片）；signals 与 hints 的枚举值顺序当前按位对齐（static_cast），由闭合枚举测试锁定。`ACT-05 READY`（依赖 ACT-04）。
+
+
+## ACT-05 原子范围（可见/唯一/可操作/同源/页面状态前置条件）
+
+- 状态：`VERIFIED`；依赖 `ACT-04 VERIFIED`。
+- 单一目标：在 `crayon-semantic-action/precondition/**` 冻结执行前置条件的确定性、无副作用评估与 fail-closed 违规报告。
+- 输入与输出：输入全部为 Browser verified 事实（ElementState、kind/action、bound/current origin、bound/current revision、discovery 唯一性）；输出仅限 `crates/crayon-semantic-action/src/precondition/**`、`tests/precondition.rs`、`lib.rs` re-export 与本 Roadmap。
+- 语义：6 个闭合检查（visible/enabled/actionable_kind/same_origin/revision_current/unique_target）产出 7 类闭合违规；违规按 `PreconditionViolation::ALL` 稳定序去重，报告有界（≤8）；origin 先经 `is_valid_origin` 校验，畸形 origin 使评估本身失败而非误匹配；sensitive kind（password/file）报告 `SensitiveTarget` 而非 `KindMismatch`；kind→action 兼容表闭合（Click: Button/Link/Tab/MenuItem；SetText/Clear: TextInput/Textarea；SelectOption: Select；Check/Uncheck: Checkbox/Radio）。
+- 验收：AC-005 契约侧：hidden/disabled/cross-origin/revision 推进/ambiguous/sensitive 全部 fail closed 且无副作用；全 hold 才允许执行；wire `deny_unknown_fields`；闭合词汇测试。
+- 明确不做：stale handle 的识别（ACT-03 registry 语义）、执行（ACT-07）、effect 等待（ACT-08）、risk policy 执行（ACT-06）。
+
+### ACT-05 完成记录（2026-08-30）
+
+- 实现：`precondition/mod.rs`：`PreconditionCheck`/`PreconditionViolation` 闭合词汇、`PreconditionInput` 借用式 verified 事实包、`PreconditionReport`（deny_unknown_fields wire）、`is_actionable` 冻结兼容表与 `evaluate`（origin 校验 → 全检查 → 稳定序去重报告）。
+- 安全边界：评估纯函数无副作用，任何违规即拒绝；页面/模型输入无法翻转结论；violation 上限 `MAX_PRECONDITION_VIOLATIONS=8` 独立命名常量。
+- 验证：`cargo test -p crayon-semantic-action` 27/27（detail 8 + handle 9 + precondition 10）；`cargo test -p crayon-domain -p crayon-ipc-schema` 13 suite 全 ok；`cargo clippy --all-targets -- -D warnings` 通过；`cargo fmt --check` 通过。
+- Code Review：按 v0.8 复核；将 violations 上限改为独立命名常量（复用 risk 常量为跨域耦合）。P0/P1/P2 = 0/0/0。
+- 未覆盖与风险：与真实 discovery/handle 的集成评估由 ACT-07 接线；revision 相等性判断偏严格（页面演进依赖 ACT-10 ChangeSet/重读，非本层放宽）。`ACT-06 READY`（依赖 PRV-10 已 DONE）。
