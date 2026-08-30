@@ -8,6 +8,7 @@
 #include <optional>
 #include <string>
 
+#include "browser/page_snapshot_gateway/cef_page_snapshot_bridge.h"
 #include "browser/permission/cef_download_handler.h"
 #include "browser/permission/cef_permission_handler.h"
 #include "browser/permission/permission_store.h"
@@ -87,6 +88,19 @@ class WindowClient final : public CefClient,
                                 CefProcessId source_process,
                                 CefRefPtr<CefProcessMessage> message) override;
 
+  std::optional<browser_engine::SnapshotRequestId> StartPageSnapshot(
+      CefRefPtr<CefBrowser> browser, std::uint64_t tab_id,
+      std::uint64_t navigation_id, browser_engine::SnapshotMode mode);
+  std::vector<gateway::SnapshotGatewayEvent> DrainPageSnapshots(
+      std::size_t max_events);
+  gateway::SnapshotGatewayResult CancelPageSnapshot(
+      const browser_engine::SnapshotRequestId& request_id);
+  void AdvancePageSnapshotNavigation(CefRefPtr<CefBrowser> browser,
+                                     std::uint64_t tab_id,
+                                     std::uint64_t navigation_id);
+  void ClosePageSnapshotBrowser(CefRefPtr<CefBrowser> browser,
+                                std::uint64_t tab_id, bool renderer_gone);
+
   // Permission handlers: default-deny unless explicitly allowed by the store.
   CefRefPtr<CefPermissionHandler> GetPermissionHandler() override {
     return permission_handler_;
@@ -104,6 +118,7 @@ class WindowClient final : public CefClient,
   /// constructed before CefInitialize).
   CefMessageRouterBrowserSide* EnsurePageRouter();
   CefRefPtr<CefMessageRouterBrowserSide> page_router_;
+  gateway::CefPageSnapshotBridge page_snapshot_bridge_;
 
   IMPLEMENT_REFCOUNTING(WindowClient);
   DISALLOW_COPY_AND_ASSIGN(WindowClient);
@@ -120,6 +135,9 @@ class TabController final : public CefBaseRefCounted {
       std::function<void(CefRefPtr<CefBrowser> browser)>;
   using ChromeCommandCallback = std::function<void(int command_id)>;
   using BrowsersClosedCallback = std::function<void()>;
+  using PageLoadCompletedCallback =
+      std::function<void(CefRefPtr<CefBrowser> browser)>;
+  using PageSnapshotEventsReadyCallback = std::function<void()>;
 
   explicit TabController(
       std::string initial_url,
@@ -210,6 +228,19 @@ class TabController final : public CefBaseRefCounted {
   bool InterceptNavigation(CefRefPtr<CefBrowser> browser, const CefString& url,
                            bool user_gesture);
   void SetBrowsersClosedCallback(BrowsersClosedCallback callback);
+  void SetPageLoadCompletedCallback(PageLoadCompletedCallback callback);
+  void SetPageSnapshotEventsReadyCallback(
+      PageSnapshotEventsReadyCallback callback);
+  void OnPageSnapshotEventsReady();
+
+  std::optional<browser_engine::SnapshotRequestId> StartPageSnapshot(
+      CefRefPtr<CefBrowser> browser,
+      browser_engine::SnapshotMode mode =
+          browser_engine::SnapshotMode::kStandard);
+  std::vector<gateway::SnapshotGatewayEvent> DrainPageSnapshots(
+      std::size_t max_events);
+  gateway::SnapshotGatewayResult CancelPageSnapshot(
+      const browser_engine::SnapshotRequestId& request_id);
 
   // Normalized callbacks from WindowClient.
   void OnBrowserCreated(CefRefPtr<CefBrowser> browser);
@@ -240,6 +271,8 @@ class TabController final : public CefBaseRefCounted {
   ContextMenuCommandHandler context_menu_command_handler_;
   SaveCommandHandler save_command_handler_;
   BrowsersClosedCallback browsers_closed_callback_;
+  PageLoadCompletedCallback page_load_completed_callback_;
+  PageSnapshotEventsReadyCallback page_snapshot_events_ready_callback_;
   TabModel model_;
   permission::PermissionStore* permission_store_;
   CefRefPtr<WindowClient> client_;

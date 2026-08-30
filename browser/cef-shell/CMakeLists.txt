@@ -35,8 +35,14 @@ if(OS_WINDOWS)
       src/browser/mdv/cef_mdv_entries.h
       src/browser/mdv/cef_mdv_handler.cc
       src/browser/mdv/cef_mdv_handler.h
+      src/browser/page_snapshot_gateway/cef_page_snapshot_bridge.cc
+      src/browser/page_snapshot_gateway/cef_page_snapshot_bridge.h
       src/browser/new_tab/cef_new_tab_handler.cc
       src/browser/new_tab/cef_new_tab_handler.h
+      src/ipc/page_snapshot_cef_message.cc
+      src/ipc/page_snapshot_cef_message.h
+      src/renderer/page_snapshot_collector/cef_page_snapshot_renderer.cc
+      src/renderer/page_snapshot_collector/cef_page_snapshot_renderer.h
       src/browser/permission/cef_download_handler.cc
       src/browser/permission/cef_download_handler.h
       src/browser/permission/cef_permission_handler.cc
@@ -71,6 +77,8 @@ if(OS_WINDOWS)
   target_link_libraries(
     ${CRAYON_BROWSER_TARGET}
     PRIVATE crayon::browser-mdv crayon::browser-new-tab
+            crayon::browser-page-snapshot-gateway
+            crayon::cef-page-snapshot-collector
             crayon::browser-shared-shell crayon_libcef libcef_dll_wrapper
             ${CEF_STANDARD_LIBS})
   set_target_properties(${CRAYON_BROWSER_TARGET}
@@ -177,6 +185,8 @@ if(OS_MAC)
       src/browser/mdv/cef_mdv_entries.h
       src/browser/mdv/cef_mdv_handler.cc
       src/browser/mdv/cef_mdv_handler.h
+      src/browser/page_snapshot_gateway/cef_page_snapshot_bridge.cc
+      src/browser/page_snapshot_gateway/cef_page_snapshot_bridge.h
       src/browser/permission/cef_download_handler.cc
       src/browser/permission/cef_download_handler.h
       src/browser/permission/cef_permission_handler.cc
@@ -187,6 +197,10 @@ if(OS_MAC)
       src/browser/permission/site_origin.h
       src/browser/new_tab/cef_new_tab_handler.cc
       src/browser/new_tab/cef_new_tab_handler.h
+      src/ipc/page_snapshot_cef_message.cc
+      src/ipc/page_snapshot_cef_message.h
+      src/renderer/page_snapshot_collector/cef_page_snapshot_renderer.cc
+      src/renderer/page_snapshot_collector/cef_page_snapshot_renderer.h
       src/browser/window/tab_controller.cc
       src/browser/window/tab_model.cc
       src/macos/app.cc
@@ -195,6 +209,10 @@ if(OS_MAC)
   set(crayon_macos_helper_sources
       src/browser/new_tab/cef_new_tab_handler.cc
       src/browser/new_tab/cef_new_tab_handler.h
+      src/ipc/page_snapshot_cef_message.cc
+      src/ipc/page_snapshot_cef_message.h
+      src/renderer/page_snapshot_collector/cef_page_snapshot_renderer.cc
+      src/renderer/page_snapshot_collector/cef_page_snapshot_renderer.h
       src/macos/process_helper_mac.cc)
   set(CRAYON_MACOS_APP
       "${CEF_TARGET_OUT_DIR}/${CRAYON_MACOS_EXECUTABLE}.app")
@@ -215,7 +233,9 @@ if(OS_MAC)
   add_dependencies(${CRAYON_BROWSER_TARGET} libcef_dll_wrapper)
   target_link_libraries(${CRAYON_BROWSER_TARGET}
                         PRIVATE libcef_dll_wrapper ${CEF_STANDARD_LIBS}
-                                crayon::browser-mdv crayon::browser-new-tab)
+                                crayon::browser-mdv crayon::browser-new-tab
+                                crayon::browser-page-snapshot-gateway
+                                crayon::cef-page-snapshot-collector)
   set_target_properties(
     ${CRAYON_BROWSER_TARGET}
     PROPERTIES OUTPUT_NAME "${CRAYON_MACOS_EXECUTABLE}"
@@ -251,7 +271,8 @@ if(OS_MAC)
     add_dependencies(${helper_target} libcef_dll_wrapper)
     target_link_libraries(${helper_target}
                           PRIVATE libcef_dll_wrapper ${CEF_STANDARD_LIBS}
-                                  crayon::browser-new-tab)
+                                  crayon::browser-new-tab
+                                  crayon::cef-page-snapshot-collector)
     set_target_properties(
       ${helper_target}
       PROPERTIES OUTPUT_NAME "${CRAYON_MACOS_HELPER_EXECUTABLE}"
@@ -321,6 +342,76 @@ if(OS_MAC)
 endif()
 
 if(CRAYON_BUILD_TESTS)
+  if(OS_MAC)
+    find_program(CRAYON_PYTHON3_EXECUTABLE NAMES python3 REQUIRED)
+    add_executable(
+      crayon_page_snapshot_cef_integration_test MACOSX_BUNDLE
+      tests/page_snapshot_cef_integration_mac.mm
+      src/browser/page_snapshot_gateway/cef_page_snapshot_bridge.cc
+      src/browser/permission/cef_download_handler.cc
+      src/browser/permission/cef_permission_handler.cc
+      src/browser/permission/permission_store.cc
+      src/browser/permission/site_origin.cc
+      src/browser/window/tab_controller.cc
+      src/browser/window/tab_model.cc
+      src/ipc/page_snapshot_cef_message.cc)
+    SET_EXECUTABLE_TARGET_PROPERTIES(crayon_page_snapshot_cef_integration_test)
+    target_compile_features(crayon_page_snapshot_cef_integration_test
+                            PRIVATE cxx_std_17)
+    set_target_properties(
+      crayon_page_snapshot_cef_integration_test
+      PROPERTIES OBJCXX_STANDARD 20
+                 OBJCXX_STANDARD_REQUIRED ON
+                 MACOSX_BUNDLE_GUI_IDENTIFIER
+                 "com.crayon.browser"
+                 MACOSX_BUNDLE_BUNDLE_NAME
+                 "CrayonPageSnapshotIntegrationTest"
+                 MACOSX_BUNDLE_BUNDLE_VERSION "1")
+    set_source_files_properties(tests/page_snapshot_cef_integration_mac.mm
+                                PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+    target_include_directories(crayon_page_snapshot_cef_integration_test
+                               PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_definitions(
+      crayon_page_snapshot_cef_integration_test
+      PRIVATE
+        CRAYON_SNAPSHOT_TEST_HELPER_PATH="${CRAYON_MACOS_APP}/Contents/Frameworks/CrayonBrowser Helper.app/Contents/MacOS/CrayonBrowser Helper")
+    target_link_libraries(
+      crayon_page_snapshot_cef_integration_test
+      PRIVATE libcef_dll_wrapper ${CEF_STANDARD_LIBS}
+              crayon::browser-page-snapshot-gateway)
+    add_dependencies(crayon_page_snapshot_cef_integration_test
+                     ${CRAYON_BROWSER_TARGET})
+    COPY_MAC_FRAMEWORK(
+      "crayon_page_snapshot_cef_integration_test" "${CEF_BINARY_DIR}"
+      "${CEF_TARGET_OUT_DIR}/crayon_page_snapshot_cef_integration_test.app")
+    foreach(snapshot_helper_name ${crayon_macos_helper_names})
+      add_custom_command(
+        TARGET crayon_page_snapshot_cef_integration_test POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy_directory
+                "${CRAYON_MACOS_APP}/Contents/Frameworks/${snapshot_helper_name}.app"
+                "$<TARGET_BUNDLE_DIR:crayon_page_snapshot_cef_integration_test>/Contents/Frameworks/${snapshot_helper_name}.app"
+        VERBATIM)
+    endforeach()
+    add_custom_command(
+      TARGET crayon_page_snapshot_cef_integration_test POST_BUILD
+      COMMAND
+        "${CMAKE_COMMAND}"
+        "-DCRAYON_APP_BUNDLE=$<TARGET_BUNDLE_DIR:crayon_page_snapshot_cef_integration_test>"
+        "-DCRAYON_HELPER_MANIFEST=${CMAKE_CURRENT_BINARY_DIR}/crayon-macos-helper-apps.txt"
+        "-DCRAYON_CEF_SHELL_SOURCE=${CMAKE_CURRENT_SOURCE_DIR}" -P
+        "${CMAKE_CURRENT_SOURCE_DIR}/macos_adhoc_sign.cmake"
+      COMMENT "Ad-hoc signing page snapshot CEF integration test"
+      VERBATIM)
+    add_test(
+      NAME page_snapshot_cef_integration
+      COMMAND "${CRAYON_PYTHON3_EXECUTABLE}"
+              "${PROJECT_SOURCE_DIR}/tests/e2e/desktop/browser/run_page_snapshot_fixture.py"
+              "$<TARGET_FILE:crayon_page_snapshot_cef_integration_test>")
+    set_tests_properties(page_snapshot_cef_integration
+                         PROPERTIES LABELS "cef;shell;content;integration"
+                                    TIMEOUT 45)
+  endif()
+
   add_executable(crayon_window_state_model_test
                  tests/window_state_model_test.cc
                  src/browser/window/tab_model.cc)

@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <map>
+#include <string>
 #include <variant>
 #include <vector>
 
@@ -18,7 +19,7 @@ enum class IpcSourceKind { kRenderer = 0, kPage, kBrowser, kOther };
 struct RendererSource final {
   IpcSourceKind kind = IpcSourceKind::kOther;
   std::uint64_t process_id = 0;
-  std::uint64_t frame_id = 0;
+  std::string frame_id;
   bool is_main_frame = false;
 };
 
@@ -62,9 +63,14 @@ class PageSnapshotGateway final {
       const RendererSource& source, browser_engine::SnapshotTerminal terminal);
   SnapshotGatewayResult Cancel(
       const browser_engine::SnapshotRequestId& request_id);
+  SnapshotGatewayResult Reject(
+      const browser_engine::SnapshotRequestId& request_id,
+      browser_engine::EngineErrorCode error);
   std::size_t AdvanceNavigation(const browser_engine::TabId& tab_id,
                                 browser_engine::NavigationId navigation_id);
   std::size_t CloseTab(const browser_engine::TabId& tab_id);
+  std::size_t FailTab(const browser_engine::TabId& tab_id,
+                      browser_engine::EngineErrorCode error);
   void ShutDown();
 
   std::vector<SnapshotGatewayEvent> Drain(std::size_t max_events);

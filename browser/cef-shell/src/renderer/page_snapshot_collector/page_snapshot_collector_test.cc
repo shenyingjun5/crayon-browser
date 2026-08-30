@@ -67,13 +67,13 @@ RendererFact MakeParagraph(std::string text) {
   SnapshotFact fact;
   fact.kind = SnapshotFactKind::kParagraph;
   fact.text = std::move(text);
-  return RendererFact{std::move(fact), 41, 7, true, true, true};
+  return RendererFact{std::move(fact), 41, "frame-renderer", true, true, true};
 }
 
 void TestVisibilityAndSourceFilters() {
   RecordingSink sink;
   PageSnapshotCollector collector(sink);
-  Check(collector.Start(MakeRequest(), 7, MakeDocument()) ==
+  Check(collector.Start(MakeRequest(), "frame-renderer", MakeDocument()) ==
             CollectResult::kAccepted,
         "collector must start");
   auto hidden = MakeParagraph("hidden");
@@ -102,8 +102,8 @@ void TestVisibilityAndSourceFilters() {
 void TestBoundedChunkingAndFinish() {
   RecordingSink sink;
   PageSnapshotCollector collector(sink);
-  Check(collector.Start(MakeRequest("snapshot-chunks"), 7, MakeDocument()) ==
-            CollectResult::kAccepted,
+  Check(collector.Start(MakeRequest("snapshot-chunks"), "frame-renderer",
+                        MakeDocument()) == CollectResult::kAccepted,
         "chunk collector must start");
   for (std::size_t index = 0;
        index < crayon::browser_engine::kMaxSnapshotFactsPerChunk + 1; ++index) {
@@ -126,12 +126,30 @@ void TestBoundedChunkingAndFinish() {
         "late fact must fail");
 }
 
+void TestEmptyDocumentFinish() {
+  RecordingSink sink;
+  PageSnapshotCollector collector(sink);
+  Check(collector.Start(MakeRequest("snapshot-empty"), "frame-renderer",
+                        MakeDocument()) == CollectResult::kAccepted,
+        "empty collector must start");
+  Check(collector.Finish() == CollectResult::kAccepted,
+        "empty document finish must pass");
+  Check(sink.chunks.size() == 1 && sink.chunks.front().sequence == 0 &&
+            sink.chunks.front().document.has_value() &&
+            sink.chunks.front().facts.empty(),
+        "empty document must emit one metadata chunk");
+  Check(sink.terminals.size() == 1 &&
+            sink.terminals.front().status == SnapshotTerminalStatus::kCompleted,
+        "empty document must complete exactly once");
+}
+
 void TestCancelAndTeardownFence() {
   RecordingSink sink;
   PageSnapshotCollector collector(sink);
-  Check(collector.Start(MakeRequest("snapshot-cancel-renderer"), 7,
-                        MakeDocument()) == CollectResult::kAccepted,
-        "cancel collector must start");
+  Check(
+      collector.Start(MakeRequest("snapshot-cancel-renderer"), "frame-renderer",
+                      MakeDocument()) == CollectResult::kAccepted,
+      "cancel collector must start");
   Check(collector.Observe(MakeParagraph("pending")) == CollectResult::kAccepted,
         "pending fact must collect");
   collector.Cancel();
@@ -143,8 +161,8 @@ void TestCancelAndTeardownFence() {
 
   RecordingSink teardown_sink;
   PageSnapshotCollector teardown(teardown_sink);
-  Check(teardown.Start(MakeRequest("snapshot-teardown"), 7, MakeDocument()) ==
-            CollectResult::kAccepted,
+  Check(teardown.Start(MakeRequest("snapshot-teardown"), "frame-renderer",
+                       MakeDocument()) == CollectResult::kAccepted,
         "teardown collector must start");
   teardown.TearDown();
   Check(teardown.Observe(MakeParagraph("late")) ==
@@ -154,13 +172,31 @@ void TestCancelAndTeardownFence() {
         "teardown must suppress callbacks");
 }
 
+void TestCapacityRejection() {
+  RecordingSink sink;
+  PageSnapshotCollector collector(sink);
+  Check(collector.Start(MakeRequest("snapshot-capacity"), "frame-renderer",
+                        MakeDocument()) == CollectResult::kAccepted,
+        "capacity collector must start");
+  Check(collector.Observe(MakeParagraph("pending")) == CollectResult::kAccepted,
+        "capacity pending fact must collect");
+  collector.RejectCapacity();
+  collector.RejectCapacity();
+  Check(sink.chunks.empty(), "capacity rejection must discard pending facts");
+  Check(sink.terminals.size() == 1 &&
+            sink.terminals.front().status == SnapshotTerminalStatus::kRejected,
+        "capacity rejection must emit exactly one rejected terminal");
+}
+
 }  // namespace
 
 int main() {
   try {
     TestVisibilityAndSourceFilters();
     TestBoundedChunkingAndFinish();
+    TestEmptyDocumentFinish();
     TestCancelAndTeardownFence();
+    TestCapacityRejection();
     std::cout << "page_snapshot_collector_test: passed\n";
     return 0;
   } catch (const std::exception& error) {

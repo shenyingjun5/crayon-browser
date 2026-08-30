@@ -76,7 +76,7 @@ SnapshotChunk Chunk(const SnapshotRequest& request, std::uint32_t sequence) {
 }
 
 RendererSource TrustedSource() {
-  return RendererSource{IpcSourceKind::kRenderer, 17, 23, true};
+  return RendererSource{IpcSourceKind::kRenderer, 17, "frame-gateway", true};
 }
 
 void TestSourceNavigationAndSequenceValidation() {
@@ -243,6 +243,65 @@ void TestMalformedAndShutdown() {
         "retired request memory must stay bounded");
 }
 
+void TestRendererFailure() {
+  PageSnapshotGateway gateway;
+  const auto request = MakeRequest("gateway-renderer-failure");
+  Check(gateway.BeginRequest(request, TrustedSource(), ExpectedUrl()) ==
+            SnapshotGatewayResult::kAccepted,
+        "renderer failure request must start");
+  Check(gateway.SubmitChunk(TrustedSource(), Chunk(request, 0)) ==
+            SnapshotGatewayResult::kAccepted,
+        "renderer failure setup chunk must pass");
+  Check(
+      gateway.FailTab(request.tab_id, EngineErrorCode::kNavigationFailed) == 1,
+      "renderer failure must reject the active tab stream");
+  const auto events = gateway.Drain(8);
+  Check(events.size() == 1 &&
+            std::get<SnapshotTerminal>(events.front()).status ==
+                SnapshotTerminalStatus::kRejected &&
+            std::get<SnapshotTerminal>(events.front()).error ==
+                EngineErrorCode::kNavigationFailed,
+        "renderer failure must discard partial chunks and retain rejection");
+  Check(
+      gateway.FailTab(request.tab_id, EngineErrorCode::kNavigationFailed) == 0,
+      "renderer failure cleanup must be idempotent");
+}
+
+void TestRendererRejectionDiscardsPartialStream() {
+  PageSnapshotGateway gateway;
+  const auto request = MakeRequest("gateway-renderer-rejection");
+  Check(gateway.BeginRequest(request, TrustedSource(), ExpectedUrl()) ==
+            SnapshotGatewayResult::kAccepted,
+        "renderer rejection request must start");
+  Check(gateway.SubmitChunk(TrustedSource(), Chunk(request, 0)) ==
+            SnapshotGatewayResult::kAccepted,
+        "renderer rejection setup chunk must pass");
+  Check(gateway.SubmitTerminal(
+            TrustedSource(),
+            SnapshotTerminal{request.request_id, request.tab_id,
+                             request.navigation_id,
+                             SnapshotTerminalStatus::kRejected,
+                             EngineErrorCode::kCapacityExceeded}) ==
+            SnapshotGatewayResult::kAccepted,
+        "renderer rejection terminal must pass");
+  const auto events = gateway.Drain(8);
+  Check(
+      events.size() == 1 && std::get<SnapshotTerminal>(events.front()).status ==
+                                SnapshotTerminalStatus::kRejected,
+      "renderer rejection must discard queued partial chunks");
+
+  const auto local = MakeRequest("gateway-local-rejection");
+  Check(gateway.BeginRequest(local, TrustedSource(), ExpectedUrl()) ==
+            SnapshotGatewayResult::kAccepted,
+        "local rejection request must start");
+  Check(gateway.Reject(local.request_id, EngineErrorCode::kCapacityExceeded) ==
+            SnapshotGatewayResult::kAccepted,
+        "browser-side rejection must complete the stream");
+  Check(gateway.Reject(local.request_id, EngineErrorCode::kCapacityExceeded) ==
+            SnapshotGatewayResult::kIdempotent,
+        "browser-side rejection must be idempotent");
+}
+
 }  // namespace
 
 int main() {
@@ -250,6 +309,8 @@ int main() {
     TestSourceNavigationAndSequenceValidation();
     TestCancelNavigationAndBackpressure();
     TestMalformedAndShutdown();
+    TestRendererFailure();
+    TestRendererRejectionDiscardsPartialStream();
     std::cout << "page_snapshot_gateway_test: passed\n";
     return 0;
   } catch (const std::exception& error) {

@@ -12,7 +12,7 @@ SnapshotGatewayResult PageSnapshotGateway::BeginRequest(
   if (shut_down_ || request.navigation_id.value() == 0 ||
       !browser_engine::IsValid(request.mode) ||
       expected_renderer.kind != IpcSourceKind::kRenderer ||
-      expected_renderer.process_id == 0 || expected_renderer.frame_id == 0 ||
+      expected_renderer.process_id == 0 || expected_renderer.frame_id.empty() ||
       !expected_renderer.is_main_frame) {
     return SnapshotGatewayResult::kRejectedInvalid;
   }
@@ -106,6 +106,17 @@ SnapshotGatewayResult PageSnapshotGateway::SubmitTerminal(
       active->second.next_sequence == 0) {
     return SnapshotGatewayResult::kRejectedInvalid;
   }
+  if (terminal.status != browser_engine::SnapshotTerminalStatus::kCompleted) {
+    const auto request_id = terminal.request_id;
+    queue_.erase(
+        std::remove_if(queue_.begin(), queue_.end(),
+                       [&request_id](const SnapshotGatewayEvent& event) {
+                         const auto* chunk =
+                             std::get_if<browser_engine::SnapshotChunk>(&event);
+                         return chunk && chunk->request_id == request_id;
+                       }),
+        queue_.end());
+  }
   Retire(terminal.request_id);
   active_.erase(active);
   queue_.emplace_back(std::move(terminal));
@@ -123,6 +134,21 @@ SnapshotGatewayResult PageSnapshotGateway::Cancel(
   }
   Complete(active, browser_engine::SnapshotTerminalStatus::kCancelled,
            browser_engine::EngineErrorCode::kNone);
+  return SnapshotGatewayResult::kAccepted;
+}
+
+SnapshotGatewayResult PageSnapshotGateway::Reject(
+    const browser_engine::SnapshotRequestId& request_id,
+    browser_engine::EngineErrorCode error) {
+  if (error == browser_engine::EngineErrorCode::kNone) {
+    return SnapshotGatewayResult::kRejectedInvalid;
+  }
+  if (IsRetired(request_id)) return SnapshotGatewayResult::kIdempotent;
+  const auto active = active_.find(request_id);
+  if (active == active_.end()) {
+    return SnapshotGatewayResult::kRejectedNotFound;
+  }
+  Complete(active, browser_engine::SnapshotTerminalStatus::kRejected, error);
   return SnapshotGatewayResult::kAccepted;
 }
 
@@ -158,6 +184,23 @@ std::size_t PageSnapshotGateway::CloseTab(const browser_engine::TabId& tab_id) {
              browser_engine::EngineErrorCode::kNone);
   }
   return closing.size();
+}
+
+std::size_t PageSnapshotGateway::FailTab(
+    const browser_engine::TabId& tab_id,
+    browser_engine::EngineErrorCode error) {
+  if (error == browser_engine::EngineErrorCode::kNone) return 0;
+  std::vector<browser_engine::SnapshotRequestId> failed;
+  for (const auto& entry : active_) {
+    if (entry.second.request.tab_id == tab_id) {
+      failed.push_back(entry.first);
+    }
+  }
+  for (const auto& request_id : failed) {
+    Complete(active_.find(request_id),
+             browser_engine::SnapshotTerminalStatus::kRejected, error);
+  }
+  return failed.size();
 }
 
 void PageSnapshotGateway::ShutDown() {

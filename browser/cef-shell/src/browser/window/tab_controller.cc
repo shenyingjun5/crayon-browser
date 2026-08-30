@@ -65,6 +65,11 @@ bool WindowClient::DoClose(CefRefPtr<CefBrowser> browser) {
 
 void WindowClient::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
+  const TabSnapshot* tab =
+      controller_->model().FindByBrowser(browser->GetIdentifier());
+  if (tab) {
+    ClosePageSnapshotBrowser(browser, tab->id, false);
+  }
   controller_->OnBrowserClosing(browser);
 }
 
@@ -98,6 +103,11 @@ void WindowClient::OnRenderProcessTerminated(CefRefPtr<CefBrowser> browser,
   static_cast<void>(error_code);
   static_cast<void>(error_string);
   EnsurePageRouter()->OnRenderProcessTerminated(browser);
+  const TabSnapshot* tab =
+      controller_->model().FindByBrowser(browser->GetIdentifier());
+  if (tab) {
+    ClosePageSnapshotBrowser(browser, tab->id, true);
+  }
   controller_->OnRenderProcessGone(browser);
 }
 
@@ -105,8 +115,52 @@ bool WindowClient::OnProcessMessageReceived(
     CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
     CefProcessId source_process, CefRefPtr<CefProcessMessage> message) {
   CEF_REQUIRE_UI_THREAD();
+  if (page_snapshot_bridge_.OnProcessMessageReceived(browser, frame,
+                                                     source_process, message)) {
+    controller_->OnPageSnapshotEventsReady();
+    return true;
+  }
   return EnsurePageRouter()->OnProcessMessageReceived(browser, frame,
                                                       source_process, message);
+}
+
+std::optional<browser_engine::SnapshotRequestId>
+WindowClient::StartPageSnapshot(CefRefPtr<CefBrowser> browser,
+                                std::uint64_t tab_id,
+                                std::uint64_t navigation_id,
+                                browser_engine::SnapshotMode mode) {
+  return page_snapshot_bridge_.StartSnapshot(browser, tab_id, navigation_id,
+                                             mode);
+}
+
+std::vector<gateway::SnapshotGatewayEvent> WindowClient::DrainPageSnapshots(
+    std::size_t max_events) {
+  CEF_REQUIRE_UI_THREAD();
+  return page_snapshot_bridge_.Drain(max_events);
+}
+
+gateway::SnapshotGatewayResult WindowClient::CancelPageSnapshot(
+    const browser_engine::SnapshotRequestId& request_id) {
+  CEF_REQUIRE_UI_THREAD();
+  return page_snapshot_bridge_.CancelSnapshot(request_id);
+}
+
+void WindowClient::AdvancePageSnapshotNavigation(CefRefPtr<CefBrowser> browser,
+                                                 std::uint64_t tab_id,
+                                                 std::uint64_t navigation_id) {
+  page_snapshot_bridge_.AdvanceNavigation(browser, tab_id, navigation_id);
+  controller_->OnPageSnapshotEventsReady();
+}
+
+void WindowClient::ClosePageSnapshotBrowser(CefRefPtr<CefBrowser> browser,
+                                            std::uint64_t tab_id,
+                                            bool renderer_gone) {
+  if (renderer_gone) {
+    page_snapshot_bridge_.RendererGone(browser, tab_id);
+  } else {
+    page_snapshot_bridge_.CloseBrowser(browser, tab_id);
+  }
+  controller_->OnPageSnapshotEventsReady();
 }
 
 CefMessageRouterBrowserSide* WindowClient::EnsurePageRouter() {
@@ -314,6 +368,55 @@ void TabController::SetBrowsersClosedCallback(BrowsersClosedCallback callback) {
   browsers_closed_callback_ = std::move(callback);
 }
 
+void TabController::SetPageLoadCompletedCallback(
+    PageLoadCompletedCallback callback) {
+  CEF_REQUIRE_UI_THREAD();
+  page_load_completed_callback_ = std::move(callback);
+}
+
+void TabController::SetPageSnapshotEventsReadyCallback(
+    PageSnapshotEventsReadyCallback callback) {
+  CEF_REQUIRE_UI_THREAD();
+  page_snapshot_events_ready_callback_ = std::move(callback);
+}
+
+void TabController::OnPageSnapshotEventsReady() {
+  CEF_REQUIRE_UI_THREAD();
+  if (page_snapshot_events_ready_callback_) {
+    page_snapshot_events_ready_callback_();
+  }
+}
+
+std::optional<browser_engine::SnapshotRequestId>
+TabController::StartPageSnapshot(CefRefPtr<CefBrowser> browser,
+                                 browser_engine::SnapshotMode mode) {
+  CEF_REQUIRE_UI_THREAD();
+  if (!browser) return std::nullopt;
+  const TabSnapshot* tab = model_.FindByBrowser(browser->GetIdentifier());
+  if (!tab || tab->lifecycle != TabLifecycle::kReady || tab->loading ||
+      tab->navigation_generation == 0) {
+    return std::nullopt;
+  }
+  return client_->StartPageSnapshot(browser, tab->id,
+                                    tab->navigation_generation, mode);
+}
+
+std::vector<gateway::SnapshotGatewayEvent> TabController::DrainPageSnapshots(
+    std::size_t max_events) {
+  CEF_REQUIRE_UI_THREAD();
+  return client_->DrainPageSnapshots(max_events);
+}
+
+gateway::SnapshotGatewayResult TabController::CancelPageSnapshot(
+    const browser_engine::SnapshotRequestId& request_id) {
+  CEF_REQUIRE_UI_THREAD();
+  const auto result = client_->CancelPageSnapshot(request_id);
+  if (result == gateway::SnapshotGatewayResult::kAccepted) {
+    OnPageSnapshotEventsReady();
+  }
+  return result;
+}
+
 void TabController::NewWindow() {
   CEF_REQUIRE_UI_THREAD();
   CreateBrowserWindow();
@@ -510,8 +613,24 @@ void TabController::OnLoadingUpdated(CefRefPtr<CefBrowser> browser,
   const int browser_id = browser->GetIdentifier();
   if (is_loading) {
     model_.BeginNavigation(browser_id);
+    const TabSnapshot* tab = model_.FindByBrowser(browser_id);
+    if (tab) {
+      client_->AdvancePageSnapshotNavigation(browser, tab->id,
+                                             tab->navigation_generation);
+    }
   }
   model_.UpdateLoading(browser_id, is_loading, can_go_back, can_go_forward);
+  if (!is_loading) {
+    const TabSnapshot* tab = model_.FindByBrowser(browser_id);
+    if (tab && tab->navigation_generation == 0) {
+      model_.BeginNavigation(browser_id);
+      tab = model_.FindByBrowser(browser_id);
+    }
+    if (page_load_completed_callback_ && tab &&
+        tab->lifecycle == TabLifecycle::kReady) {
+      page_load_completed_callback_(browser);
+    }
+  }
 }
 
 void TabController::OnRenderProcessGone(CefRefPtr<CefBrowser> browser) {

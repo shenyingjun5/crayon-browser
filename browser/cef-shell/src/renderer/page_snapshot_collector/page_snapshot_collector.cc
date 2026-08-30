@@ -5,7 +5,7 @@
 namespace crayon::cef_shell::renderer {
 
 CollectResult PageSnapshotCollector::Start(
-    const browser_engine::SnapshotRequest& request, std::uint64_t main_frame_id,
+    const browser_engine::SnapshotRequest& request, std::string main_frame_id,
     browser_engine::SnapshotDocumentMetadata document) {
   const browser_engine::SnapshotChunk metadata_chunk{request.request_id,
                                                      request.tab_id,
@@ -13,7 +13,7 @@ CollectResult PageSnapshotCollector::Start(
                                                      0,
                                                      document,
                                                      {}};
-  if (torn_down_ || active_ || main_frame_id == 0 ||
+  if (torn_down_ || active_ || main_frame_id.empty() ||
       request.navigation_id.value() == 0 ||
       !browser_engine::IsValid(request.mode) ||
       !browser_engine::IsValid(metadata_chunk, request.mode)) {
@@ -21,7 +21,7 @@ CollectResult PageSnapshotCollector::Start(
   }
   request_ = request;
   document_ = std::move(document);
-  main_frame_id_ = main_frame_id;
+  main_frame_id_ = std::move(main_frame_id);
   next_sequence_ = 0;
   total_facts_ = 0;
   total_bytes_ = 0;
@@ -87,6 +87,13 @@ CollectResult PageSnapshotCollector::Finish() {
   EmitTerminal(browser_engine::SnapshotTerminalStatus::kCompleted,
                browser_engine::EngineErrorCode::kNone);
   return CollectResult::kAccepted;
+}
+
+void PageSnapshotCollector::RejectCapacity() {
+  if (!active_ || torn_down_) return;
+  pending_.clear();
+  EmitTerminal(browser_engine::SnapshotTerminalStatus::kRejected,
+               browser_engine::EngineErrorCode::kCapacityExceeded);
 }
 
 void PageSnapshotCollector::Cancel() {

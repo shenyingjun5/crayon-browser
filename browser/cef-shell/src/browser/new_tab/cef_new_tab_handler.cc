@@ -11,6 +11,7 @@
 #include "include/cef_response.h"
 #include "include/wrapper/cef_helpers.h"
 #include "include/wrapper/cef_message_router.h"
+#include "renderer/page_snapshot_collector/cef_page_snapshot_renderer.h"
 
 namespace crayon::browser::cef_shell::new_tab {
 namespace {
@@ -202,19 +203,29 @@ class NewTabProcessApp final : public CefApp, public CefRenderProcessHandler {
   void OnContextReleased(CefRefPtr<CefBrowser> browser,
                          CefRefPtr<CefFrame> frame,
                          CefRefPtr<CefV8Context> context) override {
+    snapshot_renderer_.OnContextReleased(browser, frame);
     router_->OnContextReleased(browser, frame, context);
+  }
+
+  void OnBrowserDestroyed(CefRefPtr<CefBrowser> browser) override {
+    snapshot_renderer_.OnBrowserDestroyed(browser);
   }
 
   bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
                                 CefRefPtr<CefFrame> frame,
                                 CefProcessId source_process,
                                 CefRefPtr<CefProcessMessage> message) override {
+    if (snapshot_renderer_.OnProcessMessageReceived(browser, frame,
+                                                    source_process, message)) {
+      return true;
+    }
     return router_->OnProcessMessageReceived(browser, frame, source_process,
                                              message);
   }
 
  private:
   CefRefPtr<CefMessageRouterRendererSide> router_;
+  renderer::CefPageSnapshotRenderer snapshot_renderer_;
 
   IMPLEMENT_REFCOUNTING(NewTabProcessApp);
   DISALLOW_COPY_AND_ASSIGN(NewTabProcessApp);
@@ -231,10 +242,9 @@ void RegisterCrayonCustomSchemes(CefRawPtr<CefSchemeRegistrar> registrar) {
   // Windows evidence). CSP and same-origin policy still apply; the handlers
   // never send Access-Control-Allow-Origin, so cross-origin access stays
   // closed.
-  constexpr int kSchemeOptions = CEF_SCHEME_OPTION_STANDARD |
-                                 CEF_SCHEME_OPTION_SECURE |
-                                 CEF_SCHEME_OPTION_DISPLAY_ISOLATED |
-                                 CEF_SCHEME_OPTION_CORS_ENABLED;
+  constexpr int kSchemeOptions =
+      CEF_SCHEME_OPTION_STANDARD | CEF_SCHEME_OPTION_SECURE |
+      CEF_SCHEME_OPTION_DISPLAY_ISOLATED | CEF_SCHEME_OPTION_CORS_ENABLED;
   registrar->AddCustomScheme(browser_new_tab::kNewTabScheme, kSchemeOptions);
 }
 

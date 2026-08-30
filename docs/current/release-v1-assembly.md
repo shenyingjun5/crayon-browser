@@ -3,15 +3,14 @@
 - 契约：`release-v1-assembly`
 - 日期：2026-08-30
 - 任务：`REL-02`
-- 结论：本地 Markdown 已进入真实 CEF 产品调用链，但仍含生产 fixture 初始化缺口；网页 Markdown 与 LAN 投屏目前只有模型、独立库和测试，尚未进入 `CrayonBrowser.app`。
+- 结论：本地 Markdown 已进入真实 CEF 产品调用链，但仍含生产 fixture 初始化缺口；网页 Markdown 的真实 CEF snapshot 段已由 `CNT-17` 接通，Rust 生产编排和导出 UI 仍不可达；LAN 投屏尚未进入 `CrayonBrowser.app`。
 
 本文只记录生产 reachability。类、函数、静态库、测试或历史 Roadmap 状态存在，不等同于用户从真实 CEF 入口可以使用。
 
 ## 1. macOS CEF 装配根
 
-`browser/cef-shell/CMakeLists.txt:169-218` 是当前 macOS 产品构建图的事实源：`crayon_browser` 只编译基础 Browser/permission/window、新标签和 `browser/mdv/**` 源，并只链接 CEF、`crayon::browser-mdv` 与 `crayon::browser-new-tab`。下列独立目标虽由根 CMake 声明并可测试，但未被 `crayon_browser` 链接：
+REL-02 审计后，`CNT-17` 已把 snapshot CEF adapter、collector 与 gateway 加入 macOS/Windows 产品 target；其余断点保持不变。下列独立目标仍未被 `crayon_browser` 链接：
 
-- `crayon::cef-page-snapshot-collector`、`crayon::browser-page-snapshot-gateway`；
 - `crayon::cef-shell-media-observer`、`crayon::cef-shell-network-observer`、`crayon::cef-shell-observation-gateway`、`crayon::cef-shell-input-proof`；
 - `crayon::browser-page-tools`、`crayon::browser-cast-view`；
 - Rust `crayon-app-runtime`、`crayon-cast-adapter`、`crayon-relay`、`crayon-content-*` 与平台 adapter。
@@ -24,8 +23,8 @@
 
 ```text
 真实 CEF 当前页
-  -X-> Browser-issued snapshot request / Renderer DOM adapter       [CNT-17]
-  -X-> PageSnapshotCollector -> CEF IPC -> PageSnapshotGateway      [CNT-17]
+  ---> Browser-issued snapshot request / Renderer DOM adapter       [CNT-17 DONE]
+  ---> PageSnapshotCollector -> CEF IPC -> PageSnapshotGateway      [CNT-17 DONE]
   -X-> verified facts -> C++/Rust bridge -> PageSnapshotRuntime     [CNT-18]
   -X-> content-extract -> PageSnapshot -> content-markdown          [CNT-18]
   -X-> page-tools preview / clipboard / save dialog                 [CNT-19]
@@ -37,8 +36,8 @@
 | 层 | 当前事实 | 后续任务 |
 |---|---|---|
 | 用户入口 | `browser/shared-ui/page-tools` 只生成静态库；`PageMarkdownExportController` 无生产调用方，CEF target 未链接它 | `CNT-19` |
-| Renderer | `PageSnapshotCollector` 只接受已归一化 `RendererFact`，没有 CEF DOM 遍历、`CefRenderProcessHandler` 或真实 IPC owner | `CNT-17` |
-| Browser | `PageSnapshotGateway` 有 source/navigation/sequence/backpressure 校验，但没有被 BrowserApp/TabController 构造或调用 | `CNT-17` |
+| Renderer | `CefPageSnapshotRenderer` 已用 `VisitDOM` 生成有界可见主 frame facts，并经版本化 IPC 发送 | `CNT-17 DONE` |
+| Browser | `TabController`/`CefPageSnapshotBridge` 已签发并校验 request/source/navigation/sequence/backpressure，提供 drain/cancel seam | `CNT-17 DONE` |
 | Core | `PageSnapshotRuntime`、extract 与 Markdown 已有实现；非测试生产代码没有实例化 `PageSnapshotRuntime`，也没有 CEF 到 Rust DTO/FFI | `CNT-18` |
 | 导出 | 预览、复制、保存、覆盖和错误模型存在，但没有真实菜单、剪贴板或文件对话框调用链 | `CNT-19` |
 | 真实回归 | 现有 CT 测试证明模型契约，不证明真实 CEF 页面可导出 | `CNT-20` |
@@ -119,7 +118,7 @@ CEF BrowserApp
 
 ## 7. 审计结论
 
-- 网页 Markdown：`NOT_REACHABLE`，按 `CNT-17 -> 18 -> 19 -> 20 -> 21` 严格串行。
+- 网页 Markdown：`PARTIALLY_ASSEMBLED_NOT_USER_REACHABLE`，`CNT-17 DONE`，按 `CNT-18 -> 19 -> 20 -> 21` 严格串行。
 - LAN 投屏：`NOT_REACHABLE`，按 `PLT-M05b1 -> ... -> b6 -> M05c` 严格串行。
 - 本地 Markdown：`REACHABLE_WITH_GAP`，先完成 `MDV-25`，再由 `MRT-09`/REL/QAR 收口。
 - 第二期 feature：`OFF`，没有生产 CEF 调用链、远程 listener 或模型 provider。

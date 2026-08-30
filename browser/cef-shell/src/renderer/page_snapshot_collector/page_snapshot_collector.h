@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "crayon/browser_engine/snapshot.h"
@@ -22,7 +23,7 @@ enum class CollectResult {
 struct RendererFact final {
   browser_engine::SnapshotFact fact;
   std::uint64_t navigation_id = 0;
-  std::uint64_t frame_id = 0;
+  std::string frame_id;
   bool is_main_frame = false;
   bool is_visible = false;
   bool is_same_origin = false;
@@ -46,10 +47,11 @@ class PageSnapshotCollector final {
       : sink_(sink) {}
 
   CollectResult Start(const browser_engine::SnapshotRequest& request,
-                      std::uint64_t main_frame_id,
+                      std::string main_frame_id,
                       browser_engine::SnapshotDocumentMetadata document);
   CollectResult Observe(RendererFact fact);
   CollectResult Finish();
+  void RejectCapacity();
   void Cancel();
   void TearDown();
 
@@ -64,7 +66,7 @@ class PageSnapshotCollector final {
   PageSnapshotCollectorSink& sink_;
   bool active_ = false;
   bool torn_down_ = false;
-  std::uint64_t main_frame_id_ = 0;
+  std::string main_frame_id_;
   std::uint32_t next_sequence_ = 0;
   std::size_t total_facts_ = 0;
   std::size_t total_bytes_ = 0;
