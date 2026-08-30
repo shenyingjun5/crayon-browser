@@ -187,6 +187,10 @@ if(OS_MAC)
       src/browser/mdv/cef_mdv_handler.h
       src/browser/page_snapshot_gateway/cef_page_snapshot_bridge.cc
       src/browser/page_snapshot_gateway/cef_page_snapshot_bridge.h
+      src/browser/page_markdown/cef_page_markdown_preview.cc
+      src/browser/page_markdown/cef_page_markdown_preview.h
+      src/browser/page_markdown/page_markdown_preview.cc
+      src/browser/page_markdown/page_markdown_preview.h
       src/browser/permission/cef_download_handler.cc
       src/browser/permission/cef_download_handler.h
       src/browser/permission/cef_permission_handler.cc
@@ -289,7 +293,8 @@ if(OS_MAC)
                "${crayon_content_host_binary}")
   target_link_libraries(${CRAYON_BROWSER_TARGET}
                         PRIVATE libcef_dll_wrapper ${CEF_STANDARD_LIBS}
-                                crayon::browser-mdv crayon::browser-new-tab
+                                crayon::browser-new-tab
+                                crayon::browser-page-tools
                                 crayon::browser-page-snapshot-gateway
                                 crayon::cef-page-snapshot-collector
                                 crayon::cef-shell-core-client
@@ -517,6 +522,21 @@ if(CRAYON_BUILD_TESTS)
                          PROPERTIES LABELS "cef;shell;content;integration"
                                     TIMEOUT 240)
   endif()
+
+  add_executable(
+    crayon_page_markdown_preview_test
+    tests/page_markdown_preview_test.cc
+    src/browser/page_markdown/page_markdown_preview.cc)
+  target_compile_features(crayon_page_markdown_preview_test PRIVATE cxx_std_17)
+  target_include_directories(crayon_page_markdown_preview_test
+                             PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_link_libraries(crayon_page_markdown_preview_test
+                        PRIVATE crayon::browser-page-tools
+                                crayon::cef-shell-ipc)
+  add_test(NAME page_markdown_preview
+           COMMAND crayon_page_markdown_preview_test)
+  set_tests_properties(page_markdown_preview
+                       PROPERTIES LABELS "cef;shell;content")
 
   add_executable(crayon_window_state_model_test
                  tests/window_state_model_test.cc

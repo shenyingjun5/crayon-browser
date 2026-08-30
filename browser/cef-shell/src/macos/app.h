@@ -6,6 +6,7 @@
 
 #include "browser/mdv/cef_mdv_editing.h"
 #include "browser/mdv/cef_mdv_entries.h"
+#include "browser/page_markdown/cef_page_markdown_preview.h"
 #include "browser/permission/permission_store.h"
 #include "browser/window/tab_controller.h"
 #include "crayon/browser_mdv/mdv_page.h"
@@ -54,6 +55,8 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   std::unique_ptr<permission::PermissionStore> permission_store_;
   std::unique_ptr<macos::ContentHostAdapter> content_host_;
   CefRefPtr<window::TabController> tab_controller_;
+  std::unique_ptr<page_markdown::CefPageMarkdownPreviewController>
+      page_markdown_preview_;
   std::size_t content_host_start_checks_ = 0;
   bool content_host_tick_active_ = false;
 

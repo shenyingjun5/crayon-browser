@@ -9,7 +9,7 @@ target_include_directories(crayon-browser-page-tools
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 )
 target_link_libraries(crayon-browser-page-tools
-  PRIVATE crayon::browser-mdv
+  PUBLIC crayon::browser-mdv
 )
 target_compile_features(crayon-browser-page-tools PUBLIC cxx_std_17)
 set_target_properties(crayon-browser-page-tools PROPERTIES

@@ -214,14 +214,22 @@ void BrowserApp::OnContextInitialized() {
         return entries->HandleDragEnter(browser, drag_data, mask);
       });
   tab_controller_->SetContextMenuAugmenter(
-      [entries = mdv_entries_](CefRefPtr<CefBrowser> browser,
-                               CefRefPtr<CefContextMenuParams> params,
-                               CefRefPtr<CefMenuModel> model) {
-        return entries->HandleContextMenuAugment(browser, params, model);
+      [this, entries = mdv_entries_](CefRefPtr<CefBrowser> browser,
+                                     CefRefPtr<CefContextMenuParams> params,
+                                     CefRefPtr<CefMenuModel> model) {
+        const bool mdv =
+            entries->HandleContextMenuAugment(browser, params, model);
+        const bool page_markdown =
+            page_markdown_preview_->HandleContextMenuAugment(browser, params,
+                                                             model);
+        return mdv || page_markdown;
       });
   tab_controller_->SetContextMenuCommandHandler(
-      [entries = mdv_entries_](CefRefPtr<CefBrowser> browser, int command_id) {
-        return entries->HandleContextMenuCommand(browser, command_id);
+      [this, entries = mdv_entries_](CefRefPtr<CefBrowser> browser,
+                                     int command_id) {
+        if (entries->HandleContextMenuCommand(browser, command_id)) return true;
+        return page_markdown_preview_->HandleContextMenuCommand(browser,
+                                                                command_id);
       });
   tab_controller_->SetSaveCommandHandler(
       [editing = mdv_editing_](CefRefPtr<CefBrowser> browser) {
@@ -236,6 +244,11 @@ void BrowserApp::OnContextInitialized() {
                                     persistent, std::move(callback));
       });
   tab_controller_->SetPageSnapshotObserver(content_host_.get());
+  page_markdown_preview_ =
+      std::make_unique<page_markdown::CefPageMarkdownPreviewController>(
+          tab_controller_.get(), mdv_editing_,
+          page_markdown::PageMarkdownStrings{
+              Localized("page_markdown.preview_command")});
   tab_controller_->SetPageSnapshotAdmission(
       [host = content_host_.get()] { return host->healthy(); });
   tab_controller_->SetPageSnapshotEventsReadyCallback([this] {
@@ -243,6 +256,7 @@ void BrowserApp::OnContextInitialized() {
   });
   tab_controller_->SetBrowsersClosedCallback([this] {
     content_host_tick_active_ = false;
+    page_markdown_preview_->Stop();
     content_host_->Stop();
   });
   if (!content_host_->Start(ContentHostExecutablePath())) {
@@ -289,6 +303,8 @@ void BrowserApp::ContentHostTick() {
   if (!content_host_tick_active_) return;
   content_host_->Consume(tab_controller_->DrainPageSnapshots(16));
   content_host_->Tick();
+  page_markdown_preview_->Tick(content_host_->Drain(64),
+                               content_host_->healthy());
   ScheduleContentHostTick();
 }
 

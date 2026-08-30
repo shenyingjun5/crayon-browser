@@ -29,7 +29,7 @@
 | CNT-10 | DONE | CNT-09 | `docs/current/**`,`docs/plans/**` | C1 独立 Review 与 Agent data-plane 接口冻结 | CT-001..008；P0/P1=0 | C1 |
 | CNT-17 | DONE | REL-01,CNT-10,CEF-15 | `browser/cef-shell/src/renderer/page_snapshot_collector/**`,`browser/cef-shell/src/browser/page_snapshot_gateway/**`,`browser/engine-api/**` | 将现有有界 collector/gateway 接入真实 CEF 主 frame、导航与 IPC 生命周期 | `CT-001`,`CT-002`,`CT-007`; macOS CEF fixture/integration | R1 |
 | CNT-18 | DONE | CNT-17 | `crates/crayon-app-runtime/**`,`crates/crayon-page-data/**`,`crates/crayon-content-extract/**`,`crates/crayon-content-markdown/**`,`browser/cef-shell/**` | 接通 Browser 验证 facts → owner → 正文提取 → Markdown 的生产调用链 | CT-001..008；导航/取消/关闭/背压 E2E | R1 |
-| CNT-19 | READY | CNT-18,CNT-08 | `browser/shared-ui/page-tools/**`,`browser/cef-shell/src/browser/**`,locales | 增加用户入口并接通预览、复制、保存、取消、覆盖与失败反馈 | CT-005/006；真实菜单、剪贴板、文件对话框 | R1 |
+| CNT-19 | IN_PROGRESS | CNT-18,CNT-08 | `browser/shared-ui/page-tools/**`,`browser/cef-shell/src/browser/**`,locales | 增加用户入口并接通预览、复制、保存、取消、覆盖与失败反馈 | CT-005/006；真实菜单、剪贴板、文件对话框 | R1 |
 | CNT-20 | TODO | CNT-19 | `tests/e2e/desktop/**`,`tests/security/content/**`,`tests/perf/content/**`,`test-support/**` | 用真实 CEF 本地站点 fixture 完成网页→Markdown 产品 E2E、安全和 UI delay/RSS 回归 | CT-001..008；macOS/Windows Debug/Release | R1 |
 | CNT-21 | TODO | CNT-20,PRV-13A | `docs/current/**`,`docs/plans/**`,`tests/**` | 一期网页 Markdown 产品层总 Review，关闭 CNT-08 真实 UI 缺口 | P0/P1=0；两平台证据；无页面触发写入 | R1 |
 | CNT-11 | TODO | CNT-21,AGT-16,PRV-13B | ADR,`crayon-model-contract/**`,`docs/current/**` | 决定本地/云端/BYOK/provider、地区、费用、保留、密钥和数据发送契约 | `CT-009`; ADR/contract；未决策不开网络 | M2 |
@@ -369,3 +369,32 @@ CNT-18 涉及新的 C++/Rust 进程边界、持久 Core 生命周期和生产 CE
 - `CNT-19` 只拥有用户手势入口与 CNT-08 controller 的系统 UI/剪贴板/文件对话框装配；页面内容零触发，文件写入必须复用 MDV 原子保存语义。
 - `CNT-20` 只增加本地确定性 fixture 与两平台 E2E/security/perf 证据；测试发现生产缺陷时回到对应原子任务修复，不在 Harness 中绕过产品入口。
 - `CNT-21` 只做一期产品数据面总 Review 与状态收口；不得顺带开启 Agent transport 或 M2 provider。
+
+## CNT-19 原子切片（用户入口、预览、复制与原子保存）
+
+CNT-19 同时涉及 CEF 用户手势状态机、平台剪贴板/文件对话框和真 UI 验收，按以下切片严格串行；不增加顶层任务数：
+
+| 切片 | 状态 | 依赖 | 单一交付 |
+|---|---|---|---|
+| CNT-19a | DONE | CNT-18d | 右键用户命令触发当前页 snapshot，聚合真实 Core Markdown 并进入现有 MDV 预览/编辑页；覆盖重复命令、导航、关闭和失败清理 |
+| CNT-19b | READY | CNT-19a,CNT-08 | macOS 预览会话接通显式复制、Save As、原生覆盖确认、取消和失败反馈；文件写入只复用 MDV 原子保存 |
+| CNT-19c | TODO | CNT-19b | 本地真 CEF UI fixture 验证菜单→预览→复制→保存/覆盖/取消与无残留，并完成 macOS CNT-19 Review |
+
+### CNT-19a 原子范围（用户手势生成并预览）
+
+- 状态：`DONE`；依赖 `CNT-18d DONE`。
+- 单一目标：新增 Browser UI-thread controller，在普通 `http/https` 主 frame 右键菜单加入本地化“生成 Markdown 并预览”命令；只有该显式用户命令可调用 `TabController::StartPageSnapshot`，完整 Core Markdown 完成后复用 `MdvEditController::OnDocumentLoaded` 生成只在本机的预览/编辑会话并导航到 `crayon://mdv/app.html`。
+- 输入/输出：输入为可信 Browser context-menu command 与 CNT-18 `ContentHostAdapter::Drain()` reply；输出仅为现有 MDV runtime snapshot/内建页面导航。controller 必须绑定 browser/request/navigation，按 sequence 聚合 ≤1MiB Markdown；页面内容、Renderer message 或晚到 Core reply不得自行打开预览。
+- 允许修改：`browser/cef-shell/src/browser/page_markdown/**`、`browser/cef-shell/src/macos/app.*` 的最小装配、macOS CMake/source contract、locales、独立测试与本 Roadmap。禁止修改 extract/Markdown/page-data 算法、content-host wire、MDV 渲染/保存语义、剪贴板/文件写入、Windows、Cast/Agent。
+- 生命周期：同一 controller 最多一个在途 request；重复命令显式拒绝且不替换目标。导航、tab 关闭、Core 不健康、ErrorReply、错 request、乱序、空/超界 Markdown 全部清理且不进入 MDV；完成后清空 Core reply聚合状态，旧回复不可污染新会话。
+- 验收：纯状态测试覆盖正常多 chunk、重复命令、错误/错 request/乱序/空/超界、导航/关闭取消；macOS product target build、现有 CNT-18d/CMake CTest 回归、localization/source contract、repo-guard、clang-format、`git diff --check`；Review P0/P1=0。
+- Keychain 门禁：产品和测试继续固定 `use-mock-keychain`；本切片不得访问真实 SecureStore/Keychain。
+- 明确不做：复制、保存对话框、覆盖确认和失败 alert（CNT-19b）、真 UI 点击/截图（CNT-19c）、Windows（CNT-20）。
+
+### CNT-19a 完成记录（2026-08-31）
+
+- 实现：新增平台无关、单 request、1MiB 有界 `PageMarkdownPreviewAssembler`，严格校验 request/tab/navigation/generation/sequence 和唯一 completed；新增 CEF UI controller，只在当前主 frame 的 `http/https` 原生右键菜单显示本地化命令，显式用户 command 才签发 snapshot。完整 Core Markdown 通过现有 `MdvEditController::OnDocumentLoaded` 进入 `crayon://mdv/app.html`，没有第二套 Markdown 渲染或 owner。App tick 有界 drain Core reply；导航、关闭、Core 不健康、错误/错代际/乱序/空/超界均清空并幂等取消原 request。
+- 构建图：macOS 产品装配新增 page-markdown controller 与中英本地化；Browser controller 只依赖平台无关 content-host wire，不依赖 macOS adapter。修正 `page-tools` 的 MDV 公开头依赖为 CMake `PUBLIC`，消除新 target 的隐式 include 和重复静态库链接。
+- 验证：`cmake --build .cache/build/macos-arm64-cef-debug -j4` 通过并完成 app 重签；专项 `page_markdown_preview`、CNT-08 export、CNT-18d 真 CEF、macOS source/package 为 5/5；完整 CTest 77/77、104.94s。真实 `run_smoke.py smoke --bundle=...` 通过 7 进程、loopback-only、零残留；首次以空格形式传参返回 exit 2（脚本只接受 `--bundle=`），按文档实际 parser 语法复跑通过。repo-guard、Google clang-format dry-run、`git diff --check` 通过。
+- Code Review：按 v0.8 复核用户手势来源、主 frame/origin、request/navigation fence、重复命令、bounded aggregation、错误释放、MDV 复用、依赖方向、UI tick 与 Keychain 边界；关闭 iframe 也出现菜单、拒绝后在途 snapshot 未显式取消、Browser controller 误依赖 macOS adapter 三项问题，最终 P0/P1/P2=`0/0/0`。
+- 未覆盖与风险：预览会话尚无“复制全部”和 Save As/覆盖/失败平台交互，严格归 `CNT-19b READY`；真 UI 点击/截图归 `CNT-19c`。所有构建、测试和真实 App 启停仍固定 `use-mock-keychain`，未访问真实 Keychain。

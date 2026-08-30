@@ -44,3 +44,4 @@
 "mdv.mermaid.source" = "View source";
 "mdv.mermaid.close" = "Close";
 "mdv.mermaid.error" = "Diagram failed to render; source kept";
+"page_markdown.preview_command" = "Generate Markdown and preview";

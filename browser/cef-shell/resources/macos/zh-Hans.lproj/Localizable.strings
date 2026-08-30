@@ -44,3 +44,4 @@
 "mdv.mermaid.source" = "查看源码";
 "mdv.mermaid.close" = "关闭";
 "mdv.mermaid.error" = "图表无法渲染，已保留源码";
+"page_markdown.preview_command" = "生成 Markdown 并预览";
