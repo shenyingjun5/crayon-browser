@@ -1,4 +1,5 @@
 add_library(crayon-cef-shell-ipc STATIC
+  src/content_host_codec.cc
   src/ipc_channel_contract.cc
 )
 add_library(crayon::cef-shell-ipc ALIAS crayon-cef-shell-ipc)
@@ -24,7 +25,11 @@ endif()
 
 if(CRAYON_BUILD_TESTS)
   add_executable(crayon_cef_shell_ipc_test
+    tests/content_host_codec_test.cc
     tests/ipc_channel_contract_test.cc
+  )
+  target_compile_definitions(crayon_cef_shell_ipc_test PRIVATE
+    CRAYON_SOURCE_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/../../../.."
   )
   target_compile_features(crayon_cef_shell_ipc_test
     PRIVATE cxx_std_17)

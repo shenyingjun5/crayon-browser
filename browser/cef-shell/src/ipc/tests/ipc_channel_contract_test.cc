@@ -7,6 +7,8 @@
 
 #include "crayon/cef_shell_ipc/ipc_channel_contract.h"
 
+bool RunContentHostCodecTests();
+
 namespace {
 
 using crayon::cef_shell::ipc::ConstantTimeEquals;
@@ -237,9 +239,9 @@ bool HostileStreamInvariants() {
 }  // namespace
 
 int main() {
-  const bool ok = FrameCodecRoundTrip() && FrameCodecPartialAndBackToBack() &&
-                  FrameCodecOversizeAndHostileFeed() && ResetClearsHostileLeftovers() &&
-                  SecretVerifyAndRotation() &&
+  const bool ok = RunContentHostCodecTests() && FrameCodecRoundTrip() &&
+                  FrameCodecPartialAndBackToBack() && FrameCodecOversizeAndHostileFeed() &&
+                  ResetClearsHostileLeftovers() && SecretVerifyAndRotation() &&
                   ConstantTimeEqualsSanity() && ProcessTokenMatrix() && MessageGuardMatrix() &&
                   HostileStreamInvariants();
   if (!ok) {

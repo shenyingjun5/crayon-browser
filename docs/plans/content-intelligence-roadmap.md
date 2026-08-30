@@ -1,6 +1,6 @@
 # CNT 页面数据、Markdown 与第二阶段模型 Roadmap
 
-- 状态：C1 数据面已收口；一期产品闭环 `CNT-17 DONE`、`CNT-18 IN_PROGRESS（18a IN_PROGRESS）`、`CNT-19..21 TODO`；M2 统一进入第二期并等待 `AGT-16/PRV-13B` 与 provider ADR
+- 状态：C1 数据面已收口；一期产品闭环 `CNT-17 DONE`、`CNT-18 IN_PROGRESS（18a DONE，18b READY）`、`CNT-19..21 TODO`；M2 统一进入第二期并等待 `AGT-16/PRV-13B` 与 provider ADR
 - 任务数：21
 - C1 开始门禁：`CEF-15`、`BUX-18`、`SDK-14`、`MED-19`、`PRV-08`
 - 一期产品门禁：`REL-01`、`CNT-10`、`CEF-15`、`PRV-12`
@@ -286,20 +286,28 @@ CNT-18 涉及新的 C++/Rust 进程边界、持久 Core 生命周期和生产 CE
 
 | 切片 | 状态 | 依赖 | 单一交付 |
 |---|---|---|---|
-| CNT-18a | IN_PROGRESS | CNT-17 | 冻结 Browser verified snapshot stream ↔ Rust content host 的版本化有界逻辑 DTO、二进制 codec 与双语言 golden；不做进程/IO |
-| CNT-18b | TODO | CNT-18a | Rust content host 消费完整 verified stream，唯一调用既有 extract → `PageSnapshotRuntime` owner → Markdown，并实现 navigation/cancel/close/shutdown 状态 |
+| CNT-18a | DONE | CNT-17 | 冻结 Browser verified snapshot stream ↔ Rust content host 的版本化有界逻辑 DTO、二进制 codec 与双语言 golden；不做进程/IO |
+| CNT-18b | READY | CNT-18a | Rust content host 消费完整 verified stream，唯一调用既有 extract → `PageSnapshotRuntime` owner → Markdown，并实现 navigation/cancel/close/shutdown 状态 |
 | CNT-18c | TODO | CNT-18b,CEF-07 | macOS CEF Browser 真实 spawn/pipe/health/kill/reap 与 snapshot drain 接线；Core 不健康时 fail closed，App 退出无 orphan |
 | CNT-18d | TODO | CNT-18c | 本地真 CEF fixture 验证 request → Renderer → gateway → Core owner/extract/Markdown，并覆盖导航、取消、关闭、背压和 Core crash |
 
 ### CNT-18a 原子范围（跨语言 content host codec）
 
-- 状态：`IN_PROGRESS`；依赖 `CNT-17 DONE`。
+- 状态：`DONE`；依赖 `CNT-17 DONE`。
 - 单一目标：定义并实现不含 DOM/HTML/selector/凭证的 content-host v1 逻辑 envelope 与确定性 codec，使 C++ Browser 已验证的 document/facts/terminal 可被 Rust 严格解码，并使 Rust Markdown/错误响应可由 C++ 严格解码；本切片无 OS transport、线程、子进程或产品调用方。
 - 输入/输出：输入为 CNT-17 `SnapshotChunk/SnapshotTerminal` 的闭合字段；输出为 request begin/chunk/terminal/cancel/navigation/close/shutdown 与 Markdown/error reply。所有整数固定宽度、字符串 length-prefix、enum 闭合、版本精确匹配、payload 总长受 CEF-06 `kMaxFrameBytes` 约束。
 - 允许修改：`crates/crayon-ipc-schema/**`、`browser/cef-shell/src/ipc/**`、`schemas/current/**`/`schemas/previous/**` 的新增 content-host golden、对应独立测试与本 Roadmap。禁止修改 CNT-17 CEF collector/gateway 行为、page-data wire schema、extract/Markdown 算法、Core spawn、UI、Cast/Agent/MDV。
 - 错误与边界：未知版本/kind/enum、零 ID/generation、重复或乱序字段、越界长度/数量、非法 UTF-8、尾随字节与截断输入全部稳定拒绝；decoder 不分配超过声明上限，不记录 URL、标题、正文或 Markdown。
 - 验收：Rust/C++ golden byte-for-byte 一致；正常/空页/所有 fact kind/多 chunk/错误 terminal/取消/导航/关闭/shutdown/最大合法值与 hostile mutation；Rust fmt/clippy/test、C++ `-Werror` build/CTest、repo-guard、`git diff --check`；按 v0.8 Review P0/P1=0。
 - 明确不做：真实 pipe/socket、Core 可执行文件、owner/extract/Markdown 调用、CEF 产品装配、文件/剪贴板/UI、Windows/macOS 平台进程 API或 Keychain。
+
+### CNT-18a 完成记录（2026-08-30）
+
+- 实现：C++17 与 Rust 共用 `content-host-v1` 固定头、精确版本、闭合 kind/enum、大端定宽整数和 length-prefix UTF-8；覆盖 begin/fact batch/terminal/cancel/navigation/close/shutdown、分块 Markdown 与稳定错误回复。ID、navigation/generation、标题、fact 形状和所有容量在分配/使用前校验，单 payload 严格复用 CEF-06 的 65,536-byte 上限。
+- Golden：`schemas/current/previous/content_host_v1.json` byte-for-byte 镜像，覆盖九种 fact、成功/错误 terminal 和双向消息；Rust/C++ 均从同一向量验收。
+- 验证：`cmake --build .cache/build/macos-arm64-cef-debug -j4` 通过（`-Werror`）；`ctest --test-dir .cache/build/macos-arm64-cef-debug -R '^ipc_channel_contract$' --output-on-failure` 1/1；`cargo test -p crayon-ipc-schema --lib --tests` 19/19；严格 Clippy、Rust fmt、Google clang-format dry-run、repo-guard 与 `git diff --check` 全通过。
+- Code Review：按 v0.8 复核协议边界、长度先验、UTF-8、枚举、跨语言一致性、日志/secret、热路径分配和 hostile mutation；修正 ID 字符集、标题单行约束与 C++ 非法枚举错误分类，P0/P1/P2=`0/0/0`。
+- 未覆盖与风险：本切片按范围没有 OS transport、子进程或 owner/extract/Markdown 调用；这些严格由 `CNT-18b..18d` 承接。测试未访问 Keychain。
 
 ## CNT-18..21 一期产品闭环边界
 

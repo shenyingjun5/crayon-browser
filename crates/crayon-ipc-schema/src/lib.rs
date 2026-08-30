@@ -2,6 +2,7 @@
 //! browser/core communication, plus the CAAP v1 agent envelope set.
 
 mod caap;
+mod content_host;
 mod messages;
 mod secret;
 
@@ -9,6 +10,12 @@ pub use caap::{
     CaapCancel, CaapChunk, CaapErrorReply, CaapHello, CaapRequest, CaapSchemaError, CaapWelcome,
     MAX_CAAP_CAPABILITIES, MAX_CAAP_CHUNK_BYTES, MAX_CAAP_PARAMS, MAX_CAAP_PARAM_KEY_LEN,
     MAX_CAAP_PARAM_VALUE_LEN, MAX_CAAP_TOKEN_LEN,
+};
+pub use content_host::{
+    decode_content_host_message, encode_content_host_message, ContentHostError,
+    ContentHostErrorCode, ContentHostFact, ContentHostFactKind, ContentHostMessage,
+    ContentHostMode, ContentHostTerminalStatus, EngineErrorCode as ContentHostEngineErrorCode,
+    MAX_CONTENT_HOST_FACTS, MAX_CONTENT_HOST_FRAME_BYTES, MAX_CONTENT_HOST_MARKDOWN_BYTES,
 };
 pub use messages::{
     AdContinuity, AudioCodecKind, CastPolicyDecision, CastPolicyInput, ExternalClientHandoff,

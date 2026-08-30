@@ -9,9 +9,9 @@
 ## 1. 当前结论
 
 - 已收口：`BRD-01..04`、Foundation、`MED-01..19`、`BUX-01..18`、`SDK-01..14`、`RNM-01..08`；CEF 为 `CEF-01..05/15 DONE`、`CEF-06..14 VERIFIED`，`ACT-01..12` 已完成契约/模型层总 Review，`MRT-01..08 DONE`。
-- 页面数据 C1 算法与数据面 `CNT-01..10` 已收口，真实 CEF collector/gateway 已由 `CNT-17 DONE` 装配；生产 owner/extract/Markdown 的 `CNT-18 IN_PROGRESS` 拆为 18a..18d（当前 18a），导出 UI 仍待 `CNT-19..21 TODO`，不把局部接通解释为用户已可一键导出。
+- 页面数据 C1 算法与数据面 `CNT-01..10` 已收口，真实 CEF collector/gateway 已由 `CNT-17 DONE` 装配；生产 owner/extract/Markdown 的 `CNT-18 IN_PROGRESS` 拆为 18a..18d（18a DONE，下一步 18b），导出 UI 仍待 `CNT-19..21 TODO`，不把局部接通解释为用户已可一键导出。
 - 第一期范围由 `REL-01 DONE` 冻结为网页 Markdown、LAN Direct/Relay 投屏、本地 Markdown 编辑三大闭环；`REL-02 DONE` 已输出真实生产装配图：前两项当前不可达，MDV 可达但仍含生产 fixture 初始化缺口。macOS arm64 先行、Windows x64 同一期回归。Agent/CLI/MCP、Workflow、Hub、Partner、模型与 HarmonyOS 默认关闭并进入第二期。
-- 平台剩余重点：`CNT-18a IN_PROGRESS` 先冻结跨语言 content-host codec，再严格推进 18b..18d；`PLT-M05b1 READY` 后串行 b2..b6/M05c，随后 `PLT-W05` 对称装配；`MDV-25 READY` 清除生产 fixture 后，`MDV-20/24 VERIFIED` 与 `MRT-09` 关闭 P0 Runtime 发布缺口。M05a 既有证据只代表基础壳/new-tab，不代表 CNT/Cast 全产品装配。
+- 平台剩余重点：`CNT-18a DONE` 已冻结跨语言 content-host codec，下一步严格推进 `CNT-18b READY`、18c..18d；`PLT-M05b1 READY` 后串行 b2..b6/M05c，随后 `PLT-W05` 对称装配；`MDV-25 READY` 清除生产 fixture 后，`MDV-20/24 VERIFIED` 与 `MRT-09` 关闭 P0 Runtime 发布缺口。M05a 既有证据只代表基础壳/new-tab，不代表 CNT/Cast 全产品装配。
 - 产品依赖顺序不变，但发布拆为两期：第一期先完成浏览器/LAN 投屏/网页 Markdown/本地 MDV；第二期再开放 Agent 协议与语义动作、Workflow/Challenge、Capability Hub/合作方和模型。
 - CAAP、CLI/入站 MCP、高性能读页和授权操作仍是产品核心方向，但不进入第一期发布包启用范围；具体模型/provider 与视频/文档总结同属第二期。
 - Windows/macOS 为当前桌面；HarmonyOS 只做鸿蒙电脑 PC 形态技术预览；Linux 无活跃任务。
@@ -237,7 +237,7 @@ flowchart LR
 
 ## 7. 当前领取顺序
 
-1. `CNT-18a IN_PROGRESS`：先冻结 Browser verified facts ↔ Rust content host 双语言 codec，再按 18b Rust host、18c macOS Core 进程装配、18d 真 CEF E2E 严格推进；之后执行 `CNT-19..21`。
+1. `CNT-18b READY`：在已冻结的 content-host v1 上实现 Rust host 唯一 owner/extract/Markdown 调用与生命周期；再按 18c macOS Core 进程装配、18d 真 CEF E2E 严格推进，之后执行 `CNT-19..21`。
 2. `PLT-M05b1 READY`：接通真实媒体观察；与 CNT-17 修改相邻 CEF 装配，必须串行，随后推进 b2..b6/M05c；Direct/Relay 可使用 ADB 在线手机的正式接收端取证。
 3. `MDV-25 READY`：移除生产 `BuildFixtureSnapshot()` 初始化；与前两项同样触及 CEF App/CMake，串行领取。
 4. `MDV-20 VERIFIED` Windows 发布回归与 `MDV-24 VERIFIED` 剩余真机门禁；MDV-25 完成后执行 `MRT-09` P0 总 Review。
