@@ -377,8 +377,8 @@ CNT-19 同时涉及 CEF 用户手势状态机、平台剪贴板/文件对话框�
 | 切片 | 状态 | 依赖 | 单一交付 |
 |---|---|---|---|
 | CNT-19a | DONE | CNT-18d | 右键用户命令触发当前页 snapshot，聚合真实 Core Markdown 并进入现有 MDV 预览/编辑页；覆盖重复命令、导航、关闭和失败清理 |
-| CNT-19b | READY | CNT-19a,CNT-08 | macOS 预览会话接通显式复制、Save As、原生覆盖确认、取消和失败反馈；文件写入只复用 MDV 原子保存 |
-| CNT-19c | TODO | CNT-19b | 本地真 CEF UI fixture 验证菜单→预览→复制→保存/覆盖/取消与无残留，并完成 macOS CNT-19 Review |
+| CNT-19b | DONE | CNT-19a,CNT-08 | macOS 预览会话接通显式复制、Save As、原生覆盖确认、取消和失败反馈；文件写入只复用 MDV 原子保存 |
+| CNT-19c | READY | CNT-19b | 本地真 CEF UI fixture 验证菜单→预览→复制→保存/覆盖/取消与无残留，并完成 macOS CNT-19 Review |
 
 ### CNT-19a 原子范围（用户手势生成并预览）
 
@@ -398,3 +398,22 @@ CNT-19 同时涉及 CEF 用户手势状态机、平台剪贴板/文件对话框�
 - 验证：`cmake --build .cache/build/macos-arm64-cef-debug -j4` 通过并完成 app 重签；专项 `page_markdown_preview`、CNT-08 export、CNT-18d 真 CEF、macOS source/package 为 5/5；完整 CTest 77/77、104.94s。真实 `run_smoke.py smoke --bundle=...` 通过 7 进程、loopback-only、零残留；首次以空格形式传参返回 exit 2（脚本只接受 `--bundle=`），按文档实际 parser 语法复跑通过。repo-guard、Google clang-format dry-run、`git diff --check` 通过。
 - Code Review：按 v0.8 复核用户手势来源、主 frame/origin、request/navigation fence、重复命令、bounded aggregation、错误释放、MDV 复用、依赖方向、UI tick 与 Keychain 边界；关闭 iframe 也出现菜单、拒绝后在途 snapshot 未显式取消、Browser controller 误依赖 macOS adapter 三项问题，最终 P0/P1/P2=`0/0/0`。
 - 未覆盖与风险：预览会话尚无“复制全部”和 Save As/覆盖/失败平台交互，严格归 `CNT-19b READY`；真 UI 点击/截图归 `CNT-19c`。所有构建、测试和真实 App 启停仍固定 `use-mock-keychain`，未访问真实 Keychain。
+
+### CNT-19b 原子范围（macOS 复制与原子 Save As）
+
+- 状态：`DONE`；依赖 `CNT-19a DONE`、`CNT-08 VERIFIED`。
+- 单一目标：只对 CNT-19a 生成的内建 MDV 会话增加本地化“复制全部 Markdown”和“另存为 Markdown”右键命令；两者读取当前编辑缓冲区，复制经注入的 macOS pasteboard adapter，保存经 CEF 原生 Save dialog 后唯一调用现有 MDV `MdvSaveController` 原子写入，并把成功、取消、失败和 residual temp path 反馈回内建 MDV banner。
+- 允许修改：`browser/cef-shell/src/browser/page_markdown/**`、`browser/cef-shell/src/browser/mdv/cef_mdv_editing.*` 的最小正常 API、`browser/cef-shell/src/macos/page_markdown_platform_mac.*` 与 App/CMake/locales、对应独立测试和本 Roadmap。禁止修改 Markdown/extract/page-data 算法、content-host wire、MDV 原子保存模型、Windows、Cast/Agent。
+- 用户与数据边界：只有 Browser 原生菜单 command 可触发；页面 JS/正文不得写 clipboard 或文件。clipboard payload ≤1MiB 且写后不持久化副本；Save dialog 只允许 `.md`，用户取消不写入，原生系统对已存在目标的确认视为唯一覆盖授权；不得静默重试、更换路径或降级为非原子写。
+- 生命周期：命令必须绑定 CNT-19a 生成预览的 browser；离开内建 MDV、关闭 tab/App 或开始新预览时撤销旧导出会话。Save callback 必须校验 owner/browser 仍有效；成功后更新编辑 baseline/dirty 状态，失败显示闭合错误，cleanup 失败必须显示 residual temp path。
+- 验收：纯状态/adapter 单测覆盖 copy 成功/失败/超界、save 成功/非法后缀/取消/覆盖确认/rename 与 residual 失败、旧 browser/callback；macOS product build、scoped/完整 CTest、真实 App smoke、repo-guard、clang-format、`git diff --check`，Review P0/P1=0。
+- Keychain 门禁：继续固定 `use-mock-keychain`，不得访问真实 SecureStore/Keychain。
+- 明确不做：自动复制/自动保存、页面触发、真 UI 点击与截图（CNT-19c）、Windows（CNT-20）。
+
+### CNT-19b 完成记录（2026-08-31）
+
+- 实现：生成预览拥有独立、browser-bound 的导出会话；仅内建 `crayon://mdv/` 主 frame 原生菜单显示“复制全部 Markdown”和“另存为 Markdown”。两条命令都实时读取当前编辑缓冲区；复制经注入的 macOS `NSPasteboard` adapter 且由平台无关状态层限制为非空、≤1MiB，保存经 CEF `FILE_DIALOG_SAVE` 和 `.md` 二次校验后唯一进入现有 `MdvSaveController` 临时文件+rename 原子路径。保存成功刷新文件路径、目录和 `(size,mtime)` baseline；取消、复制失败、保存失败与 residual temp path 进入 MDV banner。
+- 生命周期与安全：新预览、离开 MDV、tab/App 关闭均撤销导出会话；Save callback 绑定 browser 与 document generation，旧对话框结果静默丢弃。页面 JS/正文没有 clipboard/file 能力，没有自动复制、自动保存、静默重试或非原子降级；原生 Save panel 是覆盖已存在目标的唯一确认点。中英本地化已装配；构建、测试和真实 App 启停继续强制 `use-mock-keychain`，未访问真实 Keychain。
+- 验证：macOS arm64 `CrayonBrowser` 产品 target 编译、ad-hoc 重签通过；专项 `page_markdown_preview`、`page_markdown_export_contract`、`mdv_edit`、`mdv_save`、`mdv_handler_contract`、macOS source/package 共 7/7。串行完整 CTest 77/77、65.70s；并行首轮曾因本地 IPC 测试竞争出现 `content_host_process_mac` 失败，该项隔离复跑 1/1 且串行全量通过。最终真实 `run_smoke.py smoke --bundle=...` 通过 full process tree、loopback-only、zero residue；repo-guard passed（仅既有 RG-003/RG-004 warning），Google clang-format 与 `git diff --check` 通过。
+- Code Review：按 v0.8 复核用户手势/主 frame、会话与文档代际 fencing、clipboard 上限和副本寿命、原生覆盖授权、路径后缀、原子 rename/residual、失败反馈、旧 callback、退出释放、依赖方向和 Keychain 边界；关闭“Save As 后 Ctrl+S baseline 未刷新”和“离开 MDV 后旧会话仍可被迟到 command 使用”两项问题，最终 P0/P1/P2=`0/0/0`。
+- 未覆盖与风险：原生菜单实际点击、pasteboard 内容、Save panel 覆盖/取消及截图证据归 `CNT-19c READY`；Windows 对称实现归 `CNT-20`。CNT-19b 不依赖真实 Keychain，真实 SecureStore/Keychain 仍只保留为最后的可选专项验证。

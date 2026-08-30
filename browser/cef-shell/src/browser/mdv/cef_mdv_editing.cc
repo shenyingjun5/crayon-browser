@@ -394,6 +394,37 @@ bool MdvEditController::SaveWriteBack(CefRefPtr<CefBrowser> browser) {
   return true;
 }
 
+std::optional<std::string> MdvEditController::CurrentMarkdown(
+    CefRefPtr<CefBrowser> browser) const {
+  CEF_REQUIRE_UI_THREAD();
+  if (!browser || browser->GetIdentifier() != host_browser_id_ ||
+      !viewer_.has_document()) {
+    return std::nullopt;
+  }
+  return edit_.edit_buffer();
+}
+
+bool MdvEditController::SaveAs(CefRefPtr<CefBrowser> browser,
+                               const std::string& suggested_filename,
+                               const std::string& cancelled_feedback) {
+  CEF_REQUIRE_UI_THREAD();
+  if (!CurrentMarkdown(browser)) return false;
+  StartSaveAsDialog(browser, suggested_filename, cancelled_feedback);
+  return true;
+}
+
+void MdvEditController::SetTransientStatus(CefRefPtr<CefBrowser> browser,
+                                           const std::string& status,
+                                           bool succeeded) {
+  CEF_REQUIRE_UI_THREAD();
+  if (!CurrentMarkdown(browser) || status.empty()) return;
+  auto snapshot = state_->snapshot();
+  snapshot.save_ok = succeeded;
+  snapshot.error_text = status;
+  state_->SetSnapshot(std::move(snapshot));
+  PushState(browser);
+}
+
 void MdvEditController::PerformSave(CefRefPtr<CefBrowser> browser,
                                     SaveKind kind,
                                     const std::string& target_path) {
@@ -401,6 +432,18 @@ void MdvEditController::PerformSave(CefRefPtr<CefBrowser> browser,
   const SaveState state = save_.Save(kind, target_path, edit_.edit_buffer());
   auto snapshot = state_->snapshot();
   if (state == SaveState::kSucceeded) {
+    if (kind == SaveKind::kSaveAs) {
+      current_path_ = target_path;
+      const auto separator = target_path.find_last_of("\\/");
+      current_doc_dir_ = separator == std::string::npos
+                             ? std::string{}
+                             : target_path.substr(0, separator);
+    }
+    std::uint64_t saved_size = 0;
+    std::uint64_t saved_mtime = 0;
+    if (HookStat(target_path, &saved_size, &saved_mtime) == 0) {
+      save_.RecordLoadedFile(target_path, saved_size, saved_mtime);
+    }
     edit_.NotifySaveSucceeded();
     snapshot.save_ok = true;
     snapshot.error_text = strings_.status_saved;
@@ -513,13 +556,26 @@ class MdvEditController::SaveDialogCallback final
     : public CefRunFileDialogCallback {
  public:
   SaveDialogCallback(std::shared_ptr<MdvEditController> owner,
-                     CefRefPtr<CefBrowser> browser)
-      : owner_(std::move(owner)), browser_(std::move(browser)) {}
+                     CefRefPtr<CefBrowser> browser,
+                     std::string cancelled_feedback,
+                     std::uint64_t document_generation)
+      : owner_(std::move(owner)),
+        browser_(std::move(browser)),
+        cancelled_feedback_(std::move(cancelled_feedback)),
+        document_generation_(document_generation) {}
 
   void OnFileDialogDismissed(
       const std::vector<CefString>& file_paths) override {
     CEF_REQUIRE_UI_THREAD();
-    if (file_paths.empty() || !owner_ || !browser_) {
+    if (!owner_ || !browser_ ||
+        owner_->document_generation_ != document_generation_ ||
+        !owner_->CurrentMarkdown(browser_)) {
+      return;
+    }
+    if (file_paths.empty()) {
+      if (owner_ && browser_ && !cancelled_feedback_.empty()) {
+        owner_->SetTransientStatus(browser_, cancelled_feedback_, false);
+      }
       return;
     }
     std::string path;
@@ -544,20 +600,26 @@ class MdvEditController::SaveDialogCallback final
  private:
   const std::shared_ptr<MdvEditController> owner_;
   CefRefPtr<CefBrowser> browser_;
+  const std::string cancelled_feedback_;
+  const std::uint64_t document_generation_;
 
   IMPLEMENT_REFCOUNTING(SaveDialogCallback);
   DISALLOW_COPY_AND_ASSIGN(SaveDialogCallback);
 };
 
-void MdvEditController::StartSaveAsDialog(CefRefPtr<CefBrowser> browser) {
+void MdvEditController::StartSaveAsDialog(
+    CefRefPtr<CefBrowser> browser, const std::string& suggested_filename,
+    const std::string& cancelled_feedback) {
   CEF_REQUIRE_UI_THREAD();
   if (!browser) {
     return;
   }
   std::vector<CefString> filters{CefString(".md")};
   browser->GetHost()->RunFileDialog(
-      FILE_DIALOG_SAVE, CefString(strings_.document_title), CefString(),
-      filters, new SaveDialogCallback(shared_from_this(), browser));
+      FILE_DIALOG_SAVE, CefString(strings_.document_title),
+      CefString(suggested_filename), filters,
+      new SaveDialogCallback(shared_from_this(), browser, cancelled_feedback,
+                             document_generation_));
 }
 
 }  // namespace crayon::browser::cef_shell::mdv

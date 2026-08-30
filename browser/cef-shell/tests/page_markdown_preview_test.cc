@@ -7,6 +7,8 @@
 namespace {
 
 namespace host = crayon::cef_shell::ipc::content_host;
+using crayon::browser::cef_shell::page_markdown::CopyMarkdownResult;
+using crayon::browser::cef_shell::page_markdown::PageMarkdownExportSession;
 using crayon::browser::cef_shell::page_markdown::PageMarkdownPreviewAssembler;
 using crayon::browser::cef_shell::page_markdown::PreviewAssemblyResult;
 
@@ -64,7 +66,34 @@ bool Run() {
     return false;
   }
   assembler.Cancel();
-  return !assembler.active() && !assembler.TakeCompleted().has_value();
+  if (assembler.active() || assembler.TakeCompleted().has_value()) return false;
+
+  PageMarkdownExportSession exports;
+  std::string copied;
+  const auto clipboard = [&copied](const std::string& markdown) {
+    copied = markdown;
+    return true;
+  };
+  exports.Activate(12);
+  if (!exports.CanExport(12) || exports.CanExport(13) ||
+      exports.Copy(13, "# stale", clipboard) !=
+          CopyMarkdownResult::kInvalidSession ||
+      exports.Copy(12, "", clipboard) != CopyMarkdownResult::kInvalidPayload ||
+      exports.Copy(
+          12,
+          std::string(crayon::browser_page_tools::kMaxExportMarkdownBytes + 1,
+                      'x'),
+          clipboard) != CopyMarkdownResult::kInvalidPayload ||
+      exports.Copy(12, "# current", {}) != CopyMarkdownResult::kWriteFailed ||
+      exports.Copy(12, "# current", [](const std::string&) { return false; }) !=
+          CopyMarkdownResult::kWriteFailed ||
+      exports.Copy(12, "# current", clipboard) != CopyMarkdownResult::kCopied ||
+      copied != "# current") {
+    return false;
+  }
+  exports.Invalidate();
+  return !exports.CanExport(12) && exports.Copy(12, "# old", clipboard) ==
+                                       CopyMarkdownResult::kInvalidSession;
 }
 
 }  // namespace

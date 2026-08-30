@@ -7,6 +7,30 @@
 
 namespace crayon::browser::cef_shell::page_markdown {
 
+void PageMarkdownExportSession::Activate(int browser_id) {
+  browser_id_ = browser_id > 0 ? browser_id : -1;
+}
+
+void PageMarkdownExportSession::Invalidate() { browser_id_ = -1; }
+
+bool PageMarkdownExportSession::CanExport(int browser_id) const noexcept {
+  return browser_id_ > 0 && browser_id == browser_id_;
+}
+
+CopyMarkdownResult PageMarkdownExportSession::Copy(
+    int browser_id, const std::string& markdown,
+    const std::function<bool(const std::string&)>& clipboard_write) const {
+  if (!CanExport(browser_id)) return CopyMarkdownResult::kInvalidSession;
+  if (markdown.empty() ||
+      markdown.size() > browser_page_tools::kMaxExportMarkdownBytes) {
+    return CopyMarkdownResult::kInvalidPayload;
+  }
+  if (!clipboard_write || !clipboard_write(markdown)) {
+    return CopyMarkdownResult::kWriteFailed;
+  }
+  return CopyMarkdownResult::kCopied;
+}
+
 bool PageMarkdownPreviewAssembler::Begin(std::string request_id,
                                          std::string tab_id,
                                          std::uint64_t navigation_id) {

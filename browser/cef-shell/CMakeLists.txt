@@ -214,6 +214,9 @@ if(OS_MAC)
       src/macos/content_host_process_mac.cc
       src/macos/content_host_process_mac.h
       src/macos/main_mac.mm)
+  list(APPEND crayon_macos_sources
+       src/macos/page_markdown_platform_mac.h
+       src/macos/page_markdown_platform_mac.mm)
   set(crayon_macos_helper_sources
       src/browser/new_tab/cef_new_tab_handler.cc
       src/browser/new_tab/cef_new_tab_handler.h
@@ -284,6 +287,7 @@ if(OS_MAC)
                         PROPERTIES OBJCXX_STANDARD 20
                                    OBJCXX_STANDARD_REQUIRED ON)
   set_source_files_properties(src/macos/main_mac.mm
+                              src/macos/page_markdown_platform_mac.mm
                               PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
   target_include_directories(${CRAYON_BROWSER_TARGET}
                              PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")

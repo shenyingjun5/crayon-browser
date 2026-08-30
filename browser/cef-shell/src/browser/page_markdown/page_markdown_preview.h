@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <string>
 
@@ -12,6 +13,30 @@ enum class PreviewAssemblyResult {
   kPending = 0,
   kCompleted,
   kRejected,
+};
+
+enum class CopyMarkdownResult {
+  kCopied = 0,
+  kInvalidSession,
+  kInvalidPayload,
+  kWriteFailed,
+};
+
+// Browser-bound export grant for one generated preview. It deliberately owns
+// no Markdown copy; every operation reads the current MDV edit buffer.
+class PageMarkdownExportSession final {
+ public:
+  void Activate(int browser_id);
+  void Invalidate();
+  bool CanExport(int browser_id) const noexcept;
+  CopyMarkdownResult Copy(
+      int browser_id, const std::string& markdown,
+      const std::function<bool(const std::string&)>& clipboard_write) const;
+
+  int browser_id() const noexcept { return browser_id_; }
+
+ private:
+  int browser_id_ = -1;
 };
 
 // Bounded single-request assembler for Browser-filtered content-host replies.

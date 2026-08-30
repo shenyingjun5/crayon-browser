@@ -45,3 +45,8 @@
 "mdv.mermaid.close" = "Close";
 "mdv.mermaid.error" = "Diagram failed to render; source kept";
 "page_markdown.preview_command" = "Generate Markdown and preview";
+"page_markdown.copy_command" = "Copy all Markdown";
+"page_markdown.save_as_command" = "Save as Markdown…";
+"page_markdown.copied_status" = "Markdown copied";
+"page_markdown.copy_failed_status" = "Could not copy Markdown";
+"page_markdown.save_cancelled_status" = "Save cancelled";

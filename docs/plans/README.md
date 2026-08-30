@@ -48,7 +48,7 @@
 
 | 顺序 | 任务 | 状态 | 说明 |
 |---:|---|---|---|
-| 1 | `CNT-19b` | READY | macOS 预览会话接通显式复制、Save As、覆盖确认、取消和失败反馈 |
+| 1 | `CNT-19c` | READY | 真 CEF UI 验证菜单→预览→复制→保存/覆盖/取消与零残留，完成 CNT-19 macOS Review |
 | 2 | `PLT-M05b1` | READY | 接通真实 CEF 媒体观察；与 CNT-17 均改 CEF 装配，必须串行避免冲突 |
 | 3 | `MDV-25` | READY | 移除 `BuildFixtureSnapshot()` 生产初始化；与前两项同样触及 CEF App/CMake，串行领取 |
 

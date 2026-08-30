@@ -14,6 +14,7 @@
 #include "browser/mdv/cef_mdv_handler.h"
 #include "browser/new_tab/cef_new_tab_handler.h"
 #include "browser/permission/permission_store.h"
+#include "macos/page_markdown_platform_mac.h"
 #include "include/base/cef_callback.h"
 #include "include/cef_app.h"
 #include "include/cef_task.h"
@@ -248,7 +249,13 @@ void BrowserApp::OnContextInitialized() {
       std::make_unique<page_markdown::CefPageMarkdownPreviewController>(
           tab_controller_.get(), mdv_editing_,
           page_markdown::PageMarkdownStrings{
-              Localized("page_markdown.preview_command")});
+              Localized("page_markdown.preview_command"),
+              Localized("page_markdown.copy_command"),
+              Localized("page_markdown.save_as_command"),
+              Localized("page_markdown.copied_status"),
+              Localized("page_markdown.copy_failed_status"),
+              Localized("page_markdown.save_cancelled_status")},
+          macos::CopyMarkdownToPasteboard);
   tab_controller_->SetPageSnapshotAdmission(
       [host = content_host_.get()] { return host->healthy(); });
   tab_controller_->SetPageSnapshotEventsReadyCallback([this] {

@@ -45,3 +45,8 @@
 "mdv.mermaid.close" = "关闭";
 "mdv.mermaid.error" = "图表无法渲染，已保留源码";
 "page_markdown.preview_command" = "生成 Markdown 并预览";
+"page_markdown.copy_command" = "复制全部 Markdown";
+"page_markdown.save_as_command" = "另存为 Markdown…";
+"page_markdown.copied_status" = "Markdown 已复制";
+"page_markdown.copy_failed_status" = "无法复制 Markdown";
+"page_markdown.save_cancelled_status" = "已取消保存";

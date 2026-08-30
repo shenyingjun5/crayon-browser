@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "browser/mdv/cef_mdv_handler.h"
@@ -53,6 +54,17 @@ class MdvEditController
   /// keystroke was consumed (always true while a document is open).
   bool SaveWriteBack(CefRefPtr<CefBrowser> browser);
 
+  /// Page-Markdown export hooks: expose only the current bounded edit buffer
+  /// for the owning built-in viewer and start the existing atomic Save As
+  /// flow. No page-origin caller can reach these methods directly.
+  std::optional<std::string> CurrentMarkdown(
+      CefRefPtr<CefBrowser> browser) const;
+  bool SaveAs(CefRefPtr<CefBrowser> browser,
+              const std::string& suggested_filename,
+              const std::string& cancelled_feedback);
+  void SetTransientStatus(CefRefPtr<CefBrowser> browser,
+                          const std::string& status, bool succeeded);
+
  private:
   class SaveDialogCallback;
   friend class SaveDialogCallback;
@@ -60,7 +72,9 @@ class MdvEditController
   void PerformSave(CefRefPtr<CefBrowser> browser,
                    crayon::browser_mdv_save::SaveKind kind,
                    const std::string& target_path);
-  void StartSaveAsDialog(CefRefPtr<CefBrowser> browser);
+  void StartSaveAsDialog(CefRefPtr<CefBrowser> browser,
+                         const std::string& suggested_filename = {},
+                         const std::string& cancelled_feedback = {});
   void ApplyDecision(CefRefPtr<CefBrowser> browser, const std::string& value);
   void RenderAndStore();
   void PushState(CefRefPtr<CefBrowser> browser);
