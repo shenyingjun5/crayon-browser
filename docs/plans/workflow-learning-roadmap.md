@@ -1,6 +1,6 @@
 # WFL：Workflow Learning、Challenge 与个人 Site Skill Roadmap
 
-- 状态：规划完成，尚未开工
+- 状态：执行中；`WFL-01 VERIFIED`（2026-08-30）；`WFL-02/04/06 READY`
 - 任务数：16
 - 目标：从用户授权且已验证成功的任务生成可预览、可保存、可验证、可回滚的个人 Site Skill，并安全处理验证码/风控的人机接管
 - 非目标：自动解验证码、从失败任务学习、记录密码/正文/secret、技能继承旧授权、静默修改高风险步骤
@@ -16,7 +16,7 @@
 
 | ID | 状态 | 依赖 | 允许修改路径 | 单一交付 | 验收与测试 |
 |---|---|---|---|---|---|
-| WFL-01 | TODO | ACT-12,AGT-03 | `crayon-domain/workflow/**`,`crayon-ipc-schema/**` | Trace/Recipe/SiteSkill/Challenge/Checkpoint schema 与状态机 | `WF-001`; golden/迁移/边界 |
+| WFL-01 | VERIFIED | ACT-12,AGT-03 | `crayon-domain/workflow/**`,`crayon-ipc-schema/**` | Trace/Recipe/SiteSkill/Challenge/Checkpoint schema 与状态机 | `WF-001`; golden/迁移/边界 |
 | WFL-02 | TODO | WFL-01,ACT-06 | `crayon-workflow/challenge/**` | 确定性 Challenge Detector，仅输出检测证据 | `WF-001`,`WF-002`; 禁止解题/绕过 surface |
 | WFL-03 | TODO | WFL-02,AGT-05 | `crayon-workflow/handoff/**`,`apps/desktop-cef/**/handoff/**`,locales | `AwaitingHuman` UI 与继续/取消状态 | `WF-003`; 无障碍/关闭/导航/超时 |
 | WFL-04 | TODO | WFL-01,PRV-07,PRV-08 | `crayon-workflow/checkpoint/**`,`crayon-platform-api/**` | 加密、短期、最小 checkpoint store | `WF-004`; 无 secret/正文；过期/清除/损坏 |
@@ -39,3 +39,21 @@
 - Challenge 状态不保存解题数据，不接第三方打码，不自动点击或改变挑战可见性。
 - self-heal 错配优先于成功率：无法证明唯一低风险等价目标时停止并生成审阅候选。
 - 个人技能失败或本模块 NO-GO 不影响浏览器、投屏、Markdown 和只读 Agent 核心功能。
+
+
+## WFL-01 原子范围（Trace/Recipe/SiteSkill/Challenge/Checkpoint schema 与状态机）
+
+- 状态：`VERIFIED`；依赖 `ACT-12 DONE`、`AGT-03 DONE`。
+- 单一目标：在 `crayon-domain/workflow/**` 冻结 workflow 家族 v1 schema 与核心状态机，并纳入 current/previous IPC golden 兼容窗口。
+- 输入与输出：输入为 ACT-01 词汇（origin/node/action/effect）与 domain ids；输出仅限 `crates/crayon-domain/src/workflow/**`、`tests/workflow.rs`、`lib.rs` re-export、`schemas/{current,previous}/` 5 组 golden、`crates/crayon-ipc-schema/tests/v1_contract.rs` 登记与本 Roadmap。
+- 语义与预算：Trace ≤64 steps（意图+verified outcome，无值/selector/正文）；Recipe ≤64 步、name `[a-z0-9_-]` ≤64B、version ∈ [1, 65535]；SiteSkill 闭合状态 Draft/Candidate/Enabled/Disabled，revision ∈ [1, 65535]，仅 Enabled 可运行且每次运行仍需新授权；Challenge 闭合 kind/phase 状态机 `Detected → AwaitingHuman → {Resumed|Cancelled|Expired}`，无解题 surface（wire 断言零 solution/solver/token 泄漏），evidence note ≤128B；Checkpoint payload ≤4096B、TTL ∈ (0, 300_000ms] 注入时钟、单次消费。
+- 验收：WF-001 契约侧（schema/状态机/golden/边界）；闭合词汇与 golden wire 名锁定；unknown field 拒绝；Secrets never serialize 套件通过。
+- 明确不做：Challenge 检测实现（WFL-02）、checkpoint 加密存储（WFL-04）、trace 记录器（WFL-06）、recipe 生成门（WFL-08）。
+
+### WFL-01 完成记录（2026-08-30）
+
+- 实现：`workflow` 模块 5 个子模块（trace/recipe/skill/challenge/checkpoint），全部 `deny_unknown_fields` wire + 预算命名常量 + 校验构造器；ChallengeSession/Checkpoint 为显式状态机，终态后一切转换拒绝（SessionClosed/NotLive）；`Checkpoint::consume` 先置位再返回保证单次。
+- Golden：`workflow_trace.json`、`recipe.json`、`site_skill.json`、`challenge_session.json`、`checkpoint.json`（current/previous 逐字节镜像），并入 `v1_contract` roundtrip 与 unknown-field 扫描。
+- 验证：`cargo test -p crayon-domain --test workflow` 6/6；`cargo test -p crayon-domain` 全量 67 项通过；`cargo test -p crayon-ipc-schema` 全量通过（v1_contract 含 5 组新 golden）；`cargo clippy --all-targets -- -D warnings` 通过；`cargo fmt --check` 通过；`bash scripts/check.sh security` 全绿；`git diff --check` 通过。
+- Code Review：按 v0.8 复核；修正一处状态机错误分类（终态转换统一 SessionClosed，非终态非法转换 IllegalTransition）。P0/P1/P2 = 0/0/0。
+- 未覆盖与风险：trace 记录器/recipe 生成/store 由 WFL-02..12 续作；checkpoint payload 解释权归 checkpoint 层，本层不读内容。

@@ -2,8 +2,8 @@
 //! compatibility window, unknown field/version rejection, and secret denial.
 
 use crayon_domain::{
-    ChangeSet, CoreError, EffectReport, PageMap, PlatformCapabilities, ReceiverCapabilities,
-    SemanticError,
+    ChallengeSession, ChangeSet, Checkpoint, CoreError, EffectReport, PageMap,
+    PlatformCapabilities, ReceiverCapabilities, Recipe, SemanticError, SiteSkill, WorkflowTrace,
 };
 use crayon_ipc_schema::{
     CastPolicyDecision, CastPolicyInput, ExternalClientHandoff, HandoffConfirmation, HandoffReason,
@@ -74,6 +74,13 @@ const CASES: &[VectorCase] = &[
         roundtrip::<EffectReport>,
     ),
     ("semantic_error.json", roundtrip::<SemanticError>),
+    // WFL-01: frozen workflow family (trace, recipe, skill, challenge,
+    // checkpoint).
+    ("workflow_trace.json", roundtrip::<WorkflowTrace>),
+    ("recipe.json", roundtrip::<Recipe>),
+    ("site_skill.json", roundtrip::<SiteSkill>),
+    ("challenge_session.json", roundtrip::<ChallengeSession>),
+    ("checkpoint.json", roundtrip::<Checkpoint>),
 ];
 
 // 注：`cast_policy_decision_mirror.json` 同时存在于 current/previous，但不进入

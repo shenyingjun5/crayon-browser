@@ -1,0 +1,1 @@
+{"schema_version":1,"origin":"https://example.com","name":"order-flow","version":1,"steps":[{"node":"n-1","action":"click","summary":"提交订单按钮"},{"node":"n-2","action":"set_text","summary":"邮箱输入框"}]}

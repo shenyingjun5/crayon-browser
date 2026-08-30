@@ -9,6 +9,7 @@ mod diagnostics_outbound;
 mod error;
 mod ids;
 mod semantic;
+mod workflow;
 
 pub use agent::{AgentCapability, AgentTarget, CaapError, RiskLevel};
 pub use capabilities::{
@@ -41,6 +42,14 @@ pub use semantic::{
     RiskReason, SemanticError, SemanticNode, SemanticNodeId, SemanticNodeKind, SemanticSchemaError,
     SemanticTruncation, MAX_ACTION_OFFERS, MAX_FIELDS_PER_FORM, MAX_FORMS, MAX_MEDIA_ELEMENTS,
     MAX_RISK_ENTRIES, MAX_SEMANTIC_NODES, SEMANTIC_MAP_SCHEMA_VERSION,
+};
+pub use workflow::{
+    ChallengeEvidence, ChallengeKind, ChallengePhase, ChallengeSession, ChallengeTransitionError,
+    Checkpoint, CheckpointError, CheckpointState, Recipe, RecipeError, RecipeStep, SiteSkill,
+    SkillError, SkillStatus, TraceError, TraceStep, WorkflowTrace, MAX_CHALLENGE_EVIDENCE_BYTES,
+    MAX_CHECKPOINT_PAYLOAD_BYTES, MAX_CHECKPOINT_TTL_MS, MAX_RECIPE_NAME_BYTES, MAX_RECIPE_STEPS,
+    MAX_RECIPE_VERSION, MAX_SKILL_REVISION, MAX_TRACE_ORIGIN_BYTES, MAX_TRACE_STEPS,
+    MAX_TRACE_SUMMARY_BYTES, WORKFLOW_SCHEMA_VERSION,
 };
 
 use serde::{Deserialize, Serialize};
