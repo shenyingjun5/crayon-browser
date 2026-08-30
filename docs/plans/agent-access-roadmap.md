@@ -1,6 +1,6 @@
 # AGT CAAP / CLI / MCP Agent 访问 Roadmap
 
-- 状态：`A0 权限内核完成（AGT-01..05/11）`；`AGT-08/AGT-10 DONE`（2026-08-24）、`AGT-12A VERIFIED`；`AGT-06/07 等 CNT-03`、`AGT-09 等 ACT-07/11`、`AGT-12 整体待 OS 端点切片`
+- 状态：`A0 权限内核完成（AGT-01..05/11）`；`AGT-08/AGT-10 DONE`（2026-08-24）、`AGT-12A VERIFIED`；`AGT-06 VERIFIED`（2026-08-30）；`AGT-07 等 CNT-08`、`AGT-09/12 待领取`
 - 任务数：16
 - 目标：用自有 CAAP、入站 tool registry 和 capability guard，为 AI Agent 提供高性能读页，并把受控操作接到 `ACT` 的可验证语义动作运行时
 - 非目标：远程控制、原始 CDP/WebDriver、任意 JavaScript、Cookie/凭证、密码/支付、文件上传、任意文件/网络工具
@@ -24,7 +24,7 @@
 | AGT-03 | DONE | AGT-01,FND-09 | `crayon-agent-gateway/session/**` | client/task/session/target/generation、取消、超时、幂等和有界队列状态机 | `AG-002`; unit/property | A0 |
 | AGT-04 | VERIFIED | AGT-02,AGT-03,PRV-08 | `crayon-agent-gateway/grant/**` | 单次/任务/App 会话 grant、Profile 隔离、撤销和目标变化失效 | `AG-003`,`AG-005`; default deny | A0 |
 | AGT-05 | VERIFIED | AGT-04,CEF-08 | `apps/desktop-cef/**/agent-confirm/**`,locales | 确认 UI：client、工具、route、目标、参数摘要、数据披露、到期和无障碍 | `AG-004`; UI integration | A0 |
-| AGT-06 | TODO | CNT-03,AGT-03 | `crayon-page-data/**`,`crayon-agent-gateway/page_stream/**` | generation-scoped 快照缓存、分页/流式/增量、索引、背压和性能 instrumentation | `AG-006`,`AG-015`; benchmark/soak | A1 |
+| AGT-06 | VERIFIED | CNT-03,AGT-03 | `crayon-page-data/**`,`crayon-agent-gateway/page_stream/**` | generation-scoped 快照缓存、分页/流式/增量、索引、背压和性能 instrumentation | `AG-006`,`AG-015`; benchmark/soak | A1 |
 | AGT-07 | TODO | AGT-04,AGT-06,CNT-08 | `crayon-agent-gateway/tools/content/**`,`crayon-app-runtime/**` | R1 target/标题/选区/结构化页面/Markdown 读取工具 | `AG-006`; 跨 Profile/后台/过期/超量拒绝 | A1 |
 | AGT-08 | DONE | AGT-04,SDK-08 | `crayon-agent-gateway/tools/cast_read/**` | R0/R1 接收端能力和投屏状态读取，不返回 IP/URL/token | `AG-007`; adapter tests | A1 |
 | AGT-09 | TODO | AGT-05,CEF-07,ACT-07,ACT-11 | `crayon-agent-gateway/tools/navigation/**`,`crayon-app-runtime/**` | R2 打开/切换/关闭标签、导航、后退、刷新、滚动及人工接管结果 | `AG-008`; scheme/redirect/download/popup/cancel | A2 |
@@ -259,3 +259,20 @@
 - 验证：`cmake -S . -B .cache/build/agt05` 零告警；`agent_confirm` 1/1（7 组：Present 校验矩阵、Confirm/Deny/边界过期、上下文变化强制重确认含 confirmed 失效、敏感遮蔽与指纹无原始值、token 矩阵、locale parity、5000 步风暴）；共享层回归 39/39；`git diff --check` 通过。
 - Code Review：P0 0、P1 0、P2 1——Fingerprint 为确定性拼接字符串（仅元数据无值），碰撞理论上可由超长 key 构造；确认判定还依赖 expires/token 校验兜底，若后续需要密码学强度指纹归 gateway 层（AGT-12 transport 已有 secret 通道）。
 - 未覆盖与风险：真实 grant 签发接线（app-runtime 用例）、CEF 呈现与键盘/读屏实机验证（QAR/BUX）、R2～R4 与 AGT-04 grant 的端到端串联（后续装配）。`AGT-05` 转为 `VERIFIED`。**A0 波次（AGT-01..05/11）全部完成。**
+
+
+## AGT-06 原子范围（generation-scoped 页面流 fan-out 与背压）
+
+- 状态：`VERIFIED`；依赖 `CNT-03 DONE`、`AGT-03 DONE`。
+- 单一目标：在 `crayon-agent-gateway/page_stream/**` 冻结 snapshot 的授权 fan-out 流层：profile-scoped 订阅、generation fence、有界队列与 drop-oldest 背压、有界 instrumentation。
+- 输入与输出：输入为 CNT-03 verified `PageSnapshot` 与 grant 层 `ProfileScope`；输出仅限 `crates/crayon-agent-gateway/src/page_stream/**`、`lib.rs` 模块登记、Cargo 依赖登记与本 Roadmap。pull 分页/缓存/取消由 `SnapshotOwner`（CNT-03）继续拥有，本层不复制。
+- 边界与预算：≤8 并发 client、每 client 队列 ≤16 chunks（溢出 drop-oldest 并计数 gap，seq 单调可检测）、client id ≤64B 闭合字符集；纯状态，无锁/IO/系统时钟；计数器为有界诊断，不参与正确性。
+- 验收：AG-006/AG-015 契约侧：fan-out 只达匹配 tab/generation 订阅者且按序、跨 client 隔离、慢 consumer 溢出丢弃可检测、generation 推进只取消旧订阅、profile 关闭零内容泄漏、cancel 幂等、容量/重复/shutdown 稳定拒绝。
+- 明确不做：grant 校验（AGT-04 所有权，订阅由授权层调用）、CAAP chunk 编码（AGT-01 schema 已冻结）、transport（AGT-12）、R1 工具（AGT-07）。
+
+### AGT-06 完成记录（2026-08-30）
+
+- 实现：`page_stream/mod.rs`：`StreamClientId`（闭合校验）、`PageStreamHub`（subscribe/publish/next_chunk/cancel/advance_generation/close_profile/shut_down/stats），`StreamChunk{seq,snapshot}` 与 `StreamStats` 有界计数。
+- 验证：`cargo test -p crayon-agent-gateway` 82/82（新增 stream 7 场景）；`cargo clippy -p crayon-agent-gateway -p crayon-page-data --all-targets -- -D warnings` 通过；`cargo fmt --check` 通过；`bash scripts/check.sh security` 全绿。
+- Code Review：按 v0.8 复核。P0/P1/P2 = 0/0/0。
+- 未覆盖与风险：真实 CAAP 传输与 grant 接线归 AGT-12/07；soak/benchmark（AG-015 的长稳）归 QAR harness。`AGT-07 等 CNT-08`、`AGT-09 READY`。

@@ -6,6 +6,7 @@
 //! registry (AGT-02).
 
 pub mod grant;
+pub mod page_stream;
 pub mod receipt;
 pub mod registry;
 pub mod session;
