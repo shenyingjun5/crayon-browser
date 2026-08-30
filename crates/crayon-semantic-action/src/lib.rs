@@ -11,6 +11,7 @@
 
 mod detail;
 mod effect;
+mod form;
 mod handle;
 mod precondition;
 mod risk;
@@ -25,6 +26,7 @@ pub use effect::{
     CheckOutcome, EffectLedger, EffectWaitSpec, IdempotencyKey, IdempotencyKeyError,
     MAX_EFFECT_LEDGER, MAX_EFFECT_WAIT_MS,
 };
+pub use form::{project_form, project_forms, FieldExclusion, FormFieldView, FormView};
 pub use handle::{
     ActionHandle, ActionHandleDescriptor, ActionHandleId, ConsumeOutcome, HandleIdError,
     HandleIssueError, HandleNonce, HandleRegistry, IssueOutcome, ProfileScope, ProfileScopeError,

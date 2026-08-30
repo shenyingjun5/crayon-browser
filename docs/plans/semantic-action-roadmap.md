@@ -1,6 +1,6 @@
 # ACT：页面语义地图与可验证动作 Roadmap
 
-- 状态：执行中；`ACT-01 DONE`、`ACT-02..08 VERIFIED`（均 2026-08-30）
+- 状态：执行中；`ACT-01 DONE`、`ACT-02..09 VERIFIED`（均 2026-08-30）
 - 任务数：12
 - 目标：把已验证页面事实转换为 Agent 可高效读取的语义地图，并通过短期 `action_id`、前置条件和效果验证执行受控操作
 - 非目标：原始 DOM/HTML/CDP 输出、长期 CSS/XPath、任意 JavaScript、截图/OCR 常规控制、密码/支付/通用文件上传
@@ -24,7 +24,7 @@
 | ACT-06 | VERIFIED | ACT-01,PRV-10 | `crayon-semantic-action/risk/**` | 确定性、单调 risk policy 与敏感元素排除 | `AC-006`; password/payment/file 不可执行 |
 | ACT-07 | VERIFIED | ACT-05,ACT-06,AGT-05,CEF-07 | `crayon-semantic-action/runtime/**`,`crayon-app-runtime/**` | action_id 到正常浏览器用例的受控执行 | `AC-007`; cancel/deadline/generation/确认绑定 |
 | ACT-08 | VERIFIED | ACT-07 | `crayon-semantic-action/effect/**` | 有界效果等待、verified/failed/indeterminate 和幂等语义 | `AC-008`; 不确定副作用不重放 |
-| ACT-09 | TODO | ACT-04,ACT-06 | `crayon-semantic-action/form/**` | FormMap 字段/约束/错误/filled 状态 | `AC-009`; 不包含字段值；敏感/file 排除 |
+| ACT-09 | VERIFIED | ACT-04,ACT-06 | `crayon-semantic-action/form/**` | FormMap 字段/约束/错误/filled 状态 | `AC-009`; 不包含字段值；敏感/file 排除 |
 | ACT-10 | TODO | ACT-01,CNT-04 | `crayon-semantic-action/change/**`,`crayon-page-data/**` | revision/ChangeSet 生成、分页、截断和旧增量丢弃 | `AC-010`; 动态页/高频变化/背压 |
 | ACT-11 | TODO | ACT-07,ACT-08 | `crayon-semantic-action/handoff/**`,`crayon-app-runtime/**` | 动作级人工接管结果、可恢复/不可恢复原因 | `AC-011`; 无隐式重试或权限继承 |
 | ACT-12 | TODO | ACT-02..ACT-11 | `tests/security/semantic/**`,`tests/perf/semantic/**`,`docs/current/**` | 语义动作性能/安全/生命周期总 Review 与 GO/NO-GO | `AC-001..012`; P0/P1=0；Release surface 零命中 |
@@ -183,3 +183,20 @@
 - 验证：`cargo test -p crayon-semantic-action` 40/40（detail 8 + handle 9 + precondition 10 + risk 6 + effect 7）；`cargo clippy --all-targets -- -D warnings` 通过；`cargo fmt --check` 通过。
 - Code Review：按 v0.8 复核。P0/P1/P2 = 0/0/0。
 - 未覆盖与风险：真实 effect 观测（DOM/导航事实）由 CEF 侧接线归后续切片；ledger 满载拒绝策略要求调用方按 tab 生命周期清理（ACT-10/11 接线时处置）。`ACT-09 READY`。
+
+
+## ACT-09 原子范围（FormMap 字段/约束/错误/filled 投影与敏感排除）
+
+- 状态：`VERIFIED`；依赖 `ACT-04 VERIFIED`、`ACT-06 VERIFIED`。
+- 单一目标：在 `crayon-semantic-action/form/**` 把冻结 FormMap 投影为 Agent 可读的表单视图：字段结构/约束/filled/error，敏感与 file 恒排除，无任何值表面。
+- 输入与输出：输入为 ACT-01 `FormMap`/`FormField` 与 verified `ElementState`；输出仅限 `crates/crayon-semantic-action/src/form/**`、`tests/form.rs`、`lib.rs` re-export 与本 Roadmap。
+- 排除语义：Password→`SensitiveCredential`、File→`FileUpload`（恒排除，状态无法翻案）；read_only→`ReadOnly`；无 verified state 或不可见→`Hidden`（fail closed）；disabled→`Disabled`；`actionable_fields()` 只放行未排除行。
+- 验收：AC-009 契约侧：wire 无 value/pattern/placeholder/DOM/selector 表面；排除分类闭合且优先于状态；hidden 缺 state fail closed；filled/error 有界透传；wire `deny_unknown_fields`。
+- 明确不做：字段值/自动填充（产品红线）、执行（ACT-07）、CEF 收集（后续接线）。
+
+### ACT-09 完成记录（2026-08-30）
+
+- 实现：`form/mod.rs`：`FieldExclusion` 闭合五类、`FormFieldView`/`FormView`（deny_unknown_fields wire，无值字段）、`project_form`（状态查找闭包注入，缺 state→Hidden）与 `project_forms`（PageMap 全量投影）。
+- 验证：`cargo test -p crayon-semantic-action` 45/45（新增 form 5）；`cargo clippy --all-targets -- -D warnings` 通过；`cargo fmt --check` 通过。
+- Code Review：按 v0.8 复核。P0/P1/P2 = 0/0/0。
+- 未覆盖与风险：真实表单收集归 CEF 侧；错误文本为页面提供内容，长度已在 domain 层有界。`ACT-10 READY`（CNT-04 已 DONE）。
