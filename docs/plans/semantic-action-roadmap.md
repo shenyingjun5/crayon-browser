@@ -1,6 +1,6 @@
 # ACT：页面语义地图与可验证动作 Roadmap
 
-- 状态：执行中；`ACT-01 DONE`、`ACT-02..09 VERIFIED`（均 2026-08-30）
+- 状态：执行中；`ACT-01 DONE`、`ACT-02..10 VERIFIED`（均 2026-08-30）
 - 任务数：12
 - 目标：把已验证页面事实转换为 Agent 可高效读取的语义地图，并通过短期 `action_id`、前置条件和效果验证执行受控操作
 - 非目标：原始 DOM/HTML/CDP 输出、长期 CSS/XPath、任意 JavaScript、截图/OCR 常规控制、密码/支付/通用文件上传
@@ -25,7 +25,7 @@
 | ACT-07 | VERIFIED | ACT-05,ACT-06,AGT-05,CEF-07 | `crayon-semantic-action/runtime/**`,`crayon-app-runtime/**` | action_id 到正常浏览器用例的受控执行 | `AC-007`; cancel/deadline/generation/确认绑定 |
 | ACT-08 | VERIFIED | ACT-07 | `crayon-semantic-action/effect/**` | 有界效果等待、verified/failed/indeterminate 和幂等语义 | `AC-008`; 不确定副作用不重放 |
 | ACT-09 | VERIFIED | ACT-04,ACT-06 | `crayon-semantic-action/form/**` | FormMap 字段/约束/错误/filled 状态 | `AC-009`; 不包含字段值；敏感/file 排除 |
-| ACT-10 | TODO | ACT-01,CNT-04 | `crayon-semantic-action/change/**`,`crayon-page-data/**` | revision/ChangeSet 生成、分页、截断和旧增量丢弃 | `AC-010`; 动态页/高频变化/背压 |
+| ACT-10 | VERIFIED | ACT-01,CNT-04 | `crayon-semantic-action/change/**`,`crayon-page-data/**` | revision/ChangeSet 生成、分页、截断和旧增量丢弃 | `AC-010`; 动态页/高频变化/背压 |
 | ACT-11 | TODO | ACT-07,ACT-08 | `crayon-semantic-action/handoff/**`,`crayon-app-runtime/**` | 动作级人工接管结果、可恢复/不可恢复原因 | `AC-011`; 无隐式重试或权限继承 |
 | ACT-12 | TODO | ACT-02..ACT-11 | `tests/security/semantic/**`,`tests/perf/semantic/**`,`docs/current/**` | 语义动作性能/安全/生命周期总 Review 与 GO/NO-GO | `AC-001..012`; P0/P1=0；Release surface 零命中 |
 
@@ -200,3 +200,20 @@
 - 验证：`cargo test -p crayon-semantic-action` 45/45（新增 form 5）；`cargo clippy --all-targets -- -D warnings` 通过；`cargo fmt --check` 通过。
 - Code Review：按 v0.8 复核。P0/P1/P2 = 0/0/0。
 - 未覆盖与风险：真实表单收集归 CEF 侧；错误文本为页面提供内容，长度已在 domain 层有界。`ACT-10 READY`（CNT-04 已 DONE）。
+
+
+## ACT-10 原子范围（revision/ChangeSet 生成、分页、截断和旧增量丢弃）
+
+- 状态：`VERIFIED`；依赖 `ACT-01 DONE`、`CNT-04 DONE`。
+- 单一目标：在 `crayon-semantic-action/change/**` 冻结 ChangeSet 生产（确定性 diff）、有界分页与消费端旧增量丢弃状态机。
+- 输入与输出：输入为同 tab/generation 的两张 verified `PageMap`；输出仅限 `crates/crayon-semantic-action/src/change/**`、`tests/change.rs`、`lib.rs` re-export 与本 Roadmap（`crayon-page-data` 未改动：CNT-03 delta 通道已覆盖其职责，本层不改其文件）。
+- 语义：diff 按 node id 比较 kind/name/state，产出 added/updated/removed；tab/generation 不匹配与 revision 不前进稳定拒绝；分页每批 ≤ `MAX_SEMANTIC_NODES` 条目、`more_available` 精确、分页不是截断（truncation 恒零）；空 diff 仍发一版空批让消费端推进 revision；消费端 `ChangeConsumer` 单一持有 last_applied_revision：replay/更旧 → `StaleDropped`，旧 generation → `Unfenced`，新 generation 重建基线。
+- 验收：AC-010 契约侧：高频变化（800 项 diff 跨批）有界且按序、分页无损、旧增量丢弃、重放丢弃、fencing 拒绝、确定性输出。
+- 明确不做：真实 collector 接线（CEF 侧）、page-data delta 通道改造、背压队列（归传输层 AGT-06/12）。
+
+### ACT-10 完成记录（2026-08-30）
+
+- 实现：`change/mod.rs`：`diff_maps`（BTreeMap 有序 diff）、`paginate`/`emit_batches`（有界分批 + revision fencing）、`ChangeConsumer`（stale/unfenced 丢弃与 generation 重建基线）。
+- 验证：`cargo test -p crayon-semantic-action` 52/52（新增 change 6：diff 三类检测、fencing 拒绝、800 项跨批无损分页、stale/replay/unfenced 丢弃、generation 重建、空 diff 推进 revision）；`cargo clippy --all-targets -- -D warnings` 通过；`cargo fmt --check` 通过。
+- Code Review：按 v0.8 复核；删除未使用的 wire 镜像类型（YAGNI）。P0/P1/P2 = 0/0/0。
+- 未覆盖与风险：高频真实页面背压/阻塞归传输层；`crayon-page-data` 文件未改动，属允许路径内的有意不动。`ACT-11 READY`。

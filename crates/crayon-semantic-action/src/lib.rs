@@ -9,6 +9,7 @@
 //! HTML, no CDP, no field values, no credentials — and every collection is
 //! fenced by named budgets that report truncation instead of failing open.
 
+mod change;
 mod detail;
 mod effect;
 mod form;
@@ -17,6 +18,10 @@ mod precondition;
 mod risk;
 mod runtime;
 
+pub use change::{
+    diff_maps, emit_batches, paginate, ApplyOutcome, ChangeConsumer, ChangeDiff, ChangeError,
+    UnfencedBatch,
+};
 pub use detail::{
     render_compact, render_internal_full, render_standard, CompactAction, CompactMap, CompactNode,
     DetailBudget, DetailProfile, InternalFullMap, SemanticNodeAnnotation, MAX_COMPACT_ACTIONS,
