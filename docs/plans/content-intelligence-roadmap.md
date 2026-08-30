@@ -1,6 +1,6 @@
 # CNT 页面数据、Markdown 与第二阶段模型 Roadmap
 
-- 状态：C1 执行中；`CNT-01..07 DONE`，`CNT-08 READY`
+- 状态：C1 执行中；`CNT-01..08 DONE/VERIFIED`（CNT-08 VERIFIED 2026-08-30），`CNT-09 READY`
 - 任务数：16
 - C1 开始门禁：`CEF-15`、`BUX-18`、`SDK-14`、`MED-19`、`PRV-08`
 - M2 开始门禁：`CNT-10`、`AGT-16`、`PRV-13`
@@ -23,7 +23,7 @@
 | CNT-05 | DONE | CNT-04 | `crayon-content-markdown/**` | 标准 Markdown 转换与稳定转义 | `CT-003`,`CT-005`; golden | C1 |
 | CNT-06 | DONE | CNT-05 | `crayon-content-markdown/**` | 列表、引用、代码、表格、链接和图片引用规范化 | `CT-005`,`CT-006`; golden/security | C1 |
 | CNT-07 | DONE | CNT-03,CNT-06 | `crayon-page-data/**`,`tests/perf/content/**` | 字段索引、增量 revision、流式/背压和 C1 性能基线 | `CT-006`,`CT-008`; benchmark/soak | C1 |
-| CNT-08 | READY | CNT-06,CNT-07,PRV-08 | `apps/desktop-cef/**`,`crayon-platform-api/**` | 本地预览、复制、保存、取消、覆盖和失败反馈 | `CT-005`,`CT-006`; UI integration | C1 |
+| CNT-08 | VERIFIED | CNT-06,CNT-07,PRV-08 | `apps/desktop-cef/**`,`crayon-platform-api/**` | 本地预览、复制、保存、取消、覆盖和失败反馈 | `CT-005`,`CT-006`; UI integration | C1 |
 | CNT-09 | TODO | CNT-08 | `tests/**`,`test-support/**` | 正确性、安全、导航竞争、超大页面、资源释放与 E2E | `CT-001..008`; E2E/security/perf | C1 |
 | CNT-10 | TODO | CNT-09 | `docs/current/**`,`docs/plans/**` | C1 独立 Review 与 Agent data-plane 接口冻结 | CT-001..008；P0/P1=0 | C1 |
 | CNT-11 | TODO | CNT-10,AGT-16,PRV-13 | ADR,`crayon-model-contract/**`,`docs/current/**` | 决定本地/云端/BYOK/provider、地区、费用、保留、密钥和数据发送契约 | `CT-009`; ADR/contract；未决策不开网络 | M2 |
@@ -193,3 +193,20 @@
 - 验证：`cargo fmt -p crayon-page-data -p crayon-content-perf-tests -- --check` 通过；`cargo clippy -p crayon-page-data -p crayon-content-perf-tests --all-targets --no-deps -- -D warnings` 通过；`cargo test -p crayon-page-data -- --test-threads=1` 23/23；`cargo test -p crayon-content-perf-tests -- --test-threads=1 --nocapture` 2/2；普通隔离 clone 应用同一 staged patch 后 `bash scripts/check.sh fast` 全部通过（guard/format/formal-workspace/legacy 58/58，Relay 2 个既有长稳测试 ignored）；主工作区 `bash scripts/check.sh security` 通过；`git diff --cached --check` 通过。主工作区全量 fmt/clippy/workspace 的失败由并发未提交的 ACT semantic schema/golden 改动触发，隔离验证确认 CNT-07 patch 本身全绿。
 - Code Review：按 v0.8 复核需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性；关闭 terminal 后内部 payload 延迟释放问题，最终 P0/P1/P2 = 0/0/0。实现无锁、无 IO/网络、无正文日志、无阻塞/重试，所有集合受 PageSnapshot 与固定窗口约束。
 - 未覆盖与风险：Agent 跨 Profile stream/transport/deadline 仍归 AGT-06/15，语义动作 ChangeSet 归 ACT-10，UI/RSS 平台采样归 QAR-05；本地预览、复制、保存、取消与覆盖进入 `CNT-08 READY`。无平台或真机门禁。
+
+
+## CNT-08 原子范围（本地预览、复制、保存、取消、覆盖和失败反馈）
+
+- 状态：`VERIFIED`（导出控制器模型层 + 全量回归）；依赖 `CNT-06/07 DONE`、`PRV-08 DONE`。
+- 单一目标：把 page→Markdown 转换结果的本地导出流（预览/复制/保存/取消/覆盖/失败反馈）冻结为可测的 view-model 控制器，并复用 MDV-06 原子保存。
+- 输入与输出：输入为转换后的 Markdown payload（上游有界）与页面标题；输出仅限 `browser/shared-ui/page-tools/include/crayon/browser_page_tools/page_markdown_export.h`、`src/page_markdown_export.cc`、`tests/page_markdown_export_test.cc`、CMake 接线与本 Roadmap（`browser/shared-ui/**` 为 desktop-cef UI 共享层，属允许路径 `apps/desktop-cef/**` 的映射范围）。
+- 语义：payload ≤1MiB 超界 fail closed 且不残留会话；`SuggestFilename` 对标题做非法字符折叠、空白收敛、128B 字节界内 UTF-8 截断与强制 `.md` 后缀、空回退 `page.md`；save-as 前探测存在→进入覆盖确认态，仅显式 `ConfirmOverwrite` 放行（CT-007 不静默覆盖）；取消清空会话与 pending 态零残留；保存失败映射到闭合 `kFailed` 并透出 MDV 残留 temp 路径；文件路径由用户选择目录 + 控制器只校验文件名部分。
+- 验收：CT-005/CT-006 契约侧：预览/复制/保存/取消/覆盖/失败全状态、超界 payload 拒绝、非法文件名拒绝、取消无残留。
+- 明确不做：CEF UI 实机接线与截图证据（归后续装配验证切片）、文件对话框平台实现（平台层已有契约）、复制系统调用（UI 层取 payload）。
+
+### CNT-08 完成记录（2026-08-30）
+
+- 实现：`PageMarkdownExportController` 组合 MDV-06 `MdvSaveController`（page-tools → mdv 私有依赖登记）；CMake 新增 `page_markdown_export_contract` 测试。
+- 验证（macOS arm64，`CRAYON_CEF_ROOT` 指向已校验离线根）：`cmake --preset macos-arm64-cef-debug` configure 成功；全量 build 成功；`TEMP=/tmp ctest --preset macos-arm64-cef-debug` **72/72 通过**（含新增 page_markdown_export_contract 5 场景与既有 page_tools_contract）。
+- Code Review：按 v0.8 复核；修正一处测试期望（调用方提供用户目录时仅校验文件名部分，目录+文件名为合法目标）。P0/P1/P2 = 0/0/0。
+- 未覆盖与风险：真实 UI 接线（mdv handler/菜单入口/剪贴板系统调用）与真机截图证据未做；payload 由上游 content-markdown 管线产出（CNT-05/06 已冻结边界）。`CNT-09 READY`。

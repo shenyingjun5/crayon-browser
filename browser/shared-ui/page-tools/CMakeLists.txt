@@ -1,11 +1,15 @@
 add_library(crayon-browser-page-tools STATIC
   src/page_tools.cc
+  src/page_markdown_export.cc
 )
 add_library(crayon::browser-page-tools ALIAS crayon-browser-page-tools)
 
 target_include_directories(crayon-browser-page-tools
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+)
+target_link_libraries(crayon-browser-page-tools
+  PRIVATE crayon::browser-mdv
 )
 target_compile_features(crayon-browser-page-tools PUBLIC cxx_std_17)
 set_target_properties(crayon-browser-page-tools PROPERTIES
@@ -31,6 +35,14 @@ if(CRAYON_BUILD_TESTS)
   target_link_libraries(crayon_browser_page_tools_test
     PRIVATE crayon::browser-page-tools
   )
+  add_executable(crayon_browser_page_markdown_export_test
+    tests/page_markdown_export_test.cc
+  )
+  target_compile_features(crayon_browser_page_markdown_export_test
+    PRIVATE cxx_std_17)
+  target_link_libraries(crayon_browser_page_markdown_export_test
+    PRIVATE crayon::browser-page-tools crayon::browser-mdv
+  )
   if(MSVC)
     target_compile_options(crayon_browser_page_tools_test
       PRIVATE /W4 /WX /permissive-
@@ -41,4 +53,5 @@ if(CRAYON_BUILD_TESTS)
     )
   endif()
   add_test(NAME page_tools_contract COMMAND crayon_browser_page_tools_test)
+  add_test(NAME page_markdown_export_contract COMMAND crayon_browser_page_markdown_export_test)
 endif()
