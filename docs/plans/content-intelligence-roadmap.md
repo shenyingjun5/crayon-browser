@@ -1,6 +1,6 @@
 # CNT 页面数据、Markdown 与第二阶段模型 Roadmap
 
-- 状态：C1 数据面已收口；一期产品闭环 `CNT-17 DONE`、`CNT-18 IN_PROGRESS（18a..18c DONE，18d READY）`、`CNT-19..21 TODO`；M2 统一进入第二期并等待 `AGT-16/PRV-13B` 与 provider ADR
+- 状态：C1 数据面已收口；一期产品闭环 `CNT-17..18 DONE`、`CNT-19 READY`、`CNT-20..21 TODO`；M2 统一进入第二期并等待 `AGT-16/PRV-13B` 与 provider ADR
 - 任务数：21
 - C1 开始门禁：`CEF-15`、`BUX-18`、`SDK-14`、`MED-19`、`PRV-08`
 - 一期产品门禁：`REL-01`、`CNT-10`、`CEF-15`、`PRV-12`
@@ -28,8 +28,8 @@
 | CNT-09 | DONE | CNT-08 | `tests/**`,`test-support/**` | 正确性、安全、导航竞争、超大页面、资源释放与 E2E | `CT-001..008`; E2E/security/perf | C1 |
 | CNT-10 | DONE | CNT-09 | `docs/current/**`,`docs/plans/**` | C1 独立 Review 与 Agent data-plane 接口冻结 | CT-001..008；P0/P1=0 | C1 |
 | CNT-17 | DONE | REL-01,CNT-10,CEF-15 | `browser/cef-shell/src/renderer/page_snapshot_collector/**`,`browser/cef-shell/src/browser/page_snapshot_gateway/**`,`browser/engine-api/**` | 将现有有界 collector/gateway 接入真实 CEF 主 frame、导航与 IPC 生命周期 | `CT-001`,`CT-002`,`CT-007`; macOS CEF fixture/integration | R1 |
-| CNT-18 | IN_PROGRESS | CNT-17 | `crates/crayon-app-runtime/**`,`crates/crayon-page-data/**`,`crates/crayon-content-extract/**`,`crates/crayon-content-markdown/**`,`browser/cef-shell/**` | 接通 Browser 验证 facts → owner → 正文提取 → Markdown 的生产调用链 | CT-001..008；导航/取消/关闭/背压 E2E | R1 |
-| CNT-19 | TODO | CNT-18,CNT-08 | `browser/shared-ui/page-tools/**`,`browser/cef-shell/src/browser/**`,locales | 增加用户入口并接通预览、复制、保存、取消、覆盖与失败反馈 | CT-005/006；真实菜单、剪贴板、文件对话框 | R1 |
+| CNT-18 | DONE | CNT-17 | `crates/crayon-app-runtime/**`,`crates/crayon-page-data/**`,`crates/crayon-content-extract/**`,`crates/crayon-content-markdown/**`,`browser/cef-shell/**` | 接通 Browser 验证 facts → owner → 正文提取 → Markdown 的生产调用链 | CT-001..008；导航/取消/关闭/背压 E2E | R1 |
+| CNT-19 | READY | CNT-18,CNT-08 | `browser/shared-ui/page-tools/**`,`browser/cef-shell/src/browser/**`,locales | 增加用户入口并接通预览、复制、保存、取消、覆盖与失败反馈 | CT-005/006；真实菜单、剪贴板、文件对话框 | R1 |
 | CNT-20 | TODO | CNT-19 | `tests/e2e/desktop/**`,`tests/security/content/**`,`tests/perf/content/**`,`test-support/**` | 用真实 CEF 本地站点 fixture 完成网页→Markdown 产品 E2E、安全和 UI delay/RSS 回归 | CT-001..008；macOS/Windows Debug/Release | R1 |
 | CNT-21 | TODO | CNT-20,PRV-13A | `docs/current/**`,`docs/plans/**`,`tests/**` | 一期网页 Markdown 产品层总 Review，关闭 CNT-08 真实 UI 缺口 | P0/P1=0；两平台证据；无页面触发写入 | R1 |
 | CNT-11 | TODO | CNT-21,AGT-16,PRV-13B | ADR,`crayon-model-contract/**`,`docs/current/**` | 决定本地/云端/BYOK/provider、地区、费用、保留、密钥和数据发送契约 | `CT-009`; ADR/contract；未决策不开网络 | M2 |
@@ -289,7 +289,7 @@ CNT-18 涉及新的 C++/Rust 进程边界、持久 Core 生命周期和生产 CE
 | CNT-18a | DONE | CNT-17 | 冻结 Browser verified snapshot stream ↔ Rust content host 的版本化有界逻辑 DTO、二进制 codec 与双语言 golden；不做进程/IO |
 | CNT-18b | DONE | CNT-18a | Rust content host 消费完整 verified stream，唯一调用既有 extract → `PageSnapshotRuntime` owner → Markdown，并实现 navigation/cancel/close/shutdown 状态 |
 | CNT-18c | DONE | CNT-18b,CEF-07 | macOS CEF Browser 真实 spawn/pipe/health/kill/reap 与 snapshot drain 接线；Core 不健康时 fail closed，App 退出无 orphan |
-| CNT-18d | READY | CNT-18c | 本地真 CEF fixture 验证 request → Renderer → gateway → Core owner/extract/Markdown，并覆盖导航、取消、关闭、背压和 Core crash |
+| CNT-18d | DONE | CNT-18c | 本地真 CEF fixture 验证 request → Renderer → gateway → Core owner/extract/Markdown，并覆盖导航、取消、关闭、背压和 Core crash |
 
 ### CNT-18a 原子范围（跨语言 content host codec）
 
@@ -342,6 +342,26 @@ CNT-18 涉及新的 C++/Rust 进程边界、持久 Core 生命周期和生产 CE
 - 验证：Rust 真实进程覆盖 health、空页、stalled health client、EOF、oversize、malformed 与 shutdown 2/2；`crayon-app-runtime` 56/56、严格 Clippy/fmt 通过。macOS process/adapter 2/2 覆盖大 frame partial IO、EAGAIN、child exit/restart、stop/reap、chunk 重排、导航/取消/关闭、旧回复和发送失败；arm64 CEF Debug build 成功，完整 CTest 76/76，最终 scoped CTest 4/4，package/source contract 与 repo-guard 通过。真实 `CrayonBrowser.app` smoke 为 7 进程（主 + 5 CEF Helper + Core）、0 非 loopback socket、退出 0 residue；增量二次构建为 `ninja: no work to do`。
 - Code Review：按 v0.8 复核进程唯一所有权、锁/IO、SIGPIPE、partial IO、重启代际、bounded queue、慢 health client、临时路径、旧回复、安全日志、增量打包和退出逆序；修复 Enqueue/worker 竞态会把旧 frame 带入重启后 Core、慢 health client 阻塞 join、Rust host 更新未触发 bundle 重签三项问题，P0/P1/P2=`0/0/0`。
 - 未覆盖与风险：本切片不提供用户导出入口，也不做真网页 Markdown 内容断言；前者归 `CNT-19`，完整 request→Renderer→gateway→Core owner/extract/Markdown 的真 CEF fixture 与 crash/backpressure 场景归下一原子任务 `CNT-18d`。全部启动、构建和测试固定 `use-mock-keychain`，未访问真实 Keychain。
+
+### CNT-18d 原子范围（真 CEF → Core → Markdown E2E）
+
+- 状态：`DONE`；依赖 `CNT-18c DONE`。
+- 单一目标：以 macOS arm64 本地 loopback fixture 和真实 CEF Renderer/Browser、真实打包 `crayon-content-host` 闭合 request → collector → gateway → content-host owner/extract → Markdown，并用同一产品 transport 验证导航、取消、关闭、gateway 背压和 Core crash 后的 fail-closed/有界恢复；不增加用户 UI。
+- 输入/输出：输入只允许测试进程创建的 loopback HTML 与 Browser-issued snapshot request；输出只从 `ContentHostAdapter::Drain()` 读取 CNT-18a Markdown/error reply，并断言 request/tab/navigation/generation fence、chunk sequence、终止标志和确定性 Markdown 内容。测试不得从 DOM、CEF message 或 Rust 内部状态旁路构造成功结果。
+- 允许修改：`browser/cef-shell/tests/**`、`tests/e2e/desktop/browser/**`、macOS 测试 target 的 `browser/cef-shell/CMakeLists.txt`；仅当 E2E 暴露真实产品缺陷时，允许对 `browser/cef-shell/src/macos/content_host_*`、snapshot gateway/observer 做最小修复并补独立回归。禁止修改 extract/Markdown/page-data 算法、CNT-18a wire、用户 UI、文件/剪贴板、Windows、Cast/Agent/MDV。
+- 生命周期与错误：正常与空页必须恰有一个完成回复；导航/取消/关闭必须撤销旧 request 且晚到事实/回复不可复活；gateway 队列满载必须生成 `CapacityExceeded` 并清除 partial；真实 Core 进程退出后当前流失败关闭，supervisor 只按既有预算恢复，恢复后的新 generation 可完成且旧回复不得混入。测试退出必须关闭 browser、停止 Core、清理 cache/socket 并证明无 orphan。
+- 边界与性能：fixture 只绑定 `127.0.0.1`，禁止公网和第三方页面；沿用 64 facts/64KiB、64 chunks、16 gateway events、64 Browser replies 上限；UI tick 只做有界 drain，不增加正文日志、固定长 sleep、同步网络/文件 IO 或测试专用生产 API。
+- 验收：新增/扩展 macOS 真 CEF integration 覆盖正常 Markdown、空页、导航、取消、关闭、背压、Core crash/restart 和 teardown；专项 CTest、完整 arm64 CEF Debug build/CTest、零 orphan 检查、repo-guard、Google clang-format、`git diff --check`；按 v0.8 Review，P0/P1=0，记录实际命令与未覆盖项。
+- Keychain 门禁：所有 test Browser process 显式 `use-mock-keychain`；本任务禁止访问真实 SecureStore/Keychain、不得弹出密码框。真实 Keychain 仅保留为发布末尾可选专项，不作为 CNT-18d 或一期 macOS 闭环门禁。
+- 明确不做：CNT-19 导出菜单/预览/复制/保存、Windows 对称实现、真实网站/公网、模型/provider、Agent/CLI/MCP、投屏或本地 Markdown 编辑。
+
+### CNT-18d 完成记录（2026-08-31）
+
+- 实现：macOS 真 CEF integration target 直接装配产品 `ContentHostAdapter`/`ContentHostProcess` 和实际构建的 `crayon-content-host`，由 loopback fixture 分别运行正常、空页、导航、取消、关闭、gateway 背压、Core 退出/有界重启七个隔离场景；成功结果只从 Browser response queue 聚合并断言 request/tab/navigation/generation、sequence、terminal、确定性 Markdown、隐藏正文排除和旧 request fence。测试壳移除重复初始导航，所有 Browser process 显式 `use-mock-keychain`。
+- 故障与生命周期：背压在 16-event 冻结上限生成 `CapacityExceeded` 且不泄漏 partial Markdown；导航后与 Core 重启后的新 generation 均完成 62-byte recovery Markdown；取消、关闭、背压均无晚到 UI Markdown。Core 退出在不同负载下允许“直接退出”或“旧 request 先返回稳定 error 再退出”两种 fail-closed 时序，但旧 Markdown、乱序回复和恢复 request error 仍严格失败。测试结束后只读进程/目录检查为 0 个残留 Core、0 个 `/tmp/crayon-content-*` owner 目录。
+- 验证：`cmake --build .cache/build/macos-arm64-cef-debug -j4` 通过，最终增量复跑为 `ninja: no work to do`；`ctest --test-dir .cache/build/macos-arm64-cef-debug -R '^page_snapshot_cef_integration$' -V` 七场景 1/1；`--repeat until-fail:3` 连续 3/3；完整 `ctest --test-dir .cache/build/macos-arm64-cef-debug --output-on-failure` 76/76、63.44s。repo-guard 通过（仅既有 RG-003/RG-004 warning），Google clang-format dry-run、Python compile、`git diff --check` 通过。
+- Code Review：按 v0.8 复核真实产品路径、request/generation fence、导航/取消/关闭、背压、Core restart 时序、bounded drain、teardown、loopback-only fixture、日志与 Keychain 边界；修正测试额外持有 browser 导致 CEF teardown 断言、背压通知计数包含 request 前导航、重复初始 `LoadURL`、Core 退出双时序误判，最终 P0/P1/P2=`0/0/0`。
+- 未覆盖与风险：本切片仍无用户导出入口、预览、剪贴板和保存对话框，归 `CNT-19 READY`；Windows named-pipe 与 x64 对称回归归 `CNT-20`。真实 SecureStore/Keychain 未运行且不属于本任务或一期日常启动门禁。
 
 ## CNT-18..21 一期产品闭环边界
 

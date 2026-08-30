@@ -456,7 +456,9 @@ if(CRAYON_BUILD_TESTS)
       src/browser/permission/site_origin.cc
       src/browser/window/tab_controller.cc
       src/browser/window/tab_model.cc
-      src/ipc/page_snapshot_cef_message.cc)
+      src/ipc/page_snapshot_cef_message.cc
+      src/macos/content_host_adapter_mac.cc
+      src/macos/content_host_process_mac.cc)
     SET_EXECUTABLE_TARGET_PROPERTIES(crayon_page_snapshot_cef_integration_test)
     target_compile_features(crayon_page_snapshot_cef_integration_test
                             PRIVATE cxx_std_17)
@@ -476,13 +478,15 @@ if(CRAYON_BUILD_TESTS)
     target_compile_definitions(
       crayon_page_snapshot_cef_integration_test
       PRIVATE
-        CRAYON_SNAPSHOT_TEST_HELPER_PATH="${CRAYON_MACOS_APP}/Contents/Frameworks/CrayonBrowser Helper.app/Contents/MacOS/CrayonBrowser Helper")
+        CRAYON_SNAPSHOT_TEST_HELPER_PATH="${CRAYON_MACOS_APP}/Contents/Frameworks/CrayonBrowser Helper.app/Contents/MacOS/CrayonBrowser Helper"
+        CRAYON_CONTENT_HOST_TEST_PATH="${crayon_content_host_binary}")
     target_link_libraries(
       crayon_page_snapshot_cef_integration_test
       PRIVATE libcef_dll_wrapper ${CEF_STANDARD_LIBS}
-              crayon::browser-page-snapshot-gateway)
+              crayon::browser-page-snapshot-gateway
+              crayon::cef-shell-core-client crayon::cef-shell-ipc)
     add_dependencies(crayon_page_snapshot_cef_integration_test
-                     ${CRAYON_BROWSER_TARGET})
+                     ${CRAYON_BROWSER_TARGET} crayon_content_host)
     COPY_MAC_FRAMEWORK(
       "crayon_page_snapshot_cef_integration_test" "${CEF_BINARY_DIR}"
       "${CEF_TARGET_OUT_DIR}/crayon_page_snapshot_cef_integration_test.app")
@@ -511,7 +515,7 @@ if(CRAYON_BUILD_TESTS)
               "$<TARGET_FILE:crayon_page_snapshot_cef_integration_test>")
     set_tests_properties(page_snapshot_cef_integration
                          PROPERTIES LABELS "cef;shell;content;integration"
-                                    TIMEOUT 45)
+                                    TIMEOUT 240)
   endif()
 
   add_executable(crayon_window_state_model_test

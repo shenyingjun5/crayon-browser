@@ -1,28 +1,65 @@
 #import <Cocoa/Cocoa.h>
 
 #include <unistd.h>
+
+#include <cstdint>
 #include <filesystem>
 #include <iostream>
+#include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <variant>
+#include <vector>
 
 #include "browser/window/tab_controller.h"
+#include "include/base/cef_callback.h"
 #include "include/cef_app.h"
 #include "include/cef_application_mac.h"
+#include "include/cef_task.h"
+#include "include/wrapper/cef_closure_task.h"
 #include "include/wrapper/cef_helpers.h"
 #include "include/wrapper/cef_library_loader.h"
+#include "macos/content_host_adapter_mac.h"
 
 #ifndef CRAYON_SNAPSHOT_TEST_HELPER_PATH
 #error "CRAYON_SNAPSHOT_TEST_HELPER_PATH must be defined"
 #endif
 
+#ifndef CRAYON_CONTENT_HOST_TEST_PATH
+#error "CRAYON_CONTENT_HOST_TEST_PATH must be defined"
+#endif
+
 namespace {
 
-// Test-only Browser process; Renderer execution uses the product Helper bundle.
+namespace host = crayon::browser::cef_shell::macos::content_host_ipc;
+using crayon::browser::cef_shell::macos::ContentHostAdapter;
+using crayon::browser::cef_shell::macos::ContentHostProcess;
+using crayon::browser::cef_shell::macos::ContentHostTransport;
+using crayon::browser::cef_shell::window::TabController;
+using crayon::browser_engine::EngineErrorCode;
+using crayon::browser_engine::SnapshotRequestId;
+using crayon::browser_engine::SnapshotTerminal;
+using crayon::browser_engine::SnapshotTerminalStatus;
+using crayon::cef_shell::gateway::SnapshotGatewayEvent;
+
+constexpr std::int64_t kTickMilliseconds = 20;
+constexpr std::size_t kStartupChecks = 500;
+constexpr std::size_t kNoReplyChecks = 25;
+
+std::string SiblingUrl(const std::string& url, const char* filename) {
+  const std::size_t slash = url.rfind('/');
+  return slash == std::string::npos ? std::string{} : url.substr(0, slash + 1) + filename;
+}
+
+// Test-only Browser process; Renderer execution uses the product Helper bundle
+// and Markdown execution uses the product Rust content-host binary.
 class SnapshotFixtureApp final : public CefApp, public CefBrowserProcessHandler {
  public:
-  explicit SnapshotFixtureApp(std::string fixture_url) : fixture_url_(std::move(fixture_url)) {}
+  SnapshotFixtureApp(std::string fixture_url, std::string scenario)
+      : fixture_url_(std::move(fixture_url)),
+        recovery_url_(SiblingUrl(fixture_url_, "recovery.html")),
+        scenario_(std::move(scenario)) {}
 
   CefRefPtr<CefBrowserProcessHandler> GetBrowserProcessHandler() override { return this; }
 
@@ -30,7 +67,7 @@ class SnapshotFixtureApp final : public CefApp, public CefBrowserProcessHandler 
     return controller_ ? controller_->client() : nullptr;
   }
 
-  void OnBeforeCommandLineProcessing(const CefString &process_type,
+  void OnBeforeCommandLineProcessing(const CefString& process_type,
                                      CefRefPtr<CefCommandLine> command_line) override {
     static_cast<void>(process_type);
     command_line->AppendSwitch("use-mock-keychain");
@@ -39,77 +76,272 @@ class SnapshotFixtureApp final : public CefApp, public CefBrowserProcessHandler 
 
   void OnContextInitialized() override {
     CEF_REQUIRE_UI_THREAD();
-    std::cerr << "snapshot_fixture context_initialized\n";
-    controller_ = new crayon::browser::cef_shell::window::TabController(
-        fixture_url_, [this](CefRefPtr<CefBrowser> browser) {
-          std::cerr << "snapshot_fixture browser_created\n";
-          if (browser && browser->GetMainFrame()) {
-            browser->GetMainFrame()->LoadURL(fixture_url_);
-          }
-        });
-    controller_->SetPageLoadCompletedCallback([this](CefRefPtr<CefBrowser> browser) {
-      std::cerr << "snapshot_fixture load_completed\n";
-      if (request_started_) return;
-      request_started_ = true;
-      request_id_ = controller_->StartPageSnapshot(browser);
-      std::cerr << "snapshot_fixture request_started=" << request_id_.has_value() << '\n';
-      if (!request_id_) Finish(false);
-    });
-    controller_->SetPageSnapshotEventsReadyCallback([this]() {
-      const auto events = controller_->DrainPageSnapshots(16);
-      std::cerr << "snapshot_fixture events=" << events.size() << '\n';
-      for (const auto &event : events) {
-        if (const auto *chunk = std::get_if<crayon::browser_engine::SnapshotChunk>(&event)) {
-          ++chunk_count_;
-          for (const auto &fact : chunk->facts) {
-            if (fact.text == "Visible fixture heading") saw_heading_ = true;
-            if (fact.text.find("hidden fixture secret") != std::string::npos) {
-              saw_hidden_ = true;
-            }
-            if (fact.kind == crayon::browser_engine::SnapshotFactKind::kTable &&
-                fact.table_columns == 2 && fact.table_cells.size() == 4) {
-              saw_table_ = true;
-            }
-            if (fact.kind == crayon::browser_engine::SnapshotFactKind::kListItem &&
-                fact.text == "ordered fixture item" && fact.ordered && fact.depth == 1 &&
-                fact.ordinal == 3) {
-              saw_ordered_list_ = true;
-            }
-          }
-        } else if (const auto *terminal =
-                       std::get_if<crayon::browser_engine::SnapshotTerminal>(&event)) {
-          Finish(terminal->status == crayon::browser_engine::SnapshotTerminalStatus::kCompleted &&
-                 chunk_count_ >= 2 && saw_heading_ && saw_table_ && saw_ordered_list_ &&
-                 !saw_hidden_);
-        }
+    auto process = std::make_unique<ContentHostProcess>();
+    process_ = process.get();
+    content_host_ = std::make_unique<ContentHostAdapter>(std::move(process));
+    controller_ = new TabController(fixture_url_,
+                                    [this](CefRefPtr<CefBrowser> browser) { browser_ = browser; });
+    controller_->SetPageSnapshotObserver(content_host_.get());
+    controller_->SetPageSnapshotAdmission([this] { return content_host_->healthy(); });
+    controller_->SetPageSnapshotEventsReadyCallback([this] { OnSnapshotEventsReady(); });
+    controller_->SetPageLoadCompletedCallback(
+        [this](CefRefPtr<CefBrowser> browser) { OnPageLoaded(browser); });
+    controller_->SetBrowsersClosedCallback([this] {
+      tick_active_ = false;
+      browser_ = nullptr;
+      content_host_->Stop();
+      if (scenario_ == "close" && close_requested_) {
+        passed_ = true;
+        std::cout << "snapshot_fixture scenario=close terminal=completed"
+                     " detail=closed without late Markdown markdown_bytes=0"
+                     " mock_keychain=1"
+                  << std::endl;
       }
     });
-    if (!controller_->CreateMainWindow()) Finish(false);
+    if (!content_host_->Start(CRAYON_CONTENT_HOST_TEST_PATH)) {
+      Finish(false, "content-host start rejected");
+      return;
+    }
+    ScheduleStartupCheck();
   }
 
   bool passed() const { return passed_; }
 
  private:
-  void Finish(bool passed) {
+  void ScheduleStartupCheck() {
+    CefPostDelayedTask(TID_UI,
+                       CefCreateClosureTask(base::BindOnce(&SnapshotFixtureApp::ContinueStartup,
+                                                           CefRefPtr<SnapshotFixtureApp>(this))),
+                       kTickMilliseconds);
+  }
+
+  void ContinueStartup() {
+    CEF_REQUIRE_UI_THREAD();
+    if (content_host_->healthy()) {
+      if (!controller_->CreateMainWindow()) {
+        Finish(false, "browser creation rejected");
+        return;
+      }
+      tick_active_ = true;
+      ScheduleTick();
+      return;
+    }
+    if (++startup_checks_ >= kStartupChecks) {
+      Finish(false, "content-host health timeout");
+      return;
+    }
+    ScheduleStartupCheck();
+  }
+
+  void ScheduleTick() {
+    CefPostDelayedTask(TID_UI,
+                       CefCreateClosureTask(base::BindOnce(&SnapshotFixtureApp::Tick,
+                                                           CefRefPtr<SnapshotFixtureApp>(this))),
+                       kTickMilliseconds);
+  }
+
+  void Tick() {
+    CEF_REQUIRE_UI_THREAD();
+    if (!tick_active_) return;
+    if (scenario_ != "backpressure" || backpressure_released_) {
+      ConsumeGatewayEvents();
+    }
+    content_host_->Tick();
+    ConsumeReplies();
+    AdvanceCrashRecovery();
+    if (no_reply_checks_ > 0 && --no_reply_checks_ == 0) {
+      Finish(!unexpected_reply_, "no late Markdown reply");
+      return;
+    }
+    ScheduleTick();
+  }
+
+  void OnPageLoaded(CefRefPtr<CefBrowser> browser) {
+    CEF_REQUIRE_UI_THREAD();
+    if (finished_ || !browser || !browser->GetMainFrame()) return;
+    const std::string loaded_url = browser->GetMainFrame()->GetURL();
+    if (loaded_url == recovery_url_) {
+      if ((scenario_ == "navigation" || scenario_ == "crash") && recovery_requested_ &&
+          !recovery_started_) {
+        recovery_started_ = true;
+        StartSnapshot(browser);
+      }
+      return;
+    }
+    if (loaded_url != fixture_url_ || initial_started_) return;
+    initial_started_ = true;
+    StartSnapshot(browser);
+    if (!active_request_) return;
+
+    if (scenario_ == "cancel") {
+      const auto result = controller_->CancelPageSnapshot(*active_request_);
+      if (result != crayon::cef_shell::gateway::SnapshotGatewayResult::kAccepted) {
+        Finish(false, "cancel rejected");
+        return;
+      }
+      abandoned_request_ = active_request_->value();
+      active_request_.reset();
+      no_reply_checks_ = kNoReplyChecks;
+    } else if (scenario_ == "navigation") {
+      abandoned_request_ = active_request_->value();
+      active_request_.reset();
+      recovery_requested_ = true;
+      browser->GetMainFrame()->LoadURL(recovery_url_);
+    } else if (scenario_ == "close") {
+      abandoned_request_ = active_request_->value();
+      active_request_.reset();
+      close_requested_ = true;
+      controller_->CloseAllBrowsers(true);
+    }
+  }
+
+  void StartSnapshot(CefRefPtr<CefBrowser> browser) {
+    active_request_ = controller_->StartPageSnapshot(browser);
+    expected_sequence_ = 0;
+    events_ready_count_ = 0;
+    markdown_.clear();
+    if (!active_request_) Finish(false, "snapshot request rejected");
+  }
+
+  void OnSnapshotEventsReady() {
+    CEF_REQUIRE_UI_THREAD();
+    if (finished_) return;
+    ++events_ready_count_;
+    if (scenario_ == "backpressure" && !backpressure_released_) {
+      if (events_ready_count_ >= crayon::cef_shell::gateway::kMaxQueuedSnapshotEvents) {
+        backpressure_released_ = true;
+        ConsumeGatewayEvents();
+        if (!saw_capacity_terminal_) {
+          Finish(false, "backpressure terminal missing");
+          return;
+        }
+        abandoned_request_ = active_request_ ? active_request_->value() : "";
+        active_request_.reset();
+        no_reply_checks_ = kNoReplyChecks;
+      }
+      return;
+    }
+    ConsumeGatewayEvents();
+    if (scenario_ == "crash" && !crash_triggered_ && active_request_) {
+      crash_triggered_ = process_->Enqueue(host::Shutdown{});
+      if (!crash_triggered_) {
+        Finish(false, "Core crash trigger rejected");
+      } else {
+        abandoned_request_ = active_request_->value();
+        active_request_.reset();
+      }
+    }
+  }
+
+  void ConsumeGatewayEvents() {
+    std::vector<SnapshotGatewayEvent> events = controller_->DrainPageSnapshots(16);
+    for (const auto& event : events) {
+      const auto* terminal = std::get_if<SnapshotTerminal>(&event);
+      if (terminal && terminal->status == SnapshotTerminalStatus::kRejected &&
+          terminal->error == EngineErrorCode::kCapacityExceeded) {
+        saw_capacity_terminal_ = true;
+      }
+    }
+    content_host_->Consume(std::move(events));
+  }
+
+  void ConsumeReplies() {
+    for (host::Message& message : content_host_->Drain(64)) {
+      const auto* chunk = std::get_if<host::MarkdownChunk>(&message);
+      if (!chunk) {
+        const auto* error = std::get_if<host::ErrorReply>(&message);
+        if (scenario_ == "crash" && error && error->request_id == abandoned_request_) {
+          continue;
+        }
+        Finish(false, "content-host returned error");
+        return;
+      }
+      if (!active_request_ || chunk->request_id != active_request_->value() ||
+          chunk->sequence != expected_sequence_++) {
+        unexpected_reply_ = true;
+        Finish(false, "stale or out-of-order reply");
+        return;
+      }
+      markdown_ += chunk->markdown;
+      if (chunk->completed) {
+        ValidateCompletedMarkdown();
+        return;
+      }
+    }
+  }
+
+  void ValidateCompletedMarkdown() {
+    if (scenario_ == "empty") {
+      Finish(markdown_.empty(), "empty Markdown");
+      return;
+    }
+    const bool recovery = scenario_ == "navigation" || scenario_ == "crash";
+    const bool has_expected_heading =
+        recovery ? markdown_.find("# Recovery fixture heading") != std::string::npos
+                 : markdown_.find("# Visible fixture heading") != std::string::npos;
+    const bool has_table = recovery || markdown_.find("| Name | Value |") != std::string::npos;
+    const bool hides_secret = markdown_.find("hidden fixture secret") == std::string::npos;
+    const bool no_abandoned = abandoned_request_.empty() ||
+                              (active_request_ && active_request_->value() != abandoned_request_);
+    Finish(has_expected_heading && has_table && hides_secret && no_abandoned,
+           "deterministic Markdown");
+  }
+
+  void AdvanceCrashRecovery() {
+    if (scenario_ != "crash" || !crash_triggered_ || recovery_requested_) {
+      return;
+    }
+    if (!process_->healthy()) {
+      saw_core_unhealthy_ = true;
+      active_request_.reset();
+      return;
+    }
+    if (saw_core_unhealthy_) {
+      recovery_requested_ = true;
+      browser_->GetMainFrame()->LoadURL(recovery_url_);
+    }
+  }
+
+  void Finish(bool passed, const char* detail) {
     if (finished_) return;
     finished_ = true;
     passed_ = passed;
-    std::cout << "snapshot_fixture terminal=" << (passed ? "completed" : "failed")
-              << " chunks=" << chunk_count_ << " heading=" << saw_heading_
-              << " table=" << saw_table_ << " ordered_list=" << saw_ordered_list_
-              << " hidden=" << saw_hidden_ << '\n';
-    if (controller_) controller_->CloseAllBrowsers(true);
+    tick_active_ = false;
+    std::cout << "snapshot_fixture scenario=" << scenario_
+              << " terminal=" << (passed ? "completed" : "failed") << " detail=" << detail
+              << " markdown_bytes=" << markdown_.size() << " mock_keychain=1" << std::endl;
+    if (controller_) {
+      controller_->CloseAllBrowsers(true);
+    } else {
+      if (content_host_) content_host_->Stop();
+      CefQuitMessageLoop();
+    }
   }
 
   const std::string fixture_url_;
-  CefRefPtr<crayon::browser::cef_shell::window::TabController> controller_;
-  std::optional<crayon::browser_engine::SnapshotRequestId> request_id_;
-  std::size_t chunk_count_ = 0;
-  bool request_started_ = false;
-  bool saw_heading_ = false;
-  bool saw_table_ = false;
-  bool saw_ordered_list_ = false;
-  bool saw_hidden_ = false;
+  const std::string recovery_url_;
+  const std::string scenario_;
+  CefRefPtr<TabController> controller_;
+  CefRefPtr<CefBrowser> browser_;
+  std::unique_ptr<ContentHostAdapter> content_host_;
+  ContentHostTransport* process_ = nullptr;
+  std::optional<SnapshotRequestId> active_request_;
+  std::string abandoned_request_;
+  std::string markdown_;
+  std::uint32_t expected_sequence_ = 0;
+  std::size_t startup_checks_ = 0;
+  std::size_t events_ready_count_ = 0;
+  std::size_t no_reply_checks_ = 0;
+  bool tick_active_ = false;
+  bool initial_started_ = false;
+  bool recovery_requested_ = false;
+  bool recovery_started_ = false;
+  bool crash_triggered_ = false;
+  bool saw_core_unhealthy_ = false;
+  bool backpressure_released_ = false;
+  bool saw_capacity_terminal_ = false;
+  bool unexpected_reply_ = false;
+  bool close_requested_ = false;
   bool finished_ = false;
   bool passed_ = false;
 
@@ -132,14 +364,14 @@ class SnapshotFixtureApp final : public CefApp, public CefBrowserProcessHandler 
 - (void)setHandlingSendEvent:(BOOL)value {
   handling_send_event_ = value;
 }
-- (void)sendEvent:(NSEvent *)event {
+- (void)sendEvent:(NSEvent*)event {
   CefScopedSendingEvent sending_event_scope;
   [super sendEvent:event];
 }
 @end
 
-int main(int argc, char *argv[]) {
-  if (argc != 2) return 2;
+int main(int argc, char* argv[]) {
+  if (argc != 3) return 2;
   CefScopedLibraryLoader library_loader;
   if (!library_loader.LoadInMain()) return 3;
   @autoreleasepool {
@@ -153,7 +385,7 @@ int main(int argc, char *argv[]) {
         ("crayon-page-snapshot-integration-" + std::to_string(getpid()));
     CefString(&settings.root_cache_path).FromString(cache_path.string());
     CefString(&settings.browser_subprocess_path).FromString(CRAYON_SNAPSHOT_TEST_HELPER_PATH);
-    CefRefPtr<SnapshotFixtureApp> app(new SnapshotFixtureApp(argv[1]));
+    CefRefPtr<SnapshotFixtureApp> app(new SnapshotFixtureApp(argv[1], argv[2]));
     if (!CefInitialize(main_args, settings, app, nullptr)) return 4;
     [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
     [NSApp finishLaunching];
