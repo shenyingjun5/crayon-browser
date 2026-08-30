@@ -1,6 +1,6 @@
 # CNT 页面数据、Markdown 与第二阶段模型 Roadmap
 
-- 状态：C1 数据面已收口；一期产品闭环 `CNT-17 DONE`、`CNT-18 IN_PROGRESS（18a DONE，18b READY）`、`CNT-19..21 TODO`；M2 统一进入第二期并等待 `AGT-16/PRV-13B` 与 provider ADR
+- 状态：C1 数据面已收口；一期产品闭环 `CNT-17 DONE`、`CNT-18 IN_PROGRESS（18a DONE，18b IN_PROGRESS）`、`CNT-19..21 TODO`；M2 统一进入第二期并等待 `AGT-16/PRV-13B` 与 provider ADR
 - 任务数：21
 - C1 开始门禁：`CEF-15`、`BUX-18`、`SDK-14`、`MED-19`、`PRV-08`
 - 一期产品门禁：`REL-01`、`CNT-10`、`CEF-15`、`PRV-12`
@@ -287,7 +287,7 @@ CNT-18 涉及新的 C++/Rust 进程边界、持久 Core 生命周期和生产 CE
 | 切片 | 状态 | 依赖 | 单一交付 |
 |---|---|---|---|
 | CNT-18a | DONE | CNT-17 | 冻结 Browser verified snapshot stream ↔ Rust content host 的版本化有界逻辑 DTO、二进制 codec 与双语言 golden；不做进程/IO |
-| CNT-18b | READY | CNT-18a | Rust content host 消费完整 verified stream，唯一调用既有 extract → `PageSnapshotRuntime` owner → Markdown，并实现 navigation/cancel/close/shutdown 状态 |
+| CNT-18b | IN_PROGRESS | CNT-18a | Rust content host 消费完整 verified stream，唯一调用既有 extract → `PageSnapshotRuntime` owner → Markdown，并实现 navigation/cancel/close/shutdown 状态 |
 | CNT-18c | TODO | CNT-18b,CEF-07 | macOS CEF Browser 真实 spawn/pipe/health/kill/reap 与 snapshot drain 接线；Core 不健康时 fail closed，App 退出无 orphan |
 | CNT-18d | TODO | CNT-18c | 本地真 CEF fixture 验证 request → Renderer → gateway → Core owner/extract/Markdown，并覆盖导航、取消、关闭、背压和 Core crash |
 
@@ -308,6 +308,16 @@ CNT-18 涉及新的 C++/Rust 进程边界、持久 Core 生命周期和生产 CE
 - 验证：`cmake --build .cache/build/macos-arm64-cef-debug -j4` 通过（`-Werror`）；`ctest --test-dir .cache/build/macos-arm64-cef-debug -R '^ipc_channel_contract$' --output-on-failure` 1/1；`cargo test -p crayon-ipc-schema --lib --tests` 19/19；严格 Clippy、Rust fmt、Google clang-format dry-run、repo-guard 与 `git diff --check` 全通过。
 - Code Review：按 v0.8 复核协议边界、长度先验、UTF-8、枚举、跨语言一致性、日志/secret、热路径分配和 hostile mutation；修正 ID 字符集、标题单行约束与 C++ 非法枚举错误分类，P0/P1/P2=`0/0/0`。
 - 未覆盖与风险：本切片按范围没有 OS transport、子进程或 owner/extract/Markdown 调用；这些严格由 `CNT-18b..18d` 承接。测试未访问 Keychain。
+
+### CNT-18b 原子范围（Rust content host 与唯一 snapshot owner）
+
+- 状态：`IN_PROGRESS`；依赖 `CNT-18a DONE`。
+- 单一目标：在 `crayon-app-runtime` 内实现纯 Rust `ContentHostRuntime`，顺序消费已解码的 `content-host-v1` begin/fact batch/terminal/lifecycle 消息，将完成流确定性映射为既有 `SourceFact`，唯一调用 `extract_main_content` → `PageSnapshotRuntime::publish` → `render_snapshot`，并输出有界 Markdown chunks；不得复制 extract/Markdown 算法或建立第二个 snapshot owner。
+- 输入/输出：输入仅 CNT-18a DTO；输出仅 CNT-18a Markdown/error DTO。CEF fact 被 Browser 验证后统一映射为 visible/same-origin/Public、单一 Unknown region，并按流内 source order 生成 node/reading key；table 只按已验证列数重建矩形 rows。该映射是装配语义，不新增 page-data wire 字段。
+- 允许修改：`crates/crayon-app-runtime/**`、对应 Cargo 依赖、独立 Rust 测试与本 Roadmap。禁止修改 `crayon-content-extract`/`crayon-content-markdown` 算法、`crayon-page-data` schema/owner、CNT-18a wire、CEF、OS transport/process、UI、Cast/Agent/MDV。
+- 状态与边界：最多 8 个 active stream、64 chunks/stream，request 与 tab active 唯一，sequence 必须从 0 严格递增，总 fact/byte 服从 mode 预算；Begin 对齐 owner navigation，成功 publish 后 revision 才单调提交。错误 terminal/取消/导航/关闭清除 partial facts；旧 generation、重复/乱序/final 后消息、capacity、owner/extract/Markdown 失败均稳定 fail closed；shutdown 幂等且之后拒绝新工作。
+- 验收：正常/空页/所有 fact/多 chunk/多 Markdown chunk；重复 begin、错 tab/navigation/generation/sequence、超量、错误 terminal、取消、导航、关闭、shutdown、revision 替换与资源释放；严格 fmt/clippy、`cargo test -p crayon-app-runtime` 及依赖回归、repo-guard、`git diff --check`，按 v0.8 Review P0/P1=0。
+- 明确不做：codec 变更、pipe/socket、Core executable、CEF spawn/health/kill/reap、用户 UI/文件/剪贴板、平台 API或 Keychain。
 
 ## CNT-18..21 一期产品闭环边界
 
