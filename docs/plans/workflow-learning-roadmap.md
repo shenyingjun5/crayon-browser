@@ -17,7 +17,7 @@
 | ID | 状态 | 依赖 | 允许修改路径 | 单一交付 | 验收与测试 |
 |---|---|---|---|---|---|
 | WFL-01 | VERIFIED | ACT-12,AGT-03 | `crayon-domain/workflow/**`,`crayon-ipc-schema/**` | Trace/Recipe/SiteSkill/Challenge/Checkpoint schema 与状态机 | `WF-001`; golden/迁移/边界 |
-| WFL-02 | TODO | WFL-01,ACT-06 | `crayon-workflow/challenge/**` | 确定性 Challenge Detector，仅输出检测证据 | `WF-001`,`WF-002`; 禁止解题/绕过 surface |
+| WFL-02 | VERIFIED | WFL-01,ACT-06 | `crayon-workflow/challenge/**` | 确定性 Challenge Detector，仅输出检测证据 | `WF-001`,`WF-002`; 禁止解题/绕过 surface |
 | WFL-03 | TODO | WFL-02,AGT-05 | `crayon-workflow/handoff/**`,`apps/desktop-cef/**/handoff/**`,locales | `AwaitingHuman` UI 与继续/取消状态 | `WF-003`; 无障碍/关闭/导航/超时 |
 | WFL-04 | TODO | WFL-01,PRV-07,PRV-08 | `crayon-workflow/checkpoint/**`,`crayon-platform-api/**` | 加密、短期、最小 checkpoint store | `WF-004`; 无 secret/正文；过期/清除/损坏 |
 | WFL-05 | TODO | WFL-03,WFL-04,ACT-08 | `crayon-workflow/resume/**` | 用户完成后的重新 snapshot/risk/grant/precondition 与幂等恢复 | `WF-005`; challenge 仍在/漂移/未知副作用终止 |
@@ -57,3 +57,19 @@
 - 验证：`cargo test -p crayon-domain --test workflow` 6/6；`cargo test -p crayon-domain` 全量 67 项通过；`cargo test -p crayon-ipc-schema` 全量通过（v1_contract 含 5 组新 golden）；`cargo clippy --all-targets -- -D warnings` 通过；`cargo fmt --check` 通过；`bash scripts/check.sh security` 全绿；`git diff --check` 通过。
 - Code Review：按 v0.8 复核；修正一处状态机错误分类（终态转换统一 SessionClosed，非终态非法转换 IllegalTransition）。P0/P1/P2 = 0/0/0。
 - 未覆盖与风险：trace 记录器/recipe 生成/store 由 WFL-02..12 续作；checkpoint payload 解释权归 checkpoint 层，本层不读内容。
+
+## WFL-02 原子范围（确定性 Challenge Detector）
+
+- 状态：`VERIFIED`；依赖 `WFL-01 VERIFIED`、`ACT-06 DONE`。
+- 单一目标：消费 Browser 侧归一化的闭合挑战信号，确定性地产出 WFL-01 `ChallengeEvidence` 或“未检测到”；证据只含 kind、origin 和静态分类 token。
+- 输入与输出：输入为可信 Browser adapter 汇总的布尔信号与经验证的当前 origin；输出限 `crates/crayon-workflow/src/challenge/**`、crate 装配、测试和本 Roadmap。
+- 边界：信号数量闭合且无 DOM/正文/selector/验证码值；多信号按 captcha → risk check → login required 的保守优先级收敛；无信号不暂停；非法 origin fail closed。
+- 验收：`WF-001` 的 captcha/滑块/登录确认/风控与相似非挑战 fixture；`WF-002` 静态/序列化面零 solution/solver/token/bypass、零网络与零自动操作接口；Format、Clippy、workspace/security 回归。
+- 明确不做：验证码求解、自动点击、挑战隐藏、第三方打码、短信/邮箱验证码读取、人机接管 UI 与恢复（WFL-03/05）。
+
+### WFL-02 完成记录（2026-08-30）
+
+- 实现：新增 `crayon-workflow::challenge`；`ChallengeSignals` 只接受四个 Browser 归一化布尔事实，`ChallengeDetector` 为纯函数式分类器，按 captcha/slider → risk → login 的稳定优先级产出 WFL-01 有界证据；非法 origin（含无信号输入）统一 fail closed；无网络、回调、页面操作或解题字段。
+- 验证：`cargo test -p crayon-workflow` 5/5；`cargo clippy -p crayon-workflow --all-targets -- -D warnings`、`cargo fmt --all -- --check`、`scripts/check.sh security`、`git diff --check` 通过。`cargo test --workspace` 首轮在未修改的 Windows named-pipe `same_user_client_is_admitted_end_to_end` 偶发 `OsDenied`，同进程后单独重跑 1/1 通过；本任务前已完成到该点的所有 crate 均通过。
+- Code Review：按 v0.8 从需求边界、正确性、架构、安全、性能、测试检查；Review 中补上“无信号但 origin 非法”也必须拒绝，并修正测试文件隔离命名。P0/P1/P2 = 0/0/0。
+- 未覆盖与风险：Browser/CEF 信号采集与 AwaitingHuman UI 属 WFL-03；真实站点挑战准确率需后续 QAR fixture/真机矩阵，本任务只冻结确定性分类核心。

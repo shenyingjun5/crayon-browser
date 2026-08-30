@@ -58,6 +58,7 @@ members = [
     "test-support",
     "crates/crayon-relay",
     "crates/crayon-semantic-action",
+    "crates/crayon-workflow",
 ]
 exclude = ["app", "demo", "third_party/cast-sdk"]
 
