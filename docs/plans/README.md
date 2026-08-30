@@ -27,13 +27,13 @@
 | BUX | [browser-product-experience-roadmap.md](browser-product-experience-roadmap.md) | Chrome-inspired 蜡笔桌面浏览器 UI 与日用基础功能 | `BUX-01..18 DONE`（BUX-17/18 2026-08-26） |
 | MDV | [markdown-viewer-roadmap.md](markdown-viewer-roadmap.md) | 本地 Markdown Runtime：查看/编辑/保存、图标工具栏、图片与 Mermaid Full 离线扩展 | 基线 `MDV-01..14 DONE`（`MDV-14` Mermaid Full 供应链 2026-08-29 冻结，104 文件/3.5MB 闭包双次生成 hash 一致）；工具栏 `MDV-21..23 DONE`、`MDV-24 VERIFIED`（macOS arm64 与 Windows x64 主矩阵已闭合，Windows Debug/Release 65/65；Narrator、中文 IME 组合态、原生 OS 200% DPI 与原生 macOS x64 待补）；Mermaid `MDV-15..19 DONE`；`MDV-20 VERIFIED`（macOS arm64 Debug/Release 七类图、50-block、签名、NOTICE/SPDX、零公网与零残留已闭合，等待 Windows x64 发布回归后转 `DONE`） |
 | MRT | [markdown-runtime-roadmap.md](markdown-runtime-roadmap.md) | Markdown Runtime Extension Framework：闭合扩展 API、Highlight/KaTeX 与后续图表/演示门禁 | `MRT-01..08 DONE`（MRT-06 Windows blocker 修复与真机复验已收口，2026-08-29 合并）；`MRT-09..19` 分波次推进或仅做 gap analysis |
-| SDK | [cast-sdk-integration-roadmap.md](cast-sdk-integration-roadmap.md) | 固定源码 Cast-SDK facade、发现、连接和控制；后续 Partner Cast facade | `SDK-13 BLOCKED`（需真实接收端 Harness） |
-| PLT | [desktop-platform-adapters-roadmap.md](desktop-platform-adapters-roadmap.md) | Windows/macOS 存储、网络、生命周期、更新和客户端交接 | `PLT-01` |
-| PRV | [privacy-security-roadmap.md](privacy-security-roadmap.md) | Profile、隐私、安全、日志和删除语义 | `PRV-01` |
-| CNT | [content-intelligence-roadmap.md](content-intelligence-roadmap.md) | 页面数据/Markdown 与第二阶段模型总结 | `CNT-01` 等待主链路；`CNT-11` 等待模型门禁 |
-| AGT | [agent-access-roadmap.md](agent-access-roadmap.md) | CAAP、tool registry、CLI/MCP、高性能读页和授权操作 | `AGT-01`，依赖满足后开始 |
+| SDK | [cast-sdk-integration-roadmap.md](cast-sdk-integration-roadmap.md) | 固定源码 Cast-SDK facade、发现、连接和控制；后续 Partner Cast facade | `SDK-01..14 DONE`；`SDK-15/16` 等 HUB/外部已批准 API |
+| PLT | [desktop-platform-adapters-roadmap.md](desktop-platform-adapters-roadmap.md) | Windows/macOS 存储、网络、生命周期、更新和客户端交接 | `PLT-01/02/W04/M04 DONE`；`PLT-M05 IN_PROGRESS`，`PLT-W05 TODO` |
+| PRV | [privacy-security-roadmap.md](privacy-security-roadmap.md) | Profile、隐私、安全、日志和删除语义 | `PRV-01..12` 已完成或 VERIFIED；`PRV-13` 待总数据流 Review |
+| CNT | [content-intelligence-roadmap.md](content-intelligence-roadmap.md) | 页面数据/Markdown 与第二阶段模型总结 | `CNT-01..07 DONE`、`CNT-08 VERIFIED`；`CNT-09 READY` |
+| AGT | [agent-access-roadmap.md](agent-access-roadmap.md) | CAAP、tool registry、CLI/MCP、高性能读页和授权操作 | A0 完成；`AGT-07 READY`，`AGT-12C/13/14` 按装配依赖后续推进，`AGT-15 VERIFIED` |
 | ACT | [semantic-action-roadmap.md](semantic-action-roadmap.md) | Page/Action/Form/Media/Risk Map、action_id、前置条件和效果验证 | `ACT-01..12 全部完成`（2026-08-30，ACT-12 总 Review GO）；实机接线归后续装配切片 |
-| WFL | [workflow-learning-roadmap.md](workflow-learning-roadmap.md) | Challenge 接管、Workflow Learning、个人 Site Skill、健康与受控修复 | `WFL-01` 等待 `ACT-12/AGT-03` |
+| WFL | [workflow-learning-roadmap.md](workflow-learning-roadmap.md) | Challenge 接管、Workflow Learning、个人 Site Skill、健康与受控修复 | `WFL-01 VERIFIED`；`WFL-02/04/06 READY` |
 | HUB | [capability-hub-roadmap.md](capability-hub-roadmap.md) | Capability Registry/Router、入站发现与出站 Partner connector | `HUB-01..06 DONE`；`HUB-07+ 待依赖` |
 | HM | [harmony-browser-roadmap.md](harmony-browser-roadmap.md) | 鸿蒙电脑 PC 形态 ArkUI/ArkWeb 技术预览 | `HM-01`，后续启动 |
 | QAR | [quality-release-roadmap.md](quality-release-roadmap.md) | Windows/macOS 构建、真实设备、性能、长稳和发布门禁 | `QAR-01` |
@@ -43,20 +43,31 @@
 
 ## 4. 当前领取队列
 
+### 可直接领取
+
 | 顺序 | 任务 | 状态 | 说明 |
 |---:|---|---|---|
-| 1 | `SDK-13` | BLOCKED | 真接收端 Harness（CS-010、E2E-001/002）；当前环境无真机，Harness 就绪后领取 |
-| 2 | `BUX-03` | DONE | Windows 本地 `crayon://newtab`、普通/无痕模型与安全 resource handler 已通过 Debug/Release 实机门禁；`BUX-04` 仍等待 `PRV-06`，下一项 Windows 任务按已满足依赖重新领取 |
-| 3 | `CEF-01E`/`CEF-02M` | VERIFIED/TODO | macOS bootstrap 已实现但平台证据后置；不得阻塞 Windows 主线，也不得用 Windows 证据完成 macOS |
-| 4 | `AGT-01` | TODO | 依赖满足后冻结 CAAP v1；不提前开放 CLI/MCP transport |
-| 5 | `CNT-01` | TODO | 等浏览器/投屏/隐私门禁后开始正式 page-data/Markdown |
-| 6 | `ACT-01` | DONE | 语义地图/ChangeSet/effect/错误 schema 已冻结并入 golden 兼容窗口（e45d086）；`ACT-02/03/04 VERIFIED`（detail profile、action handle、discovery/precondition/risk、受控执行、幂等效果、表单/ChangeSet/handoff 与总 Review GO），`ACT-05` 起按依赖领取 |
-| 7 | `MRT-08` | DONE | KaTeX inline/block facts、受控 HTML/MathML policy、离线资源/字体路由与 generation/lazy 生命周期已在 macOS arm64 真实 CEF 和 x64 编译矩阵闭合；Windows 真机不属此任务 |
-| 8 | `MDV-24` | VERIFIED | macOS arm64 与 Windows x64 主矩阵已闭合，Windows Debug/Release 65/65 且真实 CEF 三视图/快捷键/窄宽/主题通过；Narrator、中文 IME 组合态、原生 OS 200% DPI 与原生 macOS x64 待补 |
-| 9 | `MDV-20` | VERIFIED | Mermaid Full macOS arm64 发布门禁已闭合；等待 Windows x64 Debug/Release build+CTest、正式 staging、七类真实 CEF、50-block、零公网与退出零残留回归后转 `DONE` |
-| 10 | 后续任务 | TODO | WFL/HUB 严格按语义动作、权限和隐私依赖领取 |
+| 1 | `AGT-07` | READY | `CNT-08 VERIFIED` 后依赖已满足；交付 R1 target/标题/选区/结构化页面/Markdown 工具 |
+| 2 | `CNT-09` | READY | C1 正确性、安全、导航竞争、超大页面、资源释放与 E2E 总矩阵 |
+| 3 | `WFL-02` | READY | Challenge Detector；只检测证据，不解题、不绕过 |
+| 4 | `WFL-04` | READY | 短期最小 checkpoint store；依赖的隐私/平台契约已满足 |
+| 5 | `WFL-06` | READY | 仅记录已授权步骤与 verified effect 的有界 trace |
 
-`CNT-01` 必须等 `CEF-15`、`BUX-18`、`SDK-14`、`MED-19`、`PRV-08` 完成后才能进入 `READY`。`CNT-11` 必须等 `CNT-10`、`AGT-16`、`PRV-13` 完成且模型/provider ADR 获批；不得提前接真实 provider。
+### 平台收口与待拆装配
+
+| 任务 | 状态 | 说明 |
+|---|---|---|
+| `MDV-20` | VERIFIED | 仅缺 Windows x64 Mermaid Full 发布回归；不得改写 macOS 已有证据 |
+| `MDV-24` | VERIFIED | 主矩阵已闭合；Narrator、中文 IME、原生 200% DPI、原生 macOS x64 仍待补 |
+| `PLT-W05` | TODO | Windows 产品装配与 Direct/Relay/外部客户端交接验收；领取前补齐原子范围与设备条件 |
+| `AGT-12C` | TODO | CEF 产品 accept loop、stop、session/grant/tool dispatch；先拆成可审查装配切片 |
+
+### 依赖阻塞
+
+- `AGT-13/14` 等 `AGT-07 + AGT-12`；`AGT-16` 再等 CLI/MCP 与 `AGT-15 VERIFIED`。
+- `HUB-07` 等 `WFL-12`，`HUB-08` 等 `AGT-14`；Partner connector `HUB-09+` 仍按独立信任/OAuth/网络门禁推进。
+- `CNT-11` 必须等 `CNT-10`、`AGT-16`、`PRV-13` 与 provider ADR；第一阶段不得提前接真实模型。
+- `SDK-15/16` 等 `HUB-16` 及外部 Cast-SDK/receiver 正式 API，不在浏览器内临时拼协议。
 
 ## 5. 当前代码事实
 

@@ -1,15 +1,17 @@
 # 蜡笔 AI Agent 投屏浏览器总 Roadmap
 
 - 版本：v0.8（Markdown Runtime Extension Framework 同步）
-- 日期：2026-08-28
+- 日期：2026-08-30
 - 状态：活跃
 - 当前任务总数：271
 - 当前测试用例总数：212
 
 ## 1. 当前结论
 
-- 品牌资产 `BRD-01..04`、Foundation 19 项、`MED-01..19`、`CEF-01A..01D`、`CEF-02W`、`CEF-03`、`BUX-01..03`、`SDK-01..12` 与 `RNM-01..08` 已完成，共 71 项。
-- `RNM-01..08 DONE` 已将历史 `get-video` 仓库/package/README/GitHub/本地目录统一迁移为 `crayon-browser`，并完成新路径 Windows CEF configure smoke；`CEF-02W/CEF-03 DONE` 已交付正式多进程/sandbox 和 Windows 窗口/标签/基础导航命令链。`BUX-02 DONE` 已交付 Windows UI shell/command/focus/event adapter 骨架并通过 Debug/Release 与 Windows 实机门禁，`BUX-03 DONE` 已交付 Windows 本地新标签页并通过启动、`Ctrl+T`、`Ctrl+L` 与零残留 Debug/Release 实机门禁；`CEF-01E VERIFIED` 的 macOS 双架构/实机证据及 `CEF-02M` 后置，不再阻塞 Windows。`SDK-13 BLOCKED`，等待真实接收端 Harness。Windows x64 CEF 壳、真实标题栏品牌图标、Debug/Release sandbox 和完整退出已验证，macOS App/Helper Bundle 构建图与 CI 已实现，桌面信息架构、规范功能 glyph 与本地新标签页已冻结；实际完整 UI、macOS 平台验收、真实接收端闭环与页面数据面尚未完成。
+- 已收口：`BRD-01..04`、Foundation、`MED-01..19`、`BUX-01..18`、`SDK-01..14`、`RNM-01..08`；CEF 为 `CEF-01..05/15 DONE`、`CEF-06..14 VERIFIED`，`ACT-01..12` 已完成契约/模型层总 Review，`MRT-01..08 DONE`。
+- 页面数据与 Agent 主线已进入后半段：`CNT-01..07 DONE`、`CNT-08 VERIFIED`、`CNT-09 READY`；AGT A0 权限内核完成，`AGT-06/09/12B/15 VERIFIED`、`AGT-07 READY`。CLI/MCP 仍未开放，继续等待 R1 工具与产品 transport 装配。
+- Workflow/Hub：`WFL-01 VERIFIED`，`WFL-02/04/06 READY`；`HUB-01..06 DONE`，后续 Site Skill/入站发现/Partner connector 严格等待各自依赖。
+- 平台剩余重点：`PLT-W05` Windows 产品装配、`PLT-M05 IN_PROGRESS`、`MDV-20/24 VERIFIED` 的明确真机缺口，以及 AGT-12C 产品进程装配。模型/provider 与 Partner Cast 仍处于独立后置门禁。
 - 产品仍按“浏览器与 LAN 投屏 -> 页面数据/Markdown -> Agent 协议与语义动作 -> Workflow/Challenge -> Capability Hub/合作方 -> 模型”的依赖顺序交付。
 - CAAP、CLI/入站 MCP、高性能读页和授权操作是核心；具体模型/provider 与视频/文档总结属于第二阶段。
 - Windows/macOS 为当前桌面；HarmonyOS 只做鸿蒙电脑 PC 形态技术预览；Linux 无活跃任务。
@@ -220,15 +222,14 @@ flowchart LR
 
 ## 7. 当前领取顺序
 
-1. `SDK-13`：等待真实接收端 Harness，当前 `BLOCKED`，不得用 Fake 冒充真机证据。
-2. `BUX-03`：已 `DONE`；Windows 本地 `crayon://newtab`、普通/无痕差异与固定快捷入口模型已交付。`BUX-04` 已拆分为 `BUX-04A`（核心 URL/搜索判定引擎，依赖 `BUX-02/CEF-03/FND-11`，状态 `READY`）与 `BUX-04B`（provider 配置/隐私集成，依赖 `PRV-06`，仍阻塞）。`BUX-04A` 可作为下一项 Windows 原子任务领取，`BUX-04B` 仍按原依赖顺序等待。
-3. `CEF-01E/CEF-02M`：macOS bootstrap 为 `VERIFIED`，平台证据和正式 sandbox 后置；不阻塞 Windows，也不用 Windows 结果转 `DONE`。
-4. `AGT-01` 在 `FND-08/PRV-08` 满足后冻结 CAAP v1；不得提前开放 CLI/MCP。
-5. `CNT-01` 等 `CEF-15/BUX-18/SDK-14/MED-19/PRV-08` 完成。
-6. `ACT-01` 等 `CNT-03/AGT-01` 完成；`WFL/HUB` 不得越过语义动作和权限依赖。
-7. `MRT-01..05 DONE / MRT-06 READY`：Runtime v1 foundation 与 Code Highlight 11.12.0 固定离线 grammar 闭包已闭合；下一项接入 exact allowlist/lazy/SafeHtml token policy，未知语言继续纯文本回退。
-8. `MDV-24 VERIFIED`：`MDV-21..23 DONE`；macOS arm64 Helper/deployment target/signing、默认页与公网、MDV 三视图/深色/AX 真机已闭合，arm64/x64 自动化均 61/61。Windows、原生 macOS x64 以及当前 UI 自动化无法替代的 IME/窄窗交互真机仍待补；该工具栏门禁与 Mermaid `MDV-20` 独立。
-9. `MDV-14 READY`：可与 MRT 契约工作独立串行领取，冻结 Mermaid Full 11.17.2 的离线运行时 import closure、manifest/hash/许可与可重复 vendor；`MDV-15/16` 分别等待 `MRT-03/04` 后再按 `17 -> 18 -> 19 -> 20` 收口。
+1. `AGT-07 READY`：完成 R1 内容读取工具，是后续 CLI/MCP 的直接前置。
+2. `CNT-09 READY`：闭合 C1 E2E/security/perf 后再进入 `CNT-10` 总 Review。
+3. `WFL-02/04/06 READY`：三项彼此独立，但一次只领取一个原子任务。
+4. Windows 优先收口项：`MDV-20` 发布回归、`PLT-W05` 产品装配；后者领取前先补齐原子范围与真实设备条件。
+5. `AGT-12C TODO`：先拆 CEF 产品 accept loop/lifecycle 与 session/grant/tool dispatch 装配，闭合后才解锁 `AGT-13/14`。
+6. `MDV-24 VERIFIED` 的 Narrator/中文 IME/原生 200% DPI 与原生 macOS x64、`PLT-M05 IN_PROGRESS` 按平台矩阵继续，不用单平台证据冒充完成。
+
+后置依赖：`AGT-16` 等 `AGT-13/14`；`HUB-07/08` 分别等 `WFL-12/AGT-14`；`CNT-11` 等 `CNT-10 + AGT-16 + PRV-13 + provider ADR`；`SDK-15/16` 等 HUB 总 Review和外部已批准 Cast API。
 
 ## 8. 发布门禁
 
