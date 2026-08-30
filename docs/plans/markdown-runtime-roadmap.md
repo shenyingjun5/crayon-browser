@@ -36,7 +36,7 @@ MRT 是用户侧 MDV 基础设施，不进入 `crayon-page-data`、CNT 的确定
 | MRT-06 | DONE | MRT-05 | `browser/shared-ui/markdown`,`browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | Code Highlight fence extension：语言 allowlist、grammar 按需加载、未知语言纯文本回退 | MR-004；Windows x64 Debug/Release + 真实 CEF 已闭合 |
 | MRT-07 | DONE | MRT-04 | `third_party/katex`,`tools`,`docs/current` | KaTeX 语法与供应链契约：明确 inline/block 定界、转义、宏/URL/HTML 禁令、字体/CSS 本地闭包 | MR-005；许可/语法/安全矩阵 |
 | MRT-08 | DONE | MRT-07 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | KaTeX inline/block extension：按需加载、局部错误、主题/字体离线与编辑 generation | MR-005；公式 golden/注入/实机 |
-| MRT-09 | TODO | MDV-20,MRT-06,MRT-08 | `tests/e2e/desktop`,`tools/repo-guard`,`docs/current`,`docs/plans` | P0 Runtime 收口：CommonMark/GFM + Highlight + Mermaid Full + KaTeX 的双平台/包体/性能/安全总 Review | MR-001..005,MR-008/012；P0/P1=0 |
+| MRT-09 | TODO | MDV-20,MDV-25,MRT-06,MRT-08 | `tests/e2e/desktop`,`tools/repo-guard`,`docs/current`,`docs/plans` | P0 Runtime 收口：CommonMark/GFM + Highlight + Mermaid Full + KaTeX 的双平台/包体/性能/安全总 Review | MR-001..005,MR-008/012；P0/P1=0 |
 | MRT-10 | TODO | MRT-09 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv` | TOC/Outline：从解析事实生成有界标题树、稳定会话锚点与键盘/读屏导航 | MR-006；重复标题/超深/编辑更新 |
 | MRT-11 | TODO | MRT-09 | `browser/shared-ui/mdv` | 当前文档本地 Search：只查内存源码/安全文本，结果/高亮有界，不持久化 query | MR-006；Unicode/大文档/取消 |
 | MRT-12 | TODO | MRT-09 | `third_party/echarts`,`tools`,`docs/current` | ECharts 供应链与纯 JSON option schema：固定运行时闭包、series/component allowlist、禁止 function/eval/URL | MR-007；schema/许可/包体 |

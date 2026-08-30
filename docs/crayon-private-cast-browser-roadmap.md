@@ -3,15 +3,15 @@
 - 版本：v0.9（第一期三大闭环发布范围冻结）
 - 日期：2026-08-30
 - 状态：活跃
-- 当前任务总数：284
+- 当前任务总数：285
 - 当前测试用例总数：212
 
 ## 1. 当前结论
 
 - 已收口：`BRD-01..04`、Foundation、`MED-01..19`、`BUX-01..18`、`SDK-01..14`、`RNM-01..08`；CEF 为 `CEF-01..05/15 DONE`、`CEF-06..14 VERIFIED`，`ACT-01..12` 已完成契约/模型层总 Review，`MRT-01..08 DONE`。
 - 页面数据 C1 算法与数据面 `CNT-01..10` 已收口，但真实 CEF collector/gateway、生产编排和导出 UI 尚未装配；一期新增 `CNT-17 READY`、`CNT-18..21 TODO`，不再把 C1 GO 解释为用户已可一键导出。
-- 第一期范围由 `REL-01 DONE` 冻结为网页 Markdown、LAN Direct/Relay 投屏、本地 Markdown 编辑三大闭环；macOS arm64 先行、Windows x64 同一期回归。Agent/CLI/MCP、Workflow、Hub、Partner、模型与 HarmonyOS 默认关闭并进入第二期。
-- 平台剩余重点：`PLT-M05b1 READY` 后严格串行 b2..b6/M05c，随后 `PLT-W05` 对称装配；`MDV-20/24 VERIFIED` 与 `MRT-09` 关闭 P0 Runtime 发布缺口。M05a 既有证据只代表基础壳/new-tab，不代表 CNT/Cast 全产品装配。
+- 第一期范围由 `REL-01 DONE` 冻结为网页 Markdown、LAN Direct/Relay 投屏、本地 Markdown 编辑三大闭环；`REL-02 DONE` 已输出真实生产装配图：前两项当前不可达，MDV 可达但仍含生产 fixture 初始化缺口。macOS arm64 先行、Windows x64 同一期回归。Agent/CLI/MCP、Workflow、Hub、Partner、模型与 HarmonyOS 默认关闭并进入第二期。
+- 平台剩余重点：`CNT-17 READY` 先接网页事实，`PLT-M05b1 READY` 后严格串行 b2..b6/M05c，随后 `PLT-W05` 对称装配；`MDV-25 READY` 清除生产 fixture 后，`MDV-20/24 VERIFIED` 与 `MRT-09` 关闭 P0 Runtime 发布缺口。M05a 既有证据只代表基础壳/new-tab，不代表 CNT/Cast 全产品装配。
 - 产品依赖顺序不变，但发布拆为两期：第一期先完成浏览器/LAN 投屏/网页 Markdown/本地 MDV；第二期再开放 Agent 协议与语义动作、Workflow/Challenge、Capability Hub/合作方和模型。
 - CAAP、CLI/入站 MCP、高性能读页和授权操作仍是产品核心方向，但不进入第一期发布包启用范围；具体模型/provider 与视频/文档总结同属第二期。
 - Windows/macOS 为当前桌面；HarmonyOS 只做鸿蒙电脑 PC 形态技术预览；Linux 无活跃任务。
@@ -38,7 +38,7 @@
 | FND | 19 | Workspace、契约、质量入口与仓库基线 |
 | CEF | 20 | Windows/macOS CEF 浏览器壳（含 `01A..01E`、`02W/02M` 拆分） |
 | BUX | 19 | Chrome-inspired 蜡笔浏览器 UI 与日用基础功能（含 `04A/04B` 拆分） |
-| MDV | 24 | 本地 Markdown Runtime：查看/编辑/保存、图标工具栏、图片、Mermaid Full 与跨平台门禁 |
+| MDV | 25 | 本地 Markdown Runtime：查看/编辑/保存、图标工具栏、图片、Mermaid Full、生产隔离与跨平台门禁 |
 | MRT | 19 | Markdown Runtime Extension Framework、Highlight/KaTeX、后续图表/演示与跨域 gap analysis |
 | MED | 19 | 媒体观察、LAN Relay 与外部客户端交接语义 |
 | SDK | 16 | Cast-SDK 发现/投送/控制；后续 Partner Cast facade |
@@ -53,7 +53,7 @@
 | HM | 12 | HarmonyOS 电脑 PC 形态技术预览 |
 | QAR | 18 | 核心/第二期 feature 分离的质量、性能、安全、发布和回滚 |
 | RNM | 8 | `get-video` → `crayon-browser` 命名迁移 |
-| **合计** | **284** | |
+| **合计** | **285** | |
 
 ## 4. 依赖关系
 
@@ -121,7 +121,7 @@ flowchart LR
 
 ### V1：桌面浏览器与 Markdown Runtime P0 可用（macOS 先行）
 
-- `CEF-01D`、`CEF-02W`、`CEF-03..12`、`BUX-01..18`、`MDV-01..24`、`MRT-01..09`、`PLT-01/02/W04` 与适用 PRV；MDV/MRT 不阻塞 BUX 主线，第三方 runtime 与工具栏均按 macOS 先行、Windows 回归收口。
+- `CEF-01D`、`CEF-02W`、`CEF-03..12`、`BUX-01..18`、`MDV-01..25`、`MRT-01..09`、`PLT-01/02/W04` 与适用 PRV；MDV/MRT 不阻塞 BUX 主线，第三方 runtime 与工具栏均按 macOS 先行、Windows 回归收口。
 - 验收：Chrome-inspired 蜡笔 UI、本地起始页、地址栏、导航、标签/窗口、书签、历史、下载、设置、Profile/无痕、权限、安全反馈、崩溃恢复、快捷键/无障碍、生命周期和本地 Markdown 查看/预览/分栏编辑/保存/图片/标准 Mermaid/Code Highlight/KaTeX 可用；无对应节点的文档零额外 runtime 加载，含扩展文档完全离线且错误隔离。
 
 ### A0：Agent 协议与权限内核
@@ -151,7 +151,7 @@ flowchart LR
 
 ### R1：第一期三大闭环可发布版本
 
-- `REL-01..04`、`CNT-17..21`、`PLT-M05b1..b6/M05c`、`PLT-W05/19`、`MDV-20/24`、`MRT-09`、`PRV-13A` 与 `QAR-01..16` 的核心 A 任务。
+- `REL-01..04`、`CNT-17..21`、`PLT-M05b1..b6/M05c`、`PLT-W05/19`、`MDV-20/24/25`、`MRT-09`、`PRV-13A` 与 `QAR-01..16` 的核心 A 任务。
 - 顺序：范围/调用图审计 → macOS arm64 网页 Markdown → macOS 媒体观察/Direct/Relay/交接 → MDV/MRT P0 收口 → Windows x64 对称回归 → 安全/性能/长稳 → 安装/升级/回滚 → Go/NoGo。
 - 验收：发布包真实完成网页→Markdown→复制/保存、网页视频→设备→Direct/Relay→控制/停止、本地 `.md`→编辑→预览→安全保存；P0/P1=0。Agent/Workflow/Partner/model 等第二期 feature 默认为 off/NOT_IN_RELEASE。
 - 平台：macOS 第一期支持 Apple Silicon；Windows x64 同一期回归。原生 macOS Intel/x64 只有取得原生硬件证据后才能进入支持矩阵。
@@ -237,17 +237,17 @@ flowchart LR
 
 ## 7. 当前领取顺序
 
-1. `REL-02 READY`：只读审计真实 CEF 产品调用图和一期 feature flag，先关闭状态/装配认知偏差。
-2. `CNT-17 READY`：接通真实 CEF snapshot collector/gateway；完成后严格推进 `CNT-18..21`。
-3. `PLT-M05b1 READY`：接通真实媒体观察；与 CNT-17 修改相邻 CEF 装配，必须串行，随后推进 b2..b6/M05c。
-4. `MDV-20 VERIFIED` Windows 发布回归与 `MDV-24 VERIFIED` 剩余真机门禁；依赖满足后执行 `MRT-09` P0 总 Review。
+1. `CNT-17 READY`：`REL-02 DONE` 已确认当前产品断点；接通真实 CEF snapshot collector/gateway，完成后严格推进 `CNT-18..21`。
+2. `PLT-M05b1 READY`：接通真实媒体观察；与 CNT-17 修改相邻 CEF 装配，必须串行，随后推进 b2..b6/M05c；Direct/Relay 可使用 ADB 在线手机的正式接收端取证。
+3. `MDV-25 READY`：移除生产 `BuildFixtureSnapshot()` 初始化；与前两项同样触及 CEF App/CMake，串行领取。
+4. `MDV-20 VERIFIED` Windows 发布回归与 `MDV-24 VERIFIED` 剩余真机门禁；MDV-25 完成后执行 `MRT-09` P0 总 Review。
 5. macOS 三闭环关闭后推进 `PLT-W05` Windows 对称装配、`PLT-19` 与 QAR 核心矩阵。
 
 第二期保持排队：`AGT-12C/13/14/16`、`WFL`、`HUB`、`CNT-11..16`、`MRT-10..19`、`SDK-15/16`、`HM`。其中 `CNT-11` 等 `CNT-21 + AGT-16 + PRV-13B + provider ADR`；不得在 R1 完成前抢占 CEF 装配和真机矩阵。
 
 ## 8. 发布门禁
 
-- 284 项任务按所选发布范围提供真实状态、命令与证据；212 个唯一当前测试 ID 可追踪，新增一期装配任务复用并扩展 CT/E2E/MD/CP 用例映射；P0/P1 Review 为零。
+- 285 项任务按所选发布范围提供真实状态、命令与证据；212 个唯一当前测试 ID 可追踪，新增一期装配/生产隔离任务复用并扩展 CT/E2E/MD/CP/RG 用例映射；P0/P1 Review 为零。
 - 一期核心发布不得依赖 QAR 的第二期 B 任务；Agent/Workflow/Partner/model 保持默认关闭并在 QAR-15 标记 `NOT_IN_RELEASE`。
 - MDV/MRT 发布包仅包含各 manifest 锁定的浏览器运行时闭包，无 tiny/CDN/npm runtime/动态插件；普通 Markdown 对未命中扩展的 runtime 零读取，Mermaid/Highlight/KaTeX 离线可用且通过类型化输出 policy、lazy/cache、generation 与资源回落门禁。
 - CLI/入站 MCP 共用 CAAP；出站 connector 独立；无 raw CDP/WebDriver/任意 JS/remote bind/通用文件上传。

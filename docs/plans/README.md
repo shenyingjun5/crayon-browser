@@ -20,13 +20,13 @@
 
 | 模块 | Roadmap | 当前目标 | 关键起点 |
 |---|---|---|---|
-| REL | [release-v1-roadmap.md](release-v1-roadmap.md) | 第一期网页 Markdown、LAN 投屏、本地 Markdown 编辑三大闭环与发布范围 | `REL-01 DONE`，`REL-02 READY`；macOS arm64 先行、Windows x64 同一期回归 |
+| REL | [release-v1-roadmap.md](release-v1-roadmap.md) | 第一期网页 Markdown、LAN 投屏、本地 Markdown 编辑三大闭环与发布范围 | `REL-01/02 DONE`；真实装配图见 current 审计，macOS arm64 先行 |
 | BRD | [brand-assets-roadmap.md](brand-assets-roadmap.md) | 品牌图标母版、跨平台确定性资产与接入门禁 | `BRD-01..04 DONE` |
 | FND | [foundation-migration-roadmap.md](foundation-migration-roadmap.md) | Workspace、契约、质量入口与仓库基线 | 19 个原子任务 `DONE` |
 | MED | [media-policy-relay-roadmap.md](media-policy-relay-roadmap.md) | 媒体观察、策略、LAN Relay、外部客户端交接迁移 | `MED-01..19 DONE` |
 | CEF | [desktop-cef-browser-roadmap.md](desktop-cef-browser-roadmap.md) | Windows/macOS CEF 壳、共享 UI、媒体观察和 IPC | `CEF-01..15 全部完成`（`CEF-06..14` 模型层 VERIFIED，实机接线归后续装配/切片任务）；Windows 总 Review 证据已补齐 |
 | BUX | [browser-product-experience-roadmap.md](browser-product-experience-roadmap.md) | Chrome-inspired 蜡笔桌面浏览器 UI 与日用基础功能 | `BUX-01..18 DONE`（BUX-17/18 2026-08-26） |
-| MDV | [markdown-viewer-roadmap.md](markdown-viewer-roadmap.md) | 本地 Markdown Runtime：查看/编辑/保存、图标工具栏、图片与 Mermaid Full 离线扩展 | 基线 `MDV-01..14 DONE`（`MDV-14` Mermaid Full 供应链 2026-08-29 冻结，104 文件/3.5MB 闭包双次生成 hash 一致）；工具栏 `MDV-21..23 DONE`、`MDV-24 VERIFIED`（macOS arm64 与 Windows x64 主矩阵已闭合，Windows Debug/Release 65/65；Narrator、中文 IME 组合态、原生 OS 200% DPI 与原生 macOS x64 待补）；Mermaid `MDV-15..19 DONE`；`MDV-20 VERIFIED`（macOS arm64 Debug/Release 七类图、50-block、签名、NOTICE/SPDX、零公网与零残留已闭合，等待 Windows x64 发布回归后转 `DONE`） |
+| MDV | [markdown-viewer-roadmap.md](markdown-viewer-roadmap.md) | 本地 Markdown Runtime：查看/编辑/保存、图标工具栏、图片与 Mermaid Full 离线扩展 | 基线、工具栏与 Mermaid 已生产可达；`MDV-20/24 VERIFIED`，`MDV-25 READY` 移除生产 fixture 初始化后进入 MRT/发布收口 |
 | MRT | [markdown-runtime-roadmap.md](markdown-runtime-roadmap.md) | Markdown Runtime Extension Framework：闭合扩展 API、Highlight/KaTeX 与后续图表/演示门禁 | `MRT-01..08 DONE`（MRT-06 Windows blocker 修复与真机复验已收口，2026-08-29 合并）；`MRT-09..19` 分波次推进或仅做 gap analysis |
 | SDK | [cast-sdk-integration-roadmap.md](cast-sdk-integration-roadmap.md) | 固定源码 Cast-SDK facade、发现、连接和控制；后续 Partner Cast facade | `SDK-01..14 DONE`；`SDK-15/16` 等 HUB/外部已批准 API |
 | PLT | [desktop-platform-adapters-roadmap.md](desktop-platform-adapters-roadmap.md) | Windows/macOS 存储、网络、生命周期、更新和客户端交接 | `PLT-01/02/W04/M04 DONE`；`PLT-M05 IN_PROGRESS`，`PLT-W05 TODO` |
@@ -40,7 +40,7 @@
 | QAR | [quality-release-roadmap.md](quality-release-roadmap.md) | Windows/macOS 构建、真实设备、性能、长稳和发布门禁 | 核心 `QAR-02A/05A/08A` 与第二期 feature `02B/05B/08B` 已拆分 |
 | RNM | [naming-migration-roadmap.md](naming-migration-roadmap.md) | `get-video` → `crayon-browser` 仓库、包、README、GitHub 与本地路径迁移 | `RNM-01..08 DONE` |
 
-当前共 284 个活跃任务，212 个唯一当前测试用例。新增任务来自 `REL-01..04`、`CNT-17..21`、`PRV-13A/B` 对原 PRV-13 的分拆，以及 `QAR-02/05/08` 的 A/B 分拆；PLT-M05b1..b6 为 PLT-M05 内部原子切片，不重复计入模块顶层任务数。MDV 的 `MDV-14..20` 专注 Mermaid Full，`MDV-21..24` 专注编辑器工具栏；MRT-09 P0 Runtime 总 Review属于一期，MRT-10..19 属第二期。Linux、浏览器 WebRTC/采集/编码仍不计入活跃范围。
+当前共 285 个活跃任务，212 个唯一当前测试用例。新增任务来自 `REL-01..04`、`CNT-17..21`、`PRV-13A/B` 对原 PRV-13 的分拆、`QAR-02/05/08` 的 A/B 分拆，以及 REL-02 发现的 `MDV-25` 生产 fixture 清理；PLT-M05b1..b6 为 PLT-M05 内部原子切片，不重复计入模块顶层任务数。MDV 的 `MDV-14..20` 专注 Mermaid Full，`MDV-21..24` 专注编辑器工具栏，`MDV-25` 负责 Release 生产隔离；MRT-09 P0 Runtime 总 Review属于一期，MRT-10..19 属第二期。Linux、浏览器 WebRTC/采集/编码仍不计入活跃范围。
 
 ## 4. 当前领取队列
 
@@ -48,9 +48,9 @@
 
 | 顺序 | 任务 | 状态 | 说明 |
 |---:|---|---|---|
-| 1 | `REL-02` | READY | 审计真实 CEF 生产调用图和一期 feature flag；只读，不改生产行为 |
-| 2 | `CNT-17` | READY | 接通真实 CEF snapshot collector/gateway；一次只领取一个任务，先完成 REL-02 |
-| 3 | `PLT-M05b1` | READY | 接通真实 CEF 媒体观察；与 CNT-17 均改 CEF 装配，必须串行避免冲突 |
+| 1 | `CNT-17` | READY | 接通真实 CEF snapshot collector/gateway；REL-02 已确认当前产品不可达 |
+| 2 | `PLT-M05b1` | READY | 接通真实 CEF 媒体观察；与 CNT-17 均改 CEF 装配，必须串行避免冲突 |
+| 3 | `MDV-25` | READY | 移除 `BuildFixtureSnapshot()` 生产初始化；与前两项同样触及 CEF App/CMake，串行领取 |
 
 ### 平台收口与待拆装配
 
@@ -58,6 +58,7 @@
 |---|---|---|
 | `MDV-20` | VERIFIED | 仅缺 Windows x64 Mermaid Full 发布回归；不得改写 macOS 已有证据 |
 | `MDV-24` | VERIFIED | 主矩阵已闭合；Narrator、中文 IME、原生 200% DPI、原生 macOS x64 仍待补 |
+| `MRT-09` | TODO | 等 `MDV-25` 清除生产 fixture 后执行 P0 Runtime 总 Review |
 | `PLT-M05b2..b6/M05c` | TODO | macOS 策略→SDK→Direct→Relay→拒绝/交接→资源稳定性，严格串行 |
 | `PLT-W05` | TODO | macOS 闭环缺陷关闭后做 Windows 对称装配；领取前按切片补齐原子范围与设备条件 |
 

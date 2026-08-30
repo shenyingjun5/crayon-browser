@@ -1,6 +1,6 @@
 # MDV：本地 Markdown 查看器 Roadmap
 
-状态：本模块属于第一期三大闭环之一；`MDV-01 DONE`，`MDV-02..07,10..13 VERIFIED`，`MDV-08/09/21..23 DONE`，`MDV-24 VERIFIED`；Mermaid Full 为 `MDV-14..19 DONE`、`MDV-20 VERIFIED`。macOS arm64 Debug/Release 的七类 Mermaid、50-block、离线发布目录、SBOM/NOTICE、CEF 嵌套签名与退出零残留已闭合；MDV-20 仍需 Windows x64 Debug/Release 发布包回归后才能转 `DONE`。原生 macOS x64 不进入第一期 Apple Silicon 支持矩阵；Windows Narrator/中文 IME/原生 200% DPI 与当前自动化无法替代的窄窗交互真机仍待补。本 Roadmap 承接“浏览器内查看本地 Markdown 文档、渲染预览、分栏编辑与标准 Mermaid 图表”的产品增量（PRD v0.8 §4.1）：`crayon://mdv` 内置查看页复用 `crayon://newtab` 的自定义 scheme、应用内资源与严格 CSP 模式；本地 `.md` 只经用户手势的受控入口打开，保存走原子写。MDV 是纯用户能力，不进入 CAAP tool registry；Agent 侧任意文件访问禁令不变。
+状态：本模块属于第一期三大闭环之一；`MDV-01 DONE`，`MDV-02..07,10..13 VERIFIED`，`MDV-08/09/21..23 DONE`，`MDV-24 VERIFIED`，`MDV-25 READY`；Mermaid Full 为 `MDV-14..19 DONE`、`MDV-20 VERIFIED`。REL-02 确认真实 CEF 产品链已接通，同时发现生产 App 仍以 `BuildFixtureSnapshot()` 初始化，必须由 MDV-25 移除后才可进入 MRT-09/REL 发布收口。macOS arm64 Debug/Release 的七类 Mermaid、50-block、离线发布目录、SBOM/NOTICE、CEF 嵌套签名与退出零残留已闭合；MDV-20 仍需 Windows x64 Debug/Release 发布包回归后才能转 `DONE`。原生 macOS x64 不进入第一期 Apple Silicon 支持矩阵；Windows Narrator/中文 IME/原生 200% DPI 与当前自动化无法替代的窄窗交互真机仍待补。本 Roadmap 承接“浏览器内查看本地 Markdown 文档、渲染预览、分栏编辑与标准 Mermaid 图表”的产品增量（PRD v0.8 §4.1）：`crayon://mdv` 内置查看页复用 `crayon://newtab` 的自定义 scheme、应用内资源与严格 CSP 模式；本地 `.md` 只经用户手势的受控入口打开，保存走原子写。MDV 是纯用户能力，不进入 CAAP tool registry；Agent 侧任意文件访问禁令不变。
 
 ## 产品设计结论
 
@@ -43,6 +43,7 @@
 | MDV-22 | DONE | MDV-21 | `browser/shared-ui/mdv` | 可测试编辑变换层：修复行前缀重复正文，统一包裹/标题/多行列表/骨架/缩进/表格列对齐与选区保持 | MD-012；独立 ctest + 回归矩阵 |
 | MDV-23 | DONE | MDV-22 | `browser/shared-ui/mdv`,`browser/shared-ui/locales`,`browser/cef-shell/resources/windows` | 图标工具栏接线：tooltip、平台快捷键、overflow、roving tabindex、IME 门禁与既有 `mdvQuery` 集成；零新 Browser binding | MD-004、MD-011..013；页面/快捷键/a11y contract |
 | MDV-24 | VERIFIED | MDV-23 | `browser/cef-shell`,`tests/e2e/desktop`,`docs/current`,`docs/plans` | 工具栏平台收口：macOS arm64 Helper/签名/默认页/公网/MDV/AX 已闭合；Windows、原生 macOS x64 与剩余交互真机待补 | MD-007、MD-013；Debug/Release + 实机 + Review P0/P1=0 |
+| MDV-25 | READY | REL-02,MDV-24,MRT-08 | `browser/cef-shell/src/browser/mdv`,`browser/cef-shell/src/{macos,windows}`,CEF shell contracts | 移除生产 fixture 初始化，直达空 MDV 显示安全空态；fixture 只留在独立测试 | RG-002、MD-003/004；macOS arm64 CEF + Release scan |
 
 ## 接线切片说明（MDV-08..10）
 
@@ -505,3 +506,14 @@ MDV-02..06 按"模型层零 IO / 零 CEF 类型"交付后，产品仍不可见�
 - 布局与主题：真实窗口在 621x1005 窄窗下保持单行工具栏水平 overflow，窄 Split 两栏均可见；最大化 1920x1032 后宽 Split 正常。Debug `--force-dark-mode --force-device-scale-factor=1` 下 new-tab 与 MDV 深色正常。Release `--force-device-scale-factor=2` 下 new-tab、MDV Preview/Source、图标和 tooltip 以 200% Chromium device scale 真实渲染；Release 进程正常退出且无残留窗口。
 - 未覆盖与原始阻塞：① Narrator 不在 `list_apps`，通过既有 `C:\Windows\System32\Narrator.exe` 启动时 Computer Use 返回 `Computer Use app approval timed out`，随后窗口列表为空，不能冒充 Narrator 通过；技能同时禁止发送 Windows 键组合。② `Alt+Shift` 与 `Ctrl+Shift` 均未切入中文组合态，拼音按键直接写入拉丁字符并已撤销；因此只验证中英文文本输入，未验证中文 IME composition/candidate。③ 200% 使用 CEF `--force-device-scale-factor=2`，没有修改宿主 Windows 的系统显示缩放，不能冒充原生 OS 200% DPI。④ 原生 macOS x64 长稳仍受既有硬件边界限制。
 - Code Review：按 `code-review-standard.md` v0.8 独立复核需求/边界、CMake 平台职责、正确性、安全/隐私、性能、测试与可维护性；P0/P1/P2 = 0/0/0。Windows 构建阻断已关闭，任务保持 `VERIFIED`；转 `DONE` 仍需关闭上述 Narrator、中文 IME 组合态、原生 Windows 200% DPI 与原生 macOS x64 门禁。
+
+### MDV-25 原子范围（移除生产 fixture 初始化）
+
+- 状态：`READY`；依赖 `REL-02 DONE`、`MDV-24 VERIFIED`、`MRT-08 DONE`。
+- 单一目标：删除 `BrowserApp -> BuildFixtureSnapshot()` 的生产初始化路径，使未由用户打开文档的 `crayon://mdv` 只呈现本地化安全空态；示例 Markdown 只能存在于独立测试/fixture target，不能进入 Release 生产源或 App bundle。
+- 输入：REL-02 [生产装配审计](../current/release-v1-assembly.md) 的 MDV 断点、RG-002、MD-003/004、既有 `MdvRuntimeState`/empty-state 契约。
+- 允许修改：`browser/cef-shell/src/browser/mdv/**`、macOS/Windows BrowserApp 的 MDV 初始化、相邻 CEF shell contract/MDV 测试与本 Roadmap；不改变 Markdown parser、extension manifest、文件入口、保存 schema 或用户动作。
+- 禁止修改：CNT 网页 Markdown、Agent/CAAP、Cast、第三方 runtime、MDV 公共文件权限；不得以隐藏 fixture、编译宏或 Release-only 分支规避生产隔离。
+- 边界：手动导航 `crayon://mdv/app.html`、首次启动、文件打开失败和文档关闭均显示无正文的明确空/错误态；成功打开本地 `.md` 后既有 Source/Preview/Split、图片、Highlight/KaTeX/Mermaid 与保存行为不回退；无额外网络/文件 IO。
+- 验收：新增能在旧实现命中 fixture 的失败测试，再验证生产 source/binary 不含示例正文或 `BuildFixtureSnapshot`；macOS arm64 Debug/Release CEF build、MDV/handler/source/package contract、真实空态与真实本地文件 smoke，`repo-guard`/RG-002、clang-format、`git diff --check`；Windows 对称回归归 Windows 终端。
+- 明确不做：MRT-09 P0 总 Review、Windows Narrator/IME/DPI、原生 macOS x64、任何新 MDV 功能。

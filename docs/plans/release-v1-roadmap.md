@@ -2,7 +2,7 @@
 
 - 版本：`release-v1-scope`
 - 日期：2026-08-30
-- 状态：`REL-01 DONE`；`REL-02 READY`；`REL-03/04 TODO`
+- 状态：`REL-01/02 DONE`；`REL-03/04 TODO`
 - 任务数：4
 - 发布范围：Windows x64、macOS arm64；实现与验证顺序为 macOS arm64 先行、Windows x64 同一期回归
 - 第一期开关：网页 Markdown、本地 Markdown Runtime、LAN Direct/Relay 与外部客户端交接开启；Agent/CLI/MCP、Workflow、Capability Hub、Partner Cast、模型与 HarmonyOS 关闭
@@ -41,8 +41,8 @@
 | ID | 状态 | 依赖 | 单一交付目标 | 验收 |
 |---|---|---|---|---|
 | REL-01 | DONE | 用户范围决策、current/模块 Roadmap | 冻结一期三大闭环、平台顺序、第二期边界，并拆除核心 QAR 对 Agent 的错误硬依赖 | Roadmap/索引一致；任务数一致；Review P0/P1=0 |
-| REL-02 | READY | REL-01 | 对 CEF 产品调用图做一次只读装配审计，列出只有模型/测试而无生产调用方的 CNT、Cast、MDV 与浏览器基础模块，并冻结一期 feature flag 默认值 | 入口→owner→adapter→平台调用图；无“DONE 即已装配”推断；无生产改动 |
-| REL-03 | TODO | CNT-21,PLT-M05,MDV-20,MRT-09,PRV-13A | 聚合 macOS arm64 三闭环候选包证据与支持矩阵，关闭可关闭的 VERIFIED 状态 | 三闭环真实 CEF；签名包；P0/P1=0；Intel 明确 NOT_IN_RELEASE 或补证据 |
+| REL-02 | DONE | REL-01 | 对 CEF 产品调用图做一次只读装配审计，列出只有模型/测试而无生产调用方的 CNT、Cast、MDV 与浏览器基础模块，并冻结一期 feature flag 默认值 | 入口→owner→adapter→平台调用图；无“DONE 即已装配”推断；无生产改动 |
+| REL-03 | TODO | CNT-21,PLT-M05,MDV-20,MDV-25,MRT-09,PRV-13A | 聚合 macOS arm64 三闭环候选包证据与支持矩阵，关闭可关闭的 VERIFIED 状态 | 三闭环真实 CEF；签名包；P0/P1=0；Intel 明确 NOT_IN_RELEASE 或补证据 |
 | REL-04 | TODO | REL-03,PLT-W05,PLT-19,QAR-01/02A/03/04/05A/06/07/08A/09..12/14/15 | 聚合 Windows x64 对称回归、发布门禁与一期已知限制，向 QAR-16 提交 Go/NoGo 输入 | Windows/macOS 证据可追踪；关闭功能默认 off；回滚 Runbook |
 
 ## REL-01 完成记录（2026-08-30）
@@ -55,10 +55,21 @@
 
 ## REL-02 原子范围（CEF 生产调用图与一期 feature flag 审计）
 
-- 状态：`READY`；依赖 `REL-01 DONE`。
+- 状态：`DONE`；依赖 `REL-01 DONE`。
 - 单一目标：以只读代码审计确认一期三大闭环从用户入口到 owner/domain/adapter/platform 的真实生产调用关系，列出仅被测试或自身模块引用、尚无产品调用方的节点，并冻结第一期/第二期 feature 默认开关；不实现或修复任何生产能力。
 - 输入：`browser/cef-shell/**`、`browser/shared-ui/**`、`crates/crayon-{app-runtime,page-data,content-*,cast-adapter,relay,agent-*}/**`、CMake/Cargo 生产依赖图、当前 REL/CNT/PLT/MDV/MRT/AGT Roadmap。
 - 输出与允许修改：`docs/current/**` 新增或更新一期生产装配图、`docs/plans/release-v1-roadmap.md` 的发现和后续任务映射、必要的模块 Roadmap 状态纠正；禁止修改生产代码、测试、schema/golden、依赖或构建配置。
 - 审计方法：入口/handler 注册、构造与 owner、事件/IPC、domain use case、platform/SDK/文件 IO 五段逐段提供符号与调用方证据；类/函数存在、测试通过或 Roadmap DONE 不能替代生产 reachability。
 - 验收：网页 Markdown、媒体投屏、MDV 各有一张最小调用图；每个断点映射唯一后续任务 ID；Agent/Workflow/Hub/Partner/model/Harmony feature 在 Release 装配中默认关闭且无远程监听/provider；`rg`/CMake/Cargo 证据命令和未覆盖项实际记录；文档链接/任务状态/计数校验通过，Review P0/P1=0。
 - 明确不做：不新增临时 feature flag 实现、不接 CEF/SDK/文件 IO、不运行公网或真机、不因发现缺口顺手修复；缺陷进入对应原子任务。
+
+## REL-02 完成记录（2026-08-30）
+
+- 交付：新增 [第一期生产装配审计](../current/release-v1-assembly.md)，以 macOS `crayon_browser` target 的 sources/link allowlist 为根，分别给出网页 Markdown、LAN 投屏、本地 MDV 的入口→owner→adapter→平台/SDK/文件 IO 调用图。
+- 真实状态：网页 Markdown 和 LAN 投屏均为 `NOT_REACHABLE`——collector/gateway、observer/gate、page-tools/cast-view 与 Rust app-runtime 只存在于独立库/测试，均未进入 `CrayonBrowser.app`；本地 MDV 为 `REACHABLE_WITH_GAP`，真实文件入口/编辑/保存链已接通，但生产 App 仍以 `BuildFixtureSnapshot()` 初始化。
+- 任务映射：网页链唯一映射 `CNT-17..21`；投屏链唯一映射 `PLT-M05b1..b6/M05c`；生产 fixture 进入新原子任务 `MDV-25`，完成后才允许 `MRT-09` 总 Review。
+- feature 默认值：当前 CEF source/link allowlist 为产品事实源；MDV 当前 ON，网页 Markdown/投屏在完成各自门禁前 OFF；Agent/CLI/MCP、Workflow、Hub/Partner、model/provider 与 HarmonyOS 在一期均 OFF/`NOT_IN_RELEASE`，没有远程 listener 或 provider 装配。
+- 真机资源：经用户授权，后续 Direct/Relay 可使用任一 ADB 在线手机运行固定 Cast-SDK 正式接收端；`adb devices -l` 本次见 4 台 `device`。此结果只证明设备可达，未运行或宣称投屏通过。
+- 验证：关键符号非测试调用方 `rg`、CEF/CMake source/link 审计、`cargo tree -p crayon-app-runtime -e normal`、任务计数/链接检查、`cargo run -p repo-guard -- scan --root .` 与 `git diff --check`；具体最终结果以本原子提交记录为准。
+- Code Review：按 v0.8 复核需求/边界、状态真实性、架构依赖、安全/隐私、发布默认面和任务唯一映射；本任务不改生产代码，P0/P1/P2=0/0/0。
+- 未覆盖：没有运行 CEF、Cast、MDV 真机、性能或发布验证；这些能力仍由上述实现任务、PRV-13A、MRT-09、QAR 与 REL-03/04 取得证据。

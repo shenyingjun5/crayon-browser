@@ -212,7 +212,7 @@
   - **M05b1..b6（切片 2）**：依次完成真实 CEF 媒体观察、策略编排、Cast-SDK 会话装配、Direct、Relay、DRM 拒绝/外部客户端交接；每个切片单独 Review，详见下方。
   - **M05c（切片 3）**：100 次开始/停止/设备切换资源稳定性（E2E-005）+ CP-M01 完整门禁。
 - 边界：签名/公证用真实开发者证书（本机 Apple Development cert 已有，见 dump-keychain 输出）或 ad-hoc + notarize 脚本；不创建浏览器镜像 session；CP-M01 生命周期（睡眠唤醒/锁屏/网络切换）经 PLT-M04b lifecycle 模块消费。
-- 验收与测试：E2E-001..005 适用项、CP-M01。命令：CEF 完整构建 + E2E smoke harness（CEF-14 已有）+ 签名验证 + notarization 脚本验证；真实接收端（小米）投送。
+- 验收与测试：E2E-001..005 适用项、CP-M01。命令：CEF 完整构建 + E2E smoke harness（CEF-14 已有）+ 签名验证 + notarization 脚本验证；使用当前 ADB 在线的任一手机运行固定 Cast-SDK 正式接收端做真机投送，记录设备/Android/接收端 build 与网络拓扑。
 - 明确不做：PLT-W05（Windows 对应物）、PLT-19（总 Review）、QAR 性能/长稳矩阵。
 
 ### PLT-M05a 完成记录（2026-08-26，切片 1：macOS 产品装配）
@@ -239,8 +239,8 @@
 |---|---|---|---|---|
 | PLT-M05b2 | TODO | M05b1 | 接通 observation → candidate/lifecycle → probe → `Direct/Relay/ExternalClientHandoff/Reject` 唯一策略 | MP4/HLS/DASH/DRM/credential fixture；普通失败不提权、不重试；不调用 SDK/UI |
 | PLT-M05b3 | TODO | M05b2 | 接通 CastButton/FeatureView、设备选择、Cast-SDK facade、session event pump 与 PLT 生命周期 | 无设备/取消/失败/旧 session/stop；UI 线程不执行有界 SOAP 阻塞；不做真机结论 |
-| PLT-M05b4 | TODO | M05b3 | 小米真实接收端 clear fixture Direct 发现、连接、投送、控制和停止 | E2E-001；真实 Desktop Host，不以 SDK standalone Harness 代替 |
-| PLT-M05b5 | TODO | M05b4 | 小米真实接收端 MP4 Range 与 HLS Relay 全链路 | E2E-002；opaque route、200/206/416、分片、撤销后拒绝；不支持 DASH Relay/加密 HLS |
+| PLT-M05b4 | TODO | M05b3 | ADB 在线手机上的固定 Cast-SDK 正式接收端完成 clear fixture Direct 发现、连接、投送、控制和停止 | E2E-001；真实 Desktop Host，不以 ADB 在线或 SDK standalone Harness 代替 |
+| PLT-M05b5 | TODO | M05b4 | 同一 ADB 真机接收端完成 MP4 Range 与 HLS Relay 全链路 | E2E-002；opaque route、200/206/416、分片、撤销后拒绝；不支持 DASH Relay/加密 HLS |
 | PLT-M05b6 | TODO | M05b5 | DRM/EME/加密/凭证来源拒绝与无路由外部客户端确认/取消/未安装/失败反馈 | E2E-003/004；交接永不显示投屏中、不创建 SDK/Relay session |
 
 每个切片允许修改其所属 `browser/cef-shell` 装配、既有 MED/SDK/app-runtime 调用入口和独立测试；发现需要改变公共协议、Cast-SDK facade 或 Relay 安全边界时停止并新建原子任务。M05b1..b6 不包含 M05c 100 次稳定性、PLT-W05、PLT-19 或 QAR 发布矩阵。

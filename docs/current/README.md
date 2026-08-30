@@ -19,8 +19,9 @@
 | [Markdown Runtime v1 契约](markdown-runtime.md) | `markdown-runtime-v1` ExtensionNode/manifest/registry、能力、预算、generation、错误与 current/previous golden |
 | [Code Highlight 供应链契约](code-highlight.md) | `code-highlight-assets-v1` 选型、固定离线 grammar/别名/dependency、hash/许可/包体与安全输出边界 |
 | [KaTeX 数学语法与供应链契约](math-katex.md) | `math-katex-assets-v1` 的 `$`/`$$` 定界、固定 option/宏禁令、ESM/CSS/WOFF2 离线闭包与 MRT-08 输出门禁 |
-| [总 Roadmap](../crayon-private-cast-browser-roadmap.md) | 284 项活跃任务、第一期/第二期阶段和当前领取顺序 |
+| [总 Roadmap](../crayon-private-cast-browser-roadmap.md) | 285 项活跃任务、第一期/第二期阶段和当前领取顺序 |
 | [第一期发布 Roadmap](../plans/release-v1-roadmap.md) | 网页 Markdown、LAN 投屏、本地 Markdown 编辑三大闭环、平台顺序与关闭 feature |
+| [第一期生产装配审计](release-v1-assembly.md) | REL-02 的真实 CEF source/link 调用图、断点任务映射与一期/二期默认开关 |
 | [模块 Roadmap 索引](../plans/README.md) | 每个模块的原子任务、依赖与状态 |
 
 ## 2. 专项当前契约
@@ -40,7 +41,7 @@ Cast-SDK source lock 的当前事实位于 `config/cast-sdk-source.toml`、`.git
 
 - 当前产品名/定位：蜡笔 AI Agent 投屏浏览器；从协议、页面数据面和授权边界为 AI Agent 定制。
 - 桌面 UI 采用 Chrome/Chromium 用户熟悉的信息架构与快捷键心智，但使用蜡笔品牌和自有本地页面；`BUX-01..18` 覆盖起始页、omnibox、标签、书签、历史、下载、设置、Profile/无痕与日用基础功能。
-- 浏览器内建本地 Markdown Runtime：用户经受控入口打开本地 `.md`，支持源码/渲染预览切换、分栏编辑实时预览、原子保存、图标化编辑工具栏与标准 Mermaid fence；`MDV-01..24` 承接查看器、工具栏与 Mermaid，`MRT-01..19` 承接闭合扩展框架、Highlight/KaTeX 及后续扩展/跨域门禁，均属用户能力，不作为 Agent 能力暴露。普通 Markdown 继续使用 vendored md4c 0.5.3/MIT；第三方 runtime 均为应用内固定闭包、按需加载，Mermaid tiny 选型已撤销。
+- 浏览器内建本地 Markdown Runtime：用户经受控入口打开本地 `.md`，支持源码/渲染预览切换、分栏编辑实时预览、原子保存、图标化编辑工具栏与标准 Mermaid fence；`MDV-01..25` 承接查看器、工具栏、Mermaid 与生产 fixture 清理，`MRT-01..19` 承接闭合扩展框架、Highlight/KaTeX 及后续扩展/跨域门禁，均属用户能力，不作为 Agent 能力暴露。普通 Markdown 继续使用 vendored md4c 0.5.3/MIT；第三方 runtime 均为应用内固定闭包、按需加载，Mermaid tiny 选型已撤销。
 - Windows/macOS CEF 浏览器与 LAN Direct/Relay 投屏优先。
 - 无 Direct/Relay 路由时只交接给独立蜡笔投屏客户端；浏览器不做 WebRTC、屏幕/标签页/系统音频采集或编码。
 - 浏览器与投屏主链路完成后建设当前页数据/Markdown；CAAP、CLI/MCP、高性能读页与授权操作是核心分阶段能力。
@@ -55,7 +56,7 @@ Cast-SDK source lock 的当前事实位于 `config/cast-sdk-source.toml`、`.git
 - CEF 固定基线为 `150.0.10+g8042e43+chromium-150.0.7871.101` Standard。历史四平台 hash 已锁定，Windows x64 archive 已校验；后续产品构建只推进 Windows/macOS。
 - Cast-SDK source revision 已由 `SDK-01` 固定并通过 `RG-008`；`SDK-01..14 DONE`，包括真实接收端 Harness 与总 Review。`SDK-15/16` 只承接后续 Partner/TV Cast gap 与正式外部 facade。
 - `MED-19` 已完成：投屏决策集合为 `Direct/Relay/ExternalClientHandoff/Reject`，旧 `mirror` wire 值保留兼容读取窗口且不再发出；`tab_video`/`system_audio` 仅作为 `crayon-domain` 遗留字段存在，策略与 runtime 代码不再引用，不得继续扩张。
-- 当前开发前沿：`REL-01 DONE` 已冻结第一期三大闭环，下一任务为 `REL-02 READY` 生产调用图审计；网页 Markdown 从 `CNT-17 READY` 开始接真实 CEF，投屏从 `PLT-M05b1 READY` 开始按观察→策略→SDK→Direct→Relay→拒绝/交接推进；`MDV-20/24 VERIFIED` 与 `MRT-09` 负责 P0 Runtime 发布收口。macOS arm64 先行、Windows x64 同一期回归。Agent/CLI/MCP、Workflow、Hub、Partner、模型与 HarmonyOS 统一为第二期且默认关闭。
+- 当前开发前沿：`REL-02 DONE` 已确认网页 Markdown 与 LAN 投屏尚未进入 `CrayonBrowser.app`，本地 MDV 已生产可达但含 fixture 初始化缺口；下一任务为 `CNT-17 READY`，随后 `PLT-M05b1 READY`，二者串行修改 CEF 装配。MDV 新增 `MDV-25 READY` 移除生产 fixture，完成后才能执行 `MRT-09` P0 Runtime 总 Review。macOS arm64 先行，Direct/Relay 可使用 ADB 在线手机的正式接收端取证；Windows x64 同一期回归。Agent/CLI/MCP、Workflow、Hub、Partner、模型与 HarmonyOS 统一为第二期且默认关闭。
 
 ## 5. 权威与历史
 
