@@ -1,6 +1,6 @@
 # ACT：页面语义地图与可验证动作 Roadmap
 
-- 状态：执行中；`ACT-01 DONE`、`ACT-02..10 VERIFIED`（均 2026-08-30）
+- 状态：执行中；`ACT-01 DONE`、`ACT-02..11 VERIFIED`（均 2026-08-30）
 - 任务数：12
 - 目标：把已验证页面事实转换为 Agent 可高效读取的语义地图，并通过短期 `action_id`、前置条件和效果验证执行受控操作
 - 非目标：原始 DOM/HTML/CDP 输出、长期 CSS/XPath、任意 JavaScript、截图/OCR 常规控制、密码/支付/通用文件上传
@@ -26,7 +26,7 @@
 | ACT-08 | VERIFIED | ACT-07 | `crayon-semantic-action/effect/**` | 有界效果等待、verified/failed/indeterminate 和幂等语义 | `AC-008`; 不确定副作用不重放 |
 | ACT-09 | VERIFIED | ACT-04,ACT-06 | `crayon-semantic-action/form/**` | FormMap 字段/约束/错误/filled 状态 | `AC-009`; 不包含字段值；敏感/file 排除 |
 | ACT-10 | VERIFIED | ACT-01,CNT-04 | `crayon-semantic-action/change/**`,`crayon-page-data/**` | revision/ChangeSet 生成、分页、截断和旧增量丢弃 | `AC-010`; 动态页/高频变化/背压 |
-| ACT-11 | TODO | ACT-07,ACT-08 | `crayon-semantic-action/handoff/**`,`crayon-app-runtime/**` | 动作级人工接管结果、可恢复/不可恢复原因 | `AC-011`; 无隐式重试或权限继承 |
+| ACT-11 | VERIFIED | ACT-07,ACT-08 | `crayon-semantic-action/handoff/**`,`crayon-app-runtime/**` | 动作级人工接管结果、可恢复/不可恢复原因 | `AC-011`; 无隐式重试或权限继承 |
 | ACT-12 | TODO | ACT-02..ACT-11 | `tests/security/semantic/**`,`tests/perf/semantic/**`,`docs/current/**` | 语义动作性能/安全/生命周期总 Review 与 GO/NO-GO | `AC-001..012`; P0/P1=0；Release surface 零命中 |
 
 ## 3. 性能与 Review 门禁
@@ -217,3 +217,20 @@
 - 验证：`cargo test -p crayon-semantic-action` 52/52（新增 change 6：diff 三类检测、fencing 拒绝、800 项跨批无损分页、stale/replay/unfenced 丢弃、generation 重建、空 diff 推进 revision）；`cargo clippy --all-targets -- -D warnings` 通过；`cargo fmt --check` 通过。
 - Code Review：按 v0.8 复核；删除未使用的 wire 镜像类型（YAGNI）。P0/P1/P2 = 0/0/0。
 - 未覆盖与风险：高频真实页面背压/阻塞归传输层；`crayon-page-data` 文件未改动，属允许路径内的有意不动。`ACT-11 READY`。
+
+
+## ACT-11 原子范围（动作级人工接管结果）
+
+- 状态：`VERIFIED`；依赖 `ACT-07/08 VERIFIED`。
+- 单一目标：在 `crayon-semantic-action/handoff/**` 冻结动作级人工接管的可解释结果：闭合原因、冻结 kind 与"必须重读 + 必须新确认"的恢复语义。
+- 输入与输出：输入为 ACT-01 绑定词汇（tab/generation/node/action）；输出仅限 `crates/crayon-semantic-action/src/handoff/**`、`tests/handoff.rs`、`lib.rs` re-export 与本 Roadmap。
+- 语义：9 类闭合原因（5 类 Recoverable：UserTakeover/Challenge/ConfirmationExpired/ExecutionInterrupted/DeadlineElapsed；4 类 Unrecoverable：HandleConsumed/GenerationSuperseded/TargetRemoved/ProfileClosed）；kind 由 reason 表派生，调用方不可覆盖；Recoverable 恒置 `requires_fresh_read` 与 `requires_new_confirmation`（不继承旧确认、不隐式重试——重试在 ACT-07 gate 因 handle 已消费而结构性不可表达）；Unrecoverable 不可 resume。
+- 验收：AC-011 契约侧：闭合词汇、kind/reason 一致、恢复前置强制、wire `deny_unknown_fields` 与 roundtrip。
+- 明确不做：Challenge 求解（红线）、接管 UI（CEF-07/AGT-05）、确认 mint（AGT-05）、执行（ACT-07）。
+
+### ACT-11 完成记录（2026-08-30）
+
+- 实现：`handoff/mod.rs`：`HandoffKind`/`HandoffReason` 闭合词汇、`HandoffRecord`（deny_unknown_fields wire）、`handoff` 构造器（kind 派生 + 恢复前置强制）。
+- 验证：`cargo test -p crayon-semantic-action` 56/56（新增 handoff 4）；`cargo clippy --all-targets -- -D warnings` 通过；`cargo fmt --check` 通过。
+- Code Review：按 v0.8 复核。P0/P1/P2 = 0/0/0。
+- 未覆盖与风险：接管 UI 与确认 mint 归 AGT-05/CEF-07；本层只冻结可解释结果契约。`ACT-12 READY`（依赖 ACT-02..11 全部完成）。

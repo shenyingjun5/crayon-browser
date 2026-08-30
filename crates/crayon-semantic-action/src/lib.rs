@@ -14,6 +14,7 @@ mod detail;
 mod effect;
 mod form;
 mod handle;
+mod handoff;
 mod precondition;
 mod risk;
 mod runtime;
@@ -37,6 +38,7 @@ pub use handle::{
     HandleIssueError, HandleNonce, HandleRegistry, IssueOutcome, ProfileScope, ProfileScopeError,
     Resolution, MAX_ACTIVE_HANDLES, MAX_HANDLE_TTL_MS,
 };
+pub use handoff::{handoff, HandoffKind, HandoffReason, HandoffRecord};
 pub use precondition::{
     evaluate, is_actionable, PreconditionCheck, PreconditionInput, PreconditionReport,
     PreconditionViolation, MAX_PRECONDITION_VIOLATIONS,
