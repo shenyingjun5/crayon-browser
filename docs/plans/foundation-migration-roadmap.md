@@ -1,6 +1,6 @@
 # FND：基础工程与 Legacy 迁移 Roadmap
 
-状态：`FND-01/02/03/04/05/06/07A/07B/07C/07D/07E/08/09/10/11/12 DONE`；FND V0 已收口。
+状态：`FND-01/02/03/04/05/06/07A/07B/07C/07D/07E/08/09/10/11/12/13 DONE`；Foundation 当前任务已收口。
 
 ## 目标
 
@@ -244,6 +244,20 @@
   - `FND-12-R2`——legacy `--sniff-cli not-a-url` 的 URL `unwrap` panic；已在主线程 dispatch 前返回结构化错误，新增独立单测/架构契约，真实 CLI exit 0、无 panic/端口残留。
   - `FND-12-R3`——默认 formal 根包无条件携带 legacy 依赖；13 个 legacy 依赖已改为 optional 且只能由 `legacy-dev` 显式启用，RG-005 覆盖非 optional、正确接线和其他 feature 泄漏三类用例，默认直接依赖图只剩 6 个正式 Core crate。
 - 完成证据（2026-08-10）：独立 Review 见 `docs/current/fnd-migration-review.md`，P0/P1/P2/P3=0。`cargo clippy --workspace --all-targets -- -D warnings` 与 app 全目标严格 Clippy PASS；app `--locked --offline` check PASS、12/12 单测；legacy_contract 9/9；`scripts/check.ps1 fast/core/security` 全部 PASS；`cargo build --workspace` 和 `cargo build --workspace --release` PASS；默认正式依赖闭包 8 个 Release `.rlib` 的 RG-006 全部 PASS；非法 sniff URL 真实 CLI smoke 输出结构化 marker 且无残留监听；format、repo guard、`git diff --check` PASS。规模强提醒仅命中两个 feature-gated legacy 函数，保持整体的理由已写入 Review；CEF、Cast-SDK、平台/真机/发布证据明确不在 FND 范围。FND V0 完成，下一阶段按 CEF/SDK 前置继续。
+
+### FND-13：规范分层、AGENTS 精简与 Code Review v0.9
+
+- 状态：`DONE`
+- 依赖：FND-12。
+- 单一目标：把仓库级常驻红线、架构细则、验证证据和 Review 判定放回各自唯一权威文档，降低重复与漂移，同时保持现有产品、安全和交付门禁不降级。
+- 输入：Cast-SDK 仓库级 Agent 规则与 Review 契约；本仓库 `AGENTS.md`、current 契约、现有 `repo-guard`/`scripts/check.ps1` 门禁。
+- 允许修改：`AGENTS.md`、`docs/current/README.md`、`docs/current/architecture.md`、`docs/current/testing-standard.md`、`docs/current/code-review-standard.md`、`docs/plans/foundation-migration-roadmap.md`、`docs/plans/README.md`、`docs/crayon-private-cast-browser-roadmap.md`。
+- 禁止修改：生产/测试代码、依赖、构建脚本、其他模块任务状态与完成证据；不新建同义规范文档。
+- 边界：`AGENTS.md` 只保留跨任务永久规则与权威入口；主业务/辅助链、Cast-SDK 跨仓所有权归架构；验证矩阵、证据字段和 artifact scan 归测试标准；严重级别、审查顺序与结论模板归 Code Review 标准。
+- 验收：上述文档无冲突链接或状态漂移；`AGENTS.md` 明显短于现状且不删除产品/安全红线；`cargo run --quiet -p repo-guard -- scan --root .`、`scripts/check.ps1 fast`、`git diff --check` 全部通过；按 v0.9 独立 Review 后 P0/P1 为 0。
+- 明确不做：不改变任何产品行为、协议/schema、功能 Roadmap 状态、平台完成口径或发布产物；不把 Cast-SDK 专项实现规则复制到本仓库。
+- 证据：S2；完成时记录实际命令、结果和未覆盖项。
+- 完成记录（2026-08-30）：根 `AGENTS.md` 从 222 行压缩为 129 行，仅保留产品/安全红线、权威入口、原子任务、稳定架构边界、执行与授权原则；主业务/辅助链和 Cast-SDK 跨仓流程进入 architecture v0.9，变更类型矩阵、证据字段、组合命令与 Release artifact scan 进入 testing-standard v0.8，严重度、CEF 线程/重入、能力真实性、供应链和“APPROVE 与 Roadmap 状态分离”进入 code-review-standard v0.9；未新建同义规范，未修改生产/测试代码或功能任务状态。`cargo run --quiet -p repo-guard -- scan --root .` exit 0、4.6s、PASS（RG-003/RG-004 仅报告本任务未触碰的既有 warning，零新增 finding）；`scripts/check.ps1 fast` exit 0、128.5s、PASS，`guard/format/brand-assets-unit/brand-assets/formal-workspace/legacy-unit` 6/6 steps 通过；`git diff --check` PASS。独立 v0.9 Review：P0/P1/P2/P3=0，结论 APPROVE，Roadmap 最高可达 `DONE`。真机/Harness 与 Release artifact scan 对纯规范任务不适用；剩余风险为自然语言契约仍需后续任务在 Review 中持续执行，已由 current 索引和 fast 门禁约束。
 
 ## 提交顺序
 

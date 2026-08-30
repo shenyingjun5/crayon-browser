@@ -35,7 +35,7 @@
 | 模块 | 任务数 | 目标 |
 |---|---:|---|
 | BRD | 4 | 品牌图标母版、跨平台确定性资产与接入门禁 |
-| FND | 19 | Workspace、契约、质量入口与仓库基线 |
+| FND | 20 | Workspace、契约、质量入口与仓库基线 |
 | CEF | 20 | Windows/macOS CEF 浏览器壳（含 `01A..01E`、`02W/02M` 拆分） |
 | BUX | 19 | Chrome-inspired 蜡笔浏览器 UI 与日用基础功能（含 `04A/04B` 拆分） |
 | MDV | 25 | 本地 Markdown Runtime：查看/编辑/保存、图标工具栏、图片、Mermaid Full、生产隔离与跨平台门禁 |
@@ -116,7 +116,7 @@ flowchart LR
 
 ### V0：工程、投屏语义与 SDK discovery 基线（已完成）
 
-- 品牌资产 `BRD-01..04`、Foundation 19 项、`MED-01..19`、`CEF-01A..01B`、`SDK-01..12`。
+- 品牌资产 `BRD-01..04`、Foundation 19 项、`MED-01..19`、`CEF-01A..01B`、`SDK-01..12`；后续 `FND-13` 仅做规范治理，不改变 V0 产品能力。
 - 产出：`Direct/Relay/ExternalClientHandoff/Reject`，固定 SDK source/facade/Fake/真实 service/discovery/连接/投送/监督与 runtime 语义，以及 CEF/ArkWeb 共享的 C++17 engine-api 契约。
 
 ### V1：桌面浏览器与 Markdown Runtime P0 可用（macOS 先行）

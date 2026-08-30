@@ -1,7 +1,7 @@
 # 蜡笔 AI Agent 投屏浏览器当前架构
 
-- 版本：v0.8
-- 日期：2026-08-28（补充 Markdown Runtime Extension Framework 边界）
+- 版本：v0.9
+- 日期：2026-08-30（补充主业务/辅助链与 Cast-SDK 跨仓所有权）
 - 状态：当前权威架构契约
 
 ## 1. 架构结论
@@ -50,6 +50,27 @@ flowchart TB
 - CEF/ArkWeb 类型、DOM 指针、CDP 对象和平台句柄不得进入公共 schema。
 - 模型、页面文字、合作方 tool description 和 connector 响应统一视为不可信内容，不能创建 grant、confirmation、route override 或修复决定。
 - Cast-SDK/接收端拥有设备协议。浏览器不得自行解释或签发 Partner/TV Cast Manifest。
+
+### 2.1 主业务与辅助链
+
+组件按“是否决定用户可见业务结果”分类，不按 `report`、`diagnostics`、`audit` 等名称分类：
+
+- **主业务**包括授权、策略、协议 ACK/status/terminal、状态机推进、恢复/fallback、资源创建与释放。主业务失败必须进入显式、可恢复或可终止的状态，不能被日志或报告成功掩盖。
+- **辅助链**包括日志、指标、诊断、采样和不参与决策的 receipt/trace 展示。生产者必须单向、非阻塞、有界；满载时采用丢弃、覆盖或合并并记录 `dropped`，不能反压主业务。
+- 辅助消费者缺失、变慢、离线、flush 失败或格式升级时，不得改变浏览、投屏、Agent、Workflow 或 connector 的成功/失败语义，也不得阻止 stop/release。
+- receipt、trace、诊断与模型输出只能描述已发生事实，不能生成或扩大 grant、降低风险、选择 route、触发 fallback 或补发副作用。
+- 一个看似“辅助”的 ACK、terminal receipt 或恢复记录若被调用方依赖来判定协议完成，仍属于主业务，必须按协议兼容、幂等、取消和释放规则审查。
+
+### 2.2 Cast-SDK 跨仓变更
+
+浏览器只消费已批准、固定 revision 的 Cast-SDK facade。发现设备发现、连接、能力、控制、接收端协议或 Partner/TV Cast Manifest 缺口时，顺序固定为：
+
+1. 在浏览器 Roadmap 做 gap analysis，写清用例、能力缺口和不在本仓实现的边界。
+2. 在 Cast-SDK 建立独立 Roadmap/API 变更并按其规则实现、验证、Review 和发布。
+3. 浏览器更新 source lock/gitlink，核对许可、兼容和真实 facade，再只在 `crayon-cast-adapter` 接线。
+4. 浏览器侧重新执行 contract、集成、平台/设备与 Release artifact 门禁。
+
+禁止在等待外部 API 时复制 SOAP、DLNA metadata、CastExtension、receiver URL、raw manifest 或临时协议分支；Fake 只能验证浏览器消费契约，不能证明真实 SDK/接收端能力。
 
 ## 3. 模块所有权
 

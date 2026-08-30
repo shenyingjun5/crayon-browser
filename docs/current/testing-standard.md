@@ -1,7 +1,7 @@
 # 蜡笔 AI Agent 投屏浏览器测试标准
 
-- 版本：v0.7
-- 日期：2026-08-28（补充 MD-008..013、MR-001..013）
+- 版本：v0.8
+- 日期：2026-08-30（补充变更类型矩阵、证据字段与 Release artifact scan）
 
 ## 1. 分层
 
@@ -58,6 +58,23 @@ Linux 不在当前矩阵；不能用 Linux runner 结果代替 Windows/macOS 证
 - Hub 区分入站 MCP/出站 connector，覆盖 route_reason、fallback 重授权、信任/签名/kill switch、OAuth、SSRF、描述注入、熔断和审计。
 - M2 覆盖发送前预览与真实 payload 一致、provider origin/redirect、取消/失败、本地 Markdown 降级、引用和合法视频文本来源。
 
+### 4.1 按变更类型的最小验证
+
+Roadmap 可以在风险更高时增加门禁，不能低于以下最小集合：
+
+| 变更类型 | 最小验证 |
+|---|---|
+| 纯文档/Roadmap | 链接与事实一致性、`repo-guard`、`git diff --check`；涉及仓库规则时追加 `scripts/check.ps1 fast` |
+| Rust/C++/ArkTS/TypeScript 行为 | Format + Lint + 定向 Unit/Contract + 受影响 target Build |
+| Bug 修复 | 先有稳定复现失败的回归测试，再运行修复后定向测试和受影响上层套件 |
+| 公共 API/schema/协议 | current/previous golden、reject vectors、兼容调用方、错误/取消/幂等与文档同步 |
+| 并发/生命周期/性能 | 压力或确定性调度、取消/释放、资源回落；性能结论附基线、条件和端到端口径 |
+| 平台/CEF/设备 | 对应 OS/架构 Debug 与 Release build、完整适用 CTest/E2E、真实 UI/设备或指定 Harness |
+| 依赖/vendor/generated/submodule | source/lock/hash/license、可复现生成、离线闭包、跨平台 build 与 Release surface |
+| 安全/隐私/发布 | security suite、secret/release surface、安装包或 artifact scan；适用时 SBOM/签名/回滚 |
+
+一个命令同时覆盖多项可以复用，但证据必须指出具体覆盖项。Fake/Mock、cross-compile、编译通过、短 smoke、Harness 和真实设备是不同层级，不得互相冒充。
+
 ## 5. 性能与长稳
 
 - 浏览器：冷启动、首导航、标签切换、崩溃恢复和 Profile 清理。
@@ -71,11 +88,14 @@ Linux 不在当前矩阵；不能用 Linux runner 结果代替 Windows/macOS 证
 
 ## 6. 证据规则
 
-- 记录完整命令、退出码、测试数量、耗时、平台/设备版本和原始失败摘要。
-- 未运行写 `NOT_RUN`；超时写 `TIMEOUT`，不能推断通过或失败。
+- 每组证据记录 commit/range、工作区是否干净、平台/OS/架构、Debug/Release 配置、完整命令、退出码、测试通过/失败/跳过数量、耗时和 `PASS/FAIL/TIMEOUT/NOT_RUN`。
+- 真机或 Harness 追加设备/receiver/runtime 版本、网络拓扑、操作步骤和原始结果；发布产物追加精确路径、包类型、大小、SHA-256 与签名/许可结果。
+- 未运行写 `NOT_RUN`；超时写 `TIMEOUT`；失败保留首个根因和受影响范围，不能用“应该通过”或后续成功推断前项通过。
+- 组合 shell 命令必须能证明每一步退出状态；后一命令成功不能掩盖前一命令失败。证据按子命令分别记录，或使用遇错即停的入口。
 - 真机/Harness 任务只有实际证据才能 `DONE`；单平台结果不替代另一平台。
-- 当前核心基线仍以根 `AGENTS.md` 记录为准；入口变化必须同步 Roadmap 和本标准。
+- 当前计数和平台基线以所属 Roadmap 的最近完成记录为准；易变数字不得复制回根 `AGENTS.md`。入口变化必须同步 Roadmap 和本标准。
 - 在入口尚未创建前，Roadmap 必须列出底层真实命令；不得引用不存在的脚本作为证据。
+- Release/安装包必须对实际交付目录运行 `cargo run -p repo-guard -- scan --root . --artifact-path <artifact>`，同时按专项契约核对测试资源、调试入口、远程控制、secret、vendor 资产、NOTICE/SPDX 和 source lock；只扫描源码树不能证明产物合规。
 
 ## 7. 当前用例集
 

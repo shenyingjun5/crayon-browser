@@ -7,11 +7,11 @@
 | 文档 | 作用 |
 |---|---|
 | [当前 PRD](../crayon-private-cast-browser-prd.md) | v0.8 产品事实源：定位、范围、阶段、语义动作、Workflow/Hub、隐私与验收 |
-| [当前架构](architecture.md) | v0.8 CAAP、语义动作、Markdown Runtime、Workflow/Challenge、Hub/connector、投屏、模型与平台边界 |
+| [当前架构](architecture.md) | v0.9 CAAP、主/辅链、跨仓 Cast-SDK、语义动作、Workflow/Hub、投屏、模型与平台边界 |
 | [技术方案](../crayon-private-cast-browser-technical-design.md) | 当前实现方案与构建/供应链考虑 |
-| [测试标准](testing-standard.md) | 分层、设施、平台矩阵和证据规则 |
+| [测试标准](testing-standard.md) | v0.8 分层、变更类型矩阵、平台/真机与 Release artifact 证据规则 |
 | [测试用例](test-cases.md) | 212 个唯一当前权威测试 ID |
-| [Code Review 标准](code-review-standard.md) | 审查顺序、门禁和交付格式 |
+| [Code Review 标准](code-review-standard.md) | v0.9 审查顺序、严重级别、能力真实性、供应链/产物门禁和结论格式 |
 | [Content Data Plane v1](content-data-plane.md) | CNT C1 snapshot/Markdown/owner/delta/Agent R1 冻结接口、预算与 GO 结论 |
 | [品牌图标契约](brand-assets.md) | `app-icon-v1` 参考源、母版、平台组合与禁用规则 |
 | [桌面浏览器体验契约](browser-ux.md) | `browser-design-v1` 顶部信息架构、共享 token、标题栏/功能 icon、键盘与无障碍规则 |

@@ -1,8 +1,8 @@
 # 蜡笔 AI Agent 投屏浏览器 Code Review 标准
 
-- 版本：v0.8
-- 日期：2026-08-23
-- 变更：参照 Cast-SDK Review 标准重构——新增基本原则、问题等级（P0–P3 + Question/Nit）、执行顺序、合并条件与结论模板；并发死锁与热路径日志清单细化；保留浏览器/投屏/CAAP/语义动作/Workflow/Hub 域专属检查。
+- 版本：v0.9
+- 日期：2026-08-30
+- 变更：补充主业务/辅助链、CEF 线程亲和与重入、能力证据真实性、供应链/Release artifact 和组合命令证据；明确 Review 结论与 Roadmap 最高状态分离。
 
 ## 1. 目标
 
@@ -43,11 +43,13 @@ Code Review 不只确认代码“能够运行”，还要确认改动：
 
 - 依赖方向固定为：产品 UI/应用编排 → 领域接口 → 共享 Core/Cast-SDK facade → 平台 adapter；禁止反向依赖、循环依赖或跨层读取内部状态。
 - CEF、ArkWeb、Win32/AppKit 类型和系统 API 只出现在对应 adapter/shell；不泄漏到共享领域层。
-- 只有 `crayon-cast-adapter` 调 Cast-SDK；App 不拼 SOAP、DLNA metadata、CastExtension 或 receiver 控制_URL。
+- 只有 `crayon-cast-adapter` 调 Cast-SDK；App 不拼 SOAP、DLNA metadata、CastExtension 或 receiver control URL。
+- 设备协议或 facade 缺口按“浏览器 gap analysis → Cast-SDK Roadmap/API/发布 → 固定 source revision → adapter 接线”推进；Fake 或临时浏览器实现不能替代外部能力。
 - 入站 MCP 与出站 Partner MCP/API 位于不同 crate/registry/session/token/network/audit 边界，无双向权限继承。
 - 状态唯一所有，不直接修改其他模块的集合、锁、缓存或 generation；新抽象对应稳定业务概念。
 - 公共 schema/状态机/持久化/安全边界变化先有独立 Roadmap、previous/current golden 和迁移方案。
 - `lib.rs`/`main.rs` 只做装配与 re-export；禁止无边界 `utils.rs`/`manager.rs`。
+- 按是否决定用户可见结果区分主业务/辅助链，不按名称判断；授权、策略、协议 terminal、恢复/fallback 和资源释放不能依赖日志/诊断成功。辅助链必须单向、非阻塞、有界并可统计 dropped，不能生成 grant、risk 或 route。
 
 ### 3.3 浏览器与投屏
 
@@ -91,6 +93,7 @@ Code Review 不只确认代码“能够运行”，还要确认改动：
 - Stop/Release 与 callback、worker、timer 的停止顺序明确，避免互相等待或释放后回调；start/stop、导航、设备切换、网络切换、休眠唤醒和退出幂等并逆序释放资源。
 - 等待、重试、队列和条件变量有明确唤醒条件、取消路径和合理上限；检查重复回调、回调错序、旧会话污染新会话、代际复用、丢失唤醒和饥饿。
 - 并发容器、原子变量或无锁结构仍需验证组合操作一致性；不能因为“没有 mutex”就认为没有竞态。
+- CEF/Win32/AppKit/ArkWeb 对象的创建、使用和销毁必须遵守 UI/IO/Renderer 等线程亲和；跨线程投递绑定 generation/weak owner，检查同步回调、嵌套 message loop 和 listener 重入造成的二次 stop 或锁内回调。
 - 高风险并发修复应补锁序推演、压力测试或长稳验证。
 
 存在可永久死锁、稳定竞态、释放后访问或线程泄漏时，不能批准合并。
@@ -101,6 +104,7 @@ Code Review 不只确认代码“能够运行”，还要确认改动：
 - 热路径避免不必要的内存分配、复制、JSON 序列化、字符串格式化、文件 IO、同步网络调用、锁竞争和重复整树遍历。
 - 队列、缓存、连接、并发、重试、日志和采样窗口必须有界，并定义满载时的背压、覆盖、降级或丢弃策略与 dropped 计数。
 - 辅助日志/诊断/遥测不参与主业务正确性；生产者非阻塞，消费者缺失、变慢或离线不得反压主业务。
+- 辅助链初始化、flush 和销毁不能占用主链 executor、锁或退出 deadline；关闭状态下避免构造昂贵 payload，满载/离线日志必须限频。
 - 不允许默认开启逐帧、逐分片、逐像素或高频轮询日志；`trace`/diagnostics 默认关闭且关闭时接近零成本。
 - 日志结构化、等级与频率匹配；正常重试和预期状态不得持续刷 `WARN/ERROR`。
 - 日志、receipt、诊断、trace 不输出凭证、Cookie、Authorization、URL query token、用户内容或不必要设备隐私数据。
@@ -121,6 +125,7 @@ Code Review 不只确认代码“能够运行”，还要确认改动：
 - 协议字段、错误码、事件和持久化结构变化向前/向后兼容；CAAP/golden/schema 变化走独立 Roadmap 与 previous/current 向量。
 - 用户文案进入本地化资源（`browser/shared-ui/locales`），不硬编码在业务代码。
 - 废弃接口保留合理迁移路径，不直接破坏已有集成方。
+- capability/feature advertisement 必须来自真实装配与运行时检查；Fake、Mock、header 编译或跨平台编译不能把未接线能力宣告为 available。
 
 ### 3.10 安全与隐私
 
@@ -128,6 +133,7 @@ Code Review 不只确认代码“能够运行”，还要确认改动：
 - 删除前验证显式根、规范路径、符号链接/目录联接和目标数量；失败停止，不扩大范围。
 - Cookie、Authorization、浏览历史、完整签名 URL、token 和 key 不出可信内存边界；LAN 不暴露通用 extract/proxy 或无鉴权控制接口。
 - Debug 入口、远程诊断、测试开关和敏感日志不得意外进入 Release 默认能力。
+- 本机 IPC/loopback 明确 ACL、peer identity、短期 secret 与监听范围；外部客户端 handoff 需要用户确认、可信路径/签名与参数边界，不能经 shell 拼接。
 - 依赖升级检查来源、许可证、维护状态、包体和跨平台影响。
 - receipt、trace、checkpoint、Skill Store、route/audit 和 connector cache 全部最小化、有界、可撤销并按 Profile/provider/tenant 隔离。
 
@@ -158,12 +164,14 @@ Code Review 不只确认代码“能够运行”，还要确认改动：
 
 ### 3.13 测试、构建与可验证性
 
+- 验证层级、变更类型最小矩阵和证据字段以 [测试标准](testing-standard.md) 为唯一事实源；Review 不复制易变测试计数。
 - 新功能有行为测试；Bug 修复先有能复现原问题的失败测试。
 - 生产源码不包含测试实现、fixture、Mock/Fake、测试入口、故障注入或 `xxxForTest` API；Rust 生产文件只允许 `#[cfg(test)] mod xxx_tests;` 声明（`#[path]` 指向独立文件）；C++ 用独立 test target；`test-support` 不进入生产依赖图。
 - 覆盖正常、失败、空输入、边界、重复调用、取消、超时、旧结果、恢复和资源释放；敌意输入任务补伪随机风暴/LCG 不变量。
 - 不使用固定长 `sleep`、公共网络或第三方影视站作为成功条件；用确定性时钟、本地 fixture 和 mock upstream。
-- 当前基线：`cargo test -p crayon-browser-core --lib` 3 项、`--no-default-features --features legacy-dev --lib` 58 项、共享层 ctest 基线见 Roadmap 记录；全 workspace、CEF 与平台任务按各 Roadmap 记录实际证据。
-- Review 必须列出实际运行的 Test/Build/Lint/真机命令及结果；未运行或环境阻塞的项明确写出，不能用“应该通过”代替证据。
+- Review 必须列出 commit/range、平台/架构、配置、实际 Test/Build/Lint/真机命令、退出码与 `PASS/FAIL/TIMEOUT/NOT_RUN`；组合命令逐项可审计，不能让后项成功掩盖前项失败。
+- Fake/Mock、cross-compile、编译、短 smoke、Harness 与真机分别记录；平台/设备任务没有对应证据时必须限制 Roadmap 最高状态。
+- 发布相关改动对真实交付目录运行 `repo-guard --artifact-path`，核对 Release 中的测试/调试入口、远程控制、secret、许可与固定 vendor 资产；只扫描源码树不够。
 - 性能结论使用正确的端到端口径；内部阶段点不能替代用户可感知结果。
 
 ### 3.14 改动范围与文档同步
@@ -171,6 +179,7 @@ Code Review 不只确认代码“能够运行”，还要确认改动：
 - 改动围绕一个清晰目标，不夹带无关重构、格式化、依赖升级或生成文件变化；大规模重构与行为变更分开。
 - 同步更新公共 API、架构、协议、测试和必要文档；Roadmap 完成记录包含实现、验证、Review 与未覆盖。
 - 生成文件与源定义一致；锁文件变化有明确原因；不保留临时开关、调试文件和本地环境产物。
+- vendor/generated/submodule/lockfile 变化核对上游来源、固定版本/hash、许可、可复现生成、离线闭包和包体；不得审查不透明的大型生成 diff 而跳过生成源与 manifest。
 
 ## 4. 问题等级
 
@@ -180,6 +189,8 @@ Code Review 不只确认代码“能够运行”，还要确认改动：
 | `P1 必须修改` | 明确功能错误、架构边界破坏、兼容性回退、重要竞态/资源泄漏、显著性能问题 | 原则上必须在本次合并前修复 |
 | `P2 应当修改` | 可维护性明显下降、重复规则、职责混乱、重要测试缺失或可预见中期风险 | 应修复；延期必须记录理由和后续任务 ID |
 | `P3 可选建议` | 命名、表达、局部简化或非关键优化 | 不阻塞合并，由作者判断 |
+
+定级示例：绕过 grant/确认、泄漏 secret、开放代理或 DRM 绕过为 P0；把未运行写成通过、Release 携带测试/远控入口、错误 capability 宣告、协议兼容回退通常为 P1；缺少与风险匹配但不影响当前正确性的专项测试通常为 P2。最终按可触发影响定级，不能仅凭关键词机械套用。
 
 补充标记：
 
@@ -196,7 +207,7 @@ Code Review 不只确认代码“能够运行”，还要确认改动：
 
 ## 5. Review 执行顺序
 
-1. 确认任务 ID、Roadmap 原子范围、评审边界和明确不在范围内的内容。
+1. 固定被审 commit/range，检查分支、工作区、submodule/lockfile 与无关改动；确认任务 ID、Roadmap 原子范围和明确不在范围内的内容。
 2. 阅读相关架构、协议、公共 API、实现和测试，不能只看 Diff 的孤立代码。
 3. 先检查正确性、架构、公共契约、并发和安全/隐私，再检查性能、可维护性与规模。
 4. 根据改动影响追踪调用方、被调用方、线程边界、资源所有权和跨平台路径。
@@ -220,15 +231,19 @@ Code Review 不只确认代码“能够运行”，还要确认改动：
 
 P2 可以在有明确理由和后续任务入口时延期；P3、Nit 和纯个人偏好不能阻塞合并。函数或文件触发规模提醒本身不构成 P0/P1，也不能单独作为拒绝合并的理由。
 
+`APPROVE` 只表示当前 diff 满足合并门禁，不自动把任务提升为 `DONE`。Reviewer 必须另列“Roadmap 最高可达状态”：缺平台/设备/发布门禁时即使代码可合并，也只能是 `IMPLEMENTED` 或 `VERIFIED`。
+
 ## 7. Review 输出模板
 
 ```markdown
 任务：<TASK-ID> <名称>
 
 范围：<文件、行为、明确不做>
+被审对象：<commit/range；分支；工作区/submodule 状态>
 
 结论：APPROVE | CHANGES_REQUIRED | BLOCKED
 - P0 / P1 / P2 / P3 数量：
+- Roadmap 最高可达状态：IMPLEMENTED | VERIFIED | DONE
 
 ## 发现
 
@@ -241,14 +256,18 @@ P2 可以在有明确理由和后续任务入口时延期；P3、Nit 和纯个�
 
 ## 专项检查
 - 架构与依赖：
+- 主业务/辅助链与能力真实性：
 - 并发、锁序与生命周期：
 - 隐私/安全红线：
 - 性能与热路径日志：
+- vendor/generated/submodule/Release artifact：
 - 规模提醒（函数/文件）：
 
 ## 验证
-- `<实际命令>`：PASS/FAIL/TIMEOUT/NOT_RUN
-- 真机或 Harness：
+- 平台/OS/架构与配置：
+- `<完整命令>`：exit <code>；<数量/耗时>；PASS/FAIL/TIMEOUT/NOT_RUN
+- 真机或 Harness：<设备/runtime/步骤/结果，未运行写 NOT_RUN>
+- Release artifact：<路径/大小/SHA-256/扫描结果，非发布任务写 N/A>
 
 ## 未覆盖与剩余风险
 - <没有则写“无”>
