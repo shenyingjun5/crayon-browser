@@ -10,3 +10,4 @@
 # Frozen contract goldens are compared byte-exact by tests; CRLF conversion
 # on Windows checkouts (core.autocrlf=true) would break them.
 /crates/**/tests/*.txt text eol=lf
+/crates/crayon-content-markdown/tests/golden/** text eol=lf

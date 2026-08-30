@@ -172,6 +172,12 @@
 - Code Review：按 v0.8 复核需求/边界、正确性、架构/API、安全/隐私、性能、测试和可维护性；修正 basic table 兼容回归，最终 P0/P1/P2 = 0/0/0。所有扫描受 PageSnapshot 预算约束，无网络、资源加载、HTML、锁、IO、递归或正文日志。
 - 未覆盖与风险：字段索引、增量 revision、stream/backpressure 与 C1 性能基线进入 `CNT-07 READY`；UI/复制/保存仍归 CNT-08。无平台或真机门禁。
 
+### CNT-05/06 Windows golden 行尾回归修复记录（2026-08-30）
+
+- 根因：CNT Markdown 的 `basic.md`/`normalized.md`/previous golden 使用 `include_str!` 做逐字节契约比较，但根 `.gitattributes` 只为 `crates/**/tests/*.txt` 固定 LF；Windows `core.autocrlf=true` checkout 将这些 `*.md` 变为 CRLF，导致渲染器固定 LF 输出与工作区 fixture 不等。Git blob 本身仍为 LF，失败不来自 Markdown 行为变化。
+- 修复：为 `crates/crayon-content-markdown/tests/golden/**` 明确 `text eol=lf`，保持 byte-exact golden 契约，不在测试中归一化或放宽断言。
+- 验收：Windows `core.autocrlf=true` 下重新写入后，`basic.md`/`normalized.md`/previous `basic.md` 的 raw CRLF 计数均为 0，且 raw hash 与既有 Git blob 相同；`cargo test -p crayon-content-markdown` 9/9、`cargo test --workspace`、`./scripts/check.ps1 fast`、`./scripts/check.ps1 security`、`cargo clippy -p crayon-content-markdown --all-targets --no-deps -- -D warnings`、`cargo fmt --all -- --check`、`git diff --check` 均通过。按 v0.8 独立复核需求/边界、正确性、架构/API、安全/隐私、性能、测试和可维护性，P0/P1/P2 = 0/0/0；未覆盖与剩余风险：无。状态仍为 `CNT-05/06 DONE`，本记录只修跨平台 fixture checkout 契约。
+
 ## CNT-07 原子范围（索引、基础增量与性能基线）
 
 - 状态：`DONE`；依赖 `CNT-03 DONE`、`CNT-06 DONE`。
