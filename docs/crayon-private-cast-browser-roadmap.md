@@ -1,19 +1,19 @@
 # 蜡笔 AI Agent 投屏浏览器总 Roadmap
 
-- 版本：v0.8（Markdown Runtime Extension Framework 同步）
+- 版本：v0.9（第一期三大闭环发布范围冻结）
 - 日期：2026-08-30
 - 状态：活跃
-- 当前任务总数：271
+- 当前任务总数：284
 - 当前测试用例总数：212
 
 ## 1. 当前结论
 
 - 已收口：`BRD-01..04`、Foundation、`MED-01..19`、`BUX-01..18`、`SDK-01..14`、`RNM-01..08`；CEF 为 `CEF-01..05/15 DONE`、`CEF-06..14 VERIFIED`，`ACT-01..12` 已完成契约/模型层总 Review，`MRT-01..08 DONE`。
-- 页面数据与 Agent 主线已进入后半段：`CNT-01..07/09 DONE`、`CNT-08 VERIFIED`、`CNT-10 READY`；AGT A0 权限内核完成，`AGT-06/07/09/12B/15 VERIFIED`。CLI/MCP 仍未开放，继续等待产品 transport 装配。
-- Workflow/Hub：`WFL-01 VERIFIED`，`WFL-02/04/06 READY`；`HUB-01..06 DONE`，后续 Site Skill/入站发现/Partner connector 严格等待各自依赖。
-- 平台剩余重点：`PLT-W05` Windows 产品装配、`PLT-M05 IN_PROGRESS`、`MDV-20/24 VERIFIED` 的明确真机缺口，以及 AGT-12C 产品进程装配。模型/provider 与 Partner Cast 仍处于独立后置门禁。
-- 产品仍按“浏览器与 LAN 投屏 -> 页面数据/Markdown -> Agent 协议与语义动作 -> Workflow/Challenge -> Capability Hub/合作方 -> 模型”的依赖顺序交付。
-- CAAP、CLI/入站 MCP、高性能读页和授权操作是核心；具体模型/provider 与视频/文档总结属于第二阶段。
+- 页面数据 C1 算法与数据面 `CNT-01..10` 已收口，但真实 CEF collector/gateway、生产编排和导出 UI 尚未装配；一期新增 `CNT-17 READY`、`CNT-18..21 TODO`，不再把 C1 GO 解释为用户已可一键导出。
+- 第一期范围由 `REL-01 DONE` 冻结为网页 Markdown、LAN Direct/Relay 投屏、本地 Markdown 编辑三大闭环；macOS arm64 先行、Windows x64 同一期回归。Agent/CLI/MCP、Workflow、Hub、Partner、模型与 HarmonyOS 默认关闭并进入第二期。
+- 平台剩余重点：`PLT-M05b1 READY` 后严格串行 b2..b6/M05c，随后 `PLT-W05` 对称装配；`MDV-20/24 VERIFIED` 与 `MRT-09` 关闭 P0 Runtime 发布缺口。M05a 既有证据只代表基础壳/new-tab，不代表 CNT/Cast 全产品装配。
+- 产品依赖顺序不变，但发布拆为两期：第一期先完成浏览器/LAN 投屏/网页 Markdown/本地 MDV；第二期再开放 Agent 协议与语义动作、Workflow/Challenge、Capability Hub/合作方和模型。
+- CAAP、CLI/入站 MCP、高性能读页和授权操作仍是产品核心方向，但不进入第一期发布包启用范围；具体模型/provider 与视频/文档总结同属第二期。
 - Windows/macOS 为当前桌面；HarmonyOS 只做鸿蒙电脑 PC 形态技术预览；Linux 无活跃任务。
 - `BUX` 独立承接完整桌面浏览器体验；`MDV` 承接本地 Markdown 查看/编辑/保存、图标工具栏、图片与 Mermaid Full，`MRT` 独立承接闭合 Extension Framework、Highlight/KaTeX 与后续扩展门禁（PRD v0.8）；`ACT`、`WFL`、`HUB` 分别承接语义动作、持久化工作流和 connector 安全边界，避免把大模块塞进 CEF、AGT 或 CNT。
 
@@ -43,21 +43,26 @@
 | MED | 19 | 媒体观察、LAN Relay 与外部客户端交接语义 |
 | SDK | 16 | Cast-SDK 发现/投送/控制；后续 Partner Cast facade |
 | PLT | 7 | Windows/macOS 系统与本机 IPC/客户端交接适配 |
-| PRV | 13 | Profile、隐私、安全、日志与删除语义 |
-| CNT | 16 | 页面数据/Markdown；第二阶段模型总结 |
+| REL | 4 | 第一期三大闭环范围、装配审计与跨平台发布聚合 |
+| PRV | 14 | Profile、隐私、安全、日志与分期数据流 Review |
+| CNT | 21 | 页面数据/Markdown 产品闭环；第二阶段模型总结 |
 | ACT | 12 | 语义地图、action_id、前置条件与效果验证 |
 | AGT | 16 | CAAP、入站 registry、CLI/MCP 与授权访问 |
 | WFL | 16 | Workflow、Challenge、个人 Site Skill 与受控修复 |
 | HUB | 16 | Capability Registry、Router 与 Partner connector |
 | HM | 12 | HarmonyOS 电脑 PC 形态技术预览 |
-| QAR | 15 | 质量、性能、安全、发布和回滚 |
+| QAR | 18 | 核心/第二期 feature 分离的质量、性能、安全、发布和回滚 |
 | RNM | 8 | `get-video` → `crayon-browser` 命名迁移 |
-| **合计** | **271** | |
+| **合计** | **284** | |
 
 ## 4. 依赖关系
 
 ```mermaid
 flowchart LR
+  REL["REL 一期范围/装配审计"] --> CEF
+  REL --> CNT
+  REL --> PLT
+  REL --> QAR
   BRD --> CEF
   BRD --> HM
   BRD --> QAR
@@ -142,7 +147,16 @@ flowchart LR
 ### C1：高性能页面数据与 Markdown
 
 - `CNT-01..10`；前置 `CEF-15`、`BUX-18`、`SDK-14`、`MED-19`、`PRV-08`。
-- 验收：当前页结构化快照、缓存/分页/增量、Markdown 预览/复制/保存和性能基线。
+- 验收：当前页结构化快照、缓存/分页/增量、确定性 Markdown、导出控制器模型和性能基线。C1 GO 只表示数据面冻结，不表示真实 CEF 与用户入口已装配。
+
+### R1：第一期三大闭环可发布版本
+
+- `REL-01..04`、`CNT-17..21`、`PLT-M05b1..b6/M05c`、`PLT-W05/19`、`MDV-20/24`、`MRT-09`、`PRV-13A` 与 `QAR-01..16` 的核心 A 任务。
+- 顺序：范围/调用图审计 → macOS arm64 网页 Markdown → macOS 媒体观察/Direct/Relay/交接 → MDV/MRT P0 收口 → Windows x64 对称回归 → 安全/性能/长稳 → 安装/升级/回滚 → Go/NoGo。
+- 验收：发布包真实完成网页→Markdown→复制/保存、网页视频→设备→Direct/Relay→控制/停止、本地 `.md`→编辑→预览→安全保存；P0/P1=0。Agent/Workflow/Partner/model 等第二期 feature 默认为 off/NOT_IN_RELEASE。
+- 平台：macOS 第一期支持 Apple Silicon；Windows x64 同一期回归。原生 macOS Intel/x64 只有取得原生硬件证据后才能进入支持矩阵。
+
+以下 S1 对外装配、A1/A2/W/H/X/M2/Harmony 阶段统一属于第二期，不阻塞 R1：
 
 ### S1：语义地图与可验证动作内核
 
@@ -186,12 +200,12 @@ flowchart LR
 
 ### M2：模型型 AI 第二阶段
 
-- `CNT-11..16`；前置 `CNT-10`、`AGT-16`、`PRV-13`。
+- `CNT-11..16`；前置 `CNT-21`、`AGT-16`、`PRV-13B`。
 - 验收：provider ADR、发送预览、文档总结、合法文本来源的视频总结、引用和降级。可与 W/H 后期按资源并行，但不能替代其确定性门禁。
 
 ### V5：Windows/macOS 稳定发布
 
-- `QAR` 适用任务。Agent、Workflow、Partner、模型分别做 feature GO/NO-GO；任一后续 feature NO-GO 不阻塞浏览器/LAN 投屏核心发布。
+- 第一期执行 `QAR-02A/05A/08A` 与其余核心任务；第二期 feature 执行 `QAR-02B/05B/08B`。Agent、Workflow、Partner、模型分别做 feature GO/NO-GO；任一后续 feature NO-GO 不阻塞三大核心闭环发布。
 
 ### VH：HarmonyOS 电脑技术预览
 
@@ -208,6 +222,7 @@ flowchart LR
 | V2/V3 | 4～6 周 | Fake 到真实 LAN 接收端，受外部环境影响 |
 | V4W/V4M | 4～6 周 | 两平台可错峰并行 |
 | C1 | 3～4 周 | 页面数据、Markdown 与性能基线 |
+| R1 | 6～10 周 | 三大闭环产品装配、两平台回归与发布门禁；macOS 先行 |
 | S1 | 3～4 周 | 语义地图、动作和效果验证 |
 | A1/A2 | 5～8 周 | 入站 transport、只读与受控写 Preview |
 | W1/W2 | 4～6 周 | 人机接管、个人技能、健康与修复 |
@@ -222,17 +237,18 @@ flowchart LR
 
 ## 7. 当前领取顺序
 
-1. `CNT-10 READY`：执行 C1 独立总 Review与 Agent data-plane 接口冻结。
-2. `WFL-02/04/06 READY`：三项彼此独立，但一次只领取一个原子任务。
-3. Windows 优先收口项：`MDV-20` 发布回归、`PLT-W05` 产品装配；后者领取前先补齐原子范围与真实设备条件。
-4. `AGT-12C TODO`：先拆 CEF 产品 accept loop/lifecycle 与 session/grant/tool dispatch 装配，闭合后才解锁 `AGT-13/14`。
-5. `MDV-24 VERIFIED` 的 Narrator/中文 IME/原生 200% DPI 与原生 macOS x64、`PLT-M05 IN_PROGRESS` 按平台矩阵继续，不用单平台证据冒充完成。
+1. `REL-02 READY`：只读审计真实 CEF 产品调用图和一期 feature flag，先关闭状态/装配认知偏差。
+2. `CNT-17 READY`：接通真实 CEF snapshot collector/gateway；完成后严格推进 `CNT-18..21`。
+3. `PLT-M05b1 READY`：接通真实媒体观察；与 CNT-17 修改相邻 CEF 装配，必须串行，随后推进 b2..b6/M05c。
+4. `MDV-20 VERIFIED` Windows 发布回归与 `MDV-24 VERIFIED` 剩余真机门禁；依赖满足后执行 `MRT-09` P0 总 Review。
+5. macOS 三闭环关闭后推进 `PLT-W05` Windows 对称装配、`PLT-19` 与 QAR 核心矩阵。
 
-后置依赖：`AGT-16` 等 `AGT-13/14`；`HUB-07/08` 分别等 `WFL-12/AGT-14`；`CNT-11` 等 `CNT-10 + AGT-16 + PRV-13 + provider ADR`；`SDK-15/16` 等 HUB 总 Review和外部已批准 Cast API。
+第二期保持排队：`AGT-12C/13/14/16`、`WFL`、`HUB`、`CNT-11..16`、`MRT-10..19`、`SDK-15/16`、`HM`。其中 `CNT-11` 等 `CNT-21 + AGT-16 + PRV-13B + provider ADR`；不得在 R1 完成前抢占 CEF 装配和真机矩阵。
 
 ## 8. 发布门禁
 
-- 271 项任务按所选发布范围提供真实状态、命令与证据；212 个唯一测试 ID 可追踪，P0/P1 Review 为零。
+- 284 项任务按所选发布范围提供真实状态、命令与证据；212 个唯一当前测试 ID 可追踪，新增一期装配任务复用并扩展 CT/E2E/MD/CP 用例映射；P0/P1 Review 为零。
+- 一期核心发布不得依赖 QAR 的第二期 B 任务；Agent/Workflow/Partner/model 保持默认关闭并在 QAR-15 标记 `NOT_IN_RELEASE`。
 - MDV/MRT 发布包仅包含各 manifest 锁定的浏览器运行时闭包，无 tiny/CDN/npm runtime/动态插件；普通 Markdown 对未命中扩展的 runtime 零读取，Mermaid/Highlight/KaTeX 离线可用且通过类型化输出 policy、lazy/cache、generation 与资源回落门禁。
 - CLI/入站 MCP 共用 CAAP；出站 connector 独立；无 raw CDP/WebDriver/任意 JS/remote bind/通用文件上传。
 - 页面数据有界、action 有前置与效果、Workflow verified-only、Challenge 不绕过、self-heal 高风险 fail closed。

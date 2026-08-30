@@ -1,6 +1,6 @@
 # PLT Windows/macOS 平台适配 Roadmap
 
-- 状态：规划中
+- 状态：`PLT-01/02/W04/M04 DONE`；第一期 macOS 装配 `PLT-M05 IN_PROGRESS`（M05a 已完成基础壳，M05b1 READY），Windows 对称装配 `PLT-W05 TODO`
 - 任务数：7
 - 平台：Windows、macOS
 - 非目标：Linux、屏幕/标签页/系统音频采集、编码器、WebRTC sender
@@ -209,7 +209,7 @@
 - 路径说明：Roadmap `apps/desktop-cef/**` 的目录尚不存在；按既有映射惯例，`apps/desktop-cef/agent-transport` 等子路径映射 `browser/cef-shell` 装配，`platform/macos/**` 映射 `crates/crayon-platform-macos`。
 - 切片说明：
   - **M05a（切片 1）**：产品装配——把 CEF-01..14 全部模块（chrome/cast view/new-tab/omnibox/tabs/navigation/permission/download/session/context/ipc/core-client/input-proof/network-observer/media-observer/observation-gateway/agent-confirm/mdv/page-tools/context-menu/agent-confirm/settings/site-controls/preferences/profiles/session-restore/agent-confirm/bookmarks/history/downloads）装配进 CEF shell；签名/公证（开发者证书或 ad-hoc + notarization 脚本）；macOS 全量 E2E 冒烟（E2E-001..005 适用项，复用 CEF-14 harness）。
-  - **M05b（切片 2）**：Direct/Relay/外部客户端交接验收——真实接收端（小米）上 Direct 投送、外部客户端交接确认流（E2E-001/003/004）；CP-M01 生命周期与错误反馈。
+  - **M05b1..b6（切片 2）**：依次完成真实 CEF 媒体观察、策略编排、Cast-SDK 会话装配、Direct、Relay、DRM 拒绝/外部客户端交接；每个切片单独 Review，详见下方。
   - **M05c（切片 3）**：100 次开始/停止/设备切换资源稳定性（E2E-005）+ CP-M01 完整门禁。
 - 边界：签名/公证用真实开发者证书（本机 Apple Development cert 已有，见 dump-keychain 输出）或 ad-hoc + notarize 脚本；不创建浏览器镜像 session；CP-M01 生命周期（睡眠唤醒/锁屏/网络切换）经 PLT-M04b lifecycle 模块消费。
 - 验收与测试：E2E-001..005 适用项、CP-M01。命令：CEF 完整构建 + E2E smoke harness（CEF-14 已有）+ 签名验证 + notarization 脚本验证；真实接收端（小米）投送。
@@ -222,11 +222,38 @@
 - Code Review：P0 0、P1 0、P2 1——初始 URL 硬编码为 `crayon://newtab` 常量；BUX-04 omnibox 接线后用户可导航到其他页面，但启动页应通过 preference 可配（归后续 BUX/装配任务）。
 - 未覆盖与风险：真实 Direct/Relay/外部客户端交接验收（M05b，真实接收端）；签名/公证用开发者证书（当前 ad-hoc，正式分发需 Apple 证书 + notarization，归 QAR）。`PLT-M05` 保持 `IN_PROGRESS`（M05a 完成）。
 
-### PLT-M05b 原子范围（真实接收端 Direct/交接验收，切片 2）
+> REL-01 状态澄清（2026-08-30）：M05a 的完成证据只闭合 new-tab、基础 CEF 壳、进程树与 ad-hoc 签名。其原子范围中列举的 CNT/Cast 等模块不能因“计划装配”被解释为已有生产调用方；网页 Markdown 归 CNT-17..21，媒体观察与投屏执行归 M05b1..b6。
 
-- 状态：`IN_PROGRESS`；依赖 `PLT-M05a VERIFIED`。
-- 单一目标：真实接收端（小米）上的 Direct 投送与外部客户端交接验收（E2E-001/003/004 适用项）；CP-M01 生命周期与错误反馈。
-- 实现路径：CEF-13 cast feature view model + CastButtonModel 已存在于共享层（模型验证完成）；Cast-SDK facade 已验证（SDK-13 小米真机）；PLT-M04d 交接适配器已验证。本切片把 cast feature view 装配进 CEF shell（菜单/命令入口驱动 CastButtonModel → CastFeatureViewModel → Cast-SDK facade），真实接收端验证 Direct 投送与交接确认流。
-- 边界：不创建浏览器镜像 session；CP-M01 生命周期经 PLT-M04b lifecycle 模块消费；外部交接结果闭合（无"投屏中"变体）。
-- 验收与测试：E2E-001（clear fixture Direct 闭环）、E2E-003（DRM 不产生 Direct/Relay）、E2E-004（无路由交接确认）。命令：CEF 完整构建 + E2E smoke + 真实接收端（小米）投送。
-- 明确不做：M05c 资源稳定性、PLT-W05、PLT-19、QAR 矩阵。
+### PLT-M05b1 原子范围（真实 CEF 媒体观察接线）
+
+- 状态：`READY`；依赖 `PLT-M05a VERIFIED`、`CEF-09..12 VERIFIED`。
+- 单一目标：把 `MediaObserver`、`NetworkObserver`、`InputProofGate` 与 `ObservationGateway` 接到真实 CEF document/resource/input/navigation 生命周期，向下游只输出 Browser 验证、当前导航、有界的媒体候选证据；不做投屏策略或 SDK 调用。
+- 允许修改：`browser/cef-shell/src/{renderer,browser}/**` 中上述四模块与最小 process/window 装配、独立 fixture/E2E、macOS shell CMake；禁止修改 MED/SDK 策略和协议、自动点击/seek/rate、Cookie/Authorization 值、Cast UI、Relay。
+- 边界：只有 Browser process 验证的前台标签、真实用户输入和播放推进可达 eligible；页面自报、旧导航、隐藏/跨源、畸形 URL、DRM/EME 只作为不可信证据或保护标记；队列/速率/容量沿用冻结上限，锁内无 IO/回调。
+- 验收：本地 clear MP4/HLS、blob/MSE、DRM/EME、广告语义 fixture；页面伪造与旧 generation 全拒；macOS arm64 真实 CEF build/CTest/E2E、fast/security、Review P0/P1=0。
+- 明确不做：candidate/probe/policy（M05b2）、Cast UI/SDK（M05b3）、真接收端（M05b4/5）。
+
+### PLT-M05b2..b6 原子切片
+
+| ID | 状态 | 依赖 | 单一目标 | 验收与边界 |
+|---|---|---|---|---|
+| PLT-M05b2 | TODO | M05b1 | 接通 observation → candidate/lifecycle → probe → `Direct/Relay/ExternalClientHandoff/Reject` 唯一策略 | MP4/HLS/DASH/DRM/credential fixture；普通失败不提权、不重试；不调用 SDK/UI |
+| PLT-M05b3 | TODO | M05b2 | 接通 CastButton/FeatureView、设备选择、Cast-SDK facade、session event pump 与 PLT 生命周期 | 无设备/取消/失败/旧 session/stop；UI 线程不执行有界 SOAP 阻塞；不做真机结论 |
+| PLT-M05b4 | TODO | M05b3 | 小米真实接收端 clear fixture Direct 发现、连接、投送、控制和停止 | E2E-001；真实 Desktop Host，不以 SDK standalone Harness 代替 |
+| PLT-M05b5 | TODO | M05b4 | 小米真实接收端 MP4 Range 与 HLS Relay 全链路 | E2E-002；opaque route、200/206/416、分片、撤销后拒绝；不支持 DASH Relay/加密 HLS |
+| PLT-M05b6 | TODO | M05b5 | DRM/EME/加密/凭证来源拒绝与无路由外部客户端确认/取消/未安装/失败反馈 | E2E-003/004；交接永不显示投屏中、不创建 SDK/Relay session |
+
+每个切片允许修改其所属 `browser/cef-shell` 装配、既有 MED/SDK/app-runtime 调用入口和独立测试；发现需要改变公共协议、Cast-SDK facade 或 Relay 安全边界时停止并新建原子任务。M05b1..b6 不包含 M05c 100 次稳定性、PLT-W05、PLT-19 或 QAR 发布矩阵。
+
+### PLT-M05c 原子范围（macOS 资源稳定性与 CP-M01 收口）
+
+- 状态：`TODO`；依赖 `PLT-M05b6`。
+- 单一目标：在不增加功能的前提下，对真实 Desktop Host 执行 100 次开始/停止/设备切换，并覆盖网络切换、睡眠唤醒、锁屏和退出，确认 Browser/Renderer/SDK/Relay/平台 watcher 逆序释放且资源归零。
+- 验收：E2E-005、CP-M01；记录进程/线程/socket/RSS/UI delay/dropped，旧 generation 零污染，退出无 Helper/Relay/session/socket 残留；P0/P1=0。长达 8 小时的发布长稳仍归 QAR-07。
+
+### PLT-W05 第一期对称装配边界
+
+- 状态：`TODO`；依赖 `PLT-W04 DONE`、macOS `PLT-M05b6` 的协议/状态机缺陷已关闭、`CEF-15/SDK-14/PRV-12 DONE/VERIFIED`。
+- 单一目标：在 Windows x64 CEF 产品壳消费同一共享观察、策略、UI、Cast-SDK 与 Relay owner，只增加 Windows 平台装配和 CP-W01 证据；不得复制或分叉 macOS 业务逻辑。
+- 切片顺序镜像 M05b1..b6，再执行 Windows 100 次资源稳定性；真实接收端、Direct/Relay、DRM 拒绝、外部交接、网络/睡眠/退出矩阵缺一不得完成。
+- 开工前必须把每个 Windows 切片的允许/禁止路径、设备条件和命令补成与 M05b1 同等完整的原子范围；当前保持 `TODO`，不得整体置为 `IN_PROGRESS`。

@@ -1,6 +1,6 @@
 # MRT：Markdown Runtime Extension Framework Roadmap
 
-状态：`MRT-01..08 DONE`，`MRT-09..19 TODO`。本 Roadmap 吸收 `docs/reference/蜡笔投屏浏览器_Markdown_Runtime_Extension_Framework_V1.0.md` 第 34..59 章，但以当前 PRD、安全契约和真实 C++17/md4c/CEF 工程为准。目标是在不建立第二 Markdown parser、不扩大文件/Agent 权限、不让大型扩展进入浏览器 bootstrap 的前提下，为 MDV 提供统一、闭合、可审计的 Extension Framework。
+状态：`MRT-01..08 DONE`；第一期只完成 `MRT-09 TODO` P0 Runtime 总 Review，`MRT-10..19 TODO` 统一进入第二期。本文吸收 `docs/reference/蜡笔投屏浏览器_Markdown_Runtime_Extension_Framework_V1.0.md` 第 34..59 章，但以当前 PRD、安全契约和真实 C++17/md4c/CEF 工程为准。
 
 ## 1. 采纳结论
 

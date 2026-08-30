@@ -1,6 +1,6 @@
 # MDV：本地 Markdown 查看器 Roadmap
 
-状态：`MDV-01 DONE`，`MDV-02..07,10..13 VERIFIED`，`MDV-08/09/21..23 DONE`，`MDV-24 VERIFIED`；Mermaid Full 集成波次为 `MDV-14..19 DONE`、`MDV-20 VERIFIED`。macOS arm64 Debug/Release 的七类 Mermaid、50-block、离线发布目录、SBOM/NOTICE、CEF 嵌套签名与退出零残留已闭合；MDV-20 仍需 Windows x64 Debug/Release 发布包回归后才能转 `DONE`。原生 macOS x64、Windows Narrator/中文 IME/原生 200% DPI 与当前自动化无法替代的窄窗交互真机仍待补。本 Roadmap 承接“浏览器内查看本地 Markdown 文档、渲染预览、分栏编辑与标准 Mermaid 图表”的产品增量（PRD v0.8 §4.1）：`crayon://mdv` 内置查看页复用 `crayon://newtab` 的自定义 scheme、应用内资源与严格 CSP 模式；本地 `.md` 只经用户手势的受控入口打开，保存走原子写。MDV 是纯用户能力，不进入 CAAP tool registry；Agent 侧任意文件访问禁令不变。
+状态：本模块属于第一期三大闭环之一；`MDV-01 DONE`，`MDV-02..07,10..13 VERIFIED`，`MDV-08/09/21..23 DONE`，`MDV-24 VERIFIED`；Mermaid Full 为 `MDV-14..19 DONE`、`MDV-20 VERIFIED`。macOS arm64 Debug/Release 的七类 Mermaid、50-block、离线发布目录、SBOM/NOTICE、CEF 嵌套签名与退出零残留已闭合；MDV-20 仍需 Windows x64 Debug/Release 发布包回归后才能转 `DONE`。原生 macOS x64 不进入第一期 Apple Silicon 支持矩阵；Windows Narrator/中文 IME/原生 200% DPI 与当前自动化无法替代的窄窗交互真机仍待补。本 Roadmap 承接“浏览器内查看本地 Markdown 文档、渲染预览、分栏编辑与标准 Mermaid 图表”的产品增量（PRD v0.8 §4.1）：`crayon://mdv` 内置查看页复用 `crayon://newtab` 的自定义 scheme、应用内资源与严格 CSP 模式；本地 `.md` 只经用户手势的受控入口打开，保存走原子写。MDV 是纯用户能力，不进入 CAAP tool registry；Agent 侧任意文件访问禁令不变。
 
 ## 产品设计结论
 

@@ -19,7 +19,8 @@
 | [Markdown Runtime v1 契约](markdown-runtime.md) | `markdown-runtime-v1` ExtensionNode/manifest/registry、能力、预算、generation、错误与 current/previous golden |
 | [Code Highlight 供应链契约](code-highlight.md) | `code-highlight-assets-v1` 选型、固定离线 grammar/别名/dependency、hash/许可/包体与安全输出边界 |
 | [KaTeX 数学语法与供应链契约](math-katex.md) | `math-katex-assets-v1` 的 `$`/`$$` 定界、固定 option/宏禁令、ESM/CSS/WOFF2 离线闭包与 MRT-08 输出门禁 |
-| [总 Roadmap](../crayon-private-cast-browser-roadmap.md) | 271 项活跃任务、阶段和当前领取顺序 |
+| [总 Roadmap](../crayon-private-cast-browser-roadmap.md) | 284 项活跃任务、第一期/第二期阶段和当前领取顺序 |
+| [第一期发布 Roadmap](../plans/release-v1-roadmap.md) | 网页 Markdown、LAN 投屏、本地 Markdown 编辑三大闭环、平台顺序与关闭 feature |
 | [模块 Roadmap 索引](../plans/README.md) | 每个模块的原子任务、依赖与状态 |
 
 ## 2. 专项当前契约
@@ -54,7 +55,7 @@ Cast-SDK source lock 的当前事实位于 `config/cast-sdk-source.toml`、`.git
 - CEF 固定基线为 `150.0.10+g8042e43+chromium-150.0.7871.101` Standard。历史四平台 hash 已锁定，Windows x64 archive 已校验；后续产品构建只推进 Windows/macOS。
 - Cast-SDK source revision 已由 `SDK-01` 固定并通过 `RG-008`；`SDK-01..14 DONE`，包括真实接收端 Harness 与总 Review。`SDK-15/16` 只承接后续 Partner/TV Cast gap 与正式外部 facade。
 - `MED-19` 已完成：投屏决策集合为 `Direct/Relay/ExternalClientHandoff/Reject`，旧 `mirror` wire 值保留兼容读取窗口且不再发出；`tab_video`/`system_audio` 仅作为 `crayon-domain` 遗留字段存在，策略与 runtime 代码不再引用，不得继续扩张。
-- 当前开发前沿：CNT C1 已由 `CNT-10 DONE` 独立 Review 并冻结 `content-data-plane-v1`，`CNT-08 VERIFIED` 的真实 UI 装配风险保留；AGT A0 权限内核完成，`AGT-06/07/09/12B/15 VERIFIED`，CLI/MCP 仍等产品 transport 装配；`WFL-01/02/04/06 VERIFIED`，`WFL-03/07 READY`；`HUB-01..06 DONE`。Windows 后续重点是 `PLT-W05` 产品装配与 `MDV-20` 发布回归，`AGT-12C` 需先拆为可审查装配切片；第二阶段模型继续等待 `AGT-16/PRV-13` 与 provider ADR。
+- 当前开发前沿：`REL-01 DONE` 已冻结第一期三大闭环，下一任务为 `REL-02 READY` 生产调用图审计；网页 Markdown 从 `CNT-17 READY` 开始接真实 CEF，投屏从 `PLT-M05b1 READY` 开始按观察→策略→SDK→Direct→Relay→拒绝/交接推进；`MDV-20/24 VERIFIED` 与 `MRT-09` 负责 P0 Runtime 发布收口。macOS arm64 先行、Windows x64 同一期回归。Agent/CLI/MCP、Workflow、Hub、Partner、模型与 HarmonyOS 统一为第二期且默认关闭。
 
 ## 5. 权威与历史
 

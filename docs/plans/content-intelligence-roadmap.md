@@ -1,9 +1,10 @@
 # CNT 页面数据、Markdown 与第二阶段模型 Roadmap
 
-- 状态：C1 已收口；`CNT-01..10 DONE/VERIFIED`（CNT-08 VERIFIED、CNT-10 DONE 2026-08-30）；M2 等 `AGT-16/PRV-13` 与 provider ADR
-- 任务数：16
+- 状态：C1 数据面已收口；一期产品闭环 `CNT-17 READY`、`CNT-18..21 TODO`；M2 统一进入第二期并等待 `AGT-16/PRV-13B` 与 provider ADR
+- 任务数：21
 - C1 开始门禁：`CEF-15`、`BUX-18`、`SDK-14`、`MED-19`、`PRV-08`
-- M2 开始门禁：`CNT-10`、`AGT-16`、`PRV-13`
+- 一期产品门禁：`REL-01`、`CNT-10`、`CEF-15`、`PRV-12`
+- M2 开始门禁：`CNT-21`、`AGT-16`、`PRV-13B`
 
 ## 1. 范围
 
@@ -26,7 +27,12 @@
 | CNT-08 | VERIFIED | CNT-06,CNT-07,PRV-08 | `apps/desktop-cef/**`,`crayon-platform-api/**` | 本地预览、复制、保存、取消、覆盖和失败反馈 | `CT-005`,`CT-006`; UI integration | C1 |
 | CNT-09 | DONE | CNT-08 | `tests/**`,`test-support/**` | 正确性、安全、导航竞争、超大页面、资源释放与 E2E | `CT-001..008`; E2E/security/perf | C1 |
 | CNT-10 | DONE | CNT-09 | `docs/current/**`,`docs/plans/**` | C1 独立 Review 与 Agent data-plane 接口冻结 | CT-001..008；P0/P1=0 | C1 |
-| CNT-11 | TODO | CNT-10,AGT-16,PRV-13 | ADR,`crayon-model-contract/**`,`docs/current/**` | 决定本地/云端/BYOK/provider、地区、费用、保留、密钥和数据发送契约 | `CT-009`; ADR/contract；未决策不开网络 | M2 |
+| CNT-17 | READY | REL-01,CNT-10,CEF-15 | `browser/cef-shell/src/renderer/page_snapshot_collector/**`,`browser/cef-shell/src/browser/page_snapshot_gateway/**`,`browser/engine-api/**` | 将现有有界 collector/gateway 接入真实 CEF 主 frame、导航与 IPC 生命周期 | `CT-001`,`CT-002`,`CT-007`; macOS CEF fixture/integration | R1 |
+| CNT-18 | TODO | CNT-17 | `crates/crayon-app-runtime/**`,`crates/crayon-page-data/**`,`crates/crayon-content-extract/**`,`crates/crayon-content-markdown/**`,`browser/cef-shell/**` | 接通 Browser 验证 facts → owner → 正文提取 → Markdown 的生产调用链 | CT-001..008；导航/取消/关闭/背压 E2E | R1 |
+| CNT-19 | TODO | CNT-18,CNT-08 | `browser/shared-ui/page-tools/**`,`browser/cef-shell/src/browser/**`,locales | 增加用户入口并接通预览、复制、保存、取消、覆盖与失败反馈 | CT-005/006；真实菜单、剪贴板、文件对话框 | R1 |
+| CNT-20 | TODO | CNT-19 | `tests/e2e/desktop/**`,`tests/security/content/**`,`tests/perf/content/**`,`test-support/**` | 用真实 CEF 本地站点 fixture 完成网页→Markdown 产品 E2E、安全和 UI delay/RSS 回归 | CT-001..008；macOS/Windows Debug/Release | R1 |
+| CNT-21 | TODO | CNT-20,PRV-13A | `docs/current/**`,`docs/plans/**`,`tests/**` | 一期网页 Markdown 产品层总 Review，关闭 CNT-08 真实 UI 缺口 | P0/P1=0；两平台证据；无页面触发写入 | R1 |
+| CNT-11 | TODO | CNT-21,AGT-16,PRV-13B | ADR,`crayon-model-contract/**`,`docs/current/**` | 决定本地/云端/BYOK/provider、地区、费用、保留、密钥和数据发送契约 | `CT-009`; ADR/contract；未决策不开网络 | M2 |
 | CNT-12 | TODO | CNT-11 | `crayon-model-adapter/**`,`crayon-profile/**` | provider registry、安全存储、origin/redirect、发送前 payload preview 和 Fake provider | `CT-009..011`; security/integration | M2 |
 | CNT-13 | TODO | CNT-12 | `crayon-content-ai/document/**`,`crayon-app-runtime/**` | 当前文档摘要、要点、大纲/问答，绑定 snapshot/hash 与引用 | `CT-010..013`; Fake provider | M2 |
 | CNT-14 | TODO | CNT-12,MED-07 | `crayon-content-ai/video/**`,`crayon-app-runtime/**` | 基于用户可见字幕/转录或用户文本的视频总结输入契约；无文本时明确拒绝 | `CT-010`,`CT-014`; 无媒体下载/隐藏接口 | M2 |
@@ -189,7 +195,7 @@
 - 流式/背压：每 chunk 最多 64 blocks，总 chunk ≤64；最多 4 个 unacked chunk，满载返回 `Backpressure`，不阻塞/重试/扩容。sequence 从 0 严格递增，ack 必须按序且不可重复；删除-only/no-change 仍发送一个 metadata terminal chunk。cancel 幂等并释放 pending payload；generation/revision fence 不匹配立即 stale，terminal 后不可重开。
 - 性能基线：固定本地约 100KB fixture，缓存字段索引 P95 ≤50ms，结构 delta + normalized Markdown P95 ≤500ms；记录 sample count、first chunk、complete、估算序列化字节与复用率。Harness 不使用公网、随机时钟或第三方 benchmark 依赖；阈值是 C1 防回归门禁，不宣称对外竞品优势。
 - 验收：package unit 覆盖九类索引、空/同值/insert/delete/replace、旧 generation/revision、chunk sequence/terminal/ack/backpressure/cancel/容量；Harness 覆盖 100KB P95 与 10,000 步 bounded soak。命令：page-data test/clippy/fmt、perf package test、workspace/fast/security、`git diff --check`。
-- 明确不做：跨 Profile Agent 授权、CAAP transport/deadline（AGT-06/15）、高频语义 ChangeSet（ACT-10）、UI event-loop/RSS 平台采样（QAR-05）、UI/复制/保存（CNT-08）。
+- 明确不做：跨 Profile Agent 授权、CAAP transport/deadline（AGT-06/15）、高频语义 ChangeSet（ACT-10）、UI event-loop/RSS 平台采样（现归 QAR-05A）、UI/复制/保存（CNT-08）。
 
 ### CNT-07 完成记录（2026-08-30）
 
@@ -198,7 +204,7 @@
 - 性能与测试：新增零第三方 benchmark 依赖的 `crayon-content-perf-tests`。固定约 100KB/100-block fixture、40 样本实测 index P95 5us、first chunk P95 6us、delta + normalized Markdown P95 2.555ms、估算序列化 1086 bytes、复用率 99%，均低于 50ms/500ms 门槛；10,000 revision bounded soak 通过。page-data 23/23，覆盖九类/空索引、同值/insert/delete/replace、旧 generation/revision、sequence/terminal/ack/backpressure/cancel 与 terminal payload 释放。
 - 验证：`cargo fmt -p crayon-page-data -p crayon-content-perf-tests -- --check` 通过；`cargo clippy -p crayon-page-data -p crayon-content-perf-tests --all-targets --no-deps -- -D warnings` 通过；`cargo test -p crayon-page-data -- --test-threads=1` 23/23；`cargo test -p crayon-content-perf-tests -- --test-threads=1 --nocapture` 2/2；普通隔离 clone 应用同一 staged patch 后 `bash scripts/check.sh fast` 全部通过（guard/format/formal-workspace/legacy 58/58，Relay 2 个既有长稳测试 ignored）；主工作区 `bash scripts/check.sh security` 通过；`git diff --cached --check` 通过。主工作区全量 fmt/clippy/workspace 的失败由并发未提交的 ACT semantic schema/golden 改动触发，隔离验证确认 CNT-07 patch 本身全绿。
 - Code Review：按 v0.8 复核需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性；关闭 terminal 后内部 payload 延迟释放问题，最终 P0/P1/P2 = 0/0/0。实现无锁、无 IO/网络、无正文日志、无阻塞/重试，所有集合受 PageSnapshot 与固定窗口约束。
-- 未覆盖与风险：Agent 跨 Profile stream/transport/deadline 仍归 AGT-06/15，语义动作 ChangeSet 归 ACT-10，UI/RSS 平台采样归 QAR-05；本地预览、复制、保存、取消与覆盖进入 `CNT-08 READY`。无平台或真机门禁。
+- 未覆盖与风险：Agent 跨 Profile stream/transport/deadline 仍归 AGT-06/15，语义动作 ChangeSet 归 ACT-10，UI/RSS 平台采样现归 QAR-05A；本地预览、复制、保存、取消与覆盖进入 `CNT-08 READY`。无平台或真机门禁。
 
 
 ## CNT-08 原子范围（本地预览、复制、保存、取消、覆盖和失败反馈）
@@ -224,7 +230,7 @@
 - 允许修改：`tests/e2e/content/**`、`tests/security/content/**`、`tests/perf/content/**`、`test-support/**`、Workspace 测试成员、CMake 测试配置与本 Roadmap/索引；若总矩阵先复现已有 C1 缺陷或 Windows 构建契约阻塞，只允许对对应入口/checkout 属性做最小根因修复并保留回归证据。禁止修改：PageSnapshot/CAAP schema 与 golden、Markdown/提取算法、CNT-08 UI 行为、模型/provider/网络能力。
 - 边界：fixture 仅构造 Browser-normalized facts，不引入 DOM/HTML/CEF handle；不使用公网、固定长 sleep、真实用户文件或凭证。security 覆盖隐藏/敏感/跨源、危险 URL/伪造 provenance、跨 Profile/后台/旧 generation、输出与 target 容量、敌意输入不 panic；E2E 覆盖正常/空页/长文、确定性 Markdown、导航竞争、取消/关闭/shutdown 后零旧正文；perf 复用 CNT-07 100KB P95 与 10,000 revision bounded soak。
 - 验收：新增 E2E/security crate 独立通过；`crayon-content-perf-tests` 2/2；CNT-08 `page_markdown_export_contract` 与 C++ 全 CTest 通过；相关 clippy/fmt、workspace/fast/security、`git diff --check` 全通过。测试失败若揭示生产缺陷，先保留复现再做最小修复并回填允许路径。
-- 明确不做：真实 CEF UI/剪贴板/文件对话框/真机截图（后续装配）、RSS/事件循环平台采样与长稳（QAR-05）、Agent transport/CLI/MCP（AGT-12C/13/14）、C1 总接口冻结与 GO/NO-GO（CNT-10）。
+- 明确不做：真实 CEF UI/剪贴板/文件对话框/真机截图（现归 CNT-17..21）、RSS/事件循环平台采样与长稳（现归 QAR-05A/07）、Agent transport/CLI/MCP（第二期 AGT-12C/13/14）、C1 总接口冻结与 GO/NO-GO（CNT-10）。
 
 ### CNT-09 完成记录（2026-08-30）
 
@@ -234,7 +240,7 @@
 - 复现与修复：E2E 先复现导航后旧 generation 被错误分类为 `SourceUnavailable`，最小调整 app-runtime fence 顺序为 generation 优先，保留回归；Windows configure 复现 KaTeX/Mermaid manifest 因 `core.autocrlf=true` checkout 漂移，`.gitattributes` 固定 3 个 KaTeX 文本和 104 个 Mermaid `.mjs` 为 LF，恢复后逐项 bytes/hash 与既有 manifest 完全一致（vendor Git blob 未改变）；MinGW `-Werror` 复现 4 个 header 缺直接 `<cstdint>` 与 KaTeX 测试临时 string 引用，补 header 自包含和测试循环类型后全绿。
 - 总验证：相关严格 Clippy、`cargo fmt --all -- --check`、`cargo test --workspace`、`scripts/check.ps1 fast`、`scripts/check.ps1 security`、`git diff --check` 全通过。clang-format dry-run `NOT_RUN`：Windows 环境 `Get-Command clang-format` 原始错误为 `The term 'clang-format' is not recognized`；C++ 改动仅 4 个直接 include 与 1 个循环变量类型，已由全量 MinGW `-Wall -Wextra -Wpedantic -Werror` 构建覆盖。
 - Code Review：按 v0.8 复核 CT-001..008 映射、fixture 信任边界、generation/Profile/资源释放、输出预算、锁内工作、性能口径和 Windows 构建契约；上述复现项全部关闭，最终 P0/P1/P2=`0/0/0`。
-- 未覆盖与风险：真实 CEF UI 菜单/剪贴板/文件对话框/截图仍是 CNT-08 已记录的产品装配风险；RSS/事件循环平台采样与长稳归 QAR-05。CNT-09 测试总矩阵已完成，`CNT-10 READY` 执行 C1 独立总 Review/接口冻结。
+- 未覆盖与风险：真实 CEF UI 菜单/剪贴板/文件对话框/截图仍是 CNT-08 已记录的产品装配风险（现归 CNT-17..21）；RSS/事件循环平台采样与长稳现归 QAR-05A/07。CNT-09 完成时转 `CNT-10 READY`，CNT-10 现已 `DONE`。
 
 ## CNT-10 原子范围（C1 独立 Review 与 Agent data-plane 接口冻结）
 
@@ -250,4 +256,24 @@
 - Review：按 v0.8 审查需求/信任边界、正确性、依赖/API、mutex 生命周期、安全/隐私、热路径/日志、测试与维护性。CT-001..008 映射闭合，C1 `GO`，P0/P1/P2=0/0/0。
 - Rust 验证：page-data 23/23、content-extract 10/10、content-markdown 9/9、C1 E2E 3/3、security 4/4、perf 2/2；100KB 40 样本 index P95 21us、first chunk 4us、delta+Markdown complete P95 10.568ms、serialized 1086 bytes、reuse 99%；10,000 revision soak 通过。
 - Windows C++：现有 `.cache/build/cnt09` 的完整 `ctest --output-on-failure` 61/61，232.33s；`cef_build_graph_contract` 206.88s、Mermaid 22.08s，其余 content 关键项 `page_markdown_export_contract`、`page_snapshot_collector`、`page_snapshot_gateway` 均通过。前置 `cmake --build` 两次因工具 124s/242s 总时限终止且无编译错误输出，因此本轮 build 记 `TIMEOUT`，不冒充新 build 通过；CTest 使用 CNT-09 已成功构建的同一目录产物。
-- 未覆盖与风险：CNT-08 真实 CEF 菜单/剪贴板/文件对话框/截图仍需产品装配；完整 snapshot 在 runtime mutex 内复制重建继续由 AGT-15/QAR-05 监测 UI delay/RSS/长稳。M2 必须等待 AGT-16、PRV-13 和 provider ADR，不因 C1 GO 提前联网。
+- 未覆盖与风险：CNT-08 真实 CEF collector/生产编排/菜单/剪贴板/文件对话框/截图现由 CNT-17..21 闭合；完整 snapshot 在 runtime mutex 内复制重建继续由 QAR-05A 监测 UI delay/RSS/长稳，第二期 Agent 指标再由 AGT-15/QAR-05B 追加。M2 必须等待 CNT-21、AGT-16、PRV-13B 和 provider ADR，不因 C1 GO 提前联网。
+
+## CNT-17 原子范围（真实 CEF snapshot collector/gateway 接线）
+
+- 状态：`READY`；依赖 `REL-01 DONE`、`CNT-10 DONE`、`CEF-15 DONE`。
+- 单一目标：把 CNT-02 已验证的 `PageSnapshotCollector` 与 `PageSnapshotGateway` 接入真实 CEF Renderer/Browser 生命周期，使当前主 frame 的可见同源结构事实经 Browser-issued request、可信 source 和 navigation 校验后进入现有有界 stream；不在本任务执行正文提取、Markdown 转换或 UI 导出。
+- 输入：CNT-02 collector/gateway 与 engine-api stream 契约、CEF-06 IPC envelope、CEF-03 tab/navigation owner、CNT-01 预算、CT-001/002/007。
+- 允许修改：`browser/cef-shell/src/renderer/page_snapshot_collector/**`、`browser/cef-shell/src/browser/page_snapshot_gateway/**`、对应 CEF process app/IPC 装配文件、`browser/engine-api/**` 仅作装配所需的兼容性最小修正、独立测试与本 Roadmap。发现需要改变 schema、预算或公共 API 时停止并另立原子任务。
+- 禁止修改：`crayon-page-data` wire schema/golden、正文/Markdown 算法、page-tools UI、Agent transport、文件/剪贴板、Cast/MDV；不得携带 DOM/HTML/CDP/selector、隐藏/跨源正文、Cookie 或 Authorization。
+- 正常路径：Browser 为当前 tab/navigation 签发 request；Renderer 仅主 frame、当前导航、可见同源事实分块发送；Browser 校验 process/frame/request/tab/navigation/sequence/预算后 drain；恰有一个 terminal。
+- 错误与边界：子 frame、跨源/隐藏事实、页面伪造 request/source、乱序/重复、旧导航、超量、队列满载、Renderer crash、tab 关闭与 Browser shutdown 全部 fail closed；取消幂等并清除在途数据，晚到 callback 不可复活请求。
+- 性能与生命周期：沿用每 chunk 64 facts/64KiB、每流 64 chunks、在途队列 16 的冻结上限；热路径无正文日志、无同步文件/网络 IO、无持锁回调或等待。
+- 验收：独立 C++/CEF integration 覆盖正常、空页、长文分块、导航竞争、取消、crash、backpressure 与 teardown；macOS arm64 真实 CEF 本地 fixture 证明 request→collector→gateway terminal，全量 build/CTest、clang-format、fast/security、`git diff --check`；Windows 回归归 CNT-20，不以 macOS 证据冒充。
+- 明确不做：owner/extract/Markdown 生产编排（CNT-18）、用户入口/预览/复制/保存（CNT-19）、Agent/CLI/MCP、模型或公网 fixture。
+
+## CNT-18..21 一期产品闭环边界
+
+- `CNT-18` 只拥有经过 CNT-17 Browser 验证的事实到现有 Rust owner/extract/Markdown 的生产编排和跨语言 DTO；不得复制算法或建立第二缓存。
+- `CNT-19` 只拥有用户手势入口与 CNT-08 controller 的系统 UI/剪贴板/文件对话框装配；页面内容零触发，文件写入必须复用 MDV 原子保存语义。
+- `CNT-20` 只增加本地确定性 fixture 与两平台 E2E/security/perf 证据；测试发现生产缺陷时回到对应原子任务修复，不在 Harness 中绕过产品入口。
+- `CNT-21` 只做一期产品数据面总 Review 与状态收口；不得顺带开启 Agent transport 或 M2 provider。
