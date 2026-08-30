@@ -1,6 +1,6 @@
 # CNT 页面数据、Markdown 与第二阶段模型 Roadmap
 
-- 状态：C1 执行中；`CNT-01..09 DONE/VERIFIED`（CNT-08 VERIFIED、CNT-09 DONE 2026-08-30），`CNT-10 READY`
+- 状态：C1 已收口；`CNT-01..10 DONE/VERIFIED`（CNT-08 VERIFIED、CNT-10 DONE 2026-08-30）；M2 等 `AGT-16/PRV-13` 与 provider ADR
 - 任务数：16
 - C1 开始门禁：`CEF-15`、`BUX-18`、`SDK-14`、`MED-19`、`PRV-08`
 - M2 开始门禁：`CNT-10`、`AGT-16`、`PRV-13`
@@ -25,7 +25,7 @@
 | CNT-07 | DONE | CNT-03,CNT-06 | `crayon-page-data/**`,`tests/perf/content/**` | 字段索引、增量 revision、流式/背压和 C1 性能基线 | `CT-006`,`CT-008`; benchmark/soak | C1 |
 | CNT-08 | VERIFIED | CNT-06,CNT-07,PRV-08 | `apps/desktop-cef/**`,`crayon-platform-api/**` | 本地预览、复制、保存、取消、覆盖和失败反馈 | `CT-005`,`CT-006`; UI integration | C1 |
 | CNT-09 | DONE | CNT-08 | `tests/**`,`test-support/**` | 正确性、安全、导航竞争、超大页面、资源释放与 E2E | `CT-001..008`; E2E/security/perf | C1 |
-| CNT-10 | READY | CNT-09 | `docs/current/**`,`docs/plans/**` | C1 独立 Review 与 Agent data-plane 接口冻结 | CT-001..008；P0/P1=0 | C1 |
+| CNT-10 | DONE | CNT-09 | `docs/current/**`,`docs/plans/**` | C1 独立 Review 与 Agent data-plane 接口冻结 | CT-001..008；P0/P1=0 | C1 |
 | CNT-11 | TODO | CNT-10,AGT-16,PRV-13 | ADR,`crayon-model-contract/**`,`docs/current/**` | 决定本地/云端/BYOK/provider、地区、费用、保留、密钥和数据发送契约 | `CT-009`; ADR/contract；未决策不开网络 | M2 |
 | CNT-12 | TODO | CNT-11 | `crayon-model-adapter/**`,`crayon-profile/**` | provider registry、安全存储、origin/redirect、发送前 payload preview 和 Fake provider | `CT-009..011`; security/integration | M2 |
 | CNT-13 | TODO | CNT-12 | `crayon-content-ai/document/**`,`crayon-app-runtime/**` | 当前文档摘要、要点、大纲/问答，绑定 snapshot/hash 与引用 | `CT-010..013`; Fake provider | M2 |
@@ -235,3 +235,19 @@
 - 总验证：相关严格 Clippy、`cargo fmt --all -- --check`、`cargo test --workspace`、`scripts/check.ps1 fast`、`scripts/check.ps1 security`、`git diff --check` 全通过。clang-format dry-run `NOT_RUN`：Windows 环境 `Get-Command clang-format` 原始错误为 `The term 'clang-format' is not recognized`；C++ 改动仅 4 个直接 include 与 1 个循环变量类型，已由全量 MinGW `-Wall -Wextra -Wpedantic -Werror` 构建覆盖。
 - Code Review：按 v0.8 复核 CT-001..008 映射、fixture 信任边界、generation/Profile/资源释放、输出预算、锁内工作、性能口径和 Windows 构建契约；上述复现项全部关闭，最终 P0/P1/P2=`0/0/0`。
 - 未覆盖与风险：真实 CEF UI 菜单/剪贴板/文件对话框/截图仍是 CNT-08 已记录的产品装配风险；RSS/事件循环平台采样与长稳归 QAR-05。CNT-09 测试总矩阵已完成，`CNT-10 READY` 执行 C1 独立总 Review/接口冻结。
+
+## CNT-10 原子范围（C1 独立 Review 与 Agent data-plane 接口冻结）
+
+- 状态：`DONE`；依赖 `CNT-09 DONE`。
+- 单一目标：独立审查 CT-001..008 的 Browser facts → extract → PageSnapshot/owner/delta → Markdown/export → Agent R1 数据面，冻结 current 接口、预算、信任和生命周期语义并给出 C1 GO/NO-GO。
+- 输入与输出：只读审查 CNT-01..09 生产代码、测试与完成证据；输出限 `docs/current/content-data-plane.md`、current/计划索引和本 Roadmap，不修改生产行为或 schema/golden。
+- 验收：Windows C++ build/CTest、C1 Rust unit/E2E/security/perf、workspace/format/security 证据；按 v0.8 Review，P0/P1=0；明确未覆盖和 M2 门禁。
+- 明确不做：真实 CEF 导出 UI 装配、Agent transport/CLI/MCP、模型/provider/网络能力、PageSnapshot/R1 协议扩张。
+
+### CNT-10 完成记录（2026-08-30）
+
+- 契约：新增 current `content-data-plane-v1`，冻结单一事实管线、九类 block、Browser provenance、Profile/前台/tab/generation/revision fence、分页/delta/backpressure、Markdown 和五个 Agent R1 逻辑工具；协议/预算/错误变化必须另建版本化原子任务并更新 golden。
+- Review：按 v0.8 审查需求/信任边界、正确性、依赖/API、mutex 生命周期、安全/隐私、热路径/日志、测试与维护性。CT-001..008 映射闭合，C1 `GO`，P0/P1/P2=0/0/0。
+- Rust 验证：page-data 23/23、content-extract 10/10、content-markdown 9/9、C1 E2E 3/3、security 4/4、perf 2/2；100KB 40 样本 index P95 21us、first chunk 4us、delta+Markdown complete P95 10.568ms、serialized 1086 bytes、reuse 99%；10,000 revision soak 通过。
+- Windows C++：现有 `.cache/build/cnt09` 的完整 `ctest --output-on-failure` 61/61，232.33s；`cef_build_graph_contract` 206.88s、Mermaid 22.08s，其余 content 关键项 `page_markdown_export_contract`、`page_snapshot_collector`、`page_snapshot_gateway` 均通过。前置 `cmake --build` 两次因工具 124s/242s 总时限终止且无编译错误输出，因此本轮 build 记 `TIMEOUT`，不冒充新 build 通过；CTest 使用 CNT-09 已成功构建的同一目录产物。
+- 未覆盖与风险：CNT-08 真实 CEF 菜单/剪贴板/文件对话框/截图仍需产品装配；完整 snapshot 在 runtime mutex 内复制重建继续由 AGT-15/QAR-05 监测 UI delay/RSS/长稳。M2 必须等待 AGT-16、PRV-13 和 provider ADR，不因 C1 GO 提前联网。

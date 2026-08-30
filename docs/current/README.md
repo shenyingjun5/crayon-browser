@@ -12,6 +12,7 @@
 | [测试标准](testing-standard.md) | 分层、设施、平台矩阵和证据规则 |
 | [测试用例](test-cases.md) | 212 个唯一当前权威测试 ID |
 | [Code Review 标准](code-review-standard.md) | 审查顺序、门禁和交付格式 |
+| [Content Data Plane v1](content-data-plane.md) | CNT C1 snapshot/Markdown/owner/delta/Agent R1 冻结接口、预算与 GO 结论 |
 | [品牌图标契约](brand-assets.md) | `app-icon-v1` 参考源、母版、平台组合与禁用规则 |
 | [桌面浏览器体验契约](browser-ux.md) | `browser-design-v1` 顶部信息架构、共享 token、标题栏/功能 icon、键盘与无障碍规则 |
 | [本地 Markdown 查看器契约](markdown-viewer.md) | `crayon://mdv` scheme/CSP、入口手势门禁、图标工具栏与 Mermaid Full 离线扩展契约（v1.4） |
@@ -53,7 +54,7 @@ Cast-SDK source lock 的当前事实位于 `config/cast-sdk-source.toml`、`.git
 - CEF 固定基线为 `150.0.10+g8042e43+chromium-150.0.7871.101` Standard。历史四平台 hash 已锁定，Windows x64 archive 已校验；后续产品构建只推进 Windows/macOS。
 - Cast-SDK source revision 已由 `SDK-01` 固定并通过 `RG-008`；`SDK-01..14 DONE`，包括真实接收端 Harness 与总 Review。`SDK-15/16` 只承接后续 Partner/TV Cast gap 与正式外部 facade。
 - `MED-19` 已完成：投屏决策集合为 `Direct/Relay/ExternalClientHandoff/Reject`，旧 `mirror` wire 值保留兼容读取窗口且不再发出；`tab_video`/`system_audio` 仅作为 `crayon-domain` 遗留字段存在，策略与 runtime 代码不再引用，不得继续扩张。
-- 当前开发前沿：`CNT-01..07/09 DONE`、`CNT-08 VERIFIED`、`CNT-10 READY`；AGT A0 权限内核完成，`AGT-06/07/09/12B/15 VERIFIED`，CLI/MCP 仍等产品 transport 装配；`WFL-01/02/04/06 VERIFIED`，`WFL-03/07 READY`；`HUB-01..06 DONE`。Windows 后续重点是 `PLT-W05` 产品装配与 `MDV-20` 发布回归，`AGT-12C` 需先拆为可审查装配切片；第二阶段模型继续等待 `CNT-10/AGT-16/PRV-13` 与 provider ADR。
+- 当前开发前沿：CNT C1 已由 `CNT-10 DONE` 独立 Review 并冻结 `content-data-plane-v1`，`CNT-08 VERIFIED` 的真实 UI 装配风险保留；AGT A0 权限内核完成，`AGT-06/07/09/12B/15 VERIFIED`，CLI/MCP 仍等产品 transport 装配；`WFL-01/02/04/06 VERIFIED`，`WFL-03/07 READY`；`HUB-01..06 DONE`。Windows 后续重点是 `PLT-W05` 产品装配与 `MDV-20` 发布回归，`AGT-12C` 需先拆为可审查装配切片；第二阶段模型继续等待 `AGT-16/PRV-13` 与 provider ADR。
 
 ## 5. 权威与历史
 

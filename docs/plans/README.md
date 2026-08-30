@@ -30,7 +30,7 @@
 | SDK | [cast-sdk-integration-roadmap.md](cast-sdk-integration-roadmap.md) | 固定源码 Cast-SDK facade、发现、连接和控制；后续 Partner Cast facade | `SDK-01..14 DONE`；`SDK-15/16` 等 HUB/外部已批准 API |
 | PLT | [desktop-platform-adapters-roadmap.md](desktop-platform-adapters-roadmap.md) | Windows/macOS 存储、网络、生命周期、更新和客户端交接 | `PLT-01/02/W04/M04 DONE`；`PLT-M05 IN_PROGRESS`，`PLT-W05 TODO` |
 | PRV | [privacy-security-roadmap.md](privacy-security-roadmap.md) | Profile、隐私、安全、日志和删除语义 | `PRV-01..12` 已完成或 VERIFIED；`PRV-13` 待总数据流 Review |
-| CNT | [content-intelligence-roadmap.md](content-intelligence-roadmap.md) | 页面数据/Markdown 与第二阶段模型总结 | `CNT-01..07/09 DONE`、`CNT-08 VERIFIED`；`CNT-10 READY` |
+| CNT | [content-intelligence-roadmap.md](content-intelligence-roadmap.md) | 页面数据/Markdown 与第二阶段模型总结 | C1 `CNT-01..10 DONE/VERIFIED`（CNT-08 VERIFIED）；M2 等依赖 |
 | AGT | [agent-access-roadmap.md](agent-access-roadmap.md) | CAAP、tool registry、CLI/MCP、高性能读页和授权操作 | A0 完成；`AGT-07/15 VERIFIED`，`AGT-12C/13/14` 按装配依赖后续推进 |
 | ACT | [semantic-action-roadmap.md](semantic-action-roadmap.md) | Page/Action/Form/Media/Risk Map、action_id、前置条件和效果验证 | `ACT-01..12 全部完成`（2026-08-30，ACT-12 总 Review GO）；实机接线归后续装配切片 |
 | WFL | [workflow-learning-roadmap.md](workflow-learning-roadmap.md) | Challenge 接管、Workflow Learning、个人 Site Skill、健康与受控修复 | `WFL-01/02/04/06 VERIFIED`；`WFL-03/07 READY` |
@@ -47,9 +47,8 @@
 
 | 顺序 | 任务 | 状态 | 说明 |
 |---:|---|---|---|
-| 1 | `CNT-10` | READY | C1 独立总 Review 与 Agent data-plane 接口冻结 |
-| 2 | `WFL-03` | READY | AwaitingHuman UI 与继续/取消；保持只检测、不解题边界 |
-| 3 | `WFL-07` | READY | trace 写盘前敏感值移除与参数 placeholder |
+| 1 | `WFL-03` | READY | AwaitingHuman UI 与继续/取消；保持只检测、不解题边界 |
+| 2 | `WFL-07` | READY | trace 写盘前敏感值移除与参数 placeholder |
 
 ### 平台收口与待拆装配
 
