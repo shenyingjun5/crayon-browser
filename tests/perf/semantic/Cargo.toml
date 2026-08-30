@@ -1,0 +1,17 @@
+[package]
+name = "crayon-semantic-perf-tests"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Semantic action performance budget tests (ACT-12, AC-010/AC-012)"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+crayon-domain = { path = "../../../crates/crayon-domain" }
+crayon-semantic-action = { path = "../../../crates/crayon-semantic-action" }
+
+[dev-dependencies]
+serde_json = "1"

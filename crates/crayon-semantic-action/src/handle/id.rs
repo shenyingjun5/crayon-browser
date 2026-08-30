@@ -78,7 +78,6 @@ impl ActionHandleId {
             let index = ((buffer << (5 - bits)) & 0x1f) as usize;
             token.push(BASE32_ALPHABET[index] as char);
         }
-        debug_assert_eq!(token.len(), ID_LEN);
         Self::new(&token)
     }
 

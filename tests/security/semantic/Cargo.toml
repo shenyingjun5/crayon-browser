@@ -1,0 +1,18 @@
+[package]
+name = "crayon-semantic-security-tests"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Semantic action security integration tests (ACT-12, AC-012)"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+crayon-domain = { path = "../../../crates/crayon-domain" }
+crayon-semantic-action = { path = "../../../crates/crayon-semantic-action" }
+crayon-app-runtime = { path = "../../../crates/crayon-app-runtime" }
+
+[dev-dependencies]
+serde_json = "1"

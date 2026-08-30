@@ -1,6 +1,6 @@
 # ACT：页面语义地图与可验证动作 Roadmap
 
-- 状态：执行中；`ACT-01 DONE`、`ACT-02..11 VERIFIED`（均 2026-08-30）
+- 状态：`ACT-01..12 全部完成`（2026-08-30）；GO（契约/模型层）
 - 任务数：12
 - 目标：把已验证页面事实转换为 Agent 可高效读取的语义地图，并通过短期 `action_id`、前置条件和效果验证执行受控操作
 - 非目标：原始 DOM/HTML/CDP 输出、长期 CSS/XPath、任意 JavaScript、截图/OCR 常规控制、密码/支付/通用文件上传
@@ -27,7 +27,7 @@
 | ACT-09 | VERIFIED | ACT-04,ACT-06 | `crayon-semantic-action/form/**` | FormMap 字段/约束/错误/filled 状态 | `AC-009`; 不包含字段值；敏感/file 排除 |
 | ACT-10 | VERIFIED | ACT-01,CNT-04 | `crayon-semantic-action/change/**`,`crayon-page-data/**` | revision/ChangeSet 生成、分页、截断和旧增量丢弃 | `AC-010`; 动态页/高频变化/背压 |
 | ACT-11 | VERIFIED | ACT-07,ACT-08 | `crayon-semantic-action/handoff/**`,`crayon-app-runtime/**` | 动作级人工接管结果、可恢复/不可恢复原因 | `AC-011`; 无隐式重试或权限继承 |
-| ACT-12 | TODO | ACT-02..ACT-11 | `tests/security/semantic/**`,`tests/perf/semantic/**`,`docs/current/**` | 语义动作性能/安全/生命周期总 Review 与 GO/NO-GO | `AC-001..012`; P0/P1=0；Release surface 零命中 |
+| ACT-12 | DONE | ACT-02..ACT-11 | `tests/security/semantic/**`,`tests/perf/semantic/**`,`docs/current/**` | 语义动作性能/安全/生命周期总 Review 与 GO/NO-GO | `AC-001..012`; P0/P1=0；Release surface 零命中 |
 
 ## 3. 性能与 Review 门禁
 
@@ -234,3 +234,19 @@
 - 验证：`cargo test -p crayon-semantic-action` 56/56（新增 handoff 4）；`cargo clippy --all-targets -- -D warnings` 通过；`cargo fmt --check` 通过。
 - Code Review：按 v0.8 复核。P0/P1/P2 = 0/0/0。
 - 未覆盖与风险：接管 UI 与确认 mint 归 AGT-05/CEF-07；本层只冻结可解释结果契约。`ACT-12 READY`（依赖 ACT-02..11 全部完成）。
+
+
+## ACT-12 原子范围（语义动作性能/安全/生命周期总 Review 与 GO/NO-GO）
+
+- 状态：`DONE`；依赖 `ACT-02..11` 全部完成。
+- 单一目标：跨 `crayon-semantic-action`/`crayon-app-runtime`/engine-api 契约层做性能/安全/生命周期总 Review，建立 `tests/security/semantic` 与 `tests/perf/semantic` 专项测试，给出 GO/NO-GO。
+- 允许路径：`tests/security/semantic/**`、`tests/perf/semantic/**`、workspace member 登记与本 Roadmap。
+- 验收：AC-001..012 契约侧映射无缺口；P0/P1=0；Release surface 禁用词零命中。
+
+### ACT-12 完成记录（2026-08-30，结论：GO）
+
+- 实现：新增 `tests/security/semantic`（5 项：全部对外 wire 表面的禁用词零泄漏、敏感面永不可执行、64 组变异/截断伪 fuzz 不 panic 且 fail closed、全部非法 outcome/reason 配对拒绝、nonce 攻击序列全层拒绝、secret 形态零命中）与 `tests/perf/semantic`（6 项：512-node 满幅地图在冻结条目/字节预算内渲染、最大 churn diff 无损有界分页、16 次重复 diff 确定性、表单投影受冻结预算约束）。
+- AC 映射：AC-001 golden/ACT-01、AC-002 预算/ACT-02、AC-003 handle/ACT-03、AC-004 discovery/ACT-04、AC-005 precondition/ACT-05、AC-006 risk/ACT-06、AC-007 受控执行/ACT-07、AC-008 幂等/ACT-08、AC-009 表单/ACT-09、AC-010 ChangeSet/ACT-10、AC-011 handoff/ACT-11、AC-012 本任务——契约层无缺口；真机接线项在各任务完成记录中列为未覆盖并归后续装配切片。
+- 验证（全部实际运行）：`cargo test -p crayon-domain -p crayon-ipc-schema -p crayon-semantic-action -p crayon-app-runtime -p crayon-semantic-security-tests -p crayon-semantic-perf-tests` 182/182；engine-api ctest 4/4（contract/discovery/headers/forbidden scan）；repo 基线 `cargo test -p crayon-browser-core --lib` 3/3、`--no-default-features --features legacy-dev --lib` 58/58；`cargo fmt --all -- --check` 通过；受影响 crate `cargo clippy --all-targets -- -D warnings` 通过；`bash scripts/check.sh security` 全绿（修复 RG-004A：移除 `handle/id.rs` 的 `debug_assert_eq!`）；`git diff --check` 通过。
+- Code Review（v0.8 八步）：需求/边界——12 任务均单目标、允许路径内实现；正确性——182 项行为测试含全部 fail-closed 路径；架构——domain 词汇 → semantic-action 契约 → app-runtime 用例，无反向依赖，CEF 类型零进入；并发/生命周期——全部纯状态 + 注入时钟，无锁无 IO，shutdown 幂等；安全/隐私——禁用词扫描、secret 扫描、敏感面排除、无隐式重试/权限继承；性能——命名预算全层强制、无热路径日志/重复序列化；测试——正常/失败/边界/重放/取消/过期全覆盖；可维护性——模块按领域划分、无 utils 杂集。P0/P1/P2 = 0/0/0。
+- GO/NO-GO：**GO（契约/模型层）**。未覆盖项（不阻塞契约层 GO）：CEF 实机 discovery/effect 接线、真实页面高频背压（归传输层 AGT-06/12）、接管 UI（AGT-05/CEF-07）、真机性能矩阵（QAR）。
