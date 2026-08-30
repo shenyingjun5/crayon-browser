@@ -7,6 +7,7 @@
 pub mod challenge;
 pub mod checkpoint;
 pub mod handoff;
+pub mod redaction;
 pub mod trace;
 
 #[cfg(test)]
@@ -15,5 +16,7 @@ mod challenge_tests;
 mod checkpoint_tests;
 #[cfg(test)]
 mod handoff_tests;
+#[cfg(test)]
+mod redaction_tests;
 #[cfg(test)]
 mod trace_tests;

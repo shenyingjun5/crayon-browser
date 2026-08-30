@@ -164,7 +164,7 @@ impl TraceRecorder {
     }
 }
 
-const fn action_summary(action: ActionKind) -> &'static str {
+pub(crate) const fn action_summary(action: ActionKind) -> &'static str {
     match action {
         ActionKind::Click => "click",
         ActionKind::SetText => "set_text",

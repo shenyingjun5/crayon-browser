@@ -1,6 +1,6 @@
 # WFL：Workflow Learning、Challenge 与个人 Site Skill Roadmap
 
-- 状态：执行中；`WFL-01/02/03/04/06 VERIFIED`（2026-08-30）；`WFL-07 READY`
+- 状态：执行中；`WFL-01/02/03/04/06/07 VERIFIED`（2026-08-30）
 - 任务数：16
 - 目标：从用户授权且已验证成功的任务生成可预览、可保存、可验证、可回滚的个人 Site Skill，并安全处理验证码/风控的人机接管
 - 非目标：自动解验证码、从失败任务学习、记录密码/正文/secret、技能继承旧授权、静默修改高风险步骤
@@ -22,7 +22,7 @@
 | WFL-04 | VERIFIED | WFL-01,PRV-07,PRV-08 | `crayon-workflow/checkpoint/**`,`crayon-platform-api/**` | 加密、短期、最小 checkpoint store | `WF-004`; 无 secret/正文；过期/清除/损坏 |
 | WFL-05 | TODO | WFL-03,WFL-04,ACT-08 | `crayon-workflow/resume/**` | 用户完成后的重新 snapshot/risk/grant/precondition 与幂等恢复 | `WF-005`; challenge 仍在/漂移/未知副作用终止 |
 | WFL-06 | VERIFIED | WFL-01,ACT-08,AGT-11 | `crayon-workflow/trace/**` | 仅记录已授权步骤、语义意图和 verified effect 的有界 trace | `WF-006`; cancel/fail/旧结果/TTL |
-| WFL-07 | READY | WFL-06,PRV-10 | `crayon-workflow/redaction/**` | 写盘前敏感值移除与参数 placeholder | `WF-007`; seeded secret/canary 零泄漏 |
+| WFL-07 | VERIFIED | WFL-06,PRV-10 | `crayon-workflow/redaction/**` | 写盘前敏感值移除与参数 placeholder | `WF-007`; seeded secret/canary 零泄漏 |
 | WFL-08 | TODO | WFL-06,WFL-07 | `crayon-workflow/recipe/**` | 仅从 verified success 生成候选 Recipe | `WF-008`; fail/cancel/indeterminate 不学习 |
 | WFL-09 | TODO | WFL-08,AGT-05 | `apps/desktop-cef/**/skill-preview/**`,locales | 技能名称、站点、参数、步骤、风险、权限、数据流预览和保存确认 | `WF-009`; 拒绝/过期/变更后重确认 |
 | WFL-10 | TODO | WFL-09,PRV-07 | `crayon-workflow/store/**`,`crayon-platform-api/**` | 按 OS user/Profile 隔离的加密个人 Skill Store | `WF-010`; migration/corrupt/quota/无痕清除 |
@@ -123,3 +123,20 @@
 - 验证：`cargo test -p crayon-workflow` 16/16（15 unit + 1 Windows DPAPI integration）；`cargo test --workspace` 全量通过；`cargo clippy -p crayon-workflow --all-targets --no-deps -- -D warnings`、`cargo fmt --all -- --check`、`scripts/check.sh security`、`git diff --check` 通过。带依赖的 `cargo clippy -p crayon-workflow --all-targets -- -D warnings` 被未修改的 `crayon-page-data/src/snapshot.rs:506` 新版 `clippy::nonminimal_bool` 阻塞，原始建议为 `truncated == reasons.is_empty()`，未在本任务夹带修复。
 - Code Review：按 v0.8 检查授权来源、generation/revision fencing、终态、容量、TTL、隐私与依赖方向；Review 中追加公开 `EffectReport` 的 schema/reason 纵深复检。P0/P1/P2 = 0/0/0。
 - 未覆盖与风险：production runtime 将 receipt/approved/effect 以同一动作上下文喂给 recorder 的装配仍属 WFL-12/app-runtime；WFL-07 继续负责写盘前参数 placeholder/redaction，WFL-08 才能按“整个任务 verified success”生成候选 Recipe。
+
+## WFL-07 原子范围（写盘前参数 placeholder 与零值泄漏）
+
+- 状态：`VERIFIED`；依赖 `WFL-06 VERIFIED`、`PRV-10 VERIFIED`。
+- 单一目标：提供 workflow 持久化前的强制 redaction barrier，将所有调用参数（不论调用方分类）降为有界参数名与闭合 placeholder class，并从 trace 重建固定 summary，确保字段值、正文、secret、完整 query、邮箱和账户标识无法进入输出。
+- 输入与输出：输入为 WFL-06 `WorkflowTrace` 与借用的原始参数 name/value/class；输出限 `crates/crayon-workflow/src/redaction/**`、crate 装配/测试、`trace` 固定 summary helper 的 crate-private 复用和本 Roadmap。原始输入类型不实现 Serialize/Debug/Clone，输出不保留 value、长度、片段或可逆指纹。
+- 边界与预算：参数 ≤16、name ≤32B 且仅 `[a-z0-9_.-]`、name 唯一；所有 class 均无条件丢弃 value，placeholder 只保留闭合 class；trace 必须 schema v1、全部 effect Verified，summary 由 ActionKind 固定重建。当前 v1 没有跨记录关联需求，因此“必要 hash”集合明确为空，禁止对低熵邮箱/账户做可枚举裸 hash；未来若确需关联必须另立 keyed/Profile-scoped hash schema 任务。
+- 验收：`WF-007` 密码、邮箱、token、正文、完整 query、账户标识及伪造 trace summary canary 序列化零命中；空/超量/非法/重复 name、非 verified/wrong schema fail closed；Format、Clippy、workspace/security、`git diff --check`。
+- 明确不做：文件 IO、Skill/Recipe schema 或 store、加密/hash key 管理、失败任务学习、参数值恢复、自动重放与 app-runtime 装配。
+
+### WFL-07 完成记录（2026-08-30）
+
+- 实现：新增 `redact_for_persistence` 强制 barrier；原始 `WorkflowParameter` 为借用输入且不实现 Serialize/Debug/Clone，所有 class（含误标为 Text）均无条件销毁 value。输出 `RedactedWorkflow` 只含重建后的 verified trace 和 ≤16 个 `{name,class}` placeholder；name 闭合/有界/唯一。trace schema 与 effect 复检，summary 复用 WFL-06 的 crate-private ActionKind 固定映射重建，调用方伪造正文不会透传。
+- Hash 决策：当前 Recipe/trace v1 没有跨记录账户关联语义，“必要 hash”数量为 0；未引入裸 SHA 或可逆指纹，避免对低熵邮箱/账户标识进行离线枚举。未来若产品确认关联需求，必须以 Profile scoped keyed hash、轮换/迁移/删除契约建立独立 schema 任务。
+- 验证：`cargo test -p crayon-workflow` 28/28（27 unit + 1 Windows DPAPI integration）；WF-007 覆盖 password/email/token/body/full-query/account 六类 canary、误分类、伪造 summary、空/非法/重复/超量 name、wrong schema/non-verified，序列化零 canary/value/length/digest/hash surface。`cargo test --workspace` 全量通过；`cargo fmt --all -- --check`、`cargo clippy -p crayon-workflow --all-targets --no-deps -- -D warnings`、`scripts/check.ps1 security`（guard/relay-unit/relay-security 全绿）、`git diff --check` 通过。
+- Code Review：按 v0.8 检查持久化输出类型、误分类 fail-safe、schema/effect 复检、账户标识与低熵 hash 风险、预算、依赖和测试；无 IO、锁、网络、额外依赖、正文日志或可恢复值。P0/P1/P2 = 0/0/0。
+- 未覆盖与风险：真正的 store 写入点尚未存在，barrier 由 WFL-08 Recipe 生成和 WFL-10 Skill Store/app-runtime 装配时强制消费，因此状态为 VERIFIED；当前不提供跨记录账户关联 hash，这是主动隐私最小化而非功能缺失。
