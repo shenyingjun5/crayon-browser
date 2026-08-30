@@ -1,6 +1,6 @@
 # ACT：页面语义地图与可验证动作 Roadmap
 
-- 状态：执行中；`ACT-01 DONE`，`ACT-02 VERIFIED`（均 2026-08-30）
+- 状态：执行中；`ACT-01 DONE`、`ACT-02/ACT-03 VERIFIED`（均 2026-08-30）
 - 任务数：12
 - 目标：把已验证页面事实转换为 Agent 可高效读取的语义地图，并通过短期 `action_id`、前置条件和效果验证执行受控操作
 - 非目标：原始 DOM/HTML/CDP 输出、长期 CSS/XPath、任意 JavaScript、截图/OCR 常规控制、密码/支付/通用文件上传
@@ -18,7 +18,7 @@
 |---|---|---|---|---|---|
 | ACT-01 | DONE | CNT-03,AGT-01 | `crayon-domain/semantic/**`,`crayon-ipc-schema/**` | 冻结 Page/Action/Form/Media/Risk Map、ChangeSet、effect 与错误 schema | `AC-001`; current/previous golden；无引擎类型 |
 | ACT-02 | VERIFIED | ACT-01 | `crayon-semantic-action/detail/**` | `compact/standard/internal-full` 字段和资源预算 | `AC-002`; raw DOM/HTML/CDP 永不出界 |
-| ACT-03 | TODO | ACT-01,AGT-03 | `crayon-semantic-action/handle/**` | action_id 签发、target/generation/TTL/nonce 绑定与失效 | `AC-003`; property/replay/跨 Profile |
+| ACT-03 | VERIFIED | ACT-01,AGT-03 | `crayon-semantic-action/handle/**` | action_id 签发、target/generation/TTL/nonce 绑定与失效 | `AC-003`; property/replay/跨 Profile |
 | ACT-04 | TODO | ACT-03,CEF-05 | `browser/engine-api/**`,`browser/cef-shell/**/semantic/**` | 多信号 action discovery 与内部 locator evidence | `AC-004`; 外部无 selector；重复/遮挡/动态页 |
 | ACT-05 | TODO | ACT-04 | `crayon-semantic-action/precondition/**` | 可见、唯一、可操作、同源、页面状态前置条件 | `AC-005`; stale/hidden/cross-origin fail closed |
 | ACT-06 | TODO | ACT-01,PRV-10 | `crayon-semantic-action/risk/**` | 确定性、单调 risk policy 与敏感元素排除 | `AC-006`; password/payment/file 不可执行 |
@@ -71,3 +71,22 @@
 - 验证：`cargo test -p crayon-semantic-action` 8/8（detail.rs）；`cargo test -p crayon-domain -p crayon-ipc-schema` 全量回归通过（含 semantic 13 与 IPC v1 9）；`cargo clippy -p crayon-semantic-action -p crayon-domain --all-targets -- -D warnings` 通过；`cargo fmt -p crayon-semantic-action -- --check` 通过。
 - Code Review：按 v0.8 复核；修正一处语义（profile 字段面裁剪不作为 truncation 事件）并保持截断可解释；`fits_map` 因 MSRV 1.85 非 const 化。P0/P1/P2 = 0/0/0；无锁、IO、网络、日志或运行时状态。
 - 未覆盖与风险：byte budget 校验需要一次序列化（读取路径上的 CPU 成本，预算内地图最大约 200KiB，可接受）；未涉及真实 collector 接线。`ACT-03 READY`（依赖 AGT-03 已 DONE）。
+
+
+## ACT-03 原子范围（action_id 签发与绑定失效）
+
+- 状态：`VERIFIED`；依赖 `ACT-01 DONE`、`AGT-03 DONE`。
+- 单一目标：在 `crayon-semantic-action/handle/**` 冻结单次 `action_id`（ActionHandle）的数据契约与有界签发/解析/消费/失效状态机。
+- 输入与输出：输入为 ACT-01 词汇（node/action kind/tab/generation）与 profile scope token；输出仅限 `crates/crayon-semantic-action/src/handle/**`、`tests/handle.rs` 与本 Roadmap。
+- 边界与预算：handle id 为 `h`+26 位 base32（128-bit 熵，闭合字符集）；TTL ∈ (0, 300_000 ms]；nonce 为一次性 64-bit 熵；registry 上限 256 个活 handle，满载返回 `Saturated` 不驱逐；时钟全部注入，不读系统时钟。
+- 失效语义：解析失败按 Unknown/Expired/StaleGeneration/ProfileMismatch/NonceMismatch 闭合返回；消费为单次（先移除后成功，重放见 Unknown）；nonce 不匹配的 consume 销毁 handle；跨 tab 请求与伪造 id 不可区分（Unknown）；generation/profile/tab 提供批量失效。
+- 验收：AC-003 覆盖同 generation 重读稳定、单次消费与重放、nonce 猜测销毁、TTL 边界与 sweep、generation 推进只失效旧 handle、Profile 切换、目标/tab 绑定、有界签发与熵 id 闭合形状；descriptor wire 零页面内容。
+- 明确不做：多信号 discovery/locator evidence（ACT-04）、precondition（ACT-05）、risk policy（ACT-06）、执行与 effect wait（ACT-07/08）、grant/确认（AGT-04/05 所有权）。
+
+### ACT-03 完成记录（2026-08-30）
+
+- 实现：新增 `handle` 模块：`ActionHandleId`（OS 熵 base32 签发 + 闭合校验）、`ProfileScope`/`HandleNonce` 强类型绑定、`ActionHandle` 冻结数据契约（TTL 边界校验、注入时钟）与 `ActionHandleDescriptor`（deny_unknown_fields 外部视图，仅 id/node/kind/expires）；`HandleRegistry` 单一所有者：`issue`（有界、拒绝式满载）、`resolve`/`consume`（单次、fail closed、nonce 销毁）、`invalidate_before_generation`/`invalidate_tab`/`invalidate_profile`/`sweep_expired`（全部有界、返回丢弃计数）。
+- 安全边界：handle 不含 selector/DOM/页面内容；跨 Profile 与跨 tab 一律拒绝且不可枚举；重放、过期、旧 generation 无副作用；无锁、无 IO、无系统时钟读取；执行接线未开始（ACT-07），grant/确认仍归 agent-gateway。
+- 验证：`cargo test -p crayon-semantic-action` 17/17（detail 8 + handle 9）；`cargo test -p crayon-domain -p crayon-ipc-schema` 13 个 suite 全 ok 回归；`cargo clippy -p crayon-semantic-action --all-targets -- -D warnings` 通过（修正 module_inception、too_many_arguments 显式说明、div_ceil）；`cargo fmt -p crayon-semantic-action -- --check` 通过。
+- Code Review：按 v0.8 复核；consume 采用先移除后成功保证重放不可见；tab 不匹配与伪造 id 统一为 Unknown 防枚举。P0/P1/P2 = 0/0/0。
+- 未覆盖与风险：nonce 销毁仅在 `consume` 路径，`resolve` 的 nonce 不匹配不销毁（resolve 为只读预检，文档已注明）；handle 尚无 Browser 侧签发方接线（ACT-04/07）。`ACT-04 READY`（依赖 CEF-05 已完成）。

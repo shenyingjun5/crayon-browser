@@ -10,9 +10,15 @@
 //! fenced by named budgets that report truncation instead of failing open.
 
 mod detail;
+mod handle;
 
 pub use detail::{
     render_compact, render_internal_full, render_standard, CompactAction, CompactMap, CompactNode,
     DetailBudget, DetailProfile, InternalFullMap, SemanticNodeAnnotation, MAX_COMPACT_ACTIONS,
     MAX_COMPACT_NODES, MAX_STANDARD_ACTIONS, MAX_STANDARD_NODES,
+};
+pub use handle::{
+    ActionHandle, ActionHandleDescriptor, ActionHandleId, ConsumeOutcome, HandleIdError,
+    HandleIssueError, HandleNonce, HandleRegistry, IssueOutcome, ProfileScope, ProfileScopeError,
+    Resolution, MAX_ACTIVE_HANDLES, MAX_HANDLE_TTL_MS,
 };
