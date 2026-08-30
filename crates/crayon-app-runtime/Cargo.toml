@@ -12,6 +12,8 @@ workspace = true
 [dependencies]
 crayon-cast-adapter = { path = "../crayon-cast-adapter" }
 crayon-cast-policy = { path = "../crayon-cast-policy" }
+crayon-content-extract = { path = "../crayon-content-extract" }
+crayon-content-markdown = { path = "../crayon-content-markdown" }
 crayon-domain = { path = "../crayon-domain" }
 crayon-agent-gateway = { path = "../crayon-agent-gateway" }
 crayon-semantic-action = { path = "../crayon-semantic-action" }

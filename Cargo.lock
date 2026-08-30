@@ -427,6 +427,8 @@ dependencies = [
  "crayon-agent-gateway",
  "crayon-cast-adapter",
  "crayon-cast-policy",
+ "crayon-content-extract",
+ "crayon-content-markdown",
  "crayon-domain",
  "crayon-ipc-schema",
  "crayon-media-observer",
