@@ -7,6 +7,7 @@
 
 use std::error::Error;
 use std::fmt::{Display, Formatter};
+use std::io::{Read, Write};
 
 /// Local agent IPC failure.  Variants are stable and carry no peer data.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -44,6 +45,22 @@ impl Error for LocalAgentIpcError {}
 pub struct PeerIdentity {
     same_user: bool,
     loopback: bool,
+}
+
+/// One OS-verified local client byte stream.
+///
+/// Platform adapters must reject a peer before returning this object;
+/// callers may therefore process CAAP handshake bytes without repeating
+/// OS-specific identity checks. Implementations keep reads and writes
+/// bounded by the caller-provided buffers and never expose peer details
+/// in errors.
+pub trait LocalAgentIpcConnection: Read + Write + Send {
+    /// Verified peer facts used by the shared AG-012 gate.
+    #[must_use]
+    fn peer_identity(&self) -> PeerIdentity;
+
+    /// Ends this client session. Repeated calls are successful.
+    fn close(&mut self) -> Result<(), LocalAgentIpcError>;
 }
 
 impl PeerIdentity {
@@ -90,6 +107,11 @@ pub trait LocalAgentIpcEndpoint: Send {
         }
         Ok(())
     }
+
+    /// Blocks until one client connects, verifies its OS identity, and
+    /// returns the admitted byte stream. No handshake byte may be read
+    /// before the platform peer gate succeeds.
+    fn accept(&self) -> Result<Box<dyn LocalAgentIpcConnection + '_>, LocalAgentIpcError>;
 
     /// Stops the endpoint and releases the OS resource.  Idempotent:
     /// stopping a stopped endpoint succeeds.

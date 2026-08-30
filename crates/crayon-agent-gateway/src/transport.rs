@@ -15,6 +15,15 @@
 use std::collections::VecDeque;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
+use std::io::{Read, Write};
+
+use crayon_domain::{AgentCapability, CaapError};
+use crayon_ipc_schema::{
+    CaapCancel, CaapErrorReply, CaapHello, CaapRequest, CaapWelcome, SchemaVersion,
+};
+use crayon_platform_api::local_agent_ipc::{
+    LocalAgentIpcConnection, LocalAgentIpcEndpoint, LocalAgentIpcError,
+};
 
 /// Frame header: 4-byte big-endian payload length.
 pub const FRAME_HEADER_BYTES: usize = 4;
@@ -34,6 +43,10 @@ pub const MAX_STRIKES: u32 = 8;
 
 /// Bounded replay window: request ids remembered per client.
 pub const MAX_SEEN_IDS: usize = 512;
+
+/// Bounded stack buffer for each blocking read. FrameCodec owns any
+/// legal partial frame across reads.
+pub const CONNECTION_READ_BYTES: usize = 8 * 1024;
 
 /// Transport failure.  Variants are stable and carry no client data.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -276,6 +289,272 @@ impl TransportGuard {
 impl Default for TransportGuard {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// A validated inbound message after the CAAP handshake.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum InboundMessage {
+    Request(CaapRequest),
+    Cancel(CaapCancel),
+}
+
+/// Connection-level failure. Variants never contain frame payloads,
+/// client names, parameters, or peer details.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ConnectionError {
+    Endpoint(LocalAgentIpcError),
+    Transport(TransportError),
+    Io,
+    HandshakeRequired,
+    HandshakeRepeated,
+    VersionUnsupported,
+    InvalidMessage,
+    Closed,
+}
+
+impl ConnectionError {
+    #[must_use]
+    pub const fn to_caap_error(self) -> CaapError {
+        match self {
+            Self::Endpoint(_) | Self::Io | Self::Closed => CaapError::Unauthorized,
+            Self::Transport(error) => error.to_caap_error(),
+            Self::HandshakeRequired | Self::HandshakeRepeated | Self::InvalidMessage => {
+                CaapError::InvalidMessage
+            }
+            Self::VersionUnsupported => CaapError::VersionUnsupported,
+        }
+    }
+}
+
+impl Display for ConnectionError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Endpoint(_) => "local endpoint rejected connection",
+            Self::Transport(_) => "transport guard rejected frame",
+            Self::Io => "local connection io failed",
+            Self::HandshakeRequired => "CAAP handshake required",
+            Self::HandshakeRepeated => "CAAP handshake already completed",
+            Self::VersionUnsupported => "CAAP version unsupported",
+            Self::InvalidMessage => "CAAP message invalid",
+            Self::Closed => "local connection closed",
+        })
+    }
+}
+
+impl Error for ConnectionError {}
+
+/// One admitted local CAAP connection.
+///
+/// The platform endpoint verifies the OS peer before returning the byte
+/// stream. This runtime then owns framing, handshake ordering, exact
+/// schema negotiation, rate limiting, replay rejection and idempotent
+/// disconnect. Tool dispatch and grant issuance remain outside the
+/// transport boundary.
+pub struct CaapConnection<'a> {
+    stream: Box<dyn LocalAgentIpcConnection + 'a>,
+    codec: FrameCodec,
+    guard: TransportGuard,
+    supported_schema: SchemaVersion,
+    allowed_capabilities: Vec<AgentCapability>,
+    handshaken: bool,
+    stopped: bool,
+}
+
+impl<'a> CaapConnection<'a> {
+    /// Accepts a platform-verified peer. The redundant shared gate uses
+    /// only already-derived facts and still runs before the first read.
+    pub fn accept(
+        endpoint: &'a dyn LocalAgentIpcEndpoint,
+        supported_schema: SchemaVersion,
+        allowed_capabilities: Vec<AgentCapability>,
+    ) -> Result<Self, ConnectionError> {
+        let stream = endpoint.accept().map_err(ConnectionError::Endpoint)?;
+        endpoint
+            .admit_peer(stream.peer_identity())
+            .map_err(ConnectionError::Endpoint)?;
+        Ok(Self::from_stream(
+            stream,
+            supported_schema,
+            allowed_capabilities,
+        ))
+    }
+
+    /// Builds the protocol runtime around an already admitted stream.
+    /// Kept public for deterministic in-memory contract tests and future
+    /// desktop assembly; callers must supply only platform-verified
+    /// streams.
+    #[must_use]
+    pub(crate) fn from_stream(
+        stream: Box<dyn LocalAgentIpcConnection + 'a>,
+        supported_schema: SchemaVersion,
+        allowed_capabilities: Vec<AgentCapability>,
+    ) -> Self {
+        Self {
+            stream,
+            codec: FrameCodec::new(),
+            guard: TransportGuard::new(),
+            supported_schema,
+            allowed_capabilities,
+            handshaken: false,
+            stopped: false,
+        }
+    }
+
+    /// Reads and validates the mandatory first Hello, then writes the
+    /// negotiated Welcome using the same bounded frame format.
+    pub fn handshake(&mut self, now_ms: u64) -> Result<CaapWelcome, ConnectionError> {
+        if self.stopped {
+            return Err(ConnectionError::Closed);
+        }
+        if self.handshaken {
+            return Err(ConnectionError::HandshakeRepeated);
+        }
+        let payload = self.read_frame()?;
+        let hello: CaapHello = serde_json::from_slice(&payload)
+            .map_err(|_| self.invalid_message(ConnectionError::InvalidMessage))?;
+        hello
+            .validate()
+            .map_err(|_| self.invalid_message(ConnectionError::InvalidMessage))?;
+        if hello.schema() != self.supported_schema {
+            self.write_error(0, CaapError::VersionUnsupported)?;
+            self.stop()?;
+            return Err(ConnectionError::VersionUnsupported);
+        }
+        self.guard
+            .bind_client(hello.client())
+            .map_err(ConnectionError::Transport)?;
+        self.guard
+            .admit_rate(now_ms)
+            .map_err(ConnectionError::Transport)?;
+        let granted = hello
+            .capabilities()
+            .iter()
+            .copied()
+            .filter(|capability| self.allowed_capabilities.contains(capability))
+            .collect();
+        let welcome = CaapWelcome::new(self.supported_schema, granted)
+            .map_err(|_| ConnectionError::InvalidMessage)?;
+        self.write_json_frame(&welcome)?;
+        self.handshaken = true;
+        Ok(welcome)
+    }
+
+    /// Reads the next validated request or cancel. No message can reach
+    /// dispatch before a successful Hello/Welcome exchange.
+    pub fn receive(&mut self, now_ms: u64) -> Result<InboundMessage, ConnectionError> {
+        if self.stopped {
+            return Err(ConnectionError::Closed);
+        }
+        if !self.handshaken {
+            return Err(ConnectionError::HandshakeRequired);
+        }
+        let payload = self.read_frame()?;
+        self.guard
+            .admit_rate(now_ms)
+            .map_err(ConnectionError::Transport)?;
+
+        if let Ok(request) = serde_json::from_slice::<CaapRequest>(&payload) {
+            request
+                .validate()
+                .map_err(|_| self.invalid_message(ConnectionError::InvalidMessage))?;
+            self.guard
+                .admit_request_id(request.id())
+                .map_err(ConnectionError::Transport)?;
+            return Ok(InboundMessage::Request(request));
+        }
+        if let Ok(cancel) = serde_json::from_slice::<CaapCancel>(&payload) {
+            return Ok(InboundMessage::Cancel(cancel));
+        }
+        if serde_json::from_slice::<CaapHello>(&payload).is_ok() {
+            return Err(self.invalid_message(ConnectionError::HandshakeRepeated));
+        }
+        Err(self.invalid_message(ConnectionError::InvalidMessage))
+    }
+
+    /// Writes a stable CAAP error reply without exposing diagnostic text.
+    pub fn write_error(&mut self, id: u64, error: CaapError) -> Result<(), ConnectionError> {
+        self.write_json_frame(&CaapErrorReply::new(id, error))
+    }
+
+    /// Releases the client slot and OS connection. Repeated calls are
+    /// successful and perform no further IO.
+    pub fn stop(&mut self) -> Result<(), ConnectionError> {
+        if self.stopped {
+            return Ok(());
+        }
+        self.guard.stop();
+        self.stream.close().map_err(ConnectionError::Endpoint)?;
+        self.stopped = true;
+        Ok(())
+    }
+
+    fn read_frame(&mut self) -> Result<Vec<u8>, ConnectionError> {
+        loop {
+            match self.codec.take().map_err(ConnectionError::Transport)? {
+                DecodedFrame::Complete(payload) => return Ok(payload),
+                DecodedFrame::Oversize { .. } => {
+                    let _ = self.guard.strike();
+                    let _ = self.stop();
+                    return Err(ConnectionError::Transport(TransportError::FrameTooLarge));
+                }
+                DecodedFrame::Incomplete => {}
+            }
+            let mut buffer = [0u8; CONNECTION_READ_BYTES];
+            let read = self
+                .stream
+                .read(&mut buffer)
+                .map_err(|_| self.io_failure())?;
+            if read == 0 {
+                let _ = self.stop();
+                return Err(ConnectionError::Closed);
+            }
+            match self
+                .codec
+                .feed(&buffer[..read])
+                .map_err(ConnectionError::Transport)?
+            {
+                DecodedFrame::Complete(payload) => return Ok(payload),
+                DecodedFrame::Oversize { .. } => {
+                    let _ = self.guard.strike();
+                    let _ = self.stop();
+                    return Err(ConnectionError::Transport(TransportError::FrameTooLarge));
+                }
+                DecodedFrame::Incomplete => {}
+            }
+        }
+    }
+
+    fn write_json_frame<T>(&mut self, value: &T) -> Result<(), ConnectionError>
+    where
+        T: serde::Serialize,
+    {
+        let payload = serde_json::to_vec(value).map_err(|_| ConnectionError::InvalidMessage)?;
+        if payload.len() > MAX_FRAME_BYTES {
+            return Err(ConnectionError::Transport(TransportError::FrameTooLarge));
+        }
+        self.stream
+            .write_all(&FrameCodec::encode(&payload))
+            .map_err(|_| self.io_failure())?;
+        self.stream.flush().map_err(|_| self.io_failure())
+    }
+
+    fn invalid_message(&mut self, error: ConnectionError) -> ConnectionError {
+        if self.guard.strike().is_err() {
+            let _ = self.stop();
+        }
+        error
+    }
+
+    fn io_failure(&mut self) -> ConnectionError {
+        let _ = self.stop();
+        ConnectionError::Io
+    }
+}
+
+impl Drop for CaapConnection<'_> {
+    fn drop(&mut self) {
+        let _ = self.stop();
     }
 }
 

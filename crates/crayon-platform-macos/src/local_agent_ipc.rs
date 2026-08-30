@@ -6,8 +6,12 @@
 //! is idempotent.
 
 use crate::ffi;
-use crayon_platform_api::local_agent_ipc::{LocalAgentIpcEndpoint, LocalAgentIpcError};
+use crayon_platform_api::local_agent_ipc::{
+    LocalAgentIpcConnection, LocalAgentIpcEndpoint, LocalAgentIpcError, PeerIdentity,
+};
 use std::ffi::c_void;
+use std::io::{Read, Write};
+use std::os::unix::fs::PermissionsExt;
 use std::sync::atomic::{AtomicPtr, Ordering};
 
 #[cfg(test)]
@@ -80,6 +84,11 @@ impl MacUdsEndpoint {
     /// `getpeereid`.  Wired into the accept loop at AGT-12 transport
     /// assembly; exposed for integration testing.
     pub fn accept_and_check(&self) -> Result<u64, LocalAgentIpcError> {
+        let client = self.accept_verified_client()?;
+        Ok(client.peer_uid)
+    }
+
+    fn accept_verified_client(&self) -> Result<MacVerifiedClient, LocalAgentIpcError> {
         let fd = self.listen_fd.load(Ordering::Acquire);
         if fd.is_null() {
             return Err(LocalAgentIpcError::NotRunning);
@@ -98,7 +107,13 @@ impl MacUdsEndpoint {
         if unsafe { ffi::getpeereid(peer_fd_guard.0, &mut peer_uid, &mut peer_gid) } != 0 {
             return Err(LocalAgentIpcError::HandshakeFailed);
         }
-        Ok(peer_uid)
+        let peer = PeerIdentity::new(peer_uid == self.uid, true);
+        self.admit_peer(peer)?;
+        Ok(MacVerifiedClient {
+            fd: peer_fd_guard,
+            peer,
+            peer_uid,
+        })
     }
 
     /// The stored uid for comparison in tests.
@@ -134,8 +149,13 @@ impl LocalAgentIpcEndpoint for MacUdsEndpoint {
         if bind_result != 0 {
             return Err(LocalAgentIpcError::AlreadyRunning);
         }
+        if std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).is_err() {
+            let _ = std::fs::remove_file(&path);
+            return Err(LocalAgentIpcError::HandshakeFailed);
+        }
         // SAFETY: fd is a valid bound socket.
         if unsafe { ffi::listen(fd, LISTEN_BACKLOG) } != 0 {
+            let _ = std::fs::remove_file(&path);
             return Err(LocalAgentIpcError::HandshakeFailed);
         }
         std::mem::forget(guard);
@@ -157,5 +177,65 @@ impl LocalAgentIpcEndpoint for MacUdsEndpoint {
 
     fn is_running(&self) -> bool {
         !self.listen_fd.load(Ordering::Acquire).is_null()
+    }
+
+    fn accept(&self) -> Result<Box<dyn LocalAgentIpcConnection + '_>, LocalAgentIpcError> {
+        self.accept_verified_client()
+            .map(|client| Box::new(client) as Box<dyn LocalAgentIpcConnection>)
+    }
+}
+
+struct MacVerifiedClient {
+    fd: Fd,
+    peer: PeerIdentity,
+    peer_uid: u64,
+}
+
+impl Read for MacVerifiedClient {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        if self.fd.0 < 0 || buffer.is_empty() {
+            return Ok(0);
+        }
+        // SAFETY: fd is a live connected UDS and the buffer is writable
+        // for its declared length.
+        let read = unsafe { ffi::read(self.fd.0, buffer.as_mut_ptr(), buffer.len()) };
+        if read < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        Ok(read as usize)
+    }
+}
+
+impl Write for MacVerifiedClient {
+    fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+        if self.fd.0 < 0 || buffer.is_empty() {
+            return Ok(0);
+        }
+        // SAFETY: fd is a live connected UDS and the buffer is readable
+        // for its declared length.
+        let written = unsafe { ffi::write(self.fd.0, buffer.as_ptr(), buffer.len()) };
+        if written < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        Ok(written as usize)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl LocalAgentIpcConnection for MacVerifiedClient {
+    fn peer_identity(&self) -> PeerIdentity {
+        self.peer
+    }
+
+    fn close(&mut self) -> Result<(), LocalAgentIpcError> {
+        if self.fd.0 >= 0 {
+            // SAFETY: fd is exclusively owned by this connection.
+            unsafe { ffi::close(self.fd.0) };
+            self.fd.0 = -1;
+        }
+        Ok(())
     }
 }

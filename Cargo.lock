@@ -390,6 +390,10 @@ dependencies = [
  "crayon-domain",
  "crayon-ipc-schema",
  "crayon-page-data",
+ "crayon-platform-api",
+ "crayon-platform-windows",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

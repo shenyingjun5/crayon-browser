@@ -2,9 +2,149 @@
 //! admission, rate limiting, replay rejection, strikes and stop.
 
 use super::*;
+use crayon_domain::{AgentCapability, AgentTarget};
+use crayon_platform_api::local_agent_ipc::{
+    LocalAgentIpcConnection, LocalAgentIpcEndpoint, LocalAgentIpcError, PeerIdentity,
+};
+use std::collections::BTreeMap;
+use std::io::{Cursor, Read, Write};
+use std::num::NonZeroU16;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
 fn header(len: usize) -> Vec<u8> {
     (len as u32).to_be_bytes().to_vec()
+}
+
+fn json_frame<T: serde::Serialize>(value: &T) -> Vec<u8> {
+    FrameCodec::encode(&serde_json::to_vec(value).unwrap())
+}
+
+fn decode_output<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> T {
+    let mut codec = FrameCodec::new();
+    let DecodedFrame::Complete(payload) = codec.feed(bytes).unwrap() else {
+        panic!("expected complete output frame");
+    };
+    serde_json::from_slice(&payload).unwrap()
+}
+
+struct MemoryConnection {
+    input: Cursor<Vec<u8>>,
+    output: Arc<Mutex<Vec<u8>>>,
+    closed: Arc<AtomicBool>,
+    reads: Arc<AtomicUsize>,
+    peer: PeerIdentity,
+    max_read: usize,
+    fail_write: bool,
+}
+
+impl MemoryConnection {
+    fn new(input: Vec<u8>, peer: PeerIdentity, max_read: usize) -> (Self, MemoryProbe) {
+        let output = Arc::new(Mutex::new(Vec::new()));
+        let closed = Arc::new(AtomicBool::new(false));
+        let reads = Arc::new(AtomicUsize::new(0));
+        (
+            Self {
+                input: Cursor::new(input),
+                output: Arc::clone(&output),
+                closed: Arc::clone(&closed),
+                reads: Arc::clone(&reads),
+                peer,
+                max_read,
+                fail_write: false,
+            },
+            MemoryProbe {
+                output,
+                closed,
+                reads,
+            },
+        )
+    }
+}
+
+struct MemoryProbe {
+    output: Arc<Mutex<Vec<u8>>>,
+    closed: Arc<AtomicBool>,
+    reads: Arc<AtomicUsize>,
+}
+
+impl Read for MemoryConnection {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        self.reads.fetch_add(1, Ordering::Relaxed);
+        let limit = buffer.len().min(self.max_read.max(1));
+        self.input.read(&mut buffer[..limit])
+    }
+}
+
+impl Write for MemoryConnection {
+    fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+        if self.fail_write {
+            return Err(std::io::Error::other("injected write failure"));
+        }
+        self.output.lock().unwrap().extend_from_slice(buffer);
+        Ok(buffer.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl LocalAgentIpcConnection for MemoryConnection {
+    fn peer_identity(&self) -> PeerIdentity {
+        self.peer
+    }
+
+    fn close(&mut self) -> Result<(), LocalAgentIpcError> {
+        self.closed.store(true, Ordering::Relaxed);
+        Ok(())
+    }
+}
+
+struct FakeEndpoint {
+    stream: Mutex<Option<MemoryConnection>>,
+    running: AtomicBool,
+}
+
+impl LocalAgentIpcEndpoint for FakeEndpoint {
+    fn start(&mut self) -> Result<(), LocalAgentIpcError> {
+        self.running.store(true, Ordering::Relaxed);
+        Ok(())
+    }
+
+    fn accept(&self) -> Result<Box<dyn LocalAgentIpcConnection + '_>, LocalAgentIpcError> {
+        self.stream
+            .lock()
+            .unwrap()
+            .take()
+            .map(|stream| Box::new(stream) as Box<dyn LocalAgentIpcConnection>)
+            .ok_or(LocalAgentIpcError::HandshakeFailed)
+    }
+
+    fn stop(&mut self) -> Result<(), LocalAgentIpcError> {
+        self.running.store(false, Ordering::Relaxed);
+        Ok(())
+    }
+
+    fn is_running(&self) -> bool {
+        self.running.load(Ordering::Relaxed)
+    }
+}
+
+fn hello(client: &str, capabilities: Vec<AgentCapability>) -> CaapHello {
+    CaapHello::new(SchemaVersion::CURRENT, client, capabilities).unwrap()
+}
+
+fn request(id: u64) -> CaapRequest {
+    CaapRequest::new(
+        id,
+        "page.get_title",
+        AgentTarget::ActiveTab,
+        1000,
+        &format!("idem-{id}"),
+        BTreeMap::new(),
+    )
+    .unwrap()
 }
 
 #[test]
@@ -251,4 +391,201 @@ fn lcg_hostile_stream_invariants() {
         assert!(guard.strikes() < MAX_STRIKES || guard.bound_client().is_none());
         assert!(codec.pending_bytes() <= MAX_FRAME_BYTES * 2);
     }
+}
+
+#[test]
+fn connection_fragmented_handshake_negotiates_and_writes_welcome() {
+    let input = json_frame(&hello(
+        "cli-dev",
+        vec![AgentCapability::PageRead, AgentCapability::Navigation],
+    ));
+    let (stream, probe) = MemoryConnection::new(input, PeerIdentity::new(true, true), 3);
+    let mut connection = CaapConnection::from_stream(
+        Box::new(stream),
+        SchemaVersion::CURRENT,
+        vec![AgentCapability::PageRead],
+    );
+    let welcome = connection.handshake(0).unwrap();
+    assert_eq!(welcome.schema(), SchemaVersion::CURRENT);
+    assert_eq!(welcome.capabilities(), &[AgentCapability::PageRead]);
+    let output = probe.output.lock().unwrap().clone();
+    assert_eq!(decode_output::<CaapWelcome>(&output), welcome);
+    connection.stop().unwrap();
+    connection.stop().unwrap();
+    assert!(probe.closed.load(Ordering::Relaxed));
+}
+
+#[test]
+fn connection_requires_handshake_then_accepts_request_and_cancel() {
+    let mut input = json_frame(&hello("cli-dev", vec![AgentCapability::PageRead]));
+    input.extend(json_frame(&request(7)));
+    input.extend(json_frame(&CaapCancel::new(7)));
+    input.extend(json_frame(&request(7)));
+    let (stream, _) = MemoryConnection::new(input, PeerIdentity::new(true, true), usize::MAX);
+    let mut connection = CaapConnection::from_stream(
+        Box::new(stream),
+        SchemaVersion::CURRENT,
+        vec![AgentCapability::PageRead],
+    );
+    assert_eq!(
+        connection.receive(0),
+        Err(ConnectionError::HandshakeRequired)
+    );
+    connection.handshake(0).unwrap();
+    assert!(matches!(
+        connection.receive(1),
+        Ok(InboundMessage::Request(message)) if message.id() == 7
+    ));
+    assert_eq!(
+        connection.receive(2),
+        Ok(InboundMessage::Cancel(CaapCancel::new(7)))
+    );
+    assert_eq!(
+        connection.receive(3),
+        Err(ConnectionError::Transport(TransportError::Replayed))
+    );
+    assert_eq!(
+        connection.handshake(4),
+        Err(ConnectionError::HandshakeRepeated)
+    );
+}
+
+#[test]
+fn connection_version_error_is_framed_and_payload_free() {
+    let unsupported = SchemaVersion::new(NonZeroU16::new(2).unwrap());
+    let input = json_frame(&CaapHello::new(unsupported, "cli-dev", vec![]).unwrap());
+    let (stream, probe) = MemoryConnection::new(input, PeerIdentity::new(true, true), 64);
+    let mut connection =
+        CaapConnection::from_stream(Box::new(stream), SchemaVersion::CURRENT, Vec::new());
+    assert_eq!(
+        connection.handshake(0),
+        Err(ConnectionError::VersionUnsupported)
+    );
+    let output = probe.output.lock().unwrap().clone();
+    assert_eq!(
+        decode_output::<CaapErrorReply>(&output),
+        CaapErrorReply::new(0, CaapError::VersionUnsupported)
+    );
+    assert!(!String::from_utf8_lossy(&output).contains("cli-dev"));
+    assert!(probe.closed.load(Ordering::Relaxed));
+}
+
+#[test]
+fn endpoint_peer_gate_runs_before_first_handshake_read() {
+    let input = json_frame(&hello("hostile", vec![]));
+    let (stream, probe) = MemoryConnection::new(input, PeerIdentity::new(false, true), 64);
+    let endpoint = FakeEndpoint {
+        stream: Mutex::new(Some(stream)),
+        running: AtomicBool::new(true),
+    };
+    assert!(matches!(
+        CaapConnection::accept(&endpoint, SchemaVersion::CURRENT, Vec::new()),
+        Err(ConnectionError::Endpoint(LocalAgentIpcError::PeerRejected))
+    ));
+    assert_eq!(probe.reads.load(Ordering::Relaxed), 0);
+}
+
+#[test]
+fn connection_oversize_and_eof_close_without_unbounded_reads() {
+    let (stream, probe) = MemoryConnection::new(
+        header(MAX_FRAME_BYTES + 1),
+        PeerIdentity::new(true, true),
+        CONNECTION_READ_BYTES,
+    );
+    let mut connection =
+        CaapConnection::from_stream(Box::new(stream), SchemaVersion::CURRENT, Vec::new());
+    assert_eq!(
+        connection.handshake(0),
+        Err(ConnectionError::Transport(TransportError::FrameTooLarge))
+    );
+    assert!(probe.closed.load(Ordering::Relaxed));
+    assert_eq!(probe.reads.load(Ordering::Relaxed), 1);
+
+    let (empty, empty_probe) = MemoryConnection::new(Vec::new(), PeerIdentity::new(true, true), 64);
+    let mut eof = CaapConnection::from_stream(Box::new(empty), SchemaVersion::CURRENT, Vec::new());
+    assert_eq!(eof.handshake(0), Err(ConnectionError::Closed));
+    assert!(empty_probe.closed.load(Ordering::Relaxed));
+
+    let input = json_frame(&hello("cli-dev", vec![]));
+    let (mut failing, failing_probe) =
+        MemoryConnection::new(input, PeerIdentity::new(true, true), 64);
+    failing.fail_write = true;
+    let mut write_failure =
+        CaapConnection::from_stream(Box::new(failing), SchemaVersion::CURRENT, Vec::new());
+    assert_eq!(write_failure.handshake(0), Err(ConnectionError::Io));
+    assert!(failing_probe.closed.load(Ordering::Relaxed));
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_named_pipe_runs_real_hello_request_cancel_flow() {
+    use crayon_platform_windows::local_agent_ipc::{
+        WindowsAgentIpcClient, WindowsAgentIpcEndpoint,
+    };
+    use std::sync::mpsc;
+
+    let purpose = format!("agt12b-{}", std::process::id());
+    let (path_tx, path_rx) = mpsc::channel();
+    let server = std::thread::spawn(move || {
+        let mut endpoint = WindowsAgentIpcEndpoint::new(&purpose).unwrap();
+        endpoint.start().unwrap();
+        path_tx.send(endpoint.pipe_path_for_connect()).unwrap();
+        {
+            let mut connection = CaapConnection::accept(
+                &endpoint,
+                SchemaVersion::CURRENT,
+                vec![AgentCapability::PageRead],
+            )
+            .unwrap();
+            let welcome = connection.handshake(0).unwrap();
+            assert_eq!(welcome.capabilities(), &[AgentCapability::PageRead]);
+            assert!(matches!(
+                connection.receive(1),
+                Ok(InboundMessage::Request(message)) if message.id() == 41
+            ));
+            assert_eq!(
+                connection.receive(2),
+                Ok(InboundMessage::Cancel(CaapCancel::new(41)))
+            );
+            connection.stop().unwrap();
+        }
+        endpoint.stop().unwrap();
+        assert!(!endpoint.is_running());
+    });
+
+    let path = path_rx.recv().unwrap();
+    let mut remote: Vec<u16> = r"\\remote-host\pipe\crayon-agent-test"
+        .encode_utf16()
+        .collect();
+    remote.push(0);
+    assert!(matches!(
+        WindowsAgentIpcClient::connect(&remote),
+        Err(LocalAgentIpcError::InvalidToken)
+    ));
+    let mut client = WindowsAgentIpcClient::connect(&path).unwrap();
+    client
+        .write_all(&json_frame(&hello(
+            "windows-cli",
+            vec![AgentCapability::PageRead],
+        )))
+        .unwrap();
+
+    let mut response_header = [0u8; FRAME_HEADER_BYTES];
+    client.read_exact(&mut response_header).unwrap();
+    let response_len = u32::from_be_bytes(response_header) as usize;
+    assert!(response_len <= MAX_FRAME_BYTES);
+    let mut response = vec![0u8; response_len];
+    client.read_exact(&mut response).unwrap();
+    let welcome: CaapWelcome = serde_json::from_slice(&response).unwrap();
+    assert_eq!(welcome.capabilities(), &[AgentCapability::PageRead]);
+
+    assert!(matches!(
+        WindowsAgentIpcClient::connect(&path),
+        Err(LocalAgentIpcError::NotRunning)
+    ));
+
+    client.write_all(&json_frame(&request(41))).unwrap();
+    client.write_all(&json_frame(&CaapCancel::new(41))).unwrap();
+    drop(client);
+    server.join().unwrap();
 }

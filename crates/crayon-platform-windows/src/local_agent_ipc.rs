@@ -8,10 +8,11 @@
 
 use crate::ffi::{self};
 use crayon_platform_api::local_agent_ipc::{
-    LocalAgentIpcEndpoint, LocalAgentIpcError, PeerIdentity,
+    LocalAgentIpcConnection, LocalAgentIpcEndpoint, LocalAgentIpcError, PeerIdentity,
 };
 use crayon_platform_api::token::validate_token;
 use std::ffi::c_void;
+use std::io::{Read, Write};
 use std::sync::Mutex;
 
 use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, ERROR_ACCESS_DENIED, HANDLE};
@@ -22,7 +23,8 @@ use windows_sys::Win32::Security::{
     GetTokenInformation, TokenUser, SECURITY_ATTRIBUTES, TOKEN_QUERY, TOKEN_USER,
 };
 use windows_sys::Win32::Storage::FileSystem::{
-    CreateFileW, FILE_FLAG_FIRST_PIPE_INSTANCE, FILE_SHARE_NONE, OPEN_EXISTING, PIPE_ACCESS_DUPLEX,
+    CreateFileW, ReadFile, WriteFile, FILE_FLAG_FIRST_PIPE_INSTANCE, FILE_SHARE_NONE,
+    OPEN_EXISTING, PIPE_ACCESS_DUPLEX,
 };
 use windows_sys::Win32::System::Pipes::{
     ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, GetNamedPipeClientProcessId,
@@ -205,14 +207,21 @@ impl WindowsAgentIpcEndpoint {
             return Err(EndpointError::OsDenied);
         }
         // SAFETY: handle cloned from the live listener slot above.
-        match unsafe { self.verify_connected_client(handle) }? {
-            true => Ok(VerifiedClient {
+        match unsafe { self.verify_connected_client(handle) } {
+            Ok(true) => Ok(VerifiedClient {
                 handle: PipeHandle(handle),
+                closed: false,
             }),
-            false => {
+            Ok(false) => {
                 // SAFETY: reject closes our view of the peer session.
                 unsafe { DisconnectNamedPipe(handle) };
                 Err(EndpointError::Gate(LocalAgentIpcError::PeerRejected))
+            }
+            Err(error) => {
+                // SAFETY: identity observation failed after connect; fail
+                // closed and release the peer before returning.
+                unsafe { DisconnectNamedPipe(handle) };
+                Err(error)
             }
         }
     }
@@ -302,13 +311,23 @@ impl LocalAgentIpcEndpoint for WindowsAgentIpcEndpoint {
             false => Err(LocalAgentIpcError::PeerRejected),
         }
     }
+
+    fn accept(&self) -> Result<Box<dyn LocalAgentIpcConnection + '_>, LocalAgentIpcError> {
+        self.accept_verified_client()
+            .map(|client| Box::new(client) as Box<dyn LocalAgentIpcConnection>)
+            .map_err(|error| match error {
+                EndpointError::Gate(gate) => gate,
+                EndpointError::OsDenied => LocalAgentIpcError::HandshakeFailed,
+            })
+    }
 }
 
-/// A peer whose OS user identity passed the AG-012 gate.  The raw pipe
-/// handle is co-owned by the endpoint slot and the transport; transports
-/// close it exactly once when the session ends.
+/// A peer whose OS user identity passed the AG-012 gate. The endpoint
+/// remains the sole handle owner; this session view disconnects the peer
+/// without closing the reusable listener handle.
 pub struct VerifiedClient {
     handle: PipeHandle,
+    closed: bool,
 }
 
 impl VerifiedClient {
@@ -316,6 +335,178 @@ impl VerifiedClient {
     #[must_use]
     pub fn raw(&self) -> HANDLE {
         self.handle.0
+    }
+}
+
+impl Read for VerifiedClient {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        if self.closed || buffer.is_empty() {
+            return Ok(0);
+        }
+        let len = buffer.len().min(u32::MAX as usize) as u32;
+        let mut read = 0u32;
+        // SAFETY: the connected pipe handle is live while `closed` is
+        // false; `buffer` is writable for `len` bytes and `read` is a
+        // valid out pointer. This synchronous call uses no OVERLAPPED.
+        let ok = unsafe {
+            ReadFile(
+                self.handle.0,
+                buffer.as_mut_ptr().cast(),
+                len,
+                &mut read,
+                std::ptr::null_mut(),
+            )
+        };
+        if ok == 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        Ok(read as usize)
+    }
+}
+
+impl Write for VerifiedClient {
+    fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+        if self.closed || buffer.is_empty() {
+            return Ok(0);
+        }
+        let len = buffer.len().min(u32::MAX as usize) as u32;
+        let mut written = 0u32;
+        // SAFETY: the connected pipe handle is live while `closed` is
+        // false; `buffer` is readable for `len` bytes and `written` is a
+        // valid out pointer. This synchronous call uses no OVERLAPPED.
+        let ok = unsafe {
+            WriteFile(
+                self.handle.0,
+                buffer.as_ptr().cast(),
+                len,
+                &mut written,
+                std::ptr::null_mut(),
+            )
+        };
+        if ok == 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        Ok(written as usize)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl LocalAgentIpcConnection for VerifiedClient {
+    fn peer_identity(&self) -> PeerIdentity {
+        PeerIdentity::new(true, true)
+    }
+
+    fn close(&mut self) -> Result<(), LocalAgentIpcError> {
+        if !self.closed {
+            // SAFETY: this view refers to the connected listener owned
+            // by the endpoint. Disconnect ends only the client session;
+            // endpoint `stop` remains the sole CloseHandle owner.
+            unsafe { DisconnectNamedPipe(self.handle.0) };
+            self.closed = true;
+        }
+        Ok(())
+    }
+}
+
+impl Drop for VerifiedClient {
+    fn drop(&mut self) {
+        let _ = self.close();
+    }
+}
+
+/// Owned safe client side of a local agent named pipe. This is the
+/// platform byte stream used by the CLI adapter; construction accepts
+/// only the endpoint-provided NUL-terminated path and never permits a
+/// remote pipe name to be assembled here.
+pub struct WindowsAgentIpcClient {
+    handle: HANDLE,
+}
+
+impl WindowsAgentIpcClient {
+    pub fn connect(path_wide: &[u16]) -> Result<Self, LocalAgentIpcError> {
+        if path_wide.last().copied() != Some(0) {
+            return Err(LocalAgentIpcError::InvalidToken);
+        }
+        let path = String::from_utf16(&path_wide[..path_wide.len() - 1])
+            .map_err(|_| LocalAgentIpcError::InvalidToken)?;
+        let purpose = path
+            .strip_prefix(r"\\.\pipe\crayon-agent-")
+            .ok_or(LocalAgentIpcError::InvalidToken)?;
+        validate_token(purpose, 64).map_err(|_| LocalAgentIpcError::InvalidToken)?;
+        // SAFETY: the caller supplies the endpoint-produced,
+        // NUL-terminated UTF-16 path; ownership is transferred here.
+        let handle = unsafe { connect_client(path_wide) };
+        if handle.is_null() || handle == (-1isize as HANDLE) {
+            return Err(LocalAgentIpcError::NotRunning);
+        }
+        Ok(Self { handle })
+    }
+}
+
+impl Read for WindowsAgentIpcClient {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        if buffer.is_empty() {
+            return Ok(0);
+        }
+        let len = buffer.len().min(u32::MAX as usize) as u32;
+        let mut read = 0u32;
+        // SAFETY: handle is owned and live; buffer/out pointer are valid
+        // for this synchronous call.
+        let ok = unsafe {
+            ReadFile(
+                self.handle,
+                buffer.as_mut_ptr().cast(),
+                len,
+                &mut read,
+                std::ptr::null_mut(),
+            )
+        };
+        if ok == 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        Ok(read as usize)
+    }
+}
+
+impl Write for WindowsAgentIpcClient {
+    fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+        if buffer.is_empty() {
+            return Ok(0);
+        }
+        let len = buffer.len().min(u32::MAX as usize) as u32;
+        let mut written = 0u32;
+        // SAFETY: handle is owned and live; buffer/out pointer are valid
+        // for this synchronous call.
+        let ok = unsafe {
+            WriteFile(
+                self.handle,
+                buffer.as_ptr().cast(),
+                len,
+                &mut written,
+                std::ptr::null_mut(),
+            )
+        };
+        if ok == 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        Ok(written as usize)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl Drop for WindowsAgentIpcClient {
+    fn drop(&mut self) {
+        if !self.handle.is_null() && self.handle != (-1isize as HANDLE) {
+            // SAFETY: this struct owns the client handle exactly once.
+            unsafe { CloseHandle(self.handle) };
+            self.handle = std::ptr::null_mut();
+        }
     }
 }
 
