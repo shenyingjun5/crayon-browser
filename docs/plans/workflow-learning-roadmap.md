@@ -1,6 +1,6 @@
 # WFL：Workflow Learning、Challenge 与个人 Site Skill Roadmap
 
-- 状态：执行中；`WFL-01/02/04/06 VERIFIED`（2026-08-30）；`WFL-03/07 READY`
+- 状态：执行中；`WFL-01/02/03/04/06 VERIFIED`（2026-08-30）；`WFL-07 READY`
 - 任务数：16
 - 目标：从用户授权且已验证成功的任务生成可预览、可保存、可验证、可回滚的个人 Site Skill，并安全处理验证码/风控的人机接管
 - 非目标：自动解验证码、从失败任务学习、记录密码/正文/secret、技能继承旧授权、静默修改高风险步骤
@@ -18,7 +18,7 @@
 |---|---|---|---|---|---|
 | WFL-01 | VERIFIED | ACT-12,AGT-03 | `crayon-domain/workflow/**`,`crayon-ipc-schema/**` | Trace/Recipe/SiteSkill/Challenge/Checkpoint schema 与状态机 | `WF-001`; golden/迁移/边界 |
 | WFL-02 | VERIFIED | WFL-01,ACT-06 | `crayon-workflow/challenge/**` | 确定性 Challenge Detector，仅输出检测证据 | `WF-001`,`WF-002`; 禁止解题/绕过 surface |
-| WFL-03 | READY | WFL-02,AGT-05 | `crayon-workflow/handoff/**`,`apps/desktop-cef/**/handoff/**`,locales | `AwaitingHuman` UI 与继续/取消状态 | `WF-003`; 无障碍/关闭/导航/超时 |
+| WFL-03 | VERIFIED | WFL-02,AGT-05 | `crayon-workflow/handoff/**`,`apps/desktop-cef/**/handoff/**`,locales | `AwaitingHuman` UI 与继续/取消状态 | `WF-003`; 无障碍/关闭/导航/超时 |
 | WFL-04 | VERIFIED | WFL-01,PRV-07,PRV-08 | `crayon-workflow/checkpoint/**`,`crayon-platform-api/**` | 加密、短期、最小 checkpoint store | `WF-004`; 无 secret/正文；过期/清除/损坏 |
 | WFL-05 | TODO | WFL-03,WFL-04,ACT-08 | `crayon-workflow/resume/**` | 用户完成后的重新 snapshot/risk/grant/precondition 与幂等恢复 | `WF-005`; challenge 仍在/漂移/未知副作用终止 |
 | WFL-06 | VERIFIED | WFL-01,ACT-08,AGT-11 | `crayon-workflow/trace/**` | 仅记录已授权步骤、语义意图和 verified effect 的有界 trace | `WF-006`; cancel/fail/旧结果/TTL |
@@ -73,6 +73,23 @@
 - 验证：`cargo test -p crayon-workflow` 5/5；`cargo clippy -p crayon-workflow --all-targets -- -D warnings`、`cargo fmt --all -- --check`、`scripts/check.sh security`、`git diff --check` 通过。`cargo test --workspace` 首轮在未修改的 Windows named-pipe `same_user_client_is_admitted_end_to_end` 偶发 `OsDenied`，同进程后单独重跑 1/1 通过；本任务前已完成到该点的所有 crate 均通过。
 - Code Review：按 v0.8 从需求边界、正确性、架构、安全、性能、测试检查；Review 中补上“无信号但 origin 非法”也必须拒绝，并修正测试文件隔离命名。P0/P1/P2 = 0/0/0。
 - 未覆盖与风险：Browser/CEF 信号采集与 AwaitingHuman UI 属 WFL-03；真实站点挑战准确率需后续 QAR fixture/真机矩阵，本任务只冻结确定性分类核心。
+
+## WFL-03 原子范围（AwaitingHuman 接管 UI 与收敛状态）
+
+- 状态：`VERIFIED`；依赖 `WFL-02 VERIFIED`、`AGT-05 VERIFIED`。
+- 单一目标：以 workflow handoff controller 作为 `AwaitingHuman` 生命周期唯一 owner，向桌面 UI 暴露无敏感值的闭合展示模型，并将继续、取消、导航、标签关闭和超时收敛为不可逆结果。
+- 输入与输出：输入为 WFL-02 有界 `ChallengeEvidence`、tab/generation 与注入时钟；输出限 `crates/crayon-workflow/src/handoff/**`、桌面共享 handoff 展示模型、双语 locales、构建装配、测试和本 Roadmap。
+- 边界：等待期间 `automation_allowed=false`；继续只产生“需要 WFL-05 重新验证”的结果，不恢复或执行动作；导航/标签关闭/超时终止，重复/终态事件幂等且不能重新打开；UI 只显示闭合 challenge kind、已验证 origin 与剩余时间，不承载验证码值、页面正文、selector 或解题入口。
+- 验收：`WF-003` 继续、取消、导航、关闭、超时、边界时刻、重复事件、无障碍 locale key parity 与 seeded secret 零泄漏；Format、Clippy、workspace/security 及 Windows C++ contract 回归。
+- 明确不做：验证码/滑块求解、自动点击、第三方打码、读取短信/邮箱验证码、恢复执行与重新授权（WFL-05）、真实 CEF widget 装配。
+
+### WFL-03 完成记录（2026-08-30）
+
+- 实现：新增 `HandoffController` 作为 `AwaitingHuman` 唯一生命周期 owner；打开时立即进入暂停，继续只关闭为 `ResumeRequested`，取消/导航/标签关闭/TTL 分别收敛为闭合终态，终态事件幂等且不能重新打开；所有 view 均固定 `automation_allowed=false`，仅含 tab/generation、验证 origin、闭合 reason、剩余 TTL 与 outcome。桌面共享层只做 immutable presentation 和 locale key 映射，不复制状态机。
+- UI/无障碍：补齐中英文 title/description/origin/remaining/continue/cancel 与四类 reason 键；C++ contract 锁定双语键集 parity、modal 展示和继续/取消可达性。
+- 验证：`cargo test -p crayon-workflow` 22/22（21 unit + 1 Windows DPAPI integration）；`cargo fmt --all -- --check`、`cargo clippy -p crayon-workflow --all-targets --no-deps -- -D warnings` 通过；`cmake -S . -B .cache/build/wfl03 -DCRAYON_BUILD_TESTS=ON -DCRAYON_ENABLE_CEF=OFF` 与 Debug targeted build 通过；`ctest --test-dir .cache/build/wfl03 -C Debug -R "^(workflow_handoff|agent_confirm)$" --output-on-failure` 2/2 通过。首次 CTest 因只构建新 target 导致前置 `agent_confirm` executable 未生成而 1 项 Not Run，补构建后复跑全绿。
+- Code Review：按 v0.8 检查单 owner、终态/边界时刻、导航/关闭、错误面、安全隐私、无障碍与测试；无锁、网络、自动操作、解题或后台恢复 surface。P0/P1/P2 = 0/0/0。
+- 未覆盖与风险：真实 CEF widget/焦点环/Narrator 实机装配尚未实现，因此状态为 VERIFIED 而非 DONE；该装配需后续桌面 app-runtime/UI 任务，WFL-05 负责用户继续后的重新 snapshot/risk/grant/precondition，当前绝不恢复动作。
 
 ## WFL-04 原子范围（加密、短期、最小 checkpoint store）
 
