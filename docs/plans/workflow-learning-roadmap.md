@@ -1,6 +1,6 @@
 # WFL：Workflow Learning、Challenge 与个人 Site Skill Roadmap
 
-- 状态：执行中；`WFL-01/02/04 VERIFIED`（2026-08-30）；`WFL-06 READY`
+- 状态：执行中；`WFL-01/02/04/06 VERIFIED`（2026-08-30）；`WFL-03/07 READY`
 - 任务数：16
 - 目标：从用户授权且已验证成功的任务生成可预览、可保存、可验证、可回滚的个人 Site Skill，并安全处理验证码/风控的人机接管
 - 非目标：自动解验证码、从失败任务学习、记录密码/正文/secret、技能继承旧授权、静默修改高风险步骤
@@ -18,11 +18,11 @@
 |---|---|---|---|---|---|
 | WFL-01 | VERIFIED | ACT-12,AGT-03 | `crayon-domain/workflow/**`,`crayon-ipc-schema/**` | Trace/Recipe/SiteSkill/Challenge/Checkpoint schema 与状态机 | `WF-001`; golden/迁移/边界 |
 | WFL-02 | VERIFIED | WFL-01,ACT-06 | `crayon-workflow/challenge/**` | 确定性 Challenge Detector，仅输出检测证据 | `WF-001`,`WF-002`; 禁止解题/绕过 surface |
-| WFL-03 | TODO | WFL-02,AGT-05 | `crayon-workflow/handoff/**`,`apps/desktop-cef/**/handoff/**`,locales | `AwaitingHuman` UI 与继续/取消状态 | `WF-003`; 无障碍/关闭/导航/超时 |
+| WFL-03 | READY | WFL-02,AGT-05 | `crayon-workflow/handoff/**`,`apps/desktop-cef/**/handoff/**`,locales | `AwaitingHuman` UI 与继续/取消状态 | `WF-003`; 无障碍/关闭/导航/超时 |
 | WFL-04 | VERIFIED | WFL-01,PRV-07,PRV-08 | `crayon-workflow/checkpoint/**`,`crayon-platform-api/**` | 加密、短期、最小 checkpoint store | `WF-004`; 无 secret/正文；过期/清除/损坏 |
 | WFL-05 | TODO | WFL-03,WFL-04,ACT-08 | `crayon-workflow/resume/**` | 用户完成后的重新 snapshot/risk/grant/precondition 与幂等恢复 | `WF-005`; challenge 仍在/漂移/未知副作用终止 |
-| WFL-06 | TODO | WFL-01,ACT-08,AGT-11 | `crayon-workflow/trace/**` | 仅记录已授权步骤、语义意图和 verified effect 的有界 trace | `WF-006`; cancel/fail/旧结果/TTL |
-| WFL-07 | TODO | WFL-06,PRV-10 | `crayon-workflow/redaction/**` | 写盘前敏感值移除与参数 placeholder | `WF-007`; seeded secret/canary 零泄漏 |
+| WFL-06 | VERIFIED | WFL-01,ACT-08,AGT-11 | `crayon-workflow/trace/**` | 仅记录已授权步骤、语义意图和 verified effect 的有界 trace | `WF-006`; cancel/fail/旧结果/TTL |
+| WFL-07 | READY | WFL-06,PRV-10 | `crayon-workflow/redaction/**` | 写盘前敏感值移除与参数 placeholder | `WF-007`; seeded secret/canary 零泄漏 |
 | WFL-08 | TODO | WFL-06,WFL-07 | `crayon-workflow/recipe/**` | 仅从 verified success 生成候选 Recipe | `WF-008`; fail/cancel/indeterminate 不学习 |
 | WFL-09 | TODO | WFL-08,AGT-05 | `apps/desktop-cef/**/skill-preview/**`,locales | 技能名称、站点、参数、步骤、风险、权限、数据流预览和保存确认 | `WF-009`; 拒绝/过期/变更后重确认 |
 | WFL-10 | TODO | WFL-09,PRV-07 | `crayon-workflow/store/**`,`crayon-platform-api/**` | 按 OS user/Profile 隔离的加密个人 Skill Store | `WF-010`; migration/corrupt/quota/无痕清除 |
@@ -90,3 +90,19 @@
 - 验证：`cargo test -p crayon-workflow` 11/11（10 unit + 1 Windows DPAPI integration）；`cargo clippy -p crayon-workflow --all-targets -- -D warnings`、`cargo fmt --all -- --check`、`scripts/check.sh security`、`git diff --check` 通过。
 - Code Review：按 v0.8 检查生命周期、错误路径、Profile/平台依赖、安全和资源释放；无锁、线程、网络或自研加密，删除失败时不返回可重放 checkpoint。P0/P1/P2 = 0/0/0。
 - 未覆盖与风险：macOS Keychain 的同一集成用例需在 macOS CI/真机运行；Profile scoped backend 的正确注入属于后续 app-runtime 装配，WFL-05 恢复前必须重新 snapshot/risk/grant/precondition。
+
+## WFL-06 原子范围（已授权且 verified effect 的有界 trace）
+
+- 状态：`VERIFIED`；依赖 `WFL-01 VERIFIED`、`ACT-08 VERIFIED`、`AGT-11 VERIFIED`。
+- 单一目标：以 AGT-11 成功 `ActionReceipt` + ACT-07 `ApprovedAction` + ACT-08 `EffectReport::Verified` 三方一致证据记录 WFL-01 `TraceStep`，并在任务结束时生成有界 `WorkflowTrace`。
+- 输入与输出：输入为当前 origin/tab/generation/base revision/TTL、脱敏 receipt、approved action 和 effect report；输出限 `crates/crayon-workflow/src/trace/**`、crate 装配/依赖、测试和本 Roadmap。
+- 边界与预算：trace TTL ∈ (0, 300_000ms]、≤64 steps；receipt 必须是当前窗口内 `act.invoke`/SemanticAction/Succeeded；tab/generation/node/action 三方一致且 revision 严格前进；summary 从闭合 ActionKind 静态派生，不接受自由文本/selector/参数/正文。
+- 验收：`WF-006` 正常 verified、多步上限、failed/indeterminate/denied/cancel 不记录、旧 generation/revision/错绑拒绝、TTL、discard、secret canary 零泄漏；Format、Clippy、workspace/security 回归。
+- 明确不做：trace 持久化、参数 placeholder/redaction（WFL-07）、Recipe 生成（WFL-08）、失败任务学习、自动重放或 runtime/CEF 装配。
+
+### WFL-06 完成记录（2026-08-30）
+
+- 实现：新增单 owner `TraceRecorder`；创建时冻结 origin/tab/generation/base revision 与 ≤300s TTL；每步必须同时具备 AGT-11 `act.invoke`/SemanticAction/Succeeded receipt、带 confirmation 的 ACT-07 `ApprovedAction`、schema 正确且无 reason 的 ACT-08 Verified effect，且 tab/generation/node/action 完全一致、revision 严格前进。summary 仅由闭合 ActionKind 生成固定 token，不接收自由文本；容量 64，过期清空，cancel/fail 由 `discard` 丢弃。
+- 验证：`cargo test -p crayon-workflow` 16/16（15 unit + 1 Windows DPAPI integration）；`cargo test --workspace` 全量通过；`cargo clippy -p crayon-workflow --all-targets --no-deps -- -D warnings`、`cargo fmt --all -- --check`、`scripts/check.sh security`、`git diff --check` 通过。带依赖的 `cargo clippy -p crayon-workflow --all-targets -- -D warnings` 被未修改的 `crayon-page-data/src/snapshot.rs:506` 新版 `clippy::nonminimal_bool` 阻塞，原始建议为 `truncated == reasons.is_empty()`，未在本任务夹带修复。
+- Code Review：按 v0.8 检查授权来源、generation/revision fencing、终态、容量、TTL、隐私与依赖方向；Review 中追加公开 `EffectReport` 的 schema/reason 纵深复检。P0/P1/P2 = 0/0/0。
+- 未覆盖与风险：production runtime 将 receipt/approved/effect 以同一动作上下文喂给 recorder 的装配仍属 WFL-12/app-runtime；WFL-07 继续负责写盘前参数 placeholder/redaction，WFL-08 才能按“整个任务 verified success”生成候选 Recipe。

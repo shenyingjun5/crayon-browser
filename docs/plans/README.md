@@ -33,7 +33,7 @@
 | CNT | [content-intelligence-roadmap.md](content-intelligence-roadmap.md) | 页面数据/Markdown 与第二阶段模型总结 | `CNT-01..07/09 DONE`、`CNT-08 VERIFIED`；`CNT-10 READY` |
 | AGT | [agent-access-roadmap.md](agent-access-roadmap.md) | CAAP、tool registry、CLI/MCP、高性能读页和授权操作 | A0 完成；`AGT-07/15 VERIFIED`，`AGT-12C/13/14` 按装配依赖后续推进 |
 | ACT | [semantic-action-roadmap.md](semantic-action-roadmap.md) | Page/Action/Form/Media/Risk Map、action_id、前置条件和效果验证 | `ACT-01..12 全部完成`（2026-08-30，ACT-12 总 Review GO）；实机接线归后续装配切片 |
-| WFL | [workflow-learning-roadmap.md](workflow-learning-roadmap.md) | Challenge 接管、Workflow Learning、个人 Site Skill、健康与受控修复 | `WFL-01 VERIFIED`；`WFL-02/04/06 READY` |
+| WFL | [workflow-learning-roadmap.md](workflow-learning-roadmap.md) | Challenge 接管、Workflow Learning、个人 Site Skill、健康与受控修复 | `WFL-01/02/04/06 VERIFIED`；`WFL-03/07 READY` |
 | HUB | [capability-hub-roadmap.md](capability-hub-roadmap.md) | Capability Registry/Router、入站发现与出站 Partner connector | `HUB-01..06 DONE`；`HUB-07+ 待依赖` |
 | HM | [harmony-browser-roadmap.md](harmony-browser-roadmap.md) | 鸿蒙电脑 PC 形态 ArkUI/ArkWeb 技术预览 | `HM-01`，后续启动 |
 | QAR | [quality-release-roadmap.md](quality-release-roadmap.md) | Windows/macOS 构建、真实设备、性能、长稳和发布门禁 | `QAR-01` |
@@ -48,9 +48,8 @@
 | 顺序 | 任务 | 状态 | 说明 |
 |---:|---|---|---|
 | 1 | `CNT-10` | READY | C1 独立总 Review 与 Agent data-plane 接口冻结 |
-| 2 | `WFL-02` | READY | Challenge Detector；只检测证据，不解题、不绕过 |
-| 3 | `WFL-04` | READY | 短期最小 checkpoint store；依赖的隐私/平台契约已满足 |
-| 4 | `WFL-06` | READY | 仅记录已授权步骤与 verified effect 的有界 trace |
+| 2 | `WFL-03` | READY | AwaitingHuman UI 与继续/取消；保持只检测、不解题边界 |
+| 3 | `WFL-07` | READY | trace 写盘前敏感值移除与参数 placeholder |
 
 ### 平台收口与待拆装配
 

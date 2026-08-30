@@ -10,8 +10,10 @@ publish = false
 workspace = true
 
 [dependencies]
+crayon-agent-gateway = { path = "../crayon-agent-gateway" }
 crayon-domain = { path = "../crayon-domain" }
 crayon-platform-api = { path = "../crayon-platform-api" }
+crayon-semantic-action = { path = "../crayon-semantic-action" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 

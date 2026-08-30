@@ -710,9 +710,11 @@ dependencies = [
 name = "crayon-workflow"
 version = "0.1.0"
 dependencies = [
+ "crayon-agent-gateway",
  "crayon-domain",
  "crayon-platform-api",
  "crayon-platform-windows",
+ "crayon-semantic-action",
  "serde",
  "serde_json",
 ]
