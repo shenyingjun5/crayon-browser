@@ -1,0 +1,17 @@
+[package]
+name = "crayon-semantic-action"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Semantic action contracts: bounded detail profiles over the frozen semantic map (ACT)"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+crayon-domain = { path = "../crayon-domain" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]

@@ -1,6 +1,6 @@
 # ACT：页面语义地图与可验证动作 Roadmap
 
-- 状态：执行中；`ACT-01 DONE`，`ACT-02 READY`
+- 状态：执行中；`ACT-01 DONE`，`ACT-02 VERIFIED`（均 2026-08-30）
 - 任务数：12
 - 目标：把已验证页面事实转换为 Agent 可高效读取的语义地图，并通过短期 `action_id`、前置条件和效果验证执行受控操作
 - 非目标：原始 DOM/HTML/CDP 输出、长期 CSS/XPath、任意 JavaScript、截图/OCR 常规控制、密码/支付/通用文件上传
@@ -17,7 +17,7 @@
 | ID | 状态 | 依赖 | 允许修改路径 | 单一交付 | 验收与测试 |
 |---|---|---|---|---|---|
 | ACT-01 | DONE | CNT-03,AGT-01 | `crayon-domain/semantic/**`,`crayon-ipc-schema/**` | 冻结 Page/Action/Form/Media/Risk Map、ChangeSet、effect 与错误 schema | `AC-001`; current/previous golden；无引擎类型 |
-| ACT-02 | READY | ACT-01 | `crayon-semantic-action/detail/**` | `compact/standard/internal-full` 字段和资源预算 | `AC-002`; raw DOM/HTML/CDP 永不出界 |
+| ACT-02 | VERIFIED | ACT-01 | `crayon-semantic-action/detail/**` | `compact/standard/internal-full` 字段和资源预算 | `AC-002`; raw DOM/HTML/CDP 永不出界 |
 | ACT-03 | TODO | ACT-01,AGT-03 | `crayon-semantic-action/handle/**` | action_id 签发、target/generation/TTL/nonce 绑定与失效 | `AC-003`; property/replay/跨 Profile |
 | ACT-04 | TODO | ACT-03,CEF-05 | `browser/engine-api/**`,`browser/cef-shell/**/semantic/**` | 多信号 action discovery 与内部 locator evidence | `AC-004`; 外部无 selector；重复/遮挡/动态页 |
 | ACT-05 | TODO | ACT-04 | `crayon-semantic-action/precondition/**` | 可见、唯一、可操作、同源、页面状态前置条件 | `AC-005`; stale/hidden/cross-origin fail closed |
@@ -53,3 +53,21 @@
 - 验证：`cargo fmt --all -- --check` 通过；`cargo clippy -p crayon-domain -p crayon-ipc-schema --all-targets -- -D warnings` 通过；`cargo test -p crayon-domain --test semantic -- --test-threads=1` 13/13；`cargo test -p crayon-ipc-schema --test v1_contract -- --test-threads=1` 9/9；semantic current/previous `cmp` 全部通过；`git diff --check` 通过；`bash scripts/check.sh security` 通过。`bash scripts/check.sh fast` 的 guard/format/asset 与已执行的数百项 Workspace 测试通过，因宿主在每个测试二进制间固定等待约 50 秒而主动中止，未声称完整通过；影响包与 IPC 回归已由上述定向命令完整覆盖。
 - Code Review：按 v0.8 复核需求/边界、正确性、架构/API、安全/隐私、性能、测试与可维护性；保留 PageMap/ChangeSet/EffectReport 的显式 schema-field 构造参数并使用局部 Clippy 例外，避免引入第二套参数 schema。最终 P0/P1/P2 = 0/0/0；无锁、IO、网络、回调、日志或运行时状态。
 - 未覆盖与风险：完整 fast Workspace 因宿主调度未跑完；已执行部分无失败，剩余为 ACT-01 未触及模块。detail profile、action handle、Browser collector、risk policy、执行与 effect wait 均由 ACT-02..10 继续实现；`ACT-02 READY`。
+
+
+## ACT-02 原子范围（detail profile 字段与资源预算）
+
+- 状态：`VERIFIED`；依赖 `ACT-01 DONE`。
+- 单一目标：在新建 `crayon-semantic-action` crate 冻结 v1 语义地图的三个有界输出 profile（`compact`/`standard`/`internal_full`）的字段面与资源预算，并提供确定性投影函数。
+- 输入与输出：输入为 ACT-01 冻结的 `crayon-domain::PageMap` 词汇；输出仅限 `crates/crayon-semantic-action/**`、workspace member 登记与 `crayon-domain` 对预算常量的纯新增 re-export。
+- 边界与预算：`compact` ≤128 nodes / ≤64 actions，forms/media/risk 仅计数不携带条目；`standard`/`internal_full` 等于冻结地图预算（≤512 nodes / ≤256 actions / 16 forms / 16 media / 512 risk）；序列化字节上限 compact 256KiB、standard 1MiB、internal_full 2MiB；`DetailBudget::new` 拒绝超过地图冻结上限或为 0 的预算。`internal_full` 附加闭合内部 annotation（ordinal + sensitive），永不对外 transport，结构上无法表达 DOM/HTML/CDP/selector。
+- 验收：AC-002 覆盖 profile 闭合集与预算冻结、compact 对超大页的截断与显式 truncation 报告、standard 恒等与 fail closed、internal_full annotation 与敏感标志、字节预算 fail closed、wire `deny_unknown_fields` 与 raw 表面零泄漏。
+- 明确不做：action handle（ACT-03）、多信号 discovery/locator evidence（ACT-04）、precondition（ACT-05）、risk policy 执行（ACT-06）、执行/effect（ACT-07/08）、ChangeSet 生成（ACT-10）。
+
+### ACT-02 完成记录（2026-08-30）
+
+- 实现：新增 `crates/crayon-semantic-action`（`detail` 模块）：`DetailProfile` 闭合三 profile、`DetailBudget` 预算模型与校验、`render_compact`（截断并报告 truncation，节点被省略的 action 一并省略）、`render_standard`（恒等且超预算 fail closed）、`render_internal_full`（冻结地图 + 闭合 annotation）。截断语义：compact 不携带 forms/media/risk 属于字段面设计，`*_count` 承载信息，只有节点/action 超预算才计入 truncation。
+- 安全边界：三个 profile 均由 `deny_unknown_fields` wire 类型承载；测试断言 wire 零泄漏 `selector`/`html`/`dom`/`xpath`/`javascript`，raw DOM 注入被拒绝；`internal_full` 仅命名约定内部 + 类型闭合，未新增外部传输面。
+- 验证：`cargo test -p crayon-semantic-action` 8/8（detail.rs）；`cargo test -p crayon-domain -p crayon-ipc-schema` 全量回归通过（含 semantic 13 与 IPC v1 9）；`cargo clippy -p crayon-semantic-action -p crayon-domain --all-targets -- -D warnings` 通过；`cargo fmt -p crayon-semantic-action -- --check` 通过。
+- Code Review：按 v0.8 复核；修正一处语义（profile 字段面裁剪不作为 truncation 事件）并保持截断可解释；`fits_map` 因 MSRV 1.85 非 const 化。P0/P1/P2 = 0/0/0；无锁、IO、网络、日志或运行时状态。
+- 未覆盖与风险：byte budget 校验需要一次序列化（读取路径上的 CPU 成本，预算内地图最大约 200KiB，可接受）；未涉及真实 collector 接线。`ACT-03 READY`（依赖 AGT-03 已 DONE）。

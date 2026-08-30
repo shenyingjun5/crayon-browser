@@ -51,6 +51,7 @@ members = [
     "tools/repo-guard",
     "test-support",
     "crates/crayon-relay",
+    "crates/crayon-semantic-action",
 ]
 exclude = ["app", "demo", "third_party/cast-sdk"]
 

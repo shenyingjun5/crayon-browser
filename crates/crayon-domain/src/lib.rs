@@ -39,7 +39,8 @@ pub use semantic::{
     is_valid_origin, ActionKind, ActionOffer, ChangeSet, EffectOutcome, EffectReason, EffectReport,
     ElementState, FormField, FormMap, MediaElement, MediaKind, MediaState, PageMap, RiskEntry,
     RiskReason, SemanticError, SemanticNode, SemanticNodeId, SemanticNodeKind, SemanticSchemaError,
-    SemanticTruncation, SEMANTIC_MAP_SCHEMA_VERSION,
+    SemanticTruncation, MAX_ACTION_OFFERS, MAX_FIELDS_PER_FORM, MAX_FORMS, MAX_MEDIA_ELEMENTS,
+    MAX_RISK_ENTRIES, MAX_SEMANTIC_NODES, SEMANTIC_MAP_SCHEMA_VERSION,
 };
 
 use serde::{Deserialize, Serialize};
