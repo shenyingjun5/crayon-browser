@@ -5,6 +5,9 @@
 //! challenge-solving or arbitrary page-operation surface.
 
 pub mod challenge;
+pub mod checkpoint;
 
 #[cfg(test)]
 mod challenge_tests;
+#[cfg(test)]
+mod checkpoint_tests;

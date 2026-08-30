@@ -1,6 +1,6 @@
 # WFL：Workflow Learning、Challenge 与个人 Site Skill Roadmap
 
-- 状态：执行中；`WFL-01 VERIFIED`（2026-08-30）；`WFL-02/04/06 READY`
+- 状态：执行中；`WFL-01/02/04 VERIFIED`（2026-08-30）；`WFL-06 READY`
 - 任务数：16
 - 目标：从用户授权且已验证成功的任务生成可预览、可保存、可验证、可回滚的个人 Site Skill，并安全处理验证码/风控的人机接管
 - 非目标：自动解验证码、从失败任务学习、记录密码/正文/secret、技能继承旧授权、静默修改高风险步骤
@@ -19,7 +19,7 @@
 | WFL-01 | VERIFIED | ACT-12,AGT-03 | `crayon-domain/workflow/**`,`crayon-ipc-schema/**` | Trace/Recipe/SiteSkill/Challenge/Checkpoint schema 与状态机 | `WF-001`; golden/迁移/边界 |
 | WFL-02 | VERIFIED | WFL-01,ACT-06 | `crayon-workflow/challenge/**` | 确定性 Challenge Detector，仅输出检测证据 | `WF-001`,`WF-002`; 禁止解题/绕过 surface |
 | WFL-03 | TODO | WFL-02,AGT-05 | `crayon-workflow/handoff/**`,`apps/desktop-cef/**/handoff/**`,locales | `AwaitingHuman` UI 与继续/取消状态 | `WF-003`; 无障碍/关闭/导航/超时 |
-| WFL-04 | TODO | WFL-01,PRV-07,PRV-08 | `crayon-workflow/checkpoint/**`,`crayon-platform-api/**` | 加密、短期、最小 checkpoint store | `WF-004`; 无 secret/正文；过期/清除/损坏 |
+| WFL-04 | VERIFIED | WFL-01,PRV-07,PRV-08 | `crayon-workflow/checkpoint/**`,`crayon-platform-api/**` | 加密、短期、最小 checkpoint store | `WF-004`; 无 secret/正文；过期/清除/损坏 |
 | WFL-05 | TODO | WFL-03,WFL-04,ACT-08 | `crayon-workflow/resume/**` | 用户完成后的重新 snapshot/risk/grant/precondition 与幂等恢复 | `WF-005`; challenge 仍在/漂移/未知副作用终止 |
 | WFL-06 | TODO | WFL-01,ACT-08,AGT-11 | `crayon-workflow/trace/**` | 仅记录已授权步骤、语义意图和 verified effect 的有界 trace | `WF-006`; cancel/fail/旧结果/TTL |
 | WFL-07 | TODO | WFL-06,PRV-10 | `crayon-workflow/redaction/**` | 写盘前敏感值移除与参数 placeholder | `WF-007`; seeded secret/canary 零泄漏 |
@@ -73,3 +73,20 @@
 - 验证：`cargo test -p crayon-workflow` 5/5；`cargo clippy -p crayon-workflow --all-targets -- -D warnings`、`cargo fmt --all -- --check`、`scripts/check.sh security`、`git diff --check` 通过。`cargo test --workspace` 首轮在未修改的 Windows named-pipe `same_user_client_is_admitted_end_to_end` 偶发 `OsDenied`，同进程后单独重跑 1/1 通过；本任务前已完成到该点的所有 crate 均通过。
 - Code Review：按 v0.8 从需求边界、正确性、架构、安全、性能、测试检查；Review 中补上“无信号但 origin 非法”也必须拒绝，并修正测试文件隔离命名。P0/P1/P2 = 0/0/0。
 - 未覆盖与风险：Browser/CEF 信号采集与 AwaitingHuman UI 属 WFL-03；真实站点挑战准确率需后续 QAR fixture/真机矩阵，本任务只冻结确定性分类核心。
+
+## WFL-04 原子范围（加密、短期、最小 checkpoint store）
+
+- 状态：`VERIFIED`；依赖 `WFL-01 VERIFIED`、`PRV-07/08 DONE`，并复用 PLT-01 已交付的 `SecureStore`。
+- 单一目标：将只含 tab/generation/revision/TTL 的 live checkpoint 保存到调用方注入的 Profile scoped OS `SecureStore`，并提供过期清除、损坏清除、幂等删除和 delete-before-return 单次消费。
+- 输入与输出：输入为闭合 checkpoint id、WFL-01 `Checkpoint` 和注入时钟；输出限 `crates/crayon-workflow/src/checkpoint/**`、crate 装配/依赖、测试和本 Roadmap；平台 API 仅消费既有 trait，不修改 DPAPI/Keychain。
+- 边界：checkpoint 的 opaque payload 必须为空，从类型入口拒绝 secret/正文；schema/state/TTL 在存取两侧复检；密钥名固定前缀且有界；序列化值继续受 SecureStore 4 KiB 上限；损坏或过期记录先清除再返回闭合错误。
+- 验收：`WF-004` 保存/加载消费、过期、显式清除、损坏 JSON、未知字段、后端错误、非空 payload 拒绝；Format、Clippy、workspace/security 回归。
+- 明确不做：自研加密、平台文件/Keychain/DPAPI 访问、跨 Profile 后端复用、恢复执行（WFL-05）、任意 payload/正文/secret 持久化。
+
+### WFL-04 完成记录（2026-08-30）
+
+- 实现：新增泛型 `CheckpointStore<S: SecureStore>`；闭合 id 映射为 `wflcp-*` key，只接受 schema v1/live/未过期且 payload 为空的最小 checkpoint；保存复用 Profile scoped OS secure backend，消费时先标记 consumed、成功删除加密记录后才返回；过期、坏 JSON、unknown field、非 live 记录均先清除；显式 clear 幂等；错误不携带 key/value。
+- Windows 加密证据：Windows-only integration 使用真实 `DpapiSecureStore` 保存 checkpoint，磁盘 `.bin` 不以 JSON 开头且扫描不到 `tab-plaintext-canary`，随后成功解密消费并确认密文文件删除，1/1 通过。
+- 验证：`cargo test -p crayon-workflow` 11/11（10 unit + 1 Windows DPAPI integration）；`cargo clippy -p crayon-workflow --all-targets -- -D warnings`、`cargo fmt --all -- --check`、`scripts/check.sh security`、`git diff --check` 通过。
+- Code Review：按 v0.8 检查生命周期、错误路径、Profile/平台依赖、安全和资源释放；无锁、线程、网络或自研加密，删除失败时不返回可重放 checkpoint。P0/P1/P2 = 0/0/0。
+- 未覆盖与风险：macOS Keychain 的同一集成用例需在 macOS CI/真机运行；Profile scoped backend 的正确注入属于后续 app-runtime 装配，WFL-05 恢复前必须重新 snapshot/risk/grant/precondition。

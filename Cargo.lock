@@ -712,6 +712,7 @@ version = "0.1.0"
 dependencies = [
  "crayon-domain",
  "crayon-platform-api",
+ "crayon-platform-windows",
  "serde",
  "serde_json",
 ]
