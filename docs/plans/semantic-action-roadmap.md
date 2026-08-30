@@ -1,6 +1,6 @@
 # ACT：页面语义地图与可验证动作 Roadmap
 
-- 状态：执行中；`ACT-01 DONE`、`ACT-02..07 VERIFIED`（均 2026-08-30）
+- 状态：执行中；`ACT-01 DONE`、`ACT-02..08 VERIFIED`（均 2026-08-30）
 - 任务数：12
 - 目标：把已验证页面事实转换为 Agent 可高效读取的语义地图，并通过短期 `action_id`、前置条件和效果验证执行受控操作
 - 非目标：原始 DOM/HTML/CDP 输出、长期 CSS/XPath、任意 JavaScript、截图/OCR 常规控制、密码/支付/通用文件上传
@@ -23,7 +23,7 @@
 | ACT-05 | VERIFIED | ACT-04 | `crayon-semantic-action/precondition/**` | 可见、唯一、可操作、同源、页面状态前置条件 | `AC-005`; stale/hidden/cross-origin fail closed |
 | ACT-06 | VERIFIED | ACT-01,PRV-10 | `crayon-semantic-action/risk/**` | 确定性、单调 risk policy 与敏感元素排除 | `AC-006`; password/payment/file 不可执行 |
 | ACT-07 | VERIFIED | ACT-05,ACT-06,AGT-05,CEF-07 | `crayon-semantic-action/runtime/**`,`crayon-app-runtime/**` | action_id 到正常浏览器用例的受控执行 | `AC-007`; cancel/deadline/generation/确认绑定 |
-| ACT-08 | TODO | ACT-07 | `crayon-semantic-action/effect/**` | 有界效果等待、verified/failed/indeterminate 和幂等语义 | `AC-008`; 不确定副作用不重放 |
+| ACT-08 | VERIFIED | ACT-07 | `crayon-semantic-action/effect/**` | 有界效果等待、verified/failed/indeterminate 和幂等语义 | `AC-008`; 不确定副作用不重放 |
 | ACT-09 | TODO | ACT-04,ACT-06 | `crayon-semantic-action/form/**` | FormMap 字段/约束/错误/filled 状态 | `AC-009`; 不包含字段值；敏感/file 排除 |
 | ACT-10 | TODO | ACT-01,CNT-04 | `crayon-semantic-action/change/**`,`crayon-page-data/**` | revision/ChangeSet 生成、分页、截断和旧增量丢弃 | `AC-010`; 动态页/高频变化/背压 |
 | ACT-11 | TODO | ACT-07,ACT-08 | `crayon-semantic-action/handoff/**`,`crayon-app-runtime/**` | 动作级人工接管结果、可恢复/不可恢复原因 | `AC-011`; 无隐式重试或权限继承 |
@@ -164,3 +164,22 @@
 - 验证：`cargo test -p crayon-semantic-action -p crayon-app-runtime` 72/72（含 runtime 7 场景）；`cargo test -p crayon-domain -p crayon-ipc-schema` 13 suite 回归全 ok；`cargo clippy --all-targets -- -D warnings` 通过；`cargo fmt --check` 通过。
 - Code Review：按 v0.8 复核；`gate_mut` 限 `pub(crate)` 未扩大公共 API。P0/P1/P2 = 0/0/0。
 - 未覆盖与风险：真实 CEF executor 接线归后续 cef-shell 切片；effect 等待/幂等/indeterminate 由 ACT-08 续作。`ACT-08 READY`。
+
+
+## ACT-08 原子范围（有界效果等待、verified/failed/indeterminate 与幂等）
+
+- 状态：`VERIFIED`；依赖 `ACT-07 VERIFIED`。
+- 单一目标：在 `crayon-semantic-action/effect/**` 冻结效果验证的终态语义：有界等待、verified/failed/indeterminate 终态报告与 idempotency 账本（重复副作用拦截、indeterminate 永不重放）。
+- 输入与输出：输入为 ACT-01 的 `EffectReport` 词汇与闭合字符集 idempotency key；输出仅限 `crates/crayon-semantic-action/src/effect/**`、`tests/effect.rs`、`lib.rs` re-export 与本 Roadmap。
+- 边界与预算：等待窗口 ∈ (0, 10_000 ms]（注入时钟）；ledger ≤256 条、key ≤64B 闭合字符集 `[a-z0-9_.:-]`、`for_handle` 由单次 handle id 派生（同 handle 同 key）。
+- 幂等语义：`check` 返回 Fresh/AlreadyReported/IndeterminateBlocked；重复 key 永不重跑动作且冻结记录不可改写（record 对已存在 key 返回 `DuplicateEntry`）；`indeterminate` 记录阻断重放（副作用可能已发生）；仅 `Verified` 计为成功。
+- 验收：AC-008 契约侧：重复 idempotency key 拦截、indeterminate 不自动重放、零等待/超预算等待 fail closed、ledger 有界、key 闭合与 wire 往返。
+- 明确不做：effect 等待的真实引擎观测（CEF 侧接线）、执行（ACT-07 已冻结审批）、handoff（ACT-11）、ChangeSet 生成（ACT-10）。
+
+### ACT-08 完成记录（2026-08-30）
+
+- 实现：`effect/mod.rs`：`IdempotencyKey`（闭合校验 + handle 派生）、`EffectWaitSpec`（有界窗口校验）、`EffectLedger`（check/record 冻结语义、有界、indeterminate 阻断、`is_success` 仅 Verified）；`lib.rs` re-export。
+- 安全边界：冻结记录不可改写；无锁/IO/系统时钟；indeterminate 的"不确定不重放"由账本类型层面保证。
+- 验证：`cargo test -p crayon-semantic-action` 40/40（detail 8 + handle 9 + precondition 10 + risk 6 + effect 7）；`cargo clippy --all-targets -- -D warnings` 通过；`cargo fmt --check` 通过。
+- Code Review：按 v0.8 复核。P0/P1/P2 = 0/0/0。
+- 未覆盖与风险：真实 effect 观测（DOM/导航事实）由 CEF 侧接线归后续切片；ledger 满载拒绝策略要求调用方按 tab 生命周期清理（ACT-10/11 接线时处置）。`ACT-09 READY`。

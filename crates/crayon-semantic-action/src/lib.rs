@@ -10,6 +10,7 @@
 //! fenced by named budgets that report truncation instead of failing open.
 
 mod detail;
+mod effect;
 mod handle;
 mod precondition;
 mod risk;
@@ -19,6 +20,10 @@ pub use detail::{
     render_compact, render_internal_full, render_standard, CompactAction, CompactMap, CompactNode,
     DetailBudget, DetailProfile, InternalFullMap, SemanticNodeAnnotation, MAX_COMPACT_ACTIONS,
     MAX_COMPACT_NODES, MAX_STANDARD_ACTIONS, MAX_STANDARD_NODES,
+};
+pub use effect::{
+    CheckOutcome, EffectLedger, EffectWaitSpec, IdempotencyKey, IdempotencyKeyError,
+    MAX_EFFECT_LEDGER, MAX_EFFECT_WAIT_MS,
 };
 pub use handle::{
     ActionHandle, ActionHandleDescriptor, ActionHandleId, ConsumeOutcome, HandleIdError,
