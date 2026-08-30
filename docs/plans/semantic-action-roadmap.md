@@ -1,6 +1,6 @@
 # ACT：页面语义地图与可验证动作 Roadmap
 
-- 状态：执行中；`ACT-01 DONE`、`ACT-02/ACT-03 VERIFIED`（均 2026-08-30）
+- 状态：执行中；`ACT-01 DONE`、`ACT-02/03/04 VERIFIED`（均 2026-08-30）
 - 任务数：12
 - 目标：把已验证页面事实转换为 Agent 可高效读取的语义地图，并通过短期 `action_id`、前置条件和效果验证执行受控操作
 - 非目标：原始 DOM/HTML/CDP 输出、长期 CSS/XPath、任意 JavaScript、截图/OCR 常规控制、密码/支付/通用文件上传
@@ -19,7 +19,7 @@
 | ACT-01 | DONE | CNT-03,AGT-01 | `crayon-domain/semantic/**`,`crayon-ipc-schema/**` | 冻结 Page/Action/Form/Media/Risk Map、ChangeSet、effect 与错误 schema | `AC-001`; current/previous golden；无引擎类型 |
 | ACT-02 | VERIFIED | ACT-01 | `crayon-semantic-action/detail/**` | `compact/standard/internal-full` 字段和资源预算 | `AC-002`; raw DOM/HTML/CDP 永不出界 |
 | ACT-03 | VERIFIED | ACT-01,AGT-03 | `crayon-semantic-action/handle/**` | action_id 签发、target/generation/TTL/nonce 绑定与失效 | `AC-003`; property/replay/跨 Profile |
-| ACT-04 | TODO | ACT-03,CEF-05 | `browser/engine-api/**`,`browser/cef-shell/**/semantic/**` | 多信号 action discovery 与内部 locator evidence | `AC-004`; 外部无 selector；重复/遮挡/动态页 |
+| ACT-04 | VERIFIED | ACT-03,CEF-05 | `browser/engine-api/**`,`browser/cef-shell/**/semantic/**` | 多信号 action discovery 与内部 locator evidence | `AC-004`; 外部无 selector；重复/遮挡/动态页 |
 | ACT-05 | TODO | ACT-04 | `crayon-semantic-action/precondition/**` | 可见、唯一、可操作、同源、页面状态前置条件 | `AC-005`; stale/hidden/cross-origin fail closed |
 | ACT-06 | TODO | ACT-01,PRV-10 | `crayon-semantic-action/risk/**` | 确定性、单调 risk policy 与敏感元素排除 | `AC-006`; password/payment/file 不可执行 |
 | ACT-07 | TODO | ACT-05,ACT-06,AGT-05,CEF-07 | `crayon-semantic-action/runtime/**`,`crayon-app-runtime/**` | action_id 到正常浏览器用例的受控执行 | `AC-007`; cancel/deadline/generation/确认绑定 |
@@ -90,3 +90,22 @@
 - 验证：`cargo test -p crayon-semantic-action` 17/17（detail 8 + handle 9）；`cargo test -p crayon-domain -p crayon-ipc-schema` 13 个 suite 全 ok 回归；`cargo clippy -p crayon-semantic-action --all-targets -- -D warnings` 通过（修正 module_inception、too_many_arguments 显式说明、div_ceil）；`cargo fmt -p crayon-semantic-action -- --check` 通过。
 - Code Review：按 v0.8 复核；consume 采用先移除后成功保证重放不可见；tab 不匹配与伪造 id 统一为 Unknown 防枚举。P0/P1/P2 = 0/0/0。
 - 未覆盖与风险：nonce 销毁仅在 `consume` 路径，`resolve` 的 nonce 不匹配不销毁（resolve 为只读预检，文档已注明）；handle 尚无 Browser 侧签发方接线（ACT-04/07）。`ACT-04 READY`（依赖 CEF-05 已完成）。
+
+
+## ACT-04 原子范围（多信号 action discovery 与内部 locator evidence）
+
+- 状态：`VERIFIED`（engine-api 契约模型层）；依赖 `ACT-03 VERIFIED`、`CEF-05 DONE`。
+- 单一目标：在 `browser/engine-api` 冻结多信号 action discovery 契约：闭合信号/提示词汇、确定性多信号一致匹配、遮挡排除、模糊 fail closed 与内部 locator evidence 数据面。
+- 输入与输出：输入为 verified 候选事实（opaque target token + 信号值）与调用方 hints；输出仅限 `browser/engine-api/include/crayon/browser_engine/action_discovery.h`、`src/action_discovery.cc`、`tests/action_discovery_test.cc`、`tests/headers/action_discovery.cc`、共享 `IsValidBoundedText` 提升（types/snapshot 重构）与本 Roadmap。
+- 边界与预算：≤512 候选、每候选 ≤8 信号、≤4 hints（kind 去重）、信号值 ≤256B 有效 UTF-8；候选/信号预算超限整体拒绝，不静默截断。
+- 匹配语义：候选匹配要求全部 hint 按种类+值同时命中（多信号一致，非投票）；occluded 候选永不匹配；0/1/>1 命中分别给出 no_match/unique/ambiguous；ambiguous 不报告 target；跨 tab/伪造 id 由 handle 层负责。
+- 验收：AC-004 的契约侧：闭合词汇与稳定 verdict 名、部分信号不匹配、模糊 fail closed、遮挡排除、畸形输入整体拒绝、动态列表预算边界；forbidden API scan 对 `selector`/DOM/CDP 等零命中。
+- 明确不做：CEF 实机接线（`browser/cef-shell/**/semantic/**` 归后续装配切片，与 CEF-06..14 先例一致）、precondition（ACT-05）、risk policy（ACT-06）、执行（ACT-07）。
+
+### ACT-04 完成记录（2026-08-30）
+
+- 实现：`action_discovery.h/cc`：`ActionSignalKind`/`DiscoveryHintKind` 闭合枚举、`ActionCandidate`/`DiscoveryHint`/`DiscoveryEvidence` 契约类型、`FuseDiscoveryEvidence` 确定性融合与 `IsValid` 输入校验；`DiscoveryTargetId` 新增 opaque id 标签；`IsValidBoundedText` 从 snapshot.cc 内部实现提升为 types.h/types.cc 共享入口，snapshot.cc 委托（同一 UTF-8/控制字符根因单点化）。
+- 安全边界：evidence 仅含 opaque target、verdict、命中计数与命中的 hint kind；wire 无 CSS/XPath/JS query、无 DOM 引用；`forbidden_api_scan` 通过；ambiguous 不泄露任何候选 id。
+- 验证：独立构建 `cmake -S browser/engine-api -B /tmp/engine-api-build -DCRAYON_ENGINE_API_BUILD_TESTS=ON && cmake --build && ctest`：4/4 通过（browser_engine_contract、browser_engine_discovery 5 场景、headers compile、forbidden scan）。`git diff --check` 通过。
+- Code Review：按 v0.8 复核；修正两处（evidence target 改 `std::optional` 表达无匹配；`ActionCandidate` 显式构造拒绝无主候选）。P0/P1/P2 = 0/0/0。
+- 未覆盖与风险：CEF 真实引擎接线与遮挡/动态页真机证据未做（本任务为契约模型层，实机归后续 cef-shell 切片）；signals 与 hints 的枚举值顺序当前按位对齐（static_cast），由闭合枚举测试锁定。`ACT-05 READY`（依赖 ACT-04）。

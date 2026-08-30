@@ -14,7 +14,15 @@ target_link_libraries(browser-engine-contract PRIVATE crayon::browser-engine-api
 crayon_engine_api_enable_warnings(browser-engine-contract)
 add_test(NAME browser_engine_contract COMMAND browser-engine-contract)
 
+add_executable(browser-engine-discovery
+  action_discovery_test.cc
+)
+target_link_libraries(browser-engine-discovery PRIVATE crayon::browser-engine-api)
+crayon_engine_api_enable_warnings(browser-engine-discovery)
+add_test(NAME browser_engine_discovery COMMAND browser-engine-discovery)
+
 add_executable(browser-engine-headers
+  headers/action_discovery.cc
   headers/adapter.cc
   headers/browser_engine.cc
   headers/event_sink.cc

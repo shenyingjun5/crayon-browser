@@ -4,12 +4,18 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "crayon/browser_engine/ids.h"
 #include "crayon/browser_engine/result.h"
 
 namespace crayon::browser_engine {
+
+// Shared bounded-text contract: valid UTF-8, no control characters beyond
+// '\n' and '\t', no C1 codes, at most `max_bytes` bytes.
+bool IsValidBoundedText(std::string_view value, std::size_t max_bytes,
+                        bool allow_empty) noexcept;
 
 inline constexpr std::size_t kMaxBrowserUrlBytes = 2048;
 inline constexpr double kMinimumZoomFactor = 0.25;

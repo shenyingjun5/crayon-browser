@@ -3,56 +3,9 @@
 namespace crayon::browser_engine {
 namespace {
 
-bool IsContinuation(unsigned char byte) noexcept {
-  return (byte & 0xC0U) == 0x80U;
-}
-
 bool IsValidText(const std::string& text, std::size_t max_bytes,
                  bool allow_empty) noexcept {
-  if ((!allow_empty && text.empty()) || text.size() > max_bytes) {
-    return false;
-  }
-  std::size_t index = 0;
-  while (index < text.size()) {
-    const auto lead = static_cast<unsigned char>(text[index]);
-    std::uint32_t codepoint = 0;
-    std::size_t width = 0;
-    if (lead <= 0x7FU) {
-      codepoint = lead;
-      width = 1;
-    } else if (lead >= 0xC2U && lead <= 0xDFU) {
-      codepoint = lead & 0x1FU;
-      width = 2;
-    } else if (lead >= 0xE0U && lead <= 0xEFU) {
-      codepoint = lead & 0x0FU;
-      width = 3;
-    } else if (lead >= 0xF0U && lead <= 0xF4U) {
-      codepoint = lead & 0x07U;
-      width = 4;
-    } else {
-      return false;
-    }
-    if (index + width > text.size()) {
-      return false;
-    }
-    for (std::size_t offset = 1; offset < width; ++offset) {
-      const auto byte = static_cast<unsigned char>(text[index + offset]);
-      if (!IsContinuation(byte)) {
-        return false;
-      }
-      codepoint = (codepoint << 6U) | (byte & 0x3FU);
-    }
-    if ((width == 3 && codepoint < 0x800U) ||
-        (width == 4 && codepoint < 0x10000U) ||
-        (codepoint >= 0xD800U && codepoint <= 0xDFFFU) ||
-        codepoint > 0x10FFFFU ||
-        (codepoint < 0x20U && codepoint != '\n' && codepoint != '\t') ||
-        (codepoint >= 0x7FU && codepoint <= 0x9FU)) {
-      return false;
-    }
-    index += width;
-  }
-  return true;
+  return IsValidBoundedText(text, max_bytes, allow_empty);
 }
 
 bool IsValidLanguage(const std::optional<std::string>& language) noexcept {
