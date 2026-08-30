@@ -2,6 +2,9 @@
 
 pub mod cast_usecase;
 pub mod delivery;
+pub mod navigation_usecase;
+#[cfg(test)]
+mod navigation_usecase_tests;
 pub mod page_snapshot_runtime;
 pub mod semantic_action_runtime;
 #[cfg(test)]

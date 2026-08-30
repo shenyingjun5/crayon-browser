@@ -1,6 +1,6 @@
 # AGT CAAP / CLI / MCP Agent 访问 Roadmap
 
-- 状态：`A0 权限内核完成（AGT-01..05/11）`；`AGT-08/AGT-10 DONE`（2026-08-24）、`AGT-12A VERIFIED`；`AGT-06 VERIFIED`（2026-08-30）；`AGT-07 等 CNT-08`、`AGT-09/12 待领取`
+- 状态：`A0 权限内核完成（AGT-01..05/11）`；`AGT-08/AGT-10 DONE`（2026-08-24）、`AGT-12A VERIFIED`；`AGT-06/09 VERIFIED`（2026-08-30）；`AGT-07 等 CNT-08`、`AGT-12 待领取`
 - 任务数：16
 - 目标：用自有 CAAP、入站 tool registry 和 capability guard，为 AI Agent 提供高性能读页，并把受控操作接到 `ACT` 的可验证语义动作运行时
 - 非目标：远程控制、原始 CDP/WebDriver、任意 JavaScript、Cookie/凭证、密码/支付、文件上传、任意文件/网络工具
@@ -27,7 +27,7 @@
 | AGT-06 | VERIFIED | CNT-03,AGT-03 | `crayon-page-data/**`,`crayon-agent-gateway/page_stream/**` | generation-scoped 快照缓存、分页/流式/增量、索引、背压和性能 instrumentation | `AG-006`,`AG-015`; benchmark/soak | A1 |
 | AGT-07 | TODO | AGT-04,AGT-06,CNT-08 | `crayon-agent-gateway/tools/content/**`,`crayon-app-runtime/**` | R1 target/标题/选区/结构化页面/Markdown 读取工具 | `AG-006`; 跨 Profile/后台/过期/超量拒绝 | A1 |
 | AGT-08 | DONE | AGT-04,SDK-08 | `crayon-agent-gateway/tools/cast_read/**` | R0/R1 接收端能力和投屏状态读取，不返回 IP/URL/token | `AG-007`; adapter tests | A1 |
-| AGT-09 | TODO | AGT-05,CEF-07,ACT-07,ACT-11 | `crayon-agent-gateway/tools/navigation/**`,`crayon-app-runtime/**` | R2 打开/切换/关闭标签、导航、后退、刷新、滚动及人工接管结果 | `AG-008`; scheme/redirect/download/popup/cancel | A2 |
+| AGT-09 | VERIFIED | AGT-05,CEF-07,ACT-07,ACT-11 | `crayon-agent-gateway/tools/navigation/**`,`crayon-app-runtime/**` | R2 打开/切换/关闭标签、导航、后退、刷新、滚动及人工接管结果 | `AG-008`; scheme/redirect/download/popup/cancel | A2 |
 | AGT-10 | DONE | AGT-05,SDK-12,MED-19 | `crayon-agent-gateway/tools/cast_control/**` | R3 选择设备、开始/暂停/seek/停止；沿用正常投屏门禁 | `AG-009`; 目标变化重确认；不控制外部镜像客户端 | A2 |
 | AGT-11 | VERIFIED | AGT-03,AGT-04 | `crayon-agent-gateway/receipt/**`,diagnostics | 有界脱敏 action receipt、TTL、用户预览/清除 | `AG-011`,`PV-010`; 无正文/query/secret | A0 |
 | AGT-12 | TODO | AGT-04,AGT-11,PRV-10,PLT-01 | `apps/desktop-cef/agent-transport/**`,`crayon-platform-api/**` | Windows named pipe/macOS UDS CAAP transport；当前用户 ACL、限流、单客户端、stop | `AG-012`; 恶意本机 client/replay/oversize | A1 |
@@ -276,3 +276,20 @@
 - 验证：`cargo test -p crayon-agent-gateway` 82/82（新增 stream 7 场景）；`cargo clippy -p crayon-agent-gateway -p crayon-page-data --all-targets -- -D warnings` 通过；`cargo fmt --check` 通过；`bash scripts/check.sh security` 全绿。
 - Code Review：按 v0.8 复核。P0/P1/P2 = 0/0/0。
 - 未覆盖与风险：真实 CAAP 传输与 grant 接线归 AGT-12/07；soak/benchmark（AG-015 的长稳）归 QAR harness。`AGT-07 等 CNT-08`、`AGT-09 READY`。
+
+
+## AGT-09 原子范围（R2 导航工具）
+
+- 状态：`VERIFIED`（工具面 + 用例层）；依赖 `AGT-05/CEF-07/ACT-07/ACT-11` 全部完成。
+- 单一目标：冻结 R2 导航工具面（7 个闭合动词）与 app-runtime 执行用例：确认绑定、危险 scheme 前置拒绝、per-tab generation fence、有界 tab 表与确定性 receipt。
+- 输入与输出：输出仅限 `crates/crayon-agent-gateway/src/tools/navigation.rs(+tests)`、`crates/crayon-app-runtime/src/navigation_usecase.rs(+tests)`、模块登记、依赖登记与本 Roadmap。
+- 语义：`Navigate/OpenTab` 需 http(s) URL（`is_safe_url` 拒绝 javascript/file/data/userinfo/控制字符等一切危险目标）；每动词闭合字段集（意外字段拒绝）；确认 reference ≤128B 闭合字符集、缺失=CapabilityDenied；Scroll 步长 ∈ (0, 10_000px]；用例持有 ≤64 tab 的 generation 表：未知 tab / 旧 generation / 停机引擎在引擎前拒绝；引擎拒绝（危险 redirect/download/阻塞）为终态，不隐式重试；OpenTab 容量在引擎前 fence。
+- 验收：AG-008 契约侧：危险 scheme/超量/未知 tab/旧 generation/停机全部 fail closed 且不达引擎；正常动词恰好一次派发；receipt 只含 authority/形状，query 不外泄。
+- 明确不做：redirect/download 的引擎侧细节（CEF adapter）、grant/确认 UI（AGT-04/05）、transport（AGT-12）。
+
+### AGT-09 完成记录（2026-08-30）
+
+- 实现：gateway `tools/navigation.rs`（请求校验门 + `NavigationPort` trait + CAAP 错误映射 + receipt）；app-runtime `navigation_usecase.rs`（`NavigationEngine` port、generation fence、tab 生命周期与容量）。
+- 验证：`cargo test -p crayon-agent-gateway -p crayon-app-runtime` 129 项全通过（新增 navigation 8 场景）；`cargo clippy --all-targets -- -D warnings` 通过；`cargo fmt --check` 通过。
+- Code Review：按 v0.8 复核；修正两处（OpenTab 意外 tab 字段未拒绝；receipt 优先级 url>scroll>tab）。P0/P1/P2 = 0/0/0。
+- 未覆盖与风险：`NavigationEngine` 的真实 CEF adapter 归后续装配切片；redirect/download 语义由引擎拒绝统一表达。下一任务 `WFL-01 READY`（依赖 ACT-12/AGT-03）。
