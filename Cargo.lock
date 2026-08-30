@@ -391,6 +391,7 @@ dependencies = [
  "crayon-ipc-schema",
  "crayon-page-data",
  "crayon-platform-api",
+ "crayon-platform-macos",
  "crayon-platform-windows",
  "serde",
  "serde_json",

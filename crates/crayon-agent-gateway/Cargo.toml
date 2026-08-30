@@ -19,3 +19,6 @@ serde_json = "1"
 
 [target.'cfg(windows)'.dev-dependencies]
 crayon-platform-windows = { path = "../crayon-platform-windows" }
+
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+crayon-platform-macos = { path = "../crayon-platform-macos" }

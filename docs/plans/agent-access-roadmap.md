@@ -1,6 +1,6 @@
 # AGT CAAP / CLI / MCP Agent 访问 Roadmap
 
-- 状态：`A0 权限内核完成（AGT-01..05/11）`；`AGT-08/AGT-10 DONE`（2026-08-24）、`AGT-12B VERIFIED`（AGT-12 整体待产品装配/macOS 组合回归）；`AGT-06/09 VERIFIED`（2026-08-30）；`AGT-07 等 CNT-08`
+- 状态：`A0 权限内核完成（AGT-01..05/11）`；`AGT-08/AGT-10 DONE`（2026-08-24）、`AGT-12B VERIFIED`（Windows/macOS OS 组合回归闭合，AGT-12 整体待产品装配）；`AGT-06/09 VERIFIED`（2026-08-30）；`AGT-07 等 CNT-08`
 - 任务数：16
 - 目标：用自有 CAAP、入站 tool registry 和 capability guard，为 AI Agent 提供高性能读页，并把受控操作接到 `ACT` 的可验证语义动作运行时
 - 非目标：远程控制、原始 CDP/WebDriver、任意 JavaScript、Cookie/凭证、密码/支付、文件上传、任意文件/网络工具
@@ -204,9 +204,10 @@
 
 - 实现：`crayon-platform-api` 新增 OS 已验证的 `LocalAgentIpcConnection` 有界字节流契约，端点必须在读取 Hello 前完成 peer gate；Windows named pipe 与 macOS UDS 分别实现 read/write/幂等 close，Windows client 构造器只接受本机 `\\.\pipe\crayon-agent-<token>`，远程 pipe 在 OS 调用前拒绝，Windows 身份查询失败主动断开，macOS socket bind 后显式收紧 `0600`。gateway 新增 `CaapConnection`：首帧精确 Hello、能力交集 Welcome、握手后闭合 Request/Cancel、AGT-12A 限流/重放/strike、版本/IO/超大/EOF fail-closed、payload 零日志；测试专用 raw stream 构造保持 crate 私有，生产只能经平台端点进入。
 - Windows x64 验证：`cargo test -p crayon-agent-gateway -p crayon-platform-api -p crayon-platform-windows`：gateway 92/92、platform-api 17/17 + contract 7/7、platform-windows 27/27；其中真实 named pipe 完成 current-user connect → Hello/Welcome → Request/Cancel → 第二 client 拒绝 → disconnect/stop，远程 pipe 名在 CreateFileW 前拒绝。`cargo build -p crayon-agent-gateway -p crayon-platform-api -p crayon-platform-windows --release` 通过；同一真实 named pipe 用例 `--release` 1/1 通过。
+- macOS arm64 验证（2026-08-30，macOS 26.6.2 build 25G83）：新增与 Windows 对称的真实 UDS + CAAP 集成测试，仅在 macOS dev-dependency 接入 `crayon-platform-macos`。真实 `/tmp/crayon-agent-agt12b-<pid>.sock` 经 `0600` 权限与 `getpeereid` 同用户门禁后完成 Hello/Welcome（PageRead 能力交集）→ Request(41) → Cancel(41) → connection/endpoint stop，并断言 socket 文件清除、零残留；Debug/Release 各 1/1 通过。完整相关回归：gateway 92/92、platform-api 17/17 + contract 7/7、platform-macos 34/34（串行 Keychain 测试稳定通过）；Release 三 crate build 通过。
 - 质量门禁：`cargo clippy -p crayon-agent-gateway -p crayon-platform-api -p crayon-platform-windows --all-targets --no-deps -- -D warnings` 零告警；`cargo fmt --all -- --check`、`git diff --check` 通过；核心基线 3/3、legacy-dev 58/58；`scripts/check.ps1 security` passed（guard/relay unit/security 全绿）。全依赖 Clippy 被未改动的 `crates/crayon-page-data/src/snapshot.rs:506` 既有 `nonminimal_bool` 阻断；`cargo test --workspace` 与 `scripts/check.ps1 fast` 的 guard/format/brand 步骤通过，但 formal-workspace 被未改动的 `crayon-content-markdown` 两个 Windows CRLF golden（实际 LF、fixture CRLF）阻断，未夹带修复。
 - Code Review：按 v0.8 从需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试、可维护性复核；修正 Review 中发现的 4 项（远程 pipe 构造旁路、IO/版本失败未立即释放、Windows peer 查询失败未 disconnect、UDS 文件权限依赖 umask）。最终 P0/P1/P2=`0/0/0`；阻塞 IO 不在锁内，连接/endpoint 单一所有，payload/peer/参数不进入错误或日志，8KiB read 与 64KiB frame/有界 replay 保持热路径上界。
-- 未覆盖与风险：本 Windows 会话没有 macOS target，未运行 macOS 编译或 UDS+CAAP 组合真机；保留 `PLT-M04c` 已有真实 UDS/getpeereid 证据但不冒充本次组合通过。CEF 产品进程 accept loop、生命周期 stop 与 session/grant/tool dispatch 装配仍未实现，AGT-12 因此保持 `VERIFIED` 而非 `DONE`；后续 AGT-12C 在 macOS/CEF 产品装配收口后才能解锁 AGT-13/14。
+- 未覆盖与风险：Windows named pipe 与 macOS UDS+CAAP 的 OS 组合回归均已闭合；CEF 产品进程 accept loop、生命周期 stop 与 session/grant/tool dispatch 装配仍未实现，AGT-12 因此保持 `VERIFIED` 而非 `DONE`。后续 AGT-12C 在 CEF 产品装配收口后才能解锁 AGT-13/14；PLT-M05b 的真实接收端 Direct/交接验收是独立设备任务，不由本回归替代。
 
 ## AGT-08 原子范围（R0/R1 投屏只读工具）
 

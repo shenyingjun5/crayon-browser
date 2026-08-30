@@ -589,3 +589,64 @@ fn windows_named_pipe_runs_real_hello_request_cancel_flow() {
     drop(client);
     server.join().unwrap();
 }
+
+#[cfg(target_os = "macos")]
+#[test]
+fn macos_uds_runs_real_hello_request_cancel_flow() {
+    use crayon_platform_macos::local_agent_ipc::MacUdsEndpoint;
+    use std::os::unix::net::UnixStream;
+    use std::sync::mpsc;
+
+    let purpose = format!("agt12b-{}", std::process::id());
+    let (path_tx, path_rx) = mpsc::channel();
+    let server = std::thread::spawn(move || {
+        let mut endpoint = MacUdsEndpoint::new(&purpose).unwrap();
+        endpoint.start().unwrap();
+        path_tx.send(endpoint.socket_path()).unwrap();
+        {
+            let mut connection = CaapConnection::accept(
+                &endpoint,
+                SchemaVersion::CURRENT,
+                vec![AgentCapability::PageRead],
+            )
+            .unwrap();
+            let welcome = connection.handshake(0).unwrap();
+            assert_eq!(welcome.capabilities(), &[AgentCapability::PageRead]);
+            assert!(matches!(
+                connection.receive(1),
+                Ok(InboundMessage::Request(message)) if message.id() == 41
+            ));
+            assert_eq!(
+                connection.receive(2),
+                Ok(InboundMessage::Cancel(CaapCancel::new(41)))
+            );
+            connection.stop().unwrap();
+        }
+        endpoint.stop().unwrap();
+        assert!(!endpoint.is_running());
+        assert!(!std::path::Path::new(&endpoint.socket_path()).exists());
+    });
+
+    let path = path_rx.recv().unwrap();
+    let mut client = UnixStream::connect(&path).unwrap();
+    client
+        .write_all(&json_frame(&hello(
+            "macos-cli",
+            vec![AgentCapability::PageRead],
+        )))
+        .unwrap();
+
+    let mut response_header = [0u8; FRAME_HEADER_BYTES];
+    client.read_exact(&mut response_header).unwrap();
+    let response_len = u32::from_be_bytes(response_header) as usize;
+    assert!(response_len <= MAX_FRAME_BYTES);
+    let mut response = vec![0u8; response_len];
+    client.read_exact(&mut response).unwrap();
+    let welcome: CaapWelcome = serde_json::from_slice(&response).unwrap();
+    assert_eq!(welcome.capabilities(), &[AgentCapability::PageRead]);
+
+    client.write_all(&json_frame(&request(41))).unwrap();
+    client.write_all(&json_frame(&CaapCancel::new(41))).unwrap();
+    drop(client);
+    server.join().unwrap();
+}
