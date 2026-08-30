@@ -1,6 +1,6 @@
 # CNT 页面数据、Markdown 与第二阶段模型 Roadmap
 
-- 状态：C1 数据面已收口；一期产品闭环 `CNT-17..18 DONE`、`CNT-19 READY`、`CNT-20..21 TODO`；M2 统一进入第二期并等待 `AGT-16/PRV-13B` 与 provider ADR
+- 状态：C1 数据面已收口；一期产品闭环 `CNT-17..19 DONE`、`CNT-20 READY`、`CNT-21 TODO`；M2 统一进入第二期并等待 `AGT-16/PRV-13B` 与 provider ADR
 - 任务数：21
 - C1 开始门禁：`CEF-15`、`BUX-18`、`SDK-14`、`MED-19`、`PRV-08`
 - 一期产品门禁：`REL-01`、`CNT-10`、`CEF-15`、`PRV-12`
@@ -29,8 +29,8 @@
 | CNT-10 | DONE | CNT-09 | `docs/current/**`,`docs/plans/**` | C1 独立 Review 与 Agent data-plane 接口冻结 | CT-001..008；P0/P1=0 | C1 |
 | CNT-17 | DONE | REL-01,CNT-10,CEF-15 | `browser/cef-shell/src/renderer/page_snapshot_collector/**`,`browser/cef-shell/src/browser/page_snapshot_gateway/**`,`browser/engine-api/**` | 将现有有界 collector/gateway 接入真实 CEF 主 frame、导航与 IPC 生命周期 | `CT-001`,`CT-002`,`CT-007`; macOS CEF fixture/integration | R1 |
 | CNT-18 | DONE | CNT-17 | `crates/crayon-app-runtime/**`,`crates/crayon-page-data/**`,`crates/crayon-content-extract/**`,`crates/crayon-content-markdown/**`,`browser/cef-shell/**` | 接通 Browser 验证 facts → owner → 正文提取 → Markdown 的生产调用链 | CT-001..008；导航/取消/关闭/背压 E2E | R1 |
-| CNT-19 | IN_PROGRESS | CNT-18,CNT-08 | `browser/shared-ui/page-tools/**`,`browser/cef-shell/src/browser/**`,locales | 增加用户入口并接通预览、复制、保存、取消、覆盖与失败反馈 | CT-005/006；真实菜单、剪贴板、文件对话框 | R1 |
-| CNT-20 | TODO | CNT-19 | `tests/e2e/desktop/**`,`tests/security/content/**`,`tests/perf/content/**`,`test-support/**` | 用真实 CEF 本地站点 fixture 完成网页→Markdown 产品 E2E、安全和 UI delay/RSS 回归 | CT-001..008；macOS/Windows Debug/Release | R1 |
+| CNT-19 | DONE | CNT-18,CNT-08 | `browser/shared-ui/page-tools/**`,`browser/cef-shell/src/browser/**`,locales | 增加用户入口并接通预览、复制、保存、取消、覆盖与失败反馈 | CT-005/006；真实菜单、剪贴板、文件对话框 | R1 |
+| CNT-20 | READY | CNT-19 | `tests/e2e/desktop/**`,`tests/security/content/**`,`tests/perf/content/**`,`test-support/**` | 用真实 CEF 本地站点 fixture 完成网页→Markdown 产品 E2E、安全和 UI delay/RSS 回归 | CT-001..008；macOS/Windows Debug/Release | R1 |
 | CNT-21 | TODO | CNT-20,PRV-13A | `docs/current/**`,`docs/plans/**`,`tests/**` | 一期网页 Markdown 产品层总 Review，关闭 CNT-08 真实 UI 缺口 | P0/P1=0；两平台证据；无页面触发写入 | R1 |
 | CNT-11 | TODO | CNT-21,AGT-16,PRV-13B | ADR,`crayon-model-contract/**`,`docs/current/**` | 决定本地/云端/BYOK/provider、地区、费用、保留、密钥和数据发送契约 | `CT-009`; ADR/contract；未决策不开网络 | M2 |
 | CNT-12 | TODO | CNT-11 | `crayon-model-adapter/**`,`crayon-profile/**` | provider registry、安全存储、origin/redirect、发送前 payload preview 和 Fake provider | `CT-009..011`; security/integration | M2 |
@@ -378,7 +378,7 @@ CNT-19 同时涉及 CEF 用户手势状态机、平台剪贴板/文件对话框�
 |---|---|---|---|
 | CNT-19a | DONE | CNT-18d | 右键用户命令触发当前页 snapshot，聚合真实 Core Markdown 并进入现有 MDV 预览/编辑页；覆盖重复命令、导航、关闭和失败清理 |
 | CNT-19b | DONE | CNT-19a,CNT-08 | macOS 预览会话接通显式复制、Save As、原生覆盖确认、取消和失败反馈；文件写入只复用 MDV 原子保存 |
-| CNT-19c | READY | CNT-19b | 本地真 CEF UI fixture 验证菜单→预览→复制→保存/覆盖/取消与无残留，并完成 macOS CNT-19 Review |
+| CNT-19c | DONE | CNT-19b | 本地真 CEF UI fixture 验证菜单→预览→复制→保存/覆盖/取消与无残留，并完成 macOS CNT-19 Review |
 
 ### CNT-19a 原子范围（用户手势生成并预览）
 
@@ -417,3 +417,22 @@ CNT-19 同时涉及 CEF 用户手势状态机、平台剪贴板/文件对话框�
 - 验证：macOS arm64 `CrayonBrowser` 产品 target 编译、ad-hoc 重签通过；专项 `page_markdown_preview`、`page_markdown_export_contract`、`mdv_edit`、`mdv_save`、`mdv_handler_contract`、macOS source/package 共 7/7。串行完整 CTest 77/77、65.70s；并行首轮曾因本地 IPC 测试竞争出现 `content_host_process_mac` 失败，该项隔离复跑 1/1 且串行全量通过。最终真实 `run_smoke.py smoke --bundle=...` 通过 full process tree、loopback-only、zero residue；repo-guard passed（仅既有 RG-003/RG-004 warning），Google clang-format 与 `git diff --check` 通过。
 - Code Review：按 v0.8 复核用户手势/主 frame、会话与文档代际 fencing、clipboard 上限和副本寿命、原生覆盖授权、路径后缀、原子 rename/residual、失败反馈、旧 callback、退出释放、依赖方向和 Keychain 边界；关闭“Save As 后 Ctrl+S baseline 未刷新”和“离开 MDV 后旧会话仍可被迟到 command 使用”两项问题，最终 P0/P1/P2=`0/0/0`。
 - 未覆盖与风险：原生菜单实际点击、pasteboard 内容、Save panel 覆盖/取消及截图证据归 `CNT-19c READY`；Windows 对称实现归 `CNT-20`。CNT-19b 不依赖真实 Keychain，真实 SecureStore/Keychain 仍只保留为最后的可选专项验证。
+
+### CNT-19c 原子范围（macOS 真 CEF UI 验收）
+
+- 状态：`DONE`；依赖 `CNT-19b DONE`。
+- 单一目标：使用本地确定性 `http://127.0.0.1` fixture 和真实 macOS arm64 `CrayonBrowser.app`，由实际右键菜单依次验证生成→MDV 预览/编辑→复制当前缓冲区→Save As 新文件→取消→原生覆盖确认，并保留截图、文件内容、进程树和退出零残留证据。
+- 允许修改：`tests/e2e/desktop/browser/**` 的最小 fixture/Harness（确需确定性复用时）、`docs/plans/content-intelligence-roadmap.md` 与 current/plans 状态；证据只写 `.cache/qa/cnt-19c/**`。发现生产缺陷时先回退 CNT-19b 修复并重新验证，不在本切片扩张 Markdown、MDV、平台剪贴板或保存协议。
+- 用户与数据边界：只操作本地 fixture 和 `.cache/qa/cnt-19c` 测试文件，不访问公网、不读取或覆盖用户文档；复制内容只含 fixture 文本。覆盖仅针对本任务刚创建的测试文件并必须经过原生确认；测试结束枚举进程与测试临时文件，不自动删除用户数据。
+- 验收：真 UI 截图覆盖普通页命令、MDV 预览、复制/失败反馈、Save panel、取消、覆盖确认和保存成功；`pbpaste`/落盘内容与当前编辑缓冲区一致，退出 full process tree/loopback-only/zero residue；最终产品 build、CNT-19 scoped CTest、repo-guard、Google clang-format、`git diff --check`；按 v0.8 完成 CNT-19 macOS 总 Review，P0/P1=0。
+- Keychain 门禁：App 继续固定 `use-mock-keychain`；本验收禁止打开真实 Keychain 或把系统密码弹框当成步骤。
+- 明确不做：Windows（CNT-20）、公网网页、真实用户文件、真实 SecureStore/Keychain、发布签名/公证、Cast/Agent。
+
+### CNT-19c 完成记录（2026-08-31）
+
+- 真 UI：真实 arm64 `CrayonBrowser.app` 打开仅绑定 `127.0.0.1:43119` 的中英文混合 fixture；CEF 原生右键菜单 AX tree 明确出现“生成 Markdown 并预览”，执行后进入 `crayon://mdv/app.html`，预览与源码编辑均显示确定性正文。编辑缓冲区追加 `_EDITED_CURRENT_BUFFER` 后，内建 MDV 原生菜单出现“复制全部 Markdown/另存为 Markdown”；复制 banner 显示“Markdown 已复制”，授权后的 `pbpaste` 与当前缓冲区逐字一致。
+- 保存与覆盖：CEF 原生 Save panel 自动约束 `.md`，新文件写入 `.cache/qa/cnt-19c/cnt-19c-export.md` 后 banner 显示“已保存”；第二次打开面板并取消后显示“已取消保存”。同名保存只由 macOS 原生“文件已存在，是否替换”弹框授权；用户明确点击替换后，UI 和落盘文件都包含 `_OVERWRITE_CONFIRMED`，最终 SHA-256 为 `3ff8b99c15eb7d5537e2cbf9084a40d3d8182f667437631875e7ee20ceae6e26`，目录内零 `.tmp-*` residual。
+- 证据与退出：`.cache/qa/cnt-19c/evidence/01,03..10-*.png` 保留普通页、MDV 预览、编辑、复制反馈、Save panel、保存、取消、覆盖确认和覆盖成功截图；菜单项由同一真实会话 AX tree 取证。正常关闭主窗口后 `pgrep -fl 'CrayonBrowser|crayon-content-host|http.server 43119'` 输出为空，Browser/Helper/Core/fixture server 全部退出。全程无公网、无用户文件、无真实 Keychain。
+- 自动验证：最终产品增量构建为 `ninja: no work to do`；CNT-19 scoped CTest 8/8（包含真 CEF `page_snapshot_cef_integration` 17.49s）通过。沙箱内首次专项仅该 loopback test 因 `PermissionError: [Errno 1] Operation not permitted` 失败，授权本地 bind 后原命令全绿。前序同代码基线串行完整 CTest 77/77；repo-guard passed（仅既有 RG-003/RG-004 warning），CNT-19 生产改动 Google clang-format、最终 `git diff --check` 通过。
+- Code Review：按 v0.8 总复核真实 Browser 用户手势、主 frame/origin、Core generation/sequence、当前编辑缓冲区、1MiB clipboard、原生覆盖授权、`.md`/路径、原子写入/residual、取消/失败反馈、旧 callback、关闭释放、loopback-only、日志和 Keychain 边界；真 UI 未发现新生产缺陷，CNT-19 macOS 最终 P0/P1/P2=`0/0/0`。
+- 未覆盖与风险：Windows x64 对称入口、clipboard/Save panel 及 Debug/Release E2E 归 `CNT-20 READY`；网页→Markdown 性能、安全与双平台发布矩阵同归 CNT-20/21。真实 SecureStore/Keychain 不属于该闭环，继续保留为最后的可选专项验证。
