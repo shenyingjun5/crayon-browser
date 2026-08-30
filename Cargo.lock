@@ -488,6 +488,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "crayon-content-perf-tests"
+version = "0.1.0"
+dependencies = [
+ "crayon-content-markdown",
+ "crayon-domain",
+ "crayon-page-data",
+]
+
+[[package]]
 name = "crayon-domain"
 version = "0.1.0"
 dependencies = [

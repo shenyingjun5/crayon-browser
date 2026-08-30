@@ -1,6 +1,6 @@
 # CNT 页面数据、Markdown 与第二阶段模型 Roadmap
 
-- 状态：C1 执行中；`CNT-01..06 DONE`，`CNT-07 READY`
+- 状态：C1 执行中；`CNT-01..07 DONE`，`CNT-08 READY`
 - 任务数：16
 - C1 开始门禁：`CEF-15`、`BUX-18`、`SDK-14`、`MED-19`、`PRV-08`
 - M2 开始门禁：`CNT-10`、`AGT-16`、`PRV-13`
@@ -22,8 +22,8 @@
 | CNT-04 | DONE | CNT-03 | `crayon-content-extract/**` | 确定性主正文、阅读顺序和结构块识别 | `CT-003`,`CT-004`; fixture/unit | C1 |
 | CNT-05 | DONE | CNT-04 | `crayon-content-markdown/**` | 标准 Markdown 转换与稳定转义 | `CT-003`,`CT-005`; golden | C1 |
 | CNT-06 | DONE | CNT-05 | `crayon-content-markdown/**` | 列表、引用、代码、表格、链接和图片引用规范化 | `CT-005`,`CT-006`; golden/security | C1 |
-| CNT-07 | READY | CNT-03,CNT-06 | `crayon-page-data/**`,`tests/perf/content/**` | 字段索引、增量 revision、流式/背压和 C1 性能基线 | `CT-006`,`CT-008`; benchmark/soak | C1 |
-| CNT-08 | TODO | CNT-06,CNT-07,PRV-08 | `apps/desktop-cef/**`,`crayon-platform-api/**` | 本地预览、复制、保存、取消、覆盖和失败反馈 | `CT-005`,`CT-006`; UI integration | C1 |
+| CNT-07 | DONE | CNT-03,CNT-06 | `crayon-page-data/**`,`tests/perf/content/**` | 字段索引、增量 revision、流式/背压和 C1 性能基线 | `CT-006`,`CT-008`; benchmark/soak | C1 |
+| CNT-08 | READY | CNT-06,CNT-07,PRV-08 | `apps/desktop-cef/**`,`crayon-platform-api/**` | 本地预览、复制、保存、取消、覆盖和失败反馈 | `CT-005`,`CT-006`; UI integration | C1 |
 | CNT-09 | TODO | CNT-08 | `tests/**`,`test-support/**` | 正确性、安全、导航竞争、超大页面、资源释放与 E2E | `CT-001..008`; E2E/security/perf | C1 |
 | CNT-10 | TODO | CNT-09 | `docs/current/**`,`docs/plans/**` | C1 独立 Review 与 Agent data-plane 接口冻结 | CT-001..008；P0/P1=0 | C1 |
 | CNT-11 | TODO | CNT-10,AGT-16,PRV-13 | ADR,`crayon-model-contract/**`,`docs/current/**` | 决定本地/云端/BYOK/provider、地区、费用、保留、密钥和数据发送契约 | `CT-009`; ADR/contract；未决策不开网络 | M2 |
@@ -171,3 +171,25 @@
 - 验证：`cargo test -p crayon-content-markdown` 9/9；`cargo clippy -p crayon-content-markdown --all-targets -- -D warnings`、`cargo fmt --all -- --check` 通过；`cargo test --workspace` 全部通过（Relay 2 个长稳测试按既有配置 ignored）；`bash scripts/check.sh fast` 与 `bash scripts/check.sh security` 通过；`git diff --check` 通过。
 - Code Review：按 v0.8 复核需求/边界、正确性、架构/API、安全/隐私、性能、测试和可维护性；修正 basic table 兼容回归，最终 P0/P1/P2 = 0/0/0。所有扫描受 PageSnapshot 预算约束，无网络、资源加载、HTML、锁、IO、递归或正文日志。
 - 未覆盖与风险：字段索引、增量 revision、stream/backpressure 与 C1 性能基线进入 `CNT-07 READY`；UI/复制/保存仍归 CNT-08。无平台或真机门禁。
+
+## CNT-07 原子范围（索引、基础增量与性能基线）
+
+- 状态：`DONE`；依赖 `CNT-03 DONE`、`CNT-06 DONE`。
+- 验收映射：CT-006 覆盖复合字段超量与有界输出；CT-008 中 navigation/close/Profile 旧结果失效由 CNT-03 owner 提供，本任务补 revision stream 的 stale/cancel/backpressure；Agent 侧授权 Profile stream 与最终性能口径仍归 AGT-06/15。
+- 单一目标：在 `crayon-page-data` 为已验证快照建立可复用字段索引，生成绑定同一 tab/generation 的基础 revision delta，并以固定窗口的有序 chunk/ack/cancel 状态机交付；新增本地 100KB benchmark 与确定性 revision soak，冻结 C1 预算。
+- 边界澄清：CNT 只生成“公共数据块前后缀差分”的单 splice/replace-all，不定义 action_id、语义 effect 或动作 ChangeSet；后者仍由 ACT Roadmap 独占。
+- 输出与允许修改：`crates/crayon-page-data/src/{index,delta}.rs` 及独立测试；`tests/perf/content/**` 本地 Harness；根 `Cargo.toml`/`Cargo.lock` 仅用于注册 Harness；本 Roadmap。禁止修改 PageSnapshot v1 wire schema/golden、owner 行为、Markdown/正文算法、UI、Renderer/Browser、网络/文件生产能力。
+- 索引/增量预算：九类 block kind 各自保存有序 position，索引总 position 数等于 block 数且最多 4096/512；delta 要求 tab/generation 相同且 revision 严格递增，以最长公共 prefix/suffix 生成至多一个 splice。insert+delete ≤512 blocks 时发 splice，超过则 replace-all；记录 reused/inserted/deleted/serialized byte estimate，计数饱和且不含正文日志。
+- 流式/背压：每 chunk 最多 64 blocks，总 chunk ≤64；最多 4 个 unacked chunk，满载返回 `Backpressure`，不阻塞/重试/扩容。sequence 从 0 严格递增，ack 必须按序且不可重复；删除-only/no-change 仍发送一个 metadata terminal chunk。cancel 幂等并释放 pending payload；generation/revision fence 不匹配立即 stale，terminal 后不可重开。
+- 性能基线：固定本地约 100KB fixture，缓存字段索引 P95 ≤50ms，结构 delta + normalized Markdown P95 ≤500ms；记录 sample count、first chunk、complete、估算序列化字节与复用率。Harness 不使用公网、随机时钟或第三方 benchmark 依赖；阈值是 C1 防回归门禁，不宣称对外竞品优势。
+- 验收：package unit 覆盖九类索引、空/同值/insert/delete/replace、旧 generation/revision、chunk sequence/terminal/ack/backpressure/cancel/容量；Harness 覆盖 100KB P95 与 10,000 步 bounded soak。命令：page-data test/clippy/fmt、perf package test、workspace/fast/security、`git diff --check`。
+- 明确不做：跨 Profile Agent 授权、CAAP transport/deadline（AGT-06/15）、高频语义 ChangeSet（ACT-10）、UI event-loop/RSS 平台采样（QAR-05）、UI/复制/保存（CNT-08）。
+
+### CNT-07 完成记录（2026-08-30）
+
+- 实现：新增九类 `BlockKind` 的 revision 索引与 payload byte estimate；同一 tab/generation 且 revision 严格递增时，以最长公共 prefix/suffix 生成单一 `Splice`，变化超过 512 blocks 时退化为 `ReplaceAll`，同值 revision 仅发送 metadata。delta 记录起点、删除/插入、复用块数和估算序列化字节，不修改 PageSnapshot wire schema。
+- 流式与生命周期：`DeltaStream` 每 chunk 最多 64 blocks、最多 4 个未确认 chunk，按序 sequence/ack，满载显式 `Backpressure`；generation/revision 不匹配立即 stale 并释放 payload，cancel 幂等。删除-only/no-change 仍发送一个 terminal metadata chunk；terminal 交付时立即释放内部 inserted payload，之后不可重开。
+- 性能与测试：新增零第三方 benchmark 依赖的 `crayon-content-perf-tests`。固定约 100KB/100-block fixture、40 样本实测 index P95 5us、first chunk P95 6us、delta + normalized Markdown P95 2.555ms、估算序列化 1086 bytes、复用率 99%，均低于 50ms/500ms 门槛；10,000 revision bounded soak 通过。page-data 23/23，覆盖九类/空索引、同值/insert/delete/replace、旧 generation/revision、sequence/terminal/ack/backpressure/cancel 与 terminal payload 释放。
+- 验证：`cargo fmt -p crayon-page-data -p crayon-content-perf-tests -- --check` 通过；`cargo clippy -p crayon-page-data -p crayon-content-perf-tests --all-targets --no-deps -- -D warnings` 通过；`cargo test -p crayon-page-data -- --test-threads=1` 23/23；`cargo test -p crayon-content-perf-tests -- --test-threads=1 --nocapture` 2/2；普通隔离 clone 应用同一 staged patch 后 `bash scripts/check.sh fast` 全部通过（guard/format/formal-workspace/legacy 58/58，Relay 2 个既有长稳测试 ignored）；主工作区 `bash scripts/check.sh security` 通过；`git diff --cached --check` 通过。主工作区全量 fmt/clippy/workspace 的失败由并发未提交的 ACT semantic schema/golden 改动触发，隔离验证确认 CNT-07 patch 本身全绿。
+- Code Review：按 v0.8 复核需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性；关闭 terminal 后内部 payload 延迟释放问题，最终 P0/P1/P2 = 0/0/0。实现无锁、无 IO/网络、无正文日志、无阻塞/重试，所有集合受 PageSnapshot 与固定窗口约束。
+- 未覆盖与风险：Agent 跨 Profile stream/transport/deadline 仍归 AGT-06/15，语义动作 ChangeSet 归 ACT-10，UI/RSS 平台采样归 QAR-05；本地预览、复制、保存、取消与覆盖进入 `CNT-08 READY`。无平台或真机门禁。

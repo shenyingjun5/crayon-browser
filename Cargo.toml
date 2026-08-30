@@ -47,6 +47,7 @@ members = [
     "crates/crayon-platform-windows",
     "crates/crayon-platform-macos",
     "tests/security/privacy",
+    "tests/perf/content",
     "tools/repo-guard",
     "test-support",
     "crates/crayon-relay",

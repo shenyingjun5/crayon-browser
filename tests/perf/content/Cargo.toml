@@ -1,0 +1,14 @@
+[package]
+name = "crayon-content-perf-tests"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+crayon-content-markdown = { path = "../../../crates/crayon-content-markdown" }
+crayon-domain = { path = "../../../crates/crayon-domain" }
+crayon-page-data = { path = "../../../crates/crayon-page-data" }
+
+[lints]
+workspace = true
