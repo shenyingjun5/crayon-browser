@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
-"""Run the macOS CEF-to-Core Markdown path against loopback-only fixtures."""
+"""Run the desktop CEF-to-Core Markdown path against loopback-only fixtures."""
 
 from __future__ import annotations
 
 import http.server
 import base64
+import ctypes
+from ctypes import wintypes
+import os
 import pathlib
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -91,40 +95,226 @@ AUTOMATED_SCENARIOS = (
     "media-cross-frame",
     "media-forged",
 )
+CONTENT_SCENARIOS = (
+    "normal",
+    "empty",
+    "navigation",
+    "cancel",
+    "close",
+    "backpressure",
+    "crash",
+    "security",
+    "perf",
+)
 MANUAL_SCENARIOS = ("media-manual",)
 PERF_SAMPLES = 20
+FORBIDDEN_CEF_ERROR = re.compile(
+    r"Content Security Policy|Refused to (?:load|connect)|"
+    r"Failed to load resource|net::ERR_|CORS policy",
+    re.IGNORECASE,
+)
 
 
-def process_tree_rss_kib(root_pid: int) -> int:
+def unix_process_rows() -> list[tuple[int, int, int, int]]:
     result = subprocess.run(
         ["ps", "-axo", "pid=,ppid=,rss="], capture_output=True, text=True, check=False
     )
-    rows = []
+    rows: list[tuple[int, int, int, int]] = []
     for line in result.stdout.splitlines():
         parts = line.split()
         if len(parts) == 3 and all(part.isdigit() for part in parts):
-            rows.append(tuple(map(int, parts)))
+            pid, parent, rss = map(int, parts)
+            rows.append((pid, parent, rss, 0))
+    return rows
+
+
+def windows_process_rows() -> list[tuple[int, int, int, int]]:
+    snapshot_flag = 0x00000002
+    invalid_handle = ctypes.c_void_p(-1).value
+    query_limited = 0x1000
+    vm_read = 0x0010
+
+    class ProcessEntry(ctypes.Structure):
+        _fields_ = [
+            ("dwSize", wintypes.DWORD),
+            ("cntUsage", wintypes.DWORD),
+            ("th32ProcessID", wintypes.DWORD),
+            ("th32DefaultHeapID", ctypes.c_size_t),
+            ("th32ModuleID", wintypes.DWORD),
+            ("cntThreads", wintypes.DWORD),
+            ("th32ParentProcessID", wintypes.DWORD),
+            ("pcPriClassBase", wintypes.LONG),
+            ("dwFlags", wintypes.DWORD),
+            ("szExeFile", wintypes.WCHAR * 260),
+        ]
+
+    class ProcessMemoryCounters(ctypes.Structure):
+        _fields_ = [
+            ("cb", wintypes.DWORD),
+            ("PageFaultCount", wintypes.DWORD),
+            ("PeakWorkingSetSize", ctypes.c_size_t),
+            ("WorkingSetSize", ctypes.c_size_t),
+            ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+            ("QuotaPagedPoolUsage", ctypes.c_size_t),
+            ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+            ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+            ("PagefileUsage", ctypes.c_size_t),
+            ("PeakPagefileUsage", ctypes.c_size_t),
+        ]
+
+    class FileTime(ctypes.Structure):
+        _fields_ = [
+            ("dwLowDateTime", wintypes.DWORD),
+            ("dwHighDateTime", wintypes.DWORD),
+        ]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    psapi = ctypes.WinDLL("psapi", use_last_error=True)
+    kernel32.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+    kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    kernel32.Process32FirstW.argtypes = [
+        wintypes.HANDLE,
+        ctypes.POINTER(ProcessEntry),
+    ]
+    kernel32.Process32NextW.argtypes = [
+        wintypes.HANDLE,
+        ctypes.POINTER(ProcessEntry),
+    ]
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.GetProcessTimes.argtypes = [
+        wintypes.HANDLE,
+        ctypes.POINTER(FileTime),
+        ctypes.POINTER(FileTime),
+        ctypes.POINTER(FileTime),
+        ctypes.POINTER(FileTime),
+    ]
+    psapi.GetProcessMemoryInfo.argtypes = [
+        wintypes.HANDLE,
+        ctypes.POINTER(ProcessMemoryCounters),
+        wintypes.DWORD,
+    ]
+    snapshot = kernel32.CreateToolhelp32Snapshot(snapshot_flag, 0)
+    if snapshot == invalid_handle:
+        return []
+    rows: list[tuple[int, int, int, int]] = []
+    try:
+        entry = ProcessEntry()
+        entry.dwSize = ctypes.sizeof(entry)
+        present = kernel32.Process32FirstW(snapshot, ctypes.byref(entry))
+        while present:
+            rss_kib = 0
+            created = 0
+            handle = kernel32.OpenProcess(
+                query_limited | vm_read, False, entry.th32ProcessID
+            )
+            if handle:
+                try:
+                    counters = ProcessMemoryCounters()
+                    counters.cb = ctypes.sizeof(counters)
+                    if psapi.GetProcessMemoryInfo(
+                        handle, ctypes.byref(counters), counters.cb
+                    ):
+                        rss_kib = int(counters.WorkingSetSize // 1024)
+                    creation = FileTime()
+                    exit_time = FileTime()
+                    kernel_time = FileTime()
+                    user_time = FileTime()
+                    if kernel32.GetProcessTimes(
+                        handle,
+                        ctypes.byref(creation),
+                        ctypes.byref(exit_time),
+                        ctypes.byref(kernel_time),
+                        ctypes.byref(user_time),
+                    ):
+                        created = (
+                            int(creation.dwHighDateTime) << 32
+                        ) | creation.dwLowDateTime
+                finally:
+                    kernel32.CloseHandle(handle)
+            rows.append(
+                (
+                    int(entry.th32ProcessID),
+                    int(entry.th32ParentProcessID),
+                    rss_kib,
+                    created,
+                )
+            )
+            present = kernel32.Process32NextW(snapshot, ctypes.byref(entry))
+    finally:
+        kernel32.CloseHandle(snapshot)
+    return rows
+
+
+def process_rows() -> list[tuple[int, int, int, int]]:
+    return windows_process_rows() if os.name == "nt" else unix_process_rows()
+
+
+def process_tree_metrics(
+    root_pid: int, observed: set[tuple[int, int]]
+) -> tuple[int, set[int]]:
+    rows = process_rows()
+    root_created = next(
+        (created for pid, _, _, created in rows if pid == root_pid), 0
+    )
     descendants = {root_pid}
     changed = True
     while changed:
         changed = False
-        for pid, parent, _ in rows:
-            if parent in descendants and pid not in descendants:
+        for pid, parent, _, created in rows:
+            if (
+                parent in descendants
+                and pid not in descendants
+                and (root_created == 0 or created >= root_created)
+            ):
                 descendants.add(pid)
                 changed = True
-    return sum(rss for pid, _, rss in rows if pid in descendants)
+    observed.update(
+        (pid, created) for pid, _, _, created in rows if pid in descendants
+    )
+    return (
+        sum(rss for pid, _, rss, _ in rows if pid in descendants),
+        descendants,
+    )
 
 
 def communicate_with_metrics(process: subprocess.Popen[str], timeout: float):
     deadline = time.monotonic() + timeout
     peak_rss_kib = 0
+    observed: set[tuple[int, int]] = set()
     while process.poll() is None and time.monotonic() < deadline:
-        peak_rss_kib = max(peak_rss_kib, process_tree_rss_kib(process.pid))
+        rss_kib, _ = process_tree_metrics(process.pid, observed)
+        peak_rss_kib = max(peak_rss_kib, rss_kib)
         time.sleep(0.02)
     if process.poll() is None:
         raise subprocess.TimeoutExpired(process.args, timeout)
     stdout, stderr = process.communicate(timeout=5)
-    return stdout, stderr, peak_rss_kib
+    residue_deadline = time.monotonic() + 5
+    remaining = set(observed)
+    while remaining and time.monotonic() < residue_deadline:
+        live = {(pid, created) for pid, _, _, created in process_rows()}
+        remaining.intersection_update(live)
+        if remaining:
+            time.sleep(0.05)
+    profile_path = pathlib.Path(tempfile.gettempdir()).joinpath(
+        f"crayon-page-snapshot-integration-{process.pid}"
+    )
+    profile_deadline = time.monotonic() + 2
+    while profile_path.exists() and time.monotonic() < profile_deadline:
+        try:
+            if profile_path.is_symlink() or not profile_path.is_dir():
+                break
+            shutil.rmtree(profile_path)
+        except PermissionError:
+            time.sleep(0.05)
+    return (
+        stdout,
+        stderr,
+        peak_rss_kib,
+        sorted(pid for pid, _ in remaining),
+        profile_path.exists(),
+    )
 
 
 class FixtureServer(http.server.ThreadingHTTPServer):
@@ -141,12 +331,21 @@ def main() -> int:
     if len(sys.argv) not in (2, 3):
         return 2
     executable = pathlib.Path(sys.argv[1]).resolve()
-    scenarios = AUTOMATED_SCENARIOS if len(sys.argv) == 2 else (sys.argv[2],)
-    if any(scenario not in AUTOMATED_SCENARIOS + MANUAL_SCENARIOS for scenario in scenarios):
+    if len(sys.argv) == 2:
+        scenarios = AUTOMATED_SCENARIOS
+    elif sys.argv[2] == "content":
+        scenarios = CONTENT_SCENARIOS
+    else:
+        scenarios = (sys.argv[2],)
+    if any(
+        scenario not in AUTOMATED_SCENARIOS + MANUAL_SCENARIOS
+        for scenario in scenarios
+    ):
         return 2
     with tempfile.TemporaryDirectory(prefix="crayon-snapshot-fixture-") as root:
         root_path = pathlib.Path(root)
         root_path.joinpath("index.html").write_text(FIXTURE, encoding="utf-8")
+        root_path.joinpath("favicon.ico").write_bytes(b"\x00\x00\x01\x00")
         root_path.joinpath("empty.html").write_text(EMPTY_FIXTURE, encoding="utf-8")
         root_path.joinpath("backpressure.html").write_text(
             BACKPRESSURE_FIXTURE, encoding="utf-8"
@@ -261,8 +460,8 @@ def main() -> int:
                         text=True,
                     )
                     try:
-                        stdout, stderr, peak_rss_kib = communicate_with_metrics(
-                            process, 35
+                        stdout, stderr, peak_rss_kib, residue, profile_residue = (
+                            communicate_with_metrics(process, 35)
                         )
                     except subprocess.TimeoutExpired:
                         process.terminate()
@@ -278,6 +477,25 @@ def main() -> int:
                     sys.stderr.write(stderr)
                     if process.returncode != 0:
                         return process.returncode
+                    if FORBIDDEN_CEF_ERROR.search(stdout + "\n" + stderr):
+                        print(
+                            f"snapshot_fixture_forbidden_cef_error scenario={scenario}",
+                            file=sys.stderr,
+                        )
+                        return 1
+                    if residue:
+                        print(f"snapshot_fixture_residue pids={residue}", file=sys.stderr)
+                        return 1
+                    if profile_residue:
+                        print(
+                            f"snapshot_fixture_profile_residue pid={process.pid}",
+                            file=sys.stderr,
+                        )
+                        return 1
+                    print(
+                        "snapshot_fixture_process_tree "
+                        f"scenario={scenario} peak_rss_kib={peak_rss_kib} residue=0"
+                    )
                     if scenario == "perf":
                         match = re.search(
                             r"first_chunk_ms=(\d+).*complete_ms=(\d+).*"
@@ -302,7 +520,8 @@ def main() -> int:
                     f"first_chunk_p95_ms={first_chunk_p95} "
                     f"complete_p95_ms={complete_p95} "
                     f"max_tick_delay_ms={max(perf_tick_delay_ms)} "
-                    f"peak_process_tree_rss_kib={max(perf_peak_rss_kib)}"
+                    f"peak_process_tree_rss_kib={max(perf_peak_rss_kib)} "
+                    "residue=0"
                 )
                 if (
                     len(sorted_complete) != PERF_SAMPLES

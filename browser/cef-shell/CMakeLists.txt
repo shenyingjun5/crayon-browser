@@ -210,6 +210,86 @@ if(OS_WINDOWS)
                                   crayon::cef-shell-ipc)
     add_test(NAME content_host_adapter_win
              COMMAND crayon_content_host_adapter_win_test)
+
+    find_program(CRAYON_PYTHON3_EXECUTABLE NAMES python python3 REQUIRED)
+    add_library(
+      crayon_page_snapshot_cef_integration_win SHARED
+      tests/page_snapshot_cef_integration_win.cc
+      src/browser/new_tab/cef_new_tab_handler.cc
+      src/browser/network_observer/cef_network_observer_adapter.cc
+      src/browser/observation_gateway/cef_observation_bridge.cc
+      src/browser/page_snapshot_gateway/cef_page_snapshot_bridge.cc
+      src/browser/permission/cef_download_handler.cc
+      src/browser/permission/cef_permission_handler.cc
+      src/browser/permission/permission_store.cc
+      src/browser/permission/site_origin.cc
+      src/ipc/page_snapshot_cef_message.cc
+      src/renderer/media_observer/cef_media_observer_renderer.cc
+      src/renderer/page_snapshot_collector/cef_page_snapshot_renderer.cc
+      src/browser/window/tab_controller.cc
+      src/browser/window/tab_model.cc
+      src/ipc/media_observation_cef_message.cc
+      src/windows/content_host_adapter_win.cc
+      src/windows/content_host_process_win.cc)
+    SET_LIBRARY_TARGET_PROPERTIES(crayon_page_snapshot_cef_integration_win)
+    set(crayon_windows_snapshot_test_dir
+        "${CMAKE_CURRENT_BINARY_DIR}/snapshot-test/$<CONFIG>")
+    set_target_properties(
+      crayon_page_snapshot_cef_integration_win
+      PROPERTIES OUTPUT_NAME "CrayonPageSnapshotIntegrationTest"
+                 RUNTIME_OUTPUT_DIRECTORY "${crayon_windows_snapshot_test_dir}"
+                 LIBRARY_OUTPUT_DIRECTORY "${crayon_windows_snapshot_test_dir}"
+                 ARCHIVE_OUTPUT_DIRECTORY "${crayon_windows_snapshot_test_dir}")
+    target_compile_features(crayon_page_snapshot_cef_integration_win
+                            PRIVATE cxx_std_17)
+    target_compile_definitions(
+      crayon_page_snapshot_cef_integration_win
+      PRIVATE UNICODE _UNICODE
+              CRAYON_CONTENT_HOST_TEST_PATH="$<TARGET_FILE_DIR:crayon_page_snapshot_cef_integration_win>/crayon-content-host.exe")
+    target_include_directories(
+      crayon_page_snapshot_cef_integration_win
+      PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(
+      crayon_page_snapshot_cef_integration_win
+      PRIVATE crayon::browser-new-tab
+              crayon::browser-page-snapshot-gateway
+              crayon::cef-page-snapshot-collector
+              crayon::cef-shell-media-observer
+              crayon::cef-shell-network-observer
+              crayon::cef-shell-input-proof
+              crayon::cef-shell-observation-gateway
+              crayon::cef-shell-core-client crayon::cef-shell-ipc
+              crayon::browser-shared-shell crayon_libcef libcef_dll_wrapper
+              ${CEF_STANDARD_LIBS} shell32)
+    add_dependencies(crayon_page_snapshot_cef_integration_win
+                     ${CRAYON_BROWSER_TARGET})
+    COPY_SINGLE_FILE(
+      crayon_page_snapshot_cef_integration_win
+      "${CEF_BINARY_DIR}/bootstrap.exe"
+      "$<TARGET_FILE_DIR:crayon_page_snapshot_cef_integration_win>/CrayonPageSnapshotIntegrationTest.exe")
+    COPY_FILES(
+      "crayon_page_snapshot_cef_integration_win" "${CEF_BINARY_FILES}"
+      "${CEF_BINARY_DIR}"
+      "$<TARGET_FILE_DIR:crayon_page_snapshot_cef_integration_win>")
+    COPY_FILES(
+      "crayon_page_snapshot_cef_integration_win" "${CEF_RESOURCE_FILES}"
+      "${CEF_RESOURCE_DIR}"
+      "$<TARGET_FILE_DIR:crayon_page_snapshot_cef_integration_win>")
+    add_custom_command(
+      TARGET crayon_page_snapshot_cef_integration_win POST_BUILD
+      COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+              "$<TARGET_FILE_DIR:${CRAYON_BROWSER_TARGET}>/crayon-content-host.exe"
+              "$<TARGET_FILE_DIR:crayon_page_snapshot_cef_integration_win>/crayon-content-host.exe"
+      VERBATIM)
+    add_test(
+      NAME page_snapshot_cef_integration_windows
+      COMMAND "${CRAYON_PYTHON3_EXECUTABLE}"
+              "${PROJECT_SOURCE_DIR}/tests/e2e/desktop/browser/run_page_snapshot_fixture.py"
+              "$<TARGET_FILE_DIR:crayon_page_snapshot_cef_integration_win>/CrayonPageSnapshotIntegrationTest.exe"
+              content)
+    set_tests_properties(
+      page_snapshot_cef_integration_windows
+      PROPERTIES LABELS "cef;shell;windows;content;integration" TIMEOUT 900)
     add_test(
       NAME windows_cef_shell_source_contract
       COMMAND "${CMAKE_COMMAND}"
