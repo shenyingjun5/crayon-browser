@@ -14,7 +14,9 @@ constexpr std::size_t kMaxTrackedRequests = 256;
 constexpr std::size_t kMaxTrackedCandidates = 256;
 constexpr std::size_t kMaxTrackedTabs = 64;
 constexpr std::size_t kMaxBrowserReplies = 64;
+constexpr std::size_t kMaxCastReplies = 64;
 constexpr std::uint32_t kVisibleAreaScale = 1'000'000;
+constexpr auto kSessionPollInterval = std::chrono::milliseconds(100);
 
 std::string WireTabId(std::uint32_t tab_id) {
   return "cef-" + std::to_string(tab_id);
@@ -66,7 +68,10 @@ std::string ReplyRequestId(const media_host_ipc::Message &message) {
         if constexpr (std::is_same_v<T, media_host_ipc::CandidateReply> ||
                       std::is_same_v<T, media_host_ipc::DecisionReply> ||
                       std::is_same_v<T, media_host_ipc::Ack> ||
-                      std::is_same_v<T, media_host_ipc::ErrorReply>)
+                      std::is_same_v<T, media_host_ipc::ErrorReply> ||
+                      std::is_same_v<T, media_host_ipc::DevicePageReply> ||
+                      std::is_same_v<T, media_host_ipc::StartCastReply> ||
+                      std::is_same_v<T, media_host_ipc::SessionEventsReply>)
           return value.request_id;
         return {};
       },
@@ -82,7 +87,12 @@ std::string NewRequestId(const media_host_ipc::Message &message) {
                       std::is_same_v<T, media_host_ipc::Decide> ||
                       std::is_same_v<T, media_host_ipc::DecideUrlLess> ||
                       std::is_same_v<T, media_host_ipc::Navigation> ||
-                      std::is_same_v<T, media_host_ipc::CloseTab>)
+                      std::is_same_v<T, media_host_ipc::CloseTab> ||
+                      std::is_same_v<T, media_host_ipc::Discovery> ||
+                      std::is_same_v<T, media_host_ipc::ListDevices> ||
+                      std::is_same_v<T, media_host_ipc::StartCast> ||
+                      std::is_same_v<T, media_host_ipc::StopCast> ||
+                      std::is_same_v<T, media_host_ipc::PollSessionEvents>)
           return value.request_id;
         return {};
       },
@@ -136,6 +146,22 @@ bool MediaHostAdapter::Submit(media_host_ipc::Message message) {
   Context context;
   if (!Admit(message, &request_id, &context))
     return false;
+  const auto cast_kind = std::visit(
+      [](const auto &value) -> std::optional<CastRequestKind> {
+        using T = std::decay_t<decltype(value)>;
+        if constexpr (std::is_same_v<T, media_host_ipc::Discovery>)
+          return CastRequestKind::kDiscovery;
+        if constexpr (std::is_same_v<T, media_host_ipc::ListDevices>)
+          return CastRequestKind::kListDevices;
+        if constexpr (std::is_same_v<T, media_host_ipc::StartCast>)
+          return CastRequestKind::kStartCast;
+        if constexpr (std::is_same_v<T, media_host_ipc::StopCast>)
+          return CastRequestKind::kStopCast;
+        if constexpr (std::is_same_v<T, media_host_ipc::PollSessionEvents>)
+          return CastRequestKind::kPollSessionEvents;
+        return std::nullopt;
+      },
+      message);
   if (!process_->Enqueue(std::move(message))) {
     FailAll();
     tabs_.clear();
@@ -143,8 +169,14 @@ bool MediaHostAdapter::Submit(media_host_ipc::Message message) {
     process_generation_ = 0;
     return false;
   }
-  if (!request_id.empty())
+  if (!request_id.empty()) {
     requests_[request_id] = std::move(context);
+    if (cast_kind) {
+      cast_requests_[request_id] = *cast_kind;
+      if (*cast_kind == CastRequestKind::kPollSessionEvents)
+        poll_request_id_ = request_id;
+    }
+  }
   return true;
 }
 
@@ -211,7 +243,10 @@ void MediaHostAdapter::Consume(std::vector<BrowserMediaFact> facts) {
   }
 }
 
-void MediaHostAdapter::Tick() { PollReplies(); }
+void MediaHostAdapter::Tick() {
+  PollReplies();
+  MaybePollSessionEvents();
+}
 
 std::vector<media_host_ipc::Message>
 MediaHostAdapter::Drain(std::size_t maximum) {
@@ -235,6 +270,45 @@ MediaHostAdapter::DrainPlanning(std::size_t maximum) {
   for (std::size_t index = 0; index < count; ++index) {
     result.push_back(std::move(planning_events_.front()));
     planning_events_.pop_front();
+  }
+  return result;
+}
+
+bool MediaHostAdapter::RequestDiscovery(
+    media_host_ipc::DiscoveryAction action) {
+  return Submit(media_host_ipc::Discovery{NextRequestId(), action});
+}
+
+bool MediaHostAdapter::RequestDevicePage(
+    std::optional<std::uint64_t> snapshot_revision, std::uint16_t offset) {
+  return Submit(
+      media_host_ipc::ListDevices{NextRequestId(), snapshot_revision, offset});
+}
+
+bool MediaHostAdapter::RequestStartCast(std::uint64_t candidate_id,
+                                        std::string device_id,
+                                        bool handoff_available) {
+  return Submit(media_host_ipc::StartCast{
+      NextRequestId(), candidate_id, std::move(device_id), handoff_available});
+}
+
+bool MediaHostAdapter::RequestStopCast(std::uint64_t session_generation) {
+  if (!active_session_generation_ || session_generation == 0 ||
+      session_generation != *active_session_generation_) {
+    return false;
+  }
+  return Submit(media_host_ipc::StopCast{NextRequestId(), session_generation});
+}
+
+std::vector<media_host_ipc::Message>
+MediaHostAdapter::DrainCast(std::size_t maximum) {
+  PollReplies();
+  std::vector<media_host_ipc::Message> result;
+  const std::size_t count = std::min(maximum, cast_replies_.size());
+  result.reserve(count);
+  for (std::size_t index = 0; index < count; ++index) {
+    result.push_back(std::move(cast_replies_.front()));
+    cast_replies_.pop_front();
   }
   return result;
 }
@@ -297,6 +371,37 @@ bool MediaHostAdapter::Admit(const media_host_ipc::Message &message,
     *context = {};
     return true;
   }
+  if (const auto *value = std::get_if<media_host_ipc::Discovery>(&message)) {
+    *request_id = value->request_id;
+    return true;
+  }
+  if (const auto *value = std::get_if<media_host_ipc::ListDevices>(&message)) {
+    *request_id = value->request_id;
+    return true;
+  }
+  if (const auto *value = std::get_if<media_host_ipc::StartCast>(&message)) {
+    const auto found = candidates_.find(value->candidate_id);
+    if (found == candidates_.end() || !Current(found->second))
+      return false;
+    *request_id = value->request_id;
+    *context = found->second;
+    return true;
+  }
+  if (const auto *value = std::get_if<media_host_ipc::StopCast>(&message)) {
+    if (!active_session_generation_ || value->session_generation == 0 ||
+        value->session_generation != *active_session_generation_) {
+      return false;
+    }
+    *request_id = value->request_id;
+    return true;
+  }
+  if (const auto *value =
+          std::get_if<media_host_ipc::PollSessionEvents>(&message)) {
+    if (!active_session_generation_ || poll_request_id_)
+      return false;
+    *request_id = value->request_id;
+    return true;
+  }
   return false;
 }
 
@@ -330,8 +435,22 @@ void MediaHostAdapter::PollReplies() {
     const auto found = requests_.find(request_id);
     if (request_id.empty() || found == requests_.end())
       continue;
+    const auto cast_found = cast_requests_.find(request_id);
     if (!found->second.tab_id.empty() && !Current(found->second)) {
+      if (cast_found != cast_requests_.end() &&
+          cast_found->second == CastRequestKind::kStartCast &&
+          !HandleStaleCastReply(message))
+        return;
+      cast_requests_.erase(request_id);
       requests_.erase(found);
+      continue;
+    }
+    if (cast_found != cast_requests_.end()) {
+      const CastRequestKind kind = cast_found->second;
+      cast_requests_.erase(cast_found);
+      requests_.erase(found);
+      if (!HandleCastReply(std::move(message), kind))
+        return;
       continue;
     }
     if (const auto *candidate =
@@ -382,12 +501,127 @@ void MediaHostAdapter::PollReplies() {
   }
 }
 
+bool MediaHostAdapter::HandleStaleCastReply(
+    const media_host_ipc::Message &message) {
+  const auto *start = std::get_if<media_host_ipc::StartCastReply>(&message);
+  if (!start || start->outcome.kind != media_host_ipc::CastStartKind::kCasting)
+    return true;
+  const media_host_ipc::StopCast cleanup{NextRequestId(),
+                                         *start->outcome.session_generation};
+  if (process_->Enqueue(cleanup))
+    return true;
+  FailAll();
+  return false;
+}
+
+bool MediaHostAdapter::HandleCastReply(media_host_ipc::Message message,
+                                       CastRequestKind kind) {
+  const bool expected =
+      ((kind == CastRequestKind::kDiscovery ||
+        kind == CastRequestKind::kStopCast) &&
+       std::holds_alternative<media_host_ipc::Ack>(message)) ||
+      (kind == CastRequestKind::kListDevices &&
+       std::holds_alternative<media_host_ipc::DevicePageReply>(message)) ||
+      (kind == CastRequestKind::kStartCast &&
+       std::holds_alternative<media_host_ipc::StartCastReply>(message)) ||
+      (kind == CastRequestKind::kPollSessionEvents &&
+       std::holds_alternative<media_host_ipc::SessionEventsReply>(message)) ||
+      std::holds_alternative<media_host_ipc::ErrorReply>(message);
+  if (!expected) {
+    FailCastState();
+    return false;
+  }
+  if (kind == CastRequestKind::kPollSessionEvents)
+    poll_request_id_.reset();
+
+  if (const auto *start =
+          std::get_if<media_host_ipc::StartCastReply>(&message)) {
+    if (start->outcome.kind == media_host_ipc::CastStartKind::kCasting) {
+      const std::uint64_t generation = *start->outcome.session_generation;
+      if (generation <= last_session_generation_) {
+        FailCastState(generation);
+        return false;
+      }
+      active_session_generation_ = generation;
+      last_session_generation_ = generation;
+      last_state_revision_ = 0;
+      next_session_poll_ = std::chrono::steady_clock::now();
+    }
+  } else if (const auto *events =
+                 std::get_if<media_host_ipc::SessionEventsReply>(&message)) {
+    if (events->dropped_events < last_host_dropped_) {
+      FailCastState();
+      return false;
+    }
+    last_host_dropped_ = events->dropped_events;
+    media_host_ipc::SessionEventsReply filtered = *events;
+    filtered.events.clear();
+    for (const auto &event : events->events) {
+      if (!active_session_generation_ ||
+          event.session_generation != *active_session_generation_ ||
+          event.state_revision <= last_state_revision_) {
+        continue;
+      }
+      last_state_revision_ = event.state_revision;
+      filtered.events.push_back(event);
+      if (event.phase == media_host_ipc::SessionPhase::kTerminated) {
+        active_session_generation_.reset();
+        poll_request_id_.reset();
+      }
+    }
+    message = std::move(filtered);
+    next_session_poll_ =
+        std::chrono::steady_clock::now() + kSessionPollInterval;
+  }
+  return PushCastReply(std::move(message));
+}
+
+void MediaHostAdapter::MaybePollSessionEvents() {
+  if (!healthy() || !active_session_generation_ || poll_request_id_ ||
+      std::chrono::steady_clock::now() < next_session_poll_) {
+    return;
+  }
+  if (!Submit(media_host_ipc::PollSessionEvents{NextRequestId()}))
+    next_session_poll_ =
+        std::chrono::steady_clock::now() + kSessionPollInterval;
+}
+
+bool MediaHostAdapter::PushCastReply(media_host_ipc::Message message) {
+  if (cast_replies_.size() >= kMaxCastReplies) {
+    FailCastState();
+    cast_replies_.push_back(media_host_ipc::ErrorReply{
+        "mhv-adapter", media_host_ipc::HostError::kCapacityExceeded});
+    return false;
+  }
+  cast_replies_.push_back(std::move(message));
+  return true;
+}
+
+void MediaHostAdapter::FailCastState(
+    std::optional<std::uint64_t> cleanup_generation) {
+  if (!cleanup_generation)
+    cleanup_generation = active_session_generation_;
+  if (cleanup_generation && healthy()) {
+    static_cast<void>(process_->Enqueue(
+        media_host_ipc::StopCast{NextRequestId(), *cleanup_generation}));
+  }
+  FailAll();
+}
+
 void MediaHostAdapter::InvalidateTab(const std::string &tab_id) {
   for (auto it = requests_.begin(); it != requests_.end();) {
-    if (it->second.tab_id == tab_id)
+    if (it->second.tab_id == tab_id) {
+      const auto cast = cast_requests_.find(it->first);
+      if (cast != cast_requests_.end() &&
+          cast->second == CastRequestKind::kStartCast) {
+        ++it;
+        continue;
+      }
+      cast_requests_.erase(it->first);
       it = requests_.erase(it);
-    else
+    } else {
       ++it;
+    }
   }
   for (auto it = candidates_.begin(); it != candidates_.end();) {
     if (it->second.tab_id == tab_id)
@@ -399,9 +633,17 @@ void MediaHostAdapter::InvalidateTab(const std::string &tab_id) {
 
 void MediaHostAdapter::FailAll() {
   requests_.clear();
+  cast_requests_.clear();
   candidates_.clear();
   replies_.clear();
   planning_events_.clear();
+  cast_replies_.clear();
+  active_session_generation_.reset();
+  poll_request_id_.reset();
+  last_session_generation_ = 0;
+  last_state_revision_ = 0;
+  last_host_dropped_ = 0;
+  next_session_poll_ = {};
 }
 
 bool MediaHostAdapter::EnsureContext(const BrowserMediaFact &fact) {

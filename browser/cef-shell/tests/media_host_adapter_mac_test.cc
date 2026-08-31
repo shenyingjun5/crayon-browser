@@ -128,8 +128,202 @@ bool RunObservationMapping() {
   return true;
 }
 
+bool RunCastCommandPump() {
+  auto transport = std::make_unique<FakeTransport>();
+  FakeTransport *fake = transport.get();
+  MediaHostAdapter adapter(std::move(transport));
+  if (!adapter.Start("/test/media-host"))
+    return false;
+  adapter.Tick();
+  if (adapter.RequestStartCast(77, "receiver-1", true) ||
+      !adapter.Submit(mh::Navigation{"cast-nav", "tab-cast", 1, 1}))
+    return false;
+  fake->inbound.push_back(mh::Ack{"cast-nav"});
+  adapter.Tick();
+  adapter.Drain(2);
+  if (!adapter.Submit(mh::IngestUrl{
+          "cast-ingest", "tab-cast", 1, 1, 1, "https://page.example/watch",
+          "https://media.example/video.mp4", mh::Source::kCurrentSrc,
+          mh::HeadersClass::kNone, std::nullopt, false}))
+    return false;
+  fake->inbound.push_back(
+      mh::CandidateReply{"cast-ingest", 77, "https://media.example"});
+  adapter.Tick();
+  adapter.Drain(2);
+
+  if (!adapter.RequestDiscovery(mh::DiscoveryAction::kStart))
+    return false;
+  const auto discovery = std::get<mh::Discovery>(fake->sent.back());
+  fake->inbound.push_back(mh::Ack{discovery.request_id});
+  adapter.Tick();
+  auto cast = adapter.DrainCast(4);
+  if (cast.size() != 1 || !std::holds_alternative<mh::Ack>(cast.front()))
+    return false;
+
+  if (!adapter.RequestDevicePage(std::nullopt, 0))
+    return false;
+  const auto list = std::get<mh::ListDevices>(fake->sent.back());
+  fake->inbound.push_back(mh::DevicePageReply{
+      list.request_id,
+      3,
+      0,
+      std::nullopt,
+      {{"receiver-1", "Living Room", mh::DeviceState::kReady, true}}});
+  adapter.Tick();
+  cast = adapter.DrainCast(4);
+  if (cast.size() != 1 ||
+      !std::holds_alternative<mh::DevicePageReply>(cast.front()))
+    return false;
+
+  if (!adapter.RequestStartCast(77, "receiver-1", true))
+    return false;
+  const auto start = std::get<mh::StartCast>(fake->sent.back());
+  fake->inbound.push_back(mh::StartCastReply{
+      start.request_id,
+      {mh::CastStartKind::kCasting, 5, mh::DeliveryRoute::kDirect, std::nullopt,
+       std::nullopt, std::nullopt}});
+  adapter.Tick();
+  cast = adapter.DrainCast(4);
+  if (cast.size() != 1 ||
+      !std::holds_alternative<mh::StartCastReply>(cast.front()) ||
+      adapter.RequestStopCast(4) ||
+      !std::holds_alternative<mh::PollSessionEvents>(fake->sent.back()))
+    return false;
+
+  const auto empty_poll = std::get<mh::PollSessionEvents>(fake->sent.back());
+  fake->inbound.push_back(mh::SessionEventsReply{empty_poll.request_id, 0, {}});
+  adapter.Tick();
+  cast = adapter.DrainCast(2);
+  const auto *empty_events =
+      cast.size() == 1 ? std::get_if<mh::SessionEventsReply>(&cast.front())
+                       : nullptr;
+  if (!empty_events || !empty_events->events.empty())
+    return false;
+
+  if (!adapter.RequestStartCast(77, "receiver-1", true))
+    return false;
+  const auto replacement = std::get<mh::StartCast>(fake->sent.back());
+  fake->inbound.push_back(mh::StartCastReply{
+      replacement.request_id,
+      {mh::CastStartKind::kCasting, 6, mh::DeliveryRoute::kRelay, std::nullopt,
+       std::nullopt, std::nullopt}});
+  adapter.Tick();
+  cast = adapter.DrainCast(2);
+  if (cast.size() != 1 ||
+      !std::holds_alternative<mh::StartCastReply>(cast.front()) ||
+      adapter.RequestStopCast(5) ||
+      !std::holds_alternative<mh::PollSessionEvents>(fake->sent.back()))
+    return false;
+
+  const auto poll = std::get<mh::PollSessionEvents>(fake->sent.back());
+  if (!adapter.RequestStopCast(6))
+    return false;
+  const auto stop = std::get<mh::StopCast>(fake->sent.back());
+  const std::size_t sent_with_poll = fake->sent.size();
+  adapter.Tick();
+  adapter.Tick();
+  if (fake->sent.size() != sent_with_poll)
+    return false;
+  fake->inbound.push_back(mh::Ack{stop.request_id});
+  fake->inbound.push_back(mh::SessionEventsReply{
+      poll.request_id,
+      2,
+      {{5, 99, mh::SessionPhase::kActive, mh::SessionPlayback::kPlaying,
+        std::nullopt},
+       {6, 1, mh::SessionPhase::kActive, mh::SessionPlayback::kPlaying,
+        std::nullopt},
+       {6, 1, mh::SessionPhase::kActive, mh::SessionPlayback::kPlaying,
+        std::nullopt},
+       {6, 2, mh::SessionPhase::kTerminated, mh::SessionPlayback::kStopped,
+        mh::TerminalReason::kStoppedBySender}}});
+  adapter.Tick();
+  cast = adapter.DrainCast(4);
+  const auto event_reply =
+      std::find_if(cast.begin(), cast.end(), [](const auto &message) {
+        return std::holds_alternative<mh::SessionEventsReply>(message);
+      });
+  const auto *events = event_reply == cast.end()
+                           ? nullptr
+                           : std::get_if<mh::SessionEventsReply>(&*event_reply);
+  if (cast.size() != 2 || !events || events->dropped_events != 2 ||
+      events->events.size() != 2 ||
+      events->events.back().phase != mh::SessionPhase::kTerminated ||
+      adapter.RequestStopCast(6))
+    return false;
+
+  for (const auto kind :
+       {mh::CastStartKind::kHandoff, mh::CastStartKind::kRejected,
+        mh::CastStartKind::kFailed}) {
+    if (!adapter.RequestStartCast(77, "receiver-1", true))
+      return false;
+    const auto request = std::get<mh::StartCast>(fake->sent.back());
+    mh::CastStartOutcome outcome;
+    outcome.kind = kind;
+    if (kind == mh::CastStartKind::kHandoff)
+      outcome.handoff_reason = mh::HandoffReason::kStartFailed;
+    else if (kind == mh::CastStartKind::kRejected)
+      outcome.reject_reason = mh::CoreError::kPolicyDenied;
+    else
+      outcome.error = mh::CastError::kRouteLost;
+    fake->inbound.push_back(mh::StartCastReply{request.request_id, outcome});
+    adapter.Tick();
+    cast = adapter.DrainCast(2);
+    if (cast.size() != 1 ||
+        !std::holds_alternative<mh::StartCastReply>(cast.front()))
+      return false;
+  }
+
+  ++fake->generation_;
+  adapter.Tick();
+  if (!adapter.DrainCast(4).empty() || adapter.RequestStopCast(6))
+    return false;
+  fake->accept_ = false;
+  if (adapter.RequestDiscovery(mh::DiscoveryAction::kRefresh))
+    return false;
+  adapter.Stop();
+  return !adapter.healthy();
+}
+
+bool RunStaleStartCleanup() {
+  auto transport = std::make_unique<FakeTransport>();
+  FakeTransport *fake = transport.get();
+  MediaHostAdapter adapter(std::move(transport));
+  if (!adapter.Start("/test/media-host"))
+    return false;
+  adapter.Tick();
+  if (!adapter.Submit(mh::Navigation{"nav", "tab-stale", 1, 1}))
+    return false;
+  fake->inbound.push_back(mh::Ack{"nav"});
+  adapter.Tick();
+  adapter.Drain(2);
+  if (!adapter.Submit(mh::IngestUrl{
+          "ingest", "tab-stale", 1, 1, 1, "https://page.example/watch",
+          "https://media.example/video.mp4", mh::Source::kCurrentSrc,
+          mh::HeadersClass::kNone, std::nullopt, false}))
+    return false;
+  fake->inbound.push_back(
+      mh::CandidateReply{"ingest", 91, "https://media.example"});
+  adapter.Tick();
+  adapter.Drain(2);
+  if (!adapter.RequestStartCast(91, "receiver-1", true))
+    return false;
+  const auto start = std::get<mh::StartCast>(fake->sent.back());
+  if (!adapter.Submit(mh::Navigation{"nav-new", "tab-stale", 2, 2}))
+    return false;
+  fake->inbound.push_back(mh::StartCastReply{
+      start.request_id,
+      {mh::CastStartKind::kCasting, 7, mh::DeliveryRoute::kDirect, std::nullopt,
+       std::nullopt, std::nullopt}});
+  adapter.Tick();
+  const auto *cleanup = std::get_if<mh::StopCast>(&fake->sent.back());
+  const bool cleaned = cleanup && cleanup->session_generation == 7;
+  adapter.Stop();
+  return cleaned;
+}
+
 bool Run() {
-  if (!RunObservationMapping())
+  if (!RunObservationMapping() || !RunCastCommandPump() ||
+      !RunStaleStartCleanup())
     return false;
   auto transport = std::make_unique<FakeTransport>();
   FakeTransport *fake = transport.get();

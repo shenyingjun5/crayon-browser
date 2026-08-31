@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -52,6 +53,16 @@ public:
   std::vector<media_host_ipc::Message> Drain(std::size_t max_messages);
   std::vector<MediaPlanningEvent> DrainPlanning(std::size_t max_events);
 
+  // Asynchronous Cast control surface. These methods only validate and
+  // enqueue MHV1 commands; child I/O and SDK work never run on this thread.
+  bool RequestDiscovery(media_host_ipc::DiscoveryAction action);
+  bool RequestDevicePage(std::optional<std::uint64_t> snapshot_revision,
+                         std::uint16_t offset);
+  bool RequestStartCast(std::uint64_t candidate_id, std::string device_id,
+                        bool handoff_available);
+  bool RequestStopCast(std::uint64_t session_generation);
+  std::vector<media_host_ipc::Message> DrainCast(std::size_t max_messages);
+
 private:
   struct Context final {
     std::string tab_id;
@@ -63,11 +74,24 @@ private:
     std::uint64_t generation = 0;
     bool closed = false;
   };
+  enum class CastRequestKind {
+    kDiscovery = 0,
+    kListDevices,
+    kStartCast,
+    kStopCast,
+    kPollSessionEvents,
+  };
 
   bool Admit(const media_host_ipc::Message &message, std::string *request_id,
              Context *context);
   bool Current(const Context &context) const;
   void PollReplies();
+  void MaybePollSessionEvents();
+  bool HandleStaleCastReply(const media_host_ipc::Message &message);
+  bool HandleCastReply(media_host_ipc::Message message, CastRequestKind kind);
+  bool PushCastReply(media_host_ipc::Message message);
+  void
+  FailCastState(std::optional<std::uint64_t> cleanup_generation = std::nullopt);
   void InvalidateTab(const std::string &tab_id);
   void FailAll();
   bool EnsureContext(const BrowserMediaFact &fact);
@@ -75,10 +99,18 @@ private:
 
   std::unique_ptr<MediaHostTransport> process_;
   std::map<std::string, Context> requests_;
+  std::map<std::string, CastRequestKind> cast_requests_;
   std::map<std::uint64_t, Context> candidates_;
   std::map<std::string, TabState> tabs_;
   std::deque<media_host_ipc::Message> replies_;
   std::deque<MediaPlanningEvent> planning_events_;
+  std::deque<media_host_ipc::Message> cast_replies_;
+  std::optional<std::uint64_t> active_session_generation_;
+  std::optional<std::string> poll_request_id_;
+  std::uint64_t last_session_generation_ = 0;
+  std::uint64_t last_state_revision_ = 0;
+  std::uint64_t last_host_dropped_ = 0;
+  std::chrono::steady_clock::time_point next_session_poll_{};
   bool saw_healthy_ = false;
   std::uint64_t process_generation_ = 0;
   std::uint64_t next_request_id_ = 1;

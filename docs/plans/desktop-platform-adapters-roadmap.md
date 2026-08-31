@@ -1,6 +1,6 @@
 # PLT Windows/macOS 平台适配 Roadmap
 
-- 状态：`PLT-01/02/W04/M04 DONE`；第一期 macOS 装配 `PLT-M05 IN_PROGRESS`（M05a、M05b1/b2/b3a/b3b/b3c 已完成，M05b3d READY），Windows 对称装配 `PLT-W05 TODO`
+- 状态：`PLT-01/02/W04/M04 DONE`；第一期 macOS 装配 `PLT-M05 IN_PROGRESS`（M05a、M05b1/b2/b3a/b3b/b3c/b3d 已完成，M05b3e READY），Windows 对称装配 `PLT-W05 TODO`
 - 任务数：7
 - 平台：Windows、macOS
 - 非目标：Linux、屏幕/标签页/系统音频采集、编码器、WebRTC sender
@@ -262,8 +262,8 @@
 | PLT-M05b3a | DONE | M05b2 DONE | 建立单 UI 线程的 Cast UI 协调器，唯一同步 `CastButtonModel`/`CastFeatureViewModel` 与有界 receiver picker；只消费闭合 Browser/runtime facts、只产出用户 action | `browser/shared-ui/{features/cast,chrome}/**`；最多 64 设备、稳定 device id、名称 512 bytes、无 IP/URL；无 SDK/CEF/网络/线程 |
 | PLT-M05b3b | DONE | M05b3a | 扩展私有 MHV1，使 bundled Browser/media-host 可表达 discovery、设备快照、选择/停止与有界 session event pump | Rust/C++ 双 codec、current/previous golden、未知 kind/超界/secret 扫描；不执行 SDK，不改 CastFacade |
 | PLT-M05b3c | DONE | M05b3b | 在 Rust media-host 内装配唯一 `CastUsecase`、`SenderCastFacade` 与 session drain owner，执行 discovery/select/start/stop 并把旧 session/错误投影为 MHV1 | `crayon-app-runtime`/既有 adapter facade；Fake + real facade contract；阻塞 SDK 调用不在协议 reader/callback；Relay 实际投送仍不验收 |
-| PLT-M05b3d | READY | M05b3c | macOS C++ media-host process/adapter 增加有界后台 command worker 和 session event pump，CEF UI 线程只 enqueue/drain | `browser/cef-shell/src/{ipc,macos}` 与相邻 tests；无 UI 线程 SOAP/discovery、取消/stop/shutdown 逆序、队列满显式失败 |
-| PLT-M05b3e | TODO | M05b3d | 将协调器与真实 CEF Cast 按钮、原生 receiver picker、M05b2 candidate 和 PLT navigation/close/app-exit 生命周期接通 | macOS Debug/Release 真 CEF：无设备、刷新、取消、失败、旧 session、stop/退出；mock keychain；不做真机 Direct/Relay 结论 |
+| PLT-M05b3d | DONE | M05b3c | macOS C++ media-host process/adapter 增加有界后台 command worker 和 session event pump，CEF UI 线程只 enqueue/drain | `browser/cef-shell/src/{ipc,macos}` 与相邻 tests；无 UI 线程 SOAP/discovery、取消/stop/shutdown 逆序、队列满显式失败 |
+| PLT-M05b3e | READY | M05b3d | 将协调器与真实 CEF Cast 按钮、原生 receiver picker、M05b2 candidate 和 PLT navigation/close/app-exit 生命周期接通 | macOS Debug/Release 真 CEF：无设备、刷新、取消、失败、旧 session、stop/退出；mock keychain；不做真机 Direct/Relay 结论 |
 
 五切片共用边界：页面事实不能打开 picker 或选择设备；UI 永不接收 IP、控制 URL、媒体 URL、Cookie/Authorization；只有 `crayon-cast-adapter` 调 Cast-SDK；ExternalClientHandoff 不创建 SDK/Relay session且归 M05b6 呈现；M05b3 不以 Fake、ADB 在线或 standalone SDK Harness 宣称真机投送通过。若 b3b/c 发现必须修改 Cast-SDK facade、暴露 receiver locator 或改变 Relay 安全绑定，立即停止并建立独立 SDK/Relay gap 任务。
 
@@ -319,7 +319,25 @@
 - 实现：新增唯一 `MediaHostCastRuntime`，将 MHV1 discovery/list/start/stop/poll 串到既有 `CastUsecase`、`ReceiverCapabilityCache` 和 `CastFacade`；生产 `crayon-media-host` 装配真实 `SenderCastFacade`、`CoreSessionBackend` 与进程级 256-bit 随机 secret 的 `RelayRuntime`，无固定端口、无 Keychain。设备快照限制 64 项/每页 16 项，以非零单调 revision 冻结后续页；Start 同时校验 current-navigation candidate 与当前 device snapshot，阻塞 SDK 路径进入 `spawn_blocking`；Stop 使用 wire/internal generation 统一平移 fencing；Poll 每批最多 64 项，旧 revision/generation 和队列溢出累计 dropped，回包只含闭合 route/session/device presentation DTO。Shutdown 按 usecase/facade/Relay 逆序且幂等释放。
 - 验证：`cargo test -p crayon-app-runtime` 全量 85 项通过（lib 59，integration 26；含新 Cast runtime 8/8、真实 `crayon-media-host` 子进程 3/3）；`cargo clippy -p crayon-app-runtime --all-targets -- -D warnings`、`cargo fmt --all -- --check` 通过。`cargo test --workspace --exclude crayon-platform-macos` 与 `cargo clippy --workspace --all-targets --exclude crayon-platform-macos -- -D warnings` 通过，明确未运行真实 Keychain crate。macOS arm64 Debug preset 与独立 Release CEF 全量构建、ad-hoc 签名和 bundled media-host 打包通过；两套 `ctest -R '^(media_host|ipc_channel_contract)'` 各 3/3。`cargo run -p repo-guard -- scan --root .`、`bash scripts/check.sh security`、`git diff --check` 通过；受限 sandbox 首轮 media-host CTest 因 Relay loopback bind 得到 `Operation not permitted`/startup failure，按本机网络权限复跑后 Debug/Release 均通过。
 - Code Review：P0/P1/P2=`0/0/0`。按 v0.8 复核唯一 owner、锁/回调/阻塞边界、generation/revision、队列/分页容量、错误映射、进程退出和隐私输出；Review 中补齐 refresh、同名/空名/65 项、Relay 闭合 route 的缺失验收，并修正后续真机归属注释。新增生产函数/文件未触发 100/2000 行提醒；MHV1 输出与日志不含 receiver locator、page/media URL、relay token、Cookie/Authorization 或 SDK 文案。
-- 未覆盖与风险：本任务只验证真实 facade 的无设备生命周期以及 Fake Direct/Relay/Handoff/Reject/Failed；手机上的 Direct/Relay 可播放性、receiver IP 绑定和可达 Relay URL 仍由 M05b4/b5 真机任务闭合，不在此宣称通过。C++ command worker/event pump 与 CEF picker/lifecycle 仍分别由 `M05b3d READY`、`M05b3e TODO` 完成。Release Ninja 仍出现既有 `premature end of file; recovering` 警告，但重新生成、完整编译、链接与签名成功；全程未访问真实 Keychain。
+- 未覆盖与风险：本任务只验证真实 facade 的无设备生命周期以及 Fake Direct/Relay/Handoff/Reject/Failed；手机上的 Direct/Relay 可播放性、receiver IP 绑定和可达 Relay URL 仍由 M05b4/b5 真机任务闭合，不在此宣称通过。C++ command worker/event pump 已由 `M05b3d DONE` 闭合，CEF picker/lifecycle 由 `M05b3e READY` 完成。Release Ninja 仍出现既有 `premature end of file; recovering` 警告，但重新生成、完整编译、链接与签名成功；全程未访问真实 Keychain。
+
+#### PLT-M05b3d 原子范围（macOS C++ Cast command/event pump）
+
+- 状态：`DONE`；依赖 `PLT-M05b3c DONE` 与既有 `MediaHostProcess` 单 worker/有界 frame queue。
+- 单一目标：扩展 macOS C++ media-host transport/adapter，使 UI 调用方只同步 enqueue 闭合 Cast command、drain 闭合结果；所有 pipe/health/child I/O 继续只在既有后台 worker，session event pump 保持单 in-flight、固定有界间隔且在无 active/pending session 时静默。
+- 输入/输出与允许修改：允许修改 `browser/cef-shell/src/macos/media_host_{process,adapter}_mac.{h,cc}`、相邻 process/adapter tests 与本 Roadmap/索引；仅当编译契约需要时修改相邻 CMake。adapter 新增 discovery/list/start/stop 的异步入口和 bounded Cast result DTO；process 只扩展 b3b 已冻结 reply kind 的接纳，不改变 MHV1 codec/字段。
+- 禁止修改：Rust、Cast-SDK/adapter facade、共享 Cast UI coordinator、CEF App/按钮/picker、Relay、协议 schema/codec、播放控制、Cast code、外部客户端启动；不得在 UI 线程执行 discovery/SOAP、pipe、health、等待或重试，不得向 DTO/日志加入 receiver locator、page/media URL、relay token、Cookie/Authorization 或 SDK 文案。
+- 状态/容量/生命周期：沿用 transport outbound/reply 各 64；adapter tracked request/candidate 各 256、Cast result 64、device page 16。命令 request id 唯一；Start 必须命中 current candidate；Stop generation 非零；event pump 同时最多 1 个 poll，session generation/state revision 非零单调，旧/重复 event 丢弃并累计 host dropped。进程 generation 变化、navigation/close、queue full、Stop/App Stop 必须 fail closed；Stop 先停止新 poll/清 adapter 状态，再由 process 发送 Shutdown 并 join/清 child。
+- 验收：Fake transport 覆盖 discovery/list/start/stop、重复/超界/无 candidate、Direct/Relay/Handoff/Reject/Failed、单 in-flight poll、空批/64 批/dropped、旧 generation/revision、terminal 停泵、restart/queue reject/Stop；真实 process 覆盖新增 reply 接纳和 shutdown/restart。Debug/Release focused build + CTest、clang-format、非 Keychain workspace 回归、repo guard/security、Review P0/P1=0。
+- 明确不做：真实 CEF Cast 按钮/picker 与 navigation/app lifecycle 接线（b3e）、手机 Direct/Relay（b4/b5）、Windows（W05）、真实 Keychain。
+
+#### PLT-M05b3d 完成记录（2026-08-31，macOS Cast command/event pump）
+
+- 实现：复用既有 `MediaHostProcess` 单一后台 I/O worker，不新增线程；process 接纳 b3b 冻结的 device/start/session reply，UI-thread-only adapter 新增 discovery、分页设备、start、generation-bound stop 与有界 Cast result drain。Cast request/result 各限制 64，设备页沿用 16 项；request/reply kind 严格相关。Casting reply 建立单 active generation、单 in-flight、100ms 间隔的 event pump；空批保留，旧 generation/revision 与重复事件丢弃，terminal、Stop、process generation 变化和 adapter Stop 均停泵清状态。
+- 生命周期与失败闭合：Start 必须命中当前 candidate，Stop 必须命中当前 active generation；队列拒绝、协议错配、dropped count 回退与 Cast result 溢出均产出闭合错误并 best-effort stop。Review 发现 navigation 可能使 pending Start 的迟到 Casting reply失去 owner、留下孤儿 session，现保留 pending correlation 并立即异步发送 generation-fenced Stop；清理 Stop/Ack 不进入产品结果队列。
+- 验证：Debug/Release macOS arm64 完整 CEF 构建、ad-hoc App/Helpers 签名通过；两配置 `ctest -R '^(media_host|ipc_channel_contract)'` 各 3/3，最终 focused `media_host_adapter_mac`/`media_host_process_mac` 2/2。Fake transport 覆盖无 candidate、discovery/device page、Direct/Relay、Handoff/Reject/Failed、单 poll、空批、host dropped、旧 generation/revision、terminal、restart、queue reject、stop 与迟到 Start 清理；真实 child 覆盖新增 reply、shutdown/restart。`cargo test --workspace --exclude crayon-platform-macos`、`cargo run -p repo-guard -- scan --root .`、`bash scripts/check.sh security`（relay security 7/7）、Apple clang-format dry-run 和 `git diff --check` 通过；明确排除真实 Keychain crate。
+- Code Review：按 v0.8 复核需求边界、唯一 worker、UI 线程非阻塞、request/generation/revision fencing、队列容量、迟到 reply、stop/shutdown 顺序、隐私与测试；关闭上述孤儿 session P1，并拆分超 100 行生产 reply dispatch、补齐协议/容量失败时 best-effort stop，最终 P0/P1/P2=`0/0/0`。测试中的完整 Cast 状态矩阵保持为一个场景函数，属于测试规模提醒，不混入生产职责。
+- 未覆盖与风险：尚未实例化真实 CEF Cast button、原生 picker，也未把 navigation/close/app-exit 接到已建立 session；统一由 `PLT-M05b3e READY` 闭合。手机 Direct/Relay 可播放性仍归 M05b4/b5，不以 Fake 或 ADB 在线替代；Release Ninja 仍出现既有 `premature end of file; recovering` 后自恢复并完整构建成功；全程未访问真实 Keychain。
 
 ### PLT-M05b2 原子范围（按 a/b/c 三切片）
 

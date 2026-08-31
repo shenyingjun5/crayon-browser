@@ -52,7 +52,9 @@ bool Run() {
       !process.Enqueue(mh::IngestUrl{
           "ingest-1", "tab-1", 7, 9, 123, "https://page.example/watch",
           "https://media.example/video.mp4", mh::Source::kCurrentSrc,
-          mh::HeadersClass::kNone, std::nullopt, false}))
+          mh::HeadersClass::kNone, std::nullopt, false}) ||
+      !process.Enqueue(mh::ListDevices{"devices-1", std::nullopt, 0}) ||
+      !process.Enqueue(mh::PollSessionEvents{"events-1"}))
     return false;
   std::vector<mh::Message> replies;
   if (!WaitFor(
@@ -60,7 +62,7 @@ bool Run() {
             auto next = process.Drain(8);
             replies.insert(replies.end(), std::make_move_iterator(next.begin()),
                            std::make_move_iterator(next.end()));
-            return replies.size() >= 2;
+            return replies.size() >= 4;
           },
           std::chrono::seconds(6))) {
     std::cerr << "media-host process failed waiting for replies\n";
@@ -74,7 +76,15 @@ bool Run() {
       std::any_of(replies.begin(), replies.end(), [](const auto &m) {
         return std::holds_alternative<mh::CandidateReply>(m);
       });
-  if (!saw_ack || !saw_candidate) {
+  const bool saw_devices =
+      std::any_of(replies.begin(), replies.end(), [](const auto &m) {
+        return std::holds_alternative<mh::DevicePageReply>(m);
+      });
+  const bool saw_events =
+      std::any_of(replies.begin(), replies.end(), [](const auto &m) {
+        return std::holds_alternative<mh::SessionEventsReply>(m);
+      });
+  if (!saw_ack || !saw_candidate || !saw_devices || !saw_events) {
     std::cerr << "media-host process returned incomplete replies\n";
     return false;
   }

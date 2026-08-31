@@ -311,7 +311,10 @@ bool IsReply(const Message &message) {
   return std::holds_alternative<media_host_ipc::CandidateReply>(message) ||
          std::holds_alternative<media_host_ipc::DecisionReply>(message) ||
          std::holds_alternative<media_host_ipc::Ack>(message) ||
-         std::holds_alternative<media_host_ipc::ErrorReply>(message);
+         std::holds_alternative<media_host_ipc::ErrorReply>(message) ||
+         std::holds_alternative<media_host_ipc::DevicePageReply>(message) ||
+         std::holds_alternative<media_host_ipc::StartCastReply>(message) ||
+         std::holds_alternative<media_host_ipc::SessionEventsReply>(message);
 }
 
 } // namespace

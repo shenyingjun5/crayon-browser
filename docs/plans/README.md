@@ -48,7 +48,7 @@
 
 | 顺序 | 任务 | 状态 | 说明 |
 |---:|---|---|---|
-| 1 | `PLT-M05b3d` | READY | M05b3c DONE；下一步在 macOS C++ media-host adapter 增加有界 command worker/session event pump，CEF UI 线程只 enqueue/drain |
+| 1 | `PLT-M05b3e` | READY | M05b3d DONE；将 Cast UI 协调器、真实 CEF 按钮/原生 picker 与 candidate、navigation/close/app-exit 生命周期接通 |
 
 ### 平台收口与待拆装配
 
