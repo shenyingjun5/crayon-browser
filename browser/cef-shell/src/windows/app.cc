@@ -160,8 +160,7 @@ BrowserApp::BrowserApp(HINSTANCE resource_module, std::wstring product_name)
       window_icons_(std::make_shared<WindowsWindowIcons>(resource_module)),
       new_tab_strings_(LoadNewTabStrings(resource_module)),
       mdv_strings_(LoadMdvStrings(resource_module)),
-      mdv_runtime_(std::make_shared<mdv::MdvRuntimeState>(
-          mdv::BuildFixtureSnapshot())),
+      mdv_runtime_(std::make_shared<mdv::MdvRuntimeState>()),
       mdv_entries_(std::make_shared<mdv::MdvEntryController>(
           mdv_runtime_, mdv_strings_)),
       mdv_editing_(std::make_shared<mdv::MdvEditController>(mdv_runtime_,

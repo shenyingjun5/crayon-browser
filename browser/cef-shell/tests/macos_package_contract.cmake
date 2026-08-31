@@ -58,6 +58,27 @@ assert_binary_arch("${cef_framework_binary}")
 assert_binary_arch("${content_host}")
 assert_binary_arch("${media_host}")
 
+# MDV-25 Release isolation: neither the removed factory symbol nor the sample
+# body may be linked into the shipping executable.
+execute_process(
+  COMMAND /usr/bin/strings "${main_executable}"
+  RESULT_VARIABLE strings_result
+  OUTPUT_VARIABLE executable_strings
+  ERROR_VARIABLE strings_error)
+if(NOT strings_result EQUAL 0)
+  message(FATAL_ERROR
+          "strings failed for ${main_executable}: ${strings_error}")
+endif()
+foreach(forbidden_fixture IN ITEMS
+        "BuildFixtureSnapshot"
+        "这是内置 Markdown 查看器的**只读**示例文档。")
+  string(FIND "${executable_strings}" "${forbidden_fixture}" fixture_hit)
+  if(NOT fixture_hit EQUAL -1)
+    message(FATAL_ERROR
+            "Shipping executable contains forbidden MDV fixture: ${forbidden_fixture}")
+  endif()
+endforeach()
+
 if(NOT EXISTS "${CRAYON_HELPER_MANIFEST}")
   message(FATAL_ERROR "macOS helper manifest is missing")
 endif()

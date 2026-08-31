@@ -26,7 +26,7 @@
 | MED | [media-policy-relay-roadmap.md](media-policy-relay-roadmap.md) | 媒体观察、策略、LAN Relay、外部客户端交接迁移 | `MED-01..19 DONE` |
 | CEF | [desktop-cef-browser-roadmap.md](desktop-cef-browser-roadmap.md) | Windows/macOS CEF 壳、共享 UI、媒体观察和 IPC | `CEF-01..15 全部完成`（`CEF-06..14` 模型层 VERIFIED，实机接线归后续装配/切片任务）；Windows 总 Review 证据已补齐 |
 | BUX | [browser-product-experience-roadmap.md](browser-product-experience-roadmap.md) | Chrome-inspired 蜡笔桌面浏览器 UI 与日用基础功能 | `BUX-01..18 DONE`（BUX-17/18 2026-08-26） |
-| MDV | [markdown-viewer-roadmap.md](markdown-viewer-roadmap.md) | 本地 Markdown Runtime：查看/编辑/保存、图标工具栏、图片与 Mermaid Full 离线扩展 | 基线、工具栏与 Mermaid 已生产可达；`MDV-20/24 VERIFIED`，`MDV-25 READY` 移除生产 fixture 初始化后进入 MRT/发布收口 |
+| MDV | [markdown-viewer-roadmap.md](markdown-viewer-roadmap.md) | 本地 Markdown Runtime：查看/编辑/保存、图标工具栏、图片与 Mermaid Full 离线扩展 | 基线、工具栏与 Mermaid 已生产可达；`MDV-20/24/25 VERIFIED`，生产 fixture 已清除，待 Windows x64 总回归 |
 | MRT | [markdown-runtime-roadmap.md](markdown-runtime-roadmap.md) | Markdown Runtime Extension Framework：闭合扩展 API、Highlight/KaTeX 与后续图表/演示门禁 | `MRT-01..08 DONE`（MRT-06 Windows blocker 修复与真机复验已收口，2026-08-29 合并）；`MRT-09..19` 分波次推进或仅做 gap analysis |
 | SDK | [cast-sdk-integration-roadmap.md](cast-sdk-integration-roadmap.md) | 固定源码 Cast-SDK facade、发现、连接和控制；后续 Partner Cast facade | `SDK-01..14 DONE`；`SDK-15/16` 等 HUB/外部已批准 API |
 | PLT | [desktop-platform-adapters-roadmap.md](desktop-platform-adapters-roadmap.md) | Windows/macOS 存储、网络、生命周期、更新和客户端交接 | `PLT-01/02/W04/M04 DONE`；`PLT-M05 IN_PROGRESS`，`PLT-W05 TODO` |
@@ -48,9 +48,8 @@
 
 | 顺序 | 任务 | 状态 | 说明 |
 |---:|---|---|---|
-| 1 | `MDV-25` | READY | 移除 `BuildFixtureSnapshot()` 生产初始化；同样触及 CEF App/CMake，串行领取 |
-| 2 | `CNT-20` | READY | 网页→Markdown 双平台 E2E/security/perf；macOS 先行，Windows x64 最后回归 |
-| 3 | `PLT-M05b3` | READY | M05b2 DONE；接通 Cast UI、设备选择、Cast-SDK facade 与 session event pump，不做真机结论 |
+| 1 | `CNT-20` | READY | 网页→Markdown 双平台 E2E/security/perf；macOS 先行，Windows x64 最后回归 |
+| 2 | `PLT-M05b3` | READY | M05b2 DONE；接通 Cast UI、设备选择、Cast-SDK facade 与 session event pump，不做真机结论 |
 
 ### 平台收口与待拆装配
 

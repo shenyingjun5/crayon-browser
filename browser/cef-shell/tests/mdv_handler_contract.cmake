@@ -49,6 +49,8 @@ endif()
 
 file(READ "${handler_h}" header_text)
 file(READ "${handler_cc}" impl_text)
+file(READ "${CRAYON_CEF_SHELL_SOURCE}/src/macos/app.cc" macos_app)
+file(READ "${CRAYON_CEF_SHELL_SOURCE}/src/windows/app.cc" windows_app)
 
 # Registration entry point exists and takes injected strings.
 string(FIND "${header_text}" "RegisterMdvSchemeHandlerFactory(" hit)
@@ -59,6 +61,28 @@ endif()
 if(hit EQUAL -1)
   message(FATAL_ERROR "handler header must expose RegisterMdvSchemeHandlerFactory(MdvPageStrings strings)")
 endif()
+
+# MDV-25: production starts with a value-initialized empty snapshot. Sample
+# Markdown and its former builder must not remain in any production source.
+foreach(forbidden_text IN ITEMS
+        "BuildFixtureSnapshot"
+        "kFixtureMarkdown"
+        "这是内置 Markdown 查看器的**只读**示例文档。")
+  foreach(surface IN ITEMS header_text impl_text macos_app windows_app)
+    string(FIND "${${surface}}" "${forbidden_text}" fixture_hit)
+    if(NOT fixture_hit EQUAL -1)
+      message(FATAL_ERROR
+              "production ${surface} contains forbidden MDV fixture: ${forbidden_text}")
+    endif()
+  endforeach()
+endforeach()
+foreach(surface IN ITEMS macos_app windows_app)
+  string(FIND "${${surface}}" "std::make_shared<mdv::MdvRuntimeState>()"
+         empty_state_hit)
+  if(empty_state_hit EQUAL -1)
+    message(FATAL_ERROR "${surface} must initialize MDV with an empty runtime state")
+  endif()
+endforeach()
 
 # CSP comes from the shared golden constant, not a local copy.
 string(FIND "${impl_text}" "kMdvCsp" hit)
@@ -87,8 +111,8 @@ foreach(required_text IN ITEMS
   endif()
 endforeach()
 
-# The fixture is compile-time content; no network IO and no arbitrary
-# file access.  Bounded reads are only permitted inside the MDV-13
+# The handler performs no network IO or arbitrary file access. Bounded reads
+# are only permitted inside the MDV-13
 # validated local-image route (opaque /img/<index> tokens).
 foreach(forbidden IN ITEMS "fopen" "CreateFileW(\"" "WinHttp" "URLDownload")
   string(FIND "${impl_text}" "${forbidden}" hit)
@@ -131,7 +155,6 @@ file(READ "${CRAYON_CEF_SHELL_SOURCE}/resources/windows/resource_ids.h"
      windows_ids)
 file(READ "${CRAYON_CEF_SHELL_SOURCE}/resources/windows/app.rc.in"
      windows_rc)
-file(READ "${CRAYON_CEF_SHELL_SOURCE}/src/windows/app.cc" windows_app)
 foreach(resource IN ITEMS
         IDS_CRAYON_MDV_TOOL_HEADING1
         IDS_CRAYON_MDV_TOOL_HEADING2

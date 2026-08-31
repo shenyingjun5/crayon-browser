@@ -161,8 +161,7 @@ browser_mdv::MdvPageStrings DefaultMdvStrings() {
 BrowserApp::BrowserApp(std::string product_name)
     : product_name_(std::move(product_name)),
       mdv_strings_(DefaultMdvStrings()),
-      mdv_runtime_(
-          std::make_shared<mdv::MdvRuntimeState>(mdv::BuildFixtureSnapshot())),
+      mdv_runtime_(std::make_shared<mdv::MdvRuntimeState>()),
       mdv_entries_(std::make_shared<mdv::MdvEntryController>(mdv_runtime_,
                                                              mdv_strings_)),
       mdv_editing_(

@@ -8,7 +8,6 @@
 #include <string>
 #include <utility>
 
-#include "crayon/browser_markdown/markdown_render.h"
 #include "crayon/browser_markdown_runtime/highlight_extension.h"
 #include "crayon/browser_markdown_runtime/katex_extension.h"
 #include "crayon/browser_markdown_runtime/mermaid_extension.h"
@@ -28,7 +27,6 @@ using crayon::browser_mdv::kMaxLocalImageBytes;
 using crayon::browser_mdv::kMdvCsp;
 using crayon::browser_mdv::kMdvHost;
 using crayon::browser_mdv::kMdvScheme;
-using crayon::browser_mdv::MdvLoadStatus;
 using crayon::browser_mdv::MdvPageSnapshot;
 using crayon::browser_mdv::MdvPageStrings;
 using crayon::browser_mdv::MdvRequestParts;
@@ -48,22 +46,6 @@ std::filesystem::path FilesystemPath(const std::string& path_utf8) {
   return std::filesystem::path(path_utf8);
 #endif
 }
-
-// Deterministic fixture document exercising the enabled syntax set
-// (headings, table, fenced code, math, task list, safe link, mermaid fence,
-// raw-HTML escape). Real file entries arrive with MDV-09; this slice is
-// content-driven.
-constexpr char kFixtureMarkdown[] =
-    "# 蜡笔文档查看器\n\n"
-    "这是内置 Markdown 查看器的**只读**示例文档。\n\n"
-    "| 特性 | 状态 |\n|---|---|\n| 表格 | 支持 |\n| 任务列表 | 只读展示 |\n\n"
-    "- [x] 渲染引擎接入\n- [ ] 文件入口（后续切片）\n\n"
-    "```cpp\nint answer = 42;\n```\n\n"
-    "```mermaid\nflowchart LR\n  A[蜡笔] --> B[投屏]\n```\n\n"
-    "行内公式：$E = mc^2$。\n\n"
-    "$$\n\\frac{x^2 + 1}{\\sqrt{2}}\n$$\n\n"
-    "安全链接：<https://example.com/ok> 与原始 HTML "
-    "<b>按纯文本转义</b>。\n";
 
 class MdvMemoryResourceHandler final : public CefResourceHandler {
  public:
@@ -340,39 +322,14 @@ class MdvSchemeHandlerFactory final : public CefSchemeHandlerFactory {
   DISALLOW_COPY_AND_ASSIGN(MdvSchemeHandlerFactory);
 };
 
-/// Builds the read-only page snapshot from the fixture through the real
-/// MDV-03 load/render gating path.
-MdvPageSnapshot BuildFixtureSnapshotImpl() {
-  MdvPageSnapshot snapshot;
-  snapshot.view_mode = crayon::browser_mdv::MdvViewMode::kPreview;
-  snapshot.has_document = true;
-  snapshot.source_text = kFixtureMarkdown;
-
-  crayon::browser_mdv::MdvViewerModel model;
-  model.LoadContent(kFixtureMarkdown,
-                    /*utf8_valid=*/true, /*now_ms=*/0);
-  const auto revision = model.RequestRender(/*now_ms=*/1000);
-  const auto highlighted =
-      crayon::browser_markdown_runtime::RenderP0MarkdownDocument(
-          kFixtureMarkdown, /*document_generation=*/1, revision);
-  if (highlighted.render_status ==
-          crayon::browser_markdown::RenderStatus::kOk &&
-      model.DeliverRender(revision, highlighted.safe_html)) {
-    snapshot.load_status = model.load_status();
-    snapshot.rendered_html = model.rendered_html();
-  } else {
-    snapshot.load_status = MdvLoadStatus::kRenderPolicyViolation;
-    snapshot.rendered_html.clear();
-  }
-  return snapshot;
-}
-
 }  // namespace
 
 struct MdvRuntimeState::Impl {
   mutable std::mutex mutex;
   MdvPageSnapshot snapshot;
 };
+
+MdvRuntimeState::MdvRuntimeState() : MdvRuntimeState(MdvPageSnapshot{}) {}
 
 MdvRuntimeState::MdvRuntimeState(MdvPageSnapshot initial)
     : impl_(std::make_unique<Impl>()) {
@@ -390,8 +347,6 @@ MdvPageSnapshot MdvRuntimeState::snapshot() const {
   const std::lock_guard<std::mutex> lock(impl_->mutex);
   return impl_->snapshot;
 }
-
-MdvPageSnapshot BuildFixtureSnapshot() { return BuildFixtureSnapshotImpl(); }
 
 bool RegisterMdvSchemeHandlerFactory(
     MdvPageStrings strings, const std::shared_ptr<MdvRuntimeState>& state) {

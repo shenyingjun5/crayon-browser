@@ -16,6 +16,7 @@ using crayon::browser_mdv::MdvPageStrings;
 /// a gated load; the IO thread reads them.
 class MdvRuntimeState {
  public:
+  MdvRuntimeState();
   explicit MdvRuntimeState(MdvPageSnapshot initial);
   ~MdvRuntimeState();
   MdvRuntimeState(const MdvRuntimeState&) = delete;
@@ -30,17 +31,13 @@ class MdvRuntimeState {
 };
 
 // Registers the crayon://mdv scheme handler factory (domain "mdv").
-// The document body is rendered per request from `state` (initially the
-// compile-time fixture through the MDV-03 gating path); stylesheet and
-// script are fixed.  `strings` come from the platform string resources.
+// The document body is rendered per request from `state` (initially an empty
+// snapshot until a user opens a document); stylesheet and script are fixed.
+// `strings` come from the platform string resources.
 // Must be called on the CEF UI thread during OnContextInitialized,
 // after the new-tab factory.
 bool RegisterMdvSchemeHandlerFactory(
     MdvPageStrings strings, const std::shared_ptr<MdvRuntimeState>& state);
-
-/// Builds the read-only fixture snapshot through the real MDV-03
-/// load/render gating path (used as the initial runtime state).
-MdvPageSnapshot BuildFixtureSnapshot();
 
 }  // namespace crayon::browser::cef_shell::mdv
 
