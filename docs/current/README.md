@@ -19,7 +19,7 @@
 | [Markdown Runtime v1 契约](markdown-runtime.md) | `markdown-runtime-v1` ExtensionNode/manifest/registry、能力、预算、generation、错误与 current/previous golden |
 | [Code Highlight 供应链契约](code-highlight.md) | `code-highlight-assets-v1` 选型、固定离线 grammar/别名/dependency、hash/许可/包体与安全输出边界 |
 | [KaTeX 数学语法与供应链契约](math-katex.md) | `math-katex-assets-v1` 的 `$`/`$$` 定界、固定 option/宏禁令、ESM/CSS/WOFF2 离线闭包与 MRT-08 输出门禁 |
-| [总 Roadmap](../crayon-private-cast-browser-roadmap.md) | 285 项活跃任务、第一期/第二期阶段和当前领取顺序 |
+| [总 Roadmap](../crayon-private-cast-browser-roadmap.md) | 287 项活跃任务、Windows 首发候选、第一期/第二期阶段和当前领取顺序 |
 | [第一期发布 Roadmap](../plans/release-v1-roadmap.md) | 网页 Markdown、LAN 投屏、本地 Markdown 编辑三大闭环、平台顺序与关闭 feature |
 | [第一期生产装配审计](release-v1-assembly.md) | REL-02 的真实 CEF source/link 调用图、断点任务映射与一期/二期默认开关 |
 | [模块 Roadmap 索引](../plans/README.md) | 每个模块的原子任务、依赖与状态 |
@@ -56,7 +56,7 @@ Cast-SDK source lock 的当前事实位于 `config/cast-sdk-source.toml`、`.git
 - CEF 固定基线为 `150.0.10+g8042e43+chromium-150.0.7871.101` Standard。历史四平台 hash 已锁定，Windows x64 archive 已校验；后续产品构建只推进 Windows/macOS。
 - Cast-SDK source revision 已由 `SDK-01` 固定并通过 `RG-008`；`SDK-01..14 DONE`，包括真实接收端 Harness 与总 Review。`SDK-15/16` 只承接后续 Partner/TV Cast gap 与正式外部 facade。
 - `MED-19` 已完成：投屏决策集合为 `Direct/Relay/ExternalClientHandoff/Reject`，旧 `mirror` wire 值保留兼容读取窗口且不再发出；`tab_video`/`system_audio` 仅作为 `crayon-domain` 遗留字段存在，策略与 runtime 代码不再引用，不得继续扩张。
-- 当前开发前沿：`MDV-25 VERIFIED` 已移除生产 `BuildFixtureSnapshot()` 和示例正文，macOS arm64 Debug/Release、源码/包体门禁、真实空态与真实本地 `.md` 已闭合，Windows x64 对称回归待最后执行。`CNT-17..19 DONE` 已在 macOS arm64 产品 CEF 壳闭合 Browser-issued request → Renderer DOM adapter → Browser gateway → 真实 Core owner/extract → 确定性 Markdown，并通过真实原生菜单完成预览/编辑、当前缓冲区复制、Save As、取消和明确覆盖；`CNT-20 VERIFIED` 已补齐 macOS Debug/Release E2E、安全、20 次 100KiB first-chunk/complete P95、UI delay/RSS 和退出零残留证据，Windows x64 最后对称回归后才能 DONE。`PLT-M05b1/M05b2 DONE` 已接通真实 CEF media/resource/input/navigation 观察、Browser proof gate、唯一 Rust planning owner、双端 MHV1、有界 macOS helper/process/adapter，并在 Debug/Release 真 CEF fixture 闭合 MP4/HLS/DASH/credential/EME/blob/host crash 与 opaque candidate/decision；M05b3 已拆为 a-e，`PLT-M05b3a DONE` 建立 CastButton/FeatureView/有界设备列表唯一 UI owner，`PLT-M05b3b READY` 下一步冻结 discovery/select/stop/session event 的 MHV1 双端协议。测试与产品启动固定 `use-mock-keychain`，真实 SecureStore/Keychain 验证放到最后，不得作为一期启动障碍。Direct/Relay 可使用 ADB 在线手机的正式接收端取证；Windows x64 同一期回归。Agent/CLI/MCP、Workflow、Hub、Partner、模型与 HarmonyOS 统一为第二期且默认关闭。
+- 当前开发前沿：2026-08-31 用户决策改为 Windows 10/11 x64 先形成第一期候选，已有 macOS arm64 共享实现/证据保留，macOS 特有签名/公证/Keychain/生命周期/打包后续验证。`CNT-17..19 DONE` 与 `CNT-20 VERIFIED` 已在 macOS 闭合网页 Markdown；Windows 尚无 content-host/process/platform UI adapter，先执行 `CNT-20W1/W2 -> CNT-21W`。`PLT-M05b1..b3 DONE` 已冻结共享观察、策略、MHV1、Cast runtime/UI 语义；Windows 尚无 media-host/Cast 平台装配，执行 `PLT-W05a..f`，Direct/Relay 使用当前 ADB 在线 `com.zknowai.labi.cast.receiver` 正式接收端取证。`MDV-20/24/25 VERIFIED` 只补 Windows 对称发布回归。Agent/CLI/MCP、Workflow、Hub、Partner、模型与 HarmonyOS 统一为第二期且默认关闭。
 
 ## 5. 权威与历史
 

@@ -1,17 +1,17 @@
 # 蜡笔 AI Agent 投屏浏览器总 Roadmap
 
 - 版本：v0.9（第一期三大闭环发布范围冻结）
-- 日期：2026-08-30
+- 日期：2026-08-31
 - 状态：活跃
-- 当前任务总数：285
+- 当前任务总数：287
 - 当前测试用例总数：212
 
 ## 1. 当前结论
 
 - 已收口：`BRD-01..04`、Foundation、`MED-01..19`、`BUX-01..18`、`SDK-01..14`、`RNM-01..08`；CEF 为 `CEF-01..05/15 DONE`、`CEF-06..14 VERIFIED`，`ACT-01..12` 已完成契约/模型层总 Review，`MRT-01..08 DONE`。
-- 页面数据 C1 算法与数据面 `CNT-01..10` 已收口，真实 CEF collector/gateway 已由 `CNT-17 DONE` 装配；生产 owner/extract/Markdown 的 `CNT-18 IN_PROGRESS` 拆为 18a..18d（18a/18b DONE，下一步 18c），导出 UI 仍待 `CNT-19..21 TODO`，不把局部接通解释为用户已可一键导出。
-- 第一期范围由 `REL-01 DONE` 冻结为网页 Markdown、LAN Direct/Relay 投屏、本地 Markdown 编辑三大闭环；`REL-02 DONE` 已输出真实生产装配图：前两项当前不可达，MDV 可达但仍含生产 fixture 初始化缺口。macOS arm64 先行、Windows x64 同一期回归。Agent/CLI/MCP、Workflow、Hub、Partner、模型与 HarmonyOS 默认关闭并进入第二期。
-- 平台剩余重点：`CNT-18a/18b DONE` 已冻结 codec 并完成 Rust host，当前严格推进 `CNT-18c IN_PROGRESS`、随后 18d；`PLT-M05b1 READY` 后串行 b2..b6/M05c，随后 `PLT-W05` 对称装配；`MDV-25 READY` 清除生产 fixture 后，`MDV-20/24 VERIFIED` 与 `MRT-09` 关闭 P0 Runtime 发布缺口。M05a 既有证据只代表基础壳/new-tab，不代表 CNT/Cast 全产品装配。
+- 页面数据 C1 算法与数据面 `CNT-01..10` 已收口；一期 macOS 产品链 `CNT-17..19 DONE`、`CNT-18e/CNT-20 VERIFIED`。Windows 不能复用 macOS 装配证据，首发继续执行 `CNT-20W1 READY -> W2 -> CNT-21W`。
+- 第一期范围由 `REL-01 DONE` 冻结为网页 Markdown、LAN Direct/Relay 投屏、本地 Markdown 编辑三大闭环；远程后续已在 macOS arm64 闭合共享协议与大部分产品链。`REL-05 DONE` 按 2026-08-31 用户决策改为 Windows 10/11 x64 先形成发布候选，macOS 特有验证后置且不阻塞 Windows。Agent/CLI/MCP、Workflow、Hub、Partner、模型与 HarmonyOS 默认关闭并进入第二期。
+- 平台剩余重点：先执行 `CNT-20W1/W2 -> CNT-21W` 闭合 Windows 网页 Markdown，再执行 `PLT-W05a..f` 及 ADB 正式接收端 Direct/Relay，随后完成 `MDV-20W/25W -> MRT-09W`、`PRV-13AW` 与 QAR Windows 核心矩阵。macOS `PLT-M05b4..b6/M05c`、QAR-10 和其他 macOS 特有门禁保留后续，不得改写已有证据或冒充 Windows 结果。
 - 产品依赖顺序不变，但发布拆为两期：第一期先完成浏览器/LAN 投屏/网页 Markdown/本地 MDV；第二期再开放 Agent 协议与语义动作、Workflow/Challenge、Capability Hub/合作方和模型。
 - CAAP、CLI/入站 MCP、高性能读页和授权操作仍是产品核心方向，但不进入第一期发布包启用范围；具体模型/provider 与视频/文档总结同属第二期。
 - Windows/macOS 为当前桌面；HarmonyOS 只做鸿蒙电脑 PC 形态技术预览；Linux 无活跃任务。
@@ -43,7 +43,7 @@
 | MED | 19 | 媒体观察、LAN Relay 与外部客户端交接语义 |
 | SDK | 16 | Cast-SDK 发现/投送/控制；后续 Partner Cast facade |
 | PLT | 7 | Windows/macOS 系统与本机 IPC/客户端交接适配 |
-| REL | 4 | 第一期三大闭环范围、装配审计与跨平台发布聚合 |
+| REL | 5 | 第一期三大闭环范围、装配审计、Windows 首发顺序与发布聚合 |
 | PRV | 14 | Profile、隐私、安全、日志与分期数据流 Review |
 | CNT | 21 | 页面数据/Markdown 产品闭环；第二阶段模型总结 |
 | ACT | 12 | 语义地图、action_id、前置条件与效果验证 |
@@ -53,7 +53,7 @@
 | HM | 12 | HarmonyOS 电脑 PC 形态技术预览 |
 | QAR | 18 | 核心/第二期 feature 分离的质量、性能、安全、发布和回滚 |
 | RNM | 8 | `get-video` → `crayon-browser` 命名迁移 |
-| **合计** | **285** | |
+| **合计** | **287** | |
 
 ## 4. 依赖关系
 
@@ -122,6 +122,7 @@ flowchart LR
 ### V1：桌面浏览器与 Markdown Runtime P0 可用（macOS 先行）
 
 - `CEF-01D`、`CEF-02W`、`CEF-03..12`、`BUX-01..18`、`MDV-01..25`、`MRT-01..09`、`PLT-01/02/W04` 与适用 PRV；MDV/MRT 不阻塞 BUX 主线，第三方 runtime 与工具栏均按 macOS 先行、Windows 回归收口。
+- 本节保留已执行阶段的历史顺序；当前 R1 首发顺序由 `REL-05` 覆盖为 Windows x64 先形成候选，不据此恢复 macOS 前置依赖。
 - 验收：Chrome-inspired 蜡笔 UI、本地起始页、地址栏、导航、标签/窗口、书签、历史、下载、设置、Profile/无痕、权限、安全反馈、崩溃恢复、快捷键/无障碍、生命周期和本地 Markdown 查看/预览/分栏编辑/保存/图片/标准 Mermaid/Code Highlight/KaTeX 可用；无对应节点的文档零额外 runtime 加载，含扩展文档完全离线且错误隔离。
 
 ### A0：Agent 协议与权限内核
@@ -149,12 +150,12 @@ flowchart LR
 - `CNT-01..10`；前置 `CEF-15`、`BUX-18`、`SDK-14`、`MED-19`、`PRV-08`。
 - 验收：当前页结构化快照、缓存/分页/增量、确定性 Markdown、导出控制器模型和性能基线。C1 GO 只表示数据面冻结，不表示真实 CEF 与用户入口已装配。
 
-### R1：第一期三大闭环可发布版本
+### R1：第一期三大闭环 Windows 首发候选
 
-- `REL-01..04`、`CNT-17..21`、`PLT-M05b1..b6/M05c`、`PLT-W05/19`、`MDV-20/24/25`、`MRT-09`、`PRV-13A` 与 `QAR-01..16` 的核心 A 任务。
-- 顺序：范围/调用图审计 → macOS arm64 网页 Markdown → macOS 媒体观察/Direct/Relay/交接 → MDV/MRT P0 收口 → Windows x64 对称回归 → 安全/性能/长稳 → 安装/升级/回滚 → Go/NoGo。
-- 验收：发布包真实完成网页→Markdown→复制/保存、网页视频→设备→Direct/Relay→控制/停止、本地 `.md`→编辑→预览→安全保存；P0/P1=0。Agent/Workflow/Partner/model 等第二期 feature 默认为 off/NOT_IN_RELEASE。
-- 平台：macOS 第一期支持 Apple Silicon；Windows x64 同一期回归。原生 macOS Intel/x64 只有取得原生硬件证据后才能进入支持矩阵。
+- `REL-01..05`、`CNT-17..21` 的 Windows slices、`PLT-W05/19W`、`MDV-20W/24W/25W`、`MRT-09W`、`PRV-13AW` 与 `QAR-01W..16W` 的核心 A 任务。
+- 顺序：范围/调用图审计 → Windows 网页 Markdown → Windows 媒体观察/Direct/Relay/交接 → Windows MDV/MRT P0 收口 → 安全/性能/长稳 → 安装/升级/回滚 → Windows Go/NoGo。
+- 验收：Windows x64 候选包真实完成网页→Markdown→复制/保存、网页视频→设备→Direct/Relay→控制/停止、本地 `.md`→编辑→预览→安全保存；P0/P1=0。Agent/Workflow/Partner/model 等第二期 feature 默认为 off/NOT_IN_RELEASE。
+- 平台：Windows 10/11 x64 为当前首发候选。已有 macOS arm64 共享实现和证据保留；macOS 签名/公证、Keychain、原生生命周期、安装/升级/回滚与最终 Go/NoGo 后续独立验证，不能阻塞或冒充 Windows 候选。
 
 以下 S1 对外装配、A1/A2/W/H/X/M2/Harmony 阶段统一属于第二期，不阻塞 R1：
 
@@ -205,7 +206,7 @@ flowchart LR
 
 ### V5：Windows/macOS 稳定发布
 
-- 第一期执行 `QAR-02A/05A/08A` 与其余核心任务；第二期 feature 执行 `QAR-02B/05B/08B`。Agent、Workflow、Partner、模型分别做 feature GO/NO-GO；任一后续 feature NO-GO 不阻塞三大核心闭环发布。
+- 第一期 Windows 候选执行 `QAR-02AW/05AW/08AW` 与其余 W 核心任务；第二期 feature 执行 `QAR-02B/05B/08B`。Agent、Workflow、Partner、模型分别做 feature GO/NO-GO；任一后续 feature NO-GO 不阻塞三大核心闭环发布。
 
 ### VH：HarmonyOS 电脑技术预览
 
@@ -222,7 +223,7 @@ flowchart LR
 | V2/V3 | 4～6 周 | Fake 到真实 LAN 接收端，受外部环境影响 |
 | V4W/V4M | 4～6 周 | 两平台可错峰并行 |
 | C1 | 3～4 周 | 页面数据、Markdown 与性能基线 |
-| R1 | 6～10 周 | 三大闭环产品装配、两平台回归与发布门禁；macOS 先行 |
+| R1 | 6～10 周 | 三大闭环产品装配与 Windows x64 首发候选；macOS 特有门禁后续 |
 | S1 | 3～4 周 | 语义地图、动作和效果验证 |
 | A1/A2 | 5～8 周 | 入站 transport、只读与受控写 Preview |
 | W1/W2 | 4～6 周 | 人机接管、个人技能、健康与修复 |
@@ -237,17 +238,16 @@ flowchart LR
 
 ## 7. 当前领取顺序
 
-1. `CNT-18c IN_PROGRESS`：将已完成的 Rust host 作为真实 Core 子进程接入 macOS CEF Browser，完成 spawn/pipe/health/kill/reap 与 gateway drain；再执行 18d 真 CEF E2E，之后推进 `CNT-19..21`。
-2. `PLT-M05b1 READY`：接通真实媒体观察；与 CNT-17 修改相邻 CEF 装配，必须串行，随后推进 b2..b6/M05c；Direct/Relay 可使用 ADB 在线手机的正式接收端取证。
-3. `MDV-25 READY`：移除生产 `BuildFixtureSnapshot()` 初始化；与前两项同样触及 CEF App/CMake，串行领取。
-4. `MDV-20 VERIFIED` Windows 发布回归与 `MDV-24 VERIFIED` 剩余真机门禁；MDV-25 完成后执行 `MRT-09` P0 总 Review。
-5. macOS 三闭环关闭后推进 `PLT-W05` Windows 对称装配、`PLT-19` 与 QAR 核心矩阵。
+1. `CNT-20W1 READY`：实现 Windows content-host named-pipe process/adapter、网页 Markdown 平台 UI 与产品装配；再执行 `CNT-20W2 -> CNT-21W`。
+2. `PLT-W05a..f`：Windows media-host/Cast UI 装配、ADB 正式接收端 Direct/Relay、拒绝/交接与 100 次资源稳定性。
+3. `MDV-25W/20W -> MRT-09W`：Windows 本地 Markdown 生产隔离、P0 Runtime、包体与真机回归。
+4. `PRV-13AW -> PLT-19W -> QAR Windows slices -> REL-03/04 -> QAR-16W`：安全、性能、长稳、安装/升级/回滚、SBOM 与候选 Go/NoGo。
 
 第二期保持排队：`AGT-12C/13/14/16`、`WFL`、`HUB`、`CNT-11..16`、`MRT-10..19`、`SDK-15/16`、`HM`。其中 `CNT-11` 等 `CNT-21 + AGT-16 + PRV-13B + provider ADR`；不得在 R1 完成前抢占 CEF 装配和真机矩阵。
 
 ## 8. 发布门禁
 
-- 285 项任务按所选发布范围提供真实状态、命令与证据；212 个唯一当前测试 ID 可追踪，新增一期装配/生产隔离任务复用并扩展 CT/E2E/MD/CP/RG 用例映射；P0/P1 Review 为零。
+- 287 项任务按所选发布范围提供真实状态、命令与证据；212 个唯一当前测试 ID 可追踪，新增一期装配/生产隔离/Windows 顺序任务复用并扩展 CT/E2E/MD/CP/RG 用例映射；P0/P1 Review 为零。
 - 一期核心发布不得依赖 QAR 的第二期 B 任务；Agent/Workflow/Partner/model 保持默认关闭并在 QAR-15 标记 `NOT_IN_RELEASE`。
 - MDV/MRT 发布包仅包含各 manifest 锁定的浏览器运行时闭包，无 tiny/CDN/npm runtime/动态插件；普通 Markdown 对未命中扩展的 runtime 零读取，Mermaid/Highlight/KaTeX 离线可用且通过类型化输出 policy、lazy/cache、generation 与资源回落门禁。
 - CLI/入站 MCP 共用 CAAP；出站 connector 独立；无 raw CDP/WebDriver/任意 JS/remote bind/通用文件上传。

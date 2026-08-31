@@ -1,6 +1,6 @@
 # CNT 页面数据、Markdown 与第二阶段模型 Roadmap
 
-- 状态：C1 数据面已收口；一期产品闭环 `CNT-17..19 DONE`、`CNT-18e/CNT-20 VERIFIED`、`CNT-21 TODO`；M2 统一进入第二期并等待 `AGT-16/PRV-13B` 与 provider ADR
+- 状态：C1 数据面已收口；一期 macOS 产品闭环 `CNT-17..19 DONE`、`CNT-18e/CNT-20 VERIFIED`；Windows 首发继续 `CNT-20W1 READY -> W2 TODO -> CNT-21W TODO`；M2 统一进入第二期并等待 `AGT-16/PRV-13B` 与 provider ADR
 - 任务数：21
 - C1 开始门禁：`CEF-15`、`BUX-18`、`SDK-14`、`MED-19`、`PRV-08`
 - 一期产品门禁：`REL-01`、`CNT-10`、`CEF-15`、`PRV-12`
@@ -31,8 +31,8 @@
 | CNT-18 | DONE | CNT-17 | `crates/crayon-app-runtime/**`,`crates/crayon-page-data/**`,`crates/crayon-content-extract/**`,`crates/crayon-content-markdown/**`,`browser/cef-shell/**` | 接通 Browser 验证 facts → owner → 正文提取 → Markdown 的生产调用链 | CT-001..008；导航/取消/关闭/背压 E2E | R1 |
 | CNT-18e | VERIFIED | CNT-18d | `browser/cef-shell/src/{macos,windows}`,相邻 adapter tests | 修复合法近 64KiB snapshot chunk 因 CHV1 framing overhead 失效且请求静默悬挂 | CT-002/007；大 chunk 分批、顺序、terminal、真 CEF 100KiB | R1 |
 | CNT-19 | DONE | CNT-18,CNT-08 | `browser/shared-ui/page-tools/**`,`browser/cef-shell/src/browser/**`,locales | 增加用户入口并接通预览、复制、保存、取消、覆盖与失败反馈 | CT-005/006；真实菜单、剪贴板、文件对话框 | R1 |
-| CNT-20 | VERIFIED | CNT-19,CNT-18e | `tests/e2e/desktop/**`,`tests/security/content/**`,`tests/perf/content/**`,`test-support/**` | 用真实 CEF 本地站点 fixture 完成网页→Markdown 产品 E2E、安全和 UI delay/RSS 回归 | CT-001..008；macOS/Windows Debug/Release | R1 |
-| CNT-21 | TODO | CNT-20,PRV-13A | `docs/current/**`,`docs/plans/**`,`tests/**` | 一期网页 Markdown 产品层总 Review，关闭 CNT-08 真实 UI 缺口 | P0/P1=0；两平台证据；无页面触发写入 | R1 |
+| CNT-20 | VERIFIED | CNT-19,CNT-18e | Windows platform adapter + `tests/e2e/desktop/**`,`tests/security/content/**`,`tests/perf/content/**` | W1 装配 Windows content-host/平台 UI，W2 用真实 CEF fixture 完成网页→Markdown E2E、安全和 UI delay/RSS | CT-001..008；Windows Debug/Release | R1 |
+| CNT-21 | TODO | CNT-20W2,PRV-13AW | `docs/current/**`,`docs/plans/**`,`tests/**` | `CNT-21W` 做 Windows 首发网页 Markdown 产品 Review；macOS addendum 后续独立记录 | P0/P1=0；Windows 证据；无页面触发写入 | R1 |
 | CNT-11 | TODO | CNT-21,AGT-16,PRV-13B | ADR,`crayon-model-contract/**`,`docs/current/**` | 决定本地/云端/BYOK/provider、地区、费用、保留、密钥和数据发送契约 | `CT-009`; ADR/contract；未决策不开网络 | M2 |
 | CNT-12 | TODO | CNT-11 | `crayon-model-adapter/**`,`crayon-profile/**` | provider registry、安全存储、origin/redirect、发送前 payload preview 和 Fake provider | `CT-009..011`; security/integration | M2 |
 | CNT-13 | TODO | CNT-12 | `crayon-content-ai/document/**`,`crayon-app-runtime/**` | 当前文档摘要、要点、大纲/问答，绑定 snapshot/hash 与引用 | `CT-010..013`; Fake provider | M2 |
@@ -473,3 +473,18 @@ CNT-19 同时涉及 CEF 用户手势状态机、平台剪贴板/文件对话框�
 - 环境记录：Debug 全矩阵首次与仓库 security 门禁并行执行时，单个 perf 进程在 Helper 尚未健康时返回 `snapshot request rejected`；独占重跑 20/20 通过，未复现内容、顺序或资源缺陷。Apple clang-format 全文件 dry-run 仍报告该 733 行既有测试文件的历史格式漂移，本次新增行遵循相邻格式，未做无关全文件重排。
 - Code Review：按 v0.8 复核需求/入口、导航代际、敏感内容、Core crash/backpressure、进程释放、性能采样、Keychain 与测试边界；Harness 只读取 `ps` 进程表、轮询和样本数均有界，不进入产品构建，不改变 schema/授权/文件写入。P0/P1/P2=`0/0/0`。
 - 未覆盖与风险：Windows x64 Debug/Release、原生 clipboard/Save panel 对称回归尚未执行，因此任务保持 `VERIFIED` 而非 `DONE`，CNT-21 仍不能领取。当前 RSS 仅建立 macOS 基线，不代表 QAR-05A 发布阈值；真实 SecureStore/Keychain 继续留到最后可选专项，不属于一期日常启动或本任务门禁。
+
+### CNT-20W1 原子范围（Windows content-host 与产品 UI 装配）
+
+- 状态：`READY`；依赖 `CNT-18e/CNT-20 VERIFIED`、`PLT-W04 DONE`、Windows CEF/MDV 基线可构建。
+- 单一目标：把既有 CHV1/Rust content-host/page Markdown controller 接入 Windows x64 产品壳，新增 Windows named-pipe process/adapter、受控剪贴板/Save As 平台实现和 BrowserApp/CMake/package 装配；本切片只建立真实可达性，不宣称总 E2E/性能完成。
+- 输入/输出：输入仅 Browser-issued、current navigation/generation 的已验证 snapshot facts；输出仅确定性 Markdown 当前缓冲区、用户手势预览/复制/Save As/覆盖/取消/错误。页面脚本不得触发动作，路径不进 URL/DOM/日志。
+- 允许修改：`browser/cef-shell/src/windows/{content_host_process_win,content_host_adapter_win,page_markdown_platform_win,app}*`、Windows CMake/package contract、相邻独立 tests 和本 Roadmap；复用现有跨平台 codec/preview/controller，禁止复制 Rust owner/extract/Markdown。
+- 生命周期/边界：named pipe 当前用户 ACL、child inherited handle 最小化、Job Object/进程 generation、health/kill/reap、frame/队列有界；UI 线程只 enqueue/drain，不阻塞 pipe/文件；导航/close/crash/exit 取消旧请求并逆序释放。保存继续使用既有原子写/覆盖模型，不开放任意文件系统。
+- 验收：旧 Windows 源码下能稳定失败的 source/link/process contract；MSVC Debug/Release `/W4 /WX` build，content-host codec/process/adapter/page-preview 与 package/source CTest；真实 CEF 本地页面手工生成并预览、复制、Save As/取消/覆盖 smoke；`repo-guard`、security、`git diff --check`；v0.9 Review P0/P1=0。
+- 明确不做：20 次性能/全安全矩阵（W2）、CNT-21W、Cast/MDV、真实 DPAPI、公共 schema 变化、macOS 修改或公网网页。
+
+### CNT-20W2 与 CNT-21W 边界
+
+- `CNT-20W2 TODO`：依赖 W1；只补 Windows Debug/Release 真实 CEF 正常/空页/长文/导航/取消/crash/backpressure、原生 clipboard/Save dialog、安全与 20 次约 100KiB first-chunk/complete/UI delay/RSS/退出零残留证据。生产缺陷先加复现测试并回归对应 owner，不在 Harness 绕过。
+- `CNT-21W TODO`：依赖 W2 与 `PRV-13AW`；按 v0.9 做 Windows 网页 Markdown 产品层总 Review，关闭 CNT-08 Windows UI 风险。它不等待 macOS 特有门禁，不开启 Agent/M2；后续 macOS addendum 不改写 Windows 结论。

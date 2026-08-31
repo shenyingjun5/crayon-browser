@@ -525,3 +525,10 @@ MDV-02..06 按"模型层零 IO / 零 CEF 类型"交付后，产品仍不可见�
 - 真实 CEF：macOS arm64 Debug 使用产品 App（固定 mock keychain）手动导航 `crayon://mdv/app.html`，页面只显示本地化“尚未打开文档”，无示例正文；再由地址栏用户手势打开仓库内真实 `docs/reference/蜡笔投屏浏览器_Markdown_Runtime_Extension_Framework_V1.0.md`，成功回到 `crayon://mdv/app.html` 并渲染标题、段落、列表，地址栏/标题未泄露本地路径。
 - 格式与 Review：Xcode `clang-format --dry-run --Werror` 已实际运行；工具对相关文件大量 HEAD 存量风格报错，无法作为本次净增行的 clean gate，本次新增 C++ 行沿用邻接风格且 Debug/Release 均以 warning-as-error 构建。按 `code-review-standard.md` v0.8 复核需求边界、默认态、生命周期、安全/隐私、发布隔离、性能与测试，P0/P1/P2=`0/0/0`。
 - 未覆盖与风险：Windows App 已完成对称源码替换并受 source contract 约束，但 Windows x64 Debug/Release、二进制扫描和真实空态/本地文件回归未在 macOS 主机运行；因此任务为 `VERIFIED`，待 Windows 终端补证后转 `DONE`。真实 Keychain 未使用，也不是本任务门禁。
+
+### Windows 首发收口 slices（REL-05）
+
+- `MDV-25W READY`：在 Windows x64 Debug/Release 重建后运行 source/handler/package contract 和主二进制扫描，真实 CEF 验证手动 `crayon://mdv` 为空态、用户打开真实本地 `.md` 后功能恢复；通过后只关闭 MDV-25 的 Windows 缺口。
+- `MDV-20W READY`：依赖 MDV-25W；执行 Mermaid Full 七类重点图、50-block lazy/cache、Highlight、KaTeX、离线/零公网、亮暗主题、窄宽窗、100%/200% device scale、保存/退出资源回落与 Windows Release package/NOTICE/SPDX 门禁。
+- `MDV-24W TODO`：只补 Windows 首发实际支持矩阵需要的键盘/tooltip/英文与中文文本、原生系统 DPI 和可用的 Narrator/IME 证据；环境不可用项如实记 `NOT_RUN`，不阻塞不宣称的辅助能力，但必须进入候选已知限制。
+- 三个 slice 均不得等待或冒充原生 macOS x64、VoiceOver/Keychain、公证或 macOS 安装包；Windows 首发后再补 macOS 特有 addendum，不改写既有证据。

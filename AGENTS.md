@@ -29,7 +29,7 @@
 
 <!-- project-memory:begin -->
 - 稳定事实：Workspace 为 `crayon-browser-core` + `crates/*`（Rust）与 `browser/*`（C++17 共享层 + CEF 壳）；Roadmap 的 `src/**` 映射 `browser/cef-shell/src/**`。
-- 平台顺序（用户决策，2026-08-22）：macOS 先行跑通，Windows 负责最终产品装配与平台回归；具体完成状态只看平台/Roadmap 证据。
+- 平台顺序（用户决策，2026-08-31，取代 2026-08-22 顺序）：Windows 10/11 x64 先完成三大闭环与发布候选；已有 macOS arm64 共享实现/证据保留，签名、公证、Keychain、原生生命周期和打包等 macOS 特有门禁后续验证。具体状态只看平台/Roadmap 证据，两个平台不能互相替代。
 - Rosetta 边界：arm64 Mac 上的 x64 产物只做短启停 smoke；x64 长稳必须使用原生 x64 硬件。
 - Keychain 边界（用户决策，2026-08-23）：Chromium Cookie 加密使用产品语义 `use-mock-keychain`；macOS Keychain 只由 `SecureStore` 在用户真实保存/读取机密时访问。
 - Cast-SDK 只允许 `crayon-cast-adapter` 依赖；浏览器发现 SDK 公共能力缺口时先走 SDK Roadmap/API/版本交付，不在本仓临时复制实现。

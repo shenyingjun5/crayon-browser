@@ -1,10 +1,10 @@
 # REL 第一期三大闭环发布 Roadmap
 
 - 版本：`release-v1-scope`
-- 日期：2026-08-30
-- 状态：`REL-01/02 DONE`；`REL-03/04 TODO`
-- 任务数：4
-- 发布范围：Windows x64、macOS arm64；实现与验证顺序为 macOS arm64 先行、Windows x64 同一期回归
+- 日期：2026-08-31
+- 状态：`REL-01/02/05 DONE`；`REL-03/04 TODO`
+- 任务数：5
+- 当前发布候选：Windows 10/11 x64 首发；已有 macOS arm64 共享实现/证据保留，签名、公证、Keychain、平台生命周期与打包等 macOS 特有门禁后续独立验证，不阻塞 Windows 候选
 - 第一期开关：网页 Markdown、本地 Markdown Runtime、LAN Direct/Relay 与外部客户端交接开启；Agent/CLI/MCP、Workflow、Capability Hub、Partner Cast、模型与 HarmonyOS 关闭
 
 ## 1. 一期完成口径
@@ -15,7 +15,7 @@
 2. 真实网页中经用户输入与播放推进验证的媒体可选择局域网接收端，完成 Direct/Relay、控制与停止；不满足条件时显式拒绝或经用户确认交接外部客户端。
 3. 用户可打开本地 `.md`，使用源码/预览/分栏、编辑工具栏与离线 P0 Runtime，并以原子写和外部修改冲突保护保存。
 
-完成不以模型类、Fake 或独立 Harness 存在为准。三个闭环都必须从真实 CEF 产品入口进入，在 macOS arm64 与 Windows x64 发布候选包取得自动化、实机、性能、安全、长稳、安装/升级/回滚证据，最终经 QAR-16 Go/NoGo。
+完成不以模型类、Fake 或独立 Harness 存在为准。三个闭环都必须从真实 Windows x64 CEF 产品入口进入，在同一个候选包取得自动化、ADB 接收端实机、性能、安全、长稳、安装/升级/回滚证据，最终经 `QAR-16W` Go/NoGo。macOS 已有共享实现和 arm64 证据不得回退，但 macOS 特有门禁不作为本阶段 Windows 候选的依赖。
 
 ## 2. 一期明确边界
 
@@ -24,6 +24,7 @@
 - 网页 Markdown 不包含隐藏/跨源正文、Cookie、Authorization、DOM/HTML/CDP 句柄；页面脚本不能触发预览、复制或文件写入。
 - 本地 MDV 仍是用户能力，不进入 CAAP/tool registry，不开放任意文件系统。
 - macOS 第一期支持 Apple Silicon。原生 Intel Mac/x64 长稳在取得硬件前标记 `NOT_IN_RELEASE`，不得把 Rosetta 证据写成原生支持；若产品决定宣称 Universal/Intel 支持，QAR-10/15/16 必须追加原生 x64 门禁。
+- Windows 候选不得宣称 macOS 已发布；macOS 的签名/公证、Keychain、原生生命周期、安装/升级/回滚和最终 Go/NoGo 保持 `TODO/NOT_IN_RELEASE`，后续补证时不能改写 Windows 已有证据。
 
 ## 3. 第二期统一后移
 
@@ -42,8 +43,9 @@
 |---|---|---|---|---|
 | REL-01 | DONE | 用户范围决策、current/模块 Roadmap | 冻结一期三大闭环、平台顺序、第二期边界，并拆除核心 QAR 对 Agent 的错误硬依赖 | Roadmap/索引一致；任务数一致；Review P0/P1=0 |
 | REL-02 | DONE | REL-01 | 对 CEF 产品调用图做一次只读装配审计，列出只有模型/测试而无生产调用方的 CNT、Cast、MDV 与浏览器基础模块，并冻结一期 feature flag 默认值 | 入口→owner→adapter→平台调用图；无“DONE 即已装配”推断；无生产改动 |
-| REL-03 | TODO | CNT-21,PLT-M05,MDV-20,MDV-25,MRT-09,PRV-13A | 聚合 macOS arm64 三闭环候选包证据与支持矩阵，关闭可关闭的 VERIFIED 状态 | 三闭环真实 CEF；签名包；P0/P1=0；Intel 明确 NOT_IN_RELEASE 或补证据 |
-| REL-04 | TODO | REL-03,PLT-W05,PLT-19,QAR-01/02A/03/04/05A/06/07/08A/09..12/14/15 | 聚合 Windows x64 对称回归、发布门禁与一期已知限制，向 QAR-16 提交 Go/NoGo 输入 | Windows/macOS 证据可追踪；关闭功能默认 off；回滚 Runbook |
+| REL-03 | TODO | CNT-21W,PLT-W05,MDV-20W,MDV-25W,MRT-09W,PRV-13AW | 聚合 Windows x64 三闭环真实产品证据与支持矩阵，关闭 Windows 可关闭的 VERIFIED 状态 | 三闭环真实 CEF；ADB 正式接收端；P0/P1=0；macOS 特有门禁明确 NOT_IN_RELEASE |
+| REL-04 | TODO | REL-03,PLT-19W,QAR-01W/02AW/03W/04W/05AW/06W/07W/08AW/09/11W/12W/14W/15W | 聚合 Windows x64 发布门禁与一期已知限制，向 `QAR-16W` 提交 Go/NoGo 输入并形成可发布候选 | Windows 证据可追踪；关闭功能默认 off；artifact/SBOM/回滚 Runbook |
+| REL-05 | DONE | 用户 2026-08-31 平台顺序决策、当前 PRD §7、REL-02 | 将一期收口顺序改为 Windows x64 首发候选，拆出 Windows 原子装配/发布门禁并后置 macOS 特有验证 | 不改生产行为；Roadmap/索引/总数一致；Review P0/P1=0 |
 
 ## REL-01 完成记录（2026-08-30）
 
@@ -73,3 +75,19 @@
 - 验证：关键符号非测试调用方 `rg`、CEF/CMake source/link 审计、`cargo tree -p crayon-app-runtime -e normal`、任务计数/链接检查、`cargo run -p repo-guard -- scan --root .` 与 `git diff --check`；具体最终结果以本原子提交记录为准。
 - Code Review：按 v0.8 复核需求/边界、状态真实性、架构依赖、安全/隐私、发布默认面和任务唯一映射；本任务不改生产代码，P0/P1/P2=0/0/0。
 - 未覆盖：没有运行 CEF、Cast、MDV 真机、性能或发布验证；这些能力仍由上述实现任务、PRV-13A、MRT-09、QAR 与 REL-03/04 取得证据。
+
+## REL-05 原子范围（Windows x64 首发候选顺序）
+
+- 状态：`DONE`；依赖 `REL-02 DONE` 与用户 2026-08-31 明确决策。
+- 单一目标：只重排一期平台依赖和原子切片，使 Windows x64 三闭环、质量与打包可以在不等待 macOS 特有门禁时形成独立候选；不改变三闭环行为、安全边界或既有平台证据。
+- 允许修改：根 `AGENTS.md` 项目记忆、总/current/plan 索引、REL/CNT/PLT/MDV/MRT/PRV/QAR Roadmap；禁止修改生产/测试代码、schema、依赖、构建脚本和历史完成证据。
+- 必须冻结：`CNT-20W1/W2 -> CNT-21W`；`PLT-W05a..f -> PLT-19W`；`MDV-20W/25W -> MRT-09W`；`PRV-13AW`；`QAR-01W..16W` 的 Windows 候选路径。macOS 特有验证保留原任务或 M slice，状态如实为 `TODO/NOT_IN_RELEASE`。
+- 验收：Windows 候选不存在对 `PLT-M05b4..b6/M05c`、QAR-10 或 macOS 签名/公证/Keychain 的硬依赖；总任务数按新增 REL-05 增加 1；`repo-guard`、`scripts/check.ps1 fast`、`git diff --check` PASS；v0.9 Review P0/P1=0。
+- 明确不做：不把 macOS 已有 Debug/Release/真 CEF 证据删除或改写，不宣称 macOS 发布；不运行构建、真机、性能、长稳或打包，不开始 `CNT-20W1` 生产实现。
+
+### REL-05 完成记录（2026-08-31，Windows x64）
+
+- 改动：冻结 `CNT-20W1/W2 -> CNT-21W`、`PLT-W05a..f -> PLT-19W`、`MDV-20W/24W/25W -> MRT-09W`、`PRV-13AW` 与 QAR Windows slices；Windows 候选不再依赖 macOS b4..b6/M05c、QAR-10、签名/公证、Keychain 或 macOS 生命周期门禁；总任务数 286→287。
+- 验证：基于合并提交 `7b8fe22`，`cargo run --quiet -p repo-guard -- scan --root .` 退出码 0、3.4 秒、PASS（RG-001..009 适用项通过，RG-003/004 仅既有 warning）；`& .\scripts\check.ps1 fast` 退出码 0、217.5 秒、PASS；`git diff --check` 退出码 0、PASS。
+- Code Review：按 v0.9 从需求/边界、状态真实性、依赖图、平台证据隔离、安全/隐私、测试证据与可维护性独立复核；关闭 QAR-09 旧 `QAR-01` 依赖和总 Roadmap CNT 过期摘要后，P0/P1/P2/P3=`0/0/0/0`，结论 `APPROVE`。
+- 未覆盖与风险：本原子任务不改生产代码，未运行 CEF 构建、真机、性能、长稳、安装或打包；这些证据按 Windows 任务图继续取得。macOS 特有门禁如实后置，不能由 Windows 结果替代。

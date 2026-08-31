@@ -20,7 +20,7 @@
 | PRV-10 | MED-18,SDK-12 | `docs/current/threat-model.md` | 资产/信任边界/威胁/缓解/残余风险，覆盖网页、IPC/LAN、入站 CAAP/MCP、语义动作、Workflow/Challenge、出站 connector、模型与供应链；模块实现后的专项 Review 继续增补 | 安全用例映射无缺口；专项 Review | S0 |
 | PRV-11 | DONE | PRV-04,PRV-05,PRV-07,PRV-09,PRV-10 | `tests/security/privacy` | 磁盘/日志/DTO/网络/receipt/cache/trace/checkpoint/Skill/connector LeakScanner 与 Profile 全存储扫描 | PV 全集、RL-014、AG-011、适用 WF/HB；零秘密 | S3 |
 | PRV-12 | DONE | PRV-10,PRV-11 | `tools/repo-guard` | secret/debug/unsafe route/自动广告行为静态门禁 | 故意违规样本失败；Release 零例外 | S2 |
-| PRV-13A | PRV-11,PRV-12,CNT-20,PLT-M05b6,MDV-20 | Review/数据流文档 | 一期网页 Markdown、LAN 投屏、本地 MDV、Profile/平台数据矩阵与清理限制；修 P0/P1 | core security/desktop tests；无虚假隐私承诺 | R1 |
+| PRV-13A | PRV-11,PRV-12,CNT-20W2,PLT-W05e,MDV-20W | Review/数据流文档 | `PRV-13AW` 先审 Windows 首发网页 Markdown、LAN 投屏、本地 MDV、Profile/平台数据矩阵；macOS addendum 后续 | core security/desktop tests；无虚假隐私承诺 | R1 |
 | PRV-13B | PRV-13A | Review/数据流文档 | 第二期 Agent/Workflow/Hub/Partner/model 启用前的数据分类、发送/保留/凭证与清理门禁；各模块完成后由 QAR-08B 做实现复核 | 契约无循环依赖；未决数据流默认关闭；P0/P1=0 | S3 |
 
 ## 不允许的实现
@@ -264,13 +264,14 @@
 
 ## PRV-13A 原子范围（第一期核心隐私与数据流 Review）
 
-- 状态：`TODO`；依赖 `PRV-11/12`、`CNT-20`、`PLT-M05b6`、`MDV-20` 达到规定状态。
+- 状态：`TODO`；Windows 首发 slice `PRV-13AW` 依赖 `PRV-11/12`、`CNT-20W2`、`PLT-W05e`、`MDV-20W`；macOS addendum 后续等待对应 M slices。
 - 单一目标：只审查第一期三大闭环与浏览/Profile/平台支撑的数据流、保留、清理、失败语义和平台差异，修复 P0/P1；不得等待或假设 Agent、Workflow、Hub、Partner、模型已实现。
 - 必查数据：Browser snapshot/正文/Markdown、预览/剪贴板/保存目标；媒体候选/原始 URL/Relay recipe/token/接收端标识；MDV 源文/本地路径/图片映射/临时文件；Profile、诊断、崩溃、更新和安装数据。
 - 信任边界：页面脚本不能触发导出/写盘或启用投屏；Cookie/Authorization/隐藏或跨源正文不得进入 Markdown、接收端、Relay 路由、日志或持久化诊断；DRM/加密来源 fail closed；MDV 路径不进 URL/DOM/最近文件。
 - 生命周期：导航、tab/Profile/无痕关闭、设备/网络切换、Renderer crash、取消、App 退出后，snapshot/read/Relay session/recipe/MDV generation 与临时文件按契约释放；清理失败显式报告，不把 best-effort 写成已清除。
 - 输出与验收：更新 current threat/data-flow 文档与支持矩阵；运行 core security/desktop tests、LeakScanner、Relay SSRF/rebinding/replay、文件路径和日志扫描；Windows/macOS 差异逐项记录；Review P0/P1=0，P2 必须有任务 ID。
 - 明确不做：CAAP replay/prompt injection/confused deputy、Workflow checkpoint/Skill、Partner OAuth/connector、provider payload；这些只在第二期 `PRV-13B` 与 QAR-08B 开启对应 feature 后审查。
+- `PRV-13AW` 通过可解锁 Windows QAR-08AW 与 CNT-21W，不要求 macOS 签名/公证/Keychain/原生生命周期；结论只适用于 Windows 候选。后续 macOS addendum 复用同一数据分类并补平台差异，不改写 AW 证据。
 
 ## PRV-13B 第二期边界
 

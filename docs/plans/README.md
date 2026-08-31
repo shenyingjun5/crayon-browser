@@ -20,7 +20,7 @@
 
 | 模块 | Roadmap | 当前目标 | 关键起点 |
 |---|---|---|---|
-| REL | [release-v1-roadmap.md](release-v1-roadmap.md) | 第一期网页 Markdown、LAN 投屏、本地 Markdown 编辑三大闭环与发布范围 | `REL-01/02 DONE`；真实装配图见 current 审计，macOS arm64 先行 |
+| REL | [release-v1-roadmap.md](release-v1-roadmap.md) | 第一期网页 Markdown、LAN 投屏、本地 Markdown 编辑三大闭环与发布范围 | `REL-01/02/05 DONE`；Windows x64 首发候选顺序已冻结 |
 | BRD | [brand-assets-roadmap.md](brand-assets-roadmap.md) | 品牌图标母版、跨平台确定性资产与接入门禁 | `BRD-01..04 DONE` |
 | FND | [foundation-migration-roadmap.md](foundation-migration-roadmap.md) | Workspace、契约、质量入口与仓库基线 | 20 个原子任务 `DONE` |
 | MED | [media-policy-relay-roadmap.md](media-policy-relay-roadmap.md) | 媒体观察、策略、LAN Relay、外部客户端交接迁移 | `MED-01..19 DONE` |
@@ -29,7 +29,7 @@
 | MDV | [markdown-viewer-roadmap.md](markdown-viewer-roadmap.md) | 本地 Markdown Runtime：查看/编辑/保存、图标工具栏、图片与 Mermaid Full 离线扩展 | 基线、工具栏与 Mermaid 已生产可达；`MDV-20/24/25 VERIFIED`，生产 fixture 已清除，待 Windows x64 总回归 |
 | MRT | [markdown-runtime-roadmap.md](markdown-runtime-roadmap.md) | Markdown Runtime Extension Framework：闭合扩展 API、Highlight/KaTeX 与后续图表/演示门禁 | `MRT-01..08 DONE`（MRT-06 Windows blocker 修复与真机复验已收口，2026-08-29 合并）；`MRT-09..19` 分波次推进或仅做 gap analysis |
 | SDK | [cast-sdk-integration-roadmap.md](cast-sdk-integration-roadmap.md) | 固定源码 Cast-SDK facade、发现、连接和控制；后续 Partner Cast facade | `SDK-01..14 DONE`；`SDK-15/16` 等 HUB/外部已批准 API |
-| PLT | [desktop-platform-adapters-roadmap.md](desktop-platform-adapters-roadmap.md) | Windows/macOS 存储、网络、生命周期、更新和客户端交接 | `PLT-01/02/W04/M04 DONE`；`PLT-M05 IN_PROGRESS`，`PLT-W05 TODO` |
+| PLT | [desktop-platform-adapters-roadmap.md](desktop-platform-adapters-roadmap.md) | Windows/macOS 存储、网络、生命周期、更新和客户端交接 | `PLT-01/02/W04/M04 DONE`；`PLT-M05 IN_PROGRESS`（macOS 后续切片暂缓），`PLT-W05 READY` |
 | PRV | [privacy-security-roadmap.md](privacy-security-roadmap.md) | Profile、隐私、安全、日志和删除语义 | `PRV-01..12` 已完成或 VERIFIED；一期核心 `PRV-13A`、第二期扩展 `PRV-13B` |
 | CNT | [content-intelligence-roadmap.md](content-intelligence-roadmap.md) | 页面数据/Markdown 与第二阶段模型总结 | C1 数据面 `CNT-01..10 DONE/VERIFIED`；一期产品装配 `CNT-17..19 DONE`、`CNT-20 VERIFIED`（macOS 闭合、Windows 最后回归）、`CNT-21 TODO`；`CNT-11..16` 第二期 |
 | AGT | [agent-access-roadmap.md](agent-access-roadmap.md) | CAAP、tool registry、CLI/MCP、高性能读页和授权操作 | A0 完成；`AGT-07/15 VERIFIED`，`AGT-12C/13/14` 按装配依赖后续推进 |
@@ -37,10 +37,10 @@
 | WFL | [workflow-learning-roadmap.md](workflow-learning-roadmap.md) | Challenge 接管、Workflow Learning、个人 Site Skill、健康与受控修复 | `WFL-01/02/03/04/06/07 VERIFIED` |
 | HUB | [capability-hub-roadmap.md](capability-hub-roadmap.md) | Capability Registry/Router、入站发现与出站 Partner connector | `HUB-01..06 DONE`；`HUB-07+ 待依赖` |
 | HM | [harmony-browser-roadmap.md](harmony-browser-roadmap.md) | 鸿蒙电脑 PC 形态 ArkUI/ArkWeb 技术预览 | `HM-01`，后续启动 |
-| QAR | [quality-release-roadmap.md](quality-release-roadmap.md) | Windows/macOS 构建、真实设备、性能、长稳和发布门禁 | 核心 `QAR-02A/05A/08A` 与第二期 feature `02B/05B/08B` 已拆分 |
+| QAR | [quality-release-roadmap.md](quality-release-roadmap.md) | Windows/macOS 构建、真实设备、性能、长稳和发布门禁 | Windows 核心 `QAR-02AW/05AW/08AW`；第二期 feature `02B/05B/08B`；macOS 特有门禁后置 |
 | RNM | [naming-migration-roadmap.md](naming-migration-roadmap.md) | `get-video` → `crayon-browser` 仓库、包、README、GitHub 与本地路径迁移 | `RNM-01..08 DONE` |
 
-当前共 285 个活跃任务，212 个唯一当前测试用例。新增任务来自 `REL-01..04`、`CNT-17..21`、`PRV-13A/B` 对原 PRV-13 的分拆、`QAR-02/05/08` 的 A/B 分拆，以及 REL-02 发现的 `MDV-25` 生产 fixture 清理；PLT-M05b1..b6 为 PLT-M05 内部原子切片，不重复计入模块顶层任务数。MDV 的 `MDV-14..20` 专注 Mermaid Full，`MDV-21..24` 专注编辑器工具栏，`MDV-25` 负责 Release 生产隔离；MRT-09 P0 Runtime 总 Review属于一期，MRT-10..19 属第二期。Linux、浏览器 WebRTC/采集/编码仍不计入活跃范围。
+当前共 287 个活跃任务，212 个唯一当前测试用例。新增任务来自 `REL-01..05`、`CNT-17..21`、`PRV-13A/B` 对原 PRV-13 的分拆、`QAR-02/05/08` 的 A/B 分拆、REL-02 发现的 `MDV-25` 生产 fixture 清理，以及规范治理 `FND-13`；PLT-M05/PLT-W05 和 Windows-first W slices 为既有顶层任务的内部原子切片，不重复计数。MDV 的 `MDV-14..20` 专注 Mermaid Full，`MDV-21..24` 专注编辑器工具栏，`MDV-25` 负责 Release 生产隔离；MRT-09 P0 Runtime 总 Review 属于一期，MRT-10..19 属第二期。Linux、浏览器 WebRTC/采集/编码仍不计入活跃范围。
 
 ## 4. 当前领取队列
 
@@ -48,7 +48,7 @@
 
 | 顺序 | 任务 | 状态 | 说明 |
 |---:|---|---|---|
-| 1 | `PLT-M05b4` | READY | M05b3 DONE；使用 ADB 在线正式接收端验证真实 Desktop Host 的 clear fixture Direct 发现、连接、投送、控制与停止 |
+| 1 | `CNT-20W1` | READY | Windows content-host/process/platform UI 与真实 CEF 网页 Markdown 产品装配 |
 
 ### 平台收口与待拆装配
 
@@ -57,8 +57,8 @@
 | `MDV-20` | VERIFIED | 仅缺 Windows x64 Mermaid Full 发布回归；不得改写 macOS 已有证据 |
 | `MDV-24` | VERIFIED | 主矩阵已闭合；Narrator、中文 IME、原生 200% DPI、原生 macOS x64 仍待补 |
 | `MRT-09` | TODO | 等 `MDV-25` 清除生产 fixture 后执行 P0 Runtime 总 Review |
-| `PLT-M05b3..b6/M05c` | READY/TODO | `M05b1/M05b2 DONE`；macOS SDK→Direct→Relay→拒绝/交接→资源稳定性，严格串行 |
-| `PLT-W05` | TODO | macOS 闭环缺陷关闭后做 Windows 对称装配；领取前按切片补齐原子范围与设备条件 |
+| `PLT-W05a..f` | READY/TODO | Windows media-host/Cast UI→ADB Direct→Relay→拒绝/交接→100 次稳定性，严格串行 |
+| `PLT-M05b4..b6/M05c` | TODO | macOS 特有真机与生命周期验证后置；不阻塞 Windows 候选，不改写已有 macOS 证据 |
 
 ### 第二期与依赖阻塞
 
