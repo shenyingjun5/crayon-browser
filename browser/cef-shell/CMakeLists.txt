@@ -233,6 +233,10 @@ if(OS_MAC)
       src/macos/content_host_adapter_mac.h
       src/macos/content_host_process_mac.cc
       src/macos/content_host_process_mac.h
+      src/macos/media_host_adapter_mac.cc
+      src/macos/media_host_adapter_mac.h
+      src/macos/media_host_process_mac.cc
+      src/macos/media_host_process_mac.h
       src/macos/main_mac.mm)
   list(APPEND crayon_macos_sources
        src/macos/page_markdown_platform_mac.h
@@ -272,10 +276,16 @@ if(OS_MAC)
   endif()
   set(crayon_content_host_cargo_binary
       "${crayon_content_host_target_dir}/${crayon_content_host_triple}/${crayon_content_host_profile}/crayon-content-host")
+  set(crayon_media_host_cargo_binary
+      "${crayon_content_host_target_dir}/${crayon_content_host_triple}/${crayon_content_host_profile}/crayon-media-host")
   set(crayon_content_host_binary
       "${CMAKE_CURRENT_BINARY_DIR}/content-host-stage/crayon-content-host")
+  set(crayon_media_host_binary
+      "${CMAKE_CURRENT_BINARY_DIR}/media-host-stage/crayon-media-host")
   set(crayon_bundled_content_host
       "${CRAYON_MACOS_APP}/Contents/Helpers/crayon-content-host")
+  set(crayon_bundled_media_host
+      "${CRAYON_MACOS_APP}/Contents/Helpers/crayon-media-host")
   file(
     GLOB_RECURSE crayon_content_host_rust_sources CONFIGURE_DEPENDS
     "${PROJECT_SOURCE_DIR}/crates/*.rs"
@@ -283,25 +293,30 @@ if(OS_MAC)
     "${PROJECT_SOURCE_DIR}/third_party/cast-sdk/*.rs"
     "${PROJECT_SOURCE_DIR}/third_party/cast-sdk/*/Cargo.toml")
   add_custom_command(
-    OUTPUT "${crayon_content_host_binary}"
+    OUTPUT "${crayon_content_host_binary}" "${crayon_media_host_binary}"
     COMMAND
       "${CMAKE_COMMAND}" -E env
       "CARGO_TARGET_DIR=${crayon_content_host_target_dir}"
       "${CRAYON_CARGO_EXECUTABLE}" build -p crayon-app-runtime --bin
-      crayon-content-host --target "${crayon_content_host_triple}"
+      crayon-content-host --bin crayon-media-host --target
+      "${crayon_content_host_triple}"
       ${crayon_content_host_profile_argument}
     COMMAND "${CMAKE_COMMAND}" -E make_directory
             "${CMAKE_CURRENT_BINARY_DIR}/content-host-stage"
+            "${CMAKE_CURRENT_BINARY_DIR}/media-host-stage"
     COMMAND "${CMAKE_COMMAND}" -E copy "${crayon_content_host_cargo_binary}"
             "${crayon_content_host_binary}"
+    COMMAND "${CMAKE_COMMAND}" -E copy "${crayon_media_host_cargo_binary}"
+            "${crayon_media_host_binary}"
     DEPENDS
       "${PROJECT_SOURCE_DIR}/Cargo.toml"
       "${PROJECT_SOURCE_DIR}/Cargo.lock"
       ${crayon_content_host_rust_sources}
     WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
-    COMMENT "Building the bundled Rust content host"
+    COMMENT "Building the bundled Rust content and media hosts"
     VERBATIM)
   add_custom_target(crayon_content_host DEPENDS "${crayon_content_host_binary}")
+  add_custom_target(crayon_media_host DEPENDS "${crayon_media_host_binary}")
 
   add_executable(${CRAYON_BROWSER_TARGET} MACOSX_BUNDLE
                  ${crayon_macos_sources} ${crayon_macos_resources})
@@ -319,9 +334,11 @@ if(OS_MAC)
   target_include_directories(${CRAYON_BROWSER_TARGET}
                              PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
   add_dependencies(${CRAYON_BROWSER_TARGET} libcef_dll_wrapper
-                   crayon_content_host)
+                   crayon_content_host crayon_media_host)
   set_property(TARGET ${CRAYON_BROWSER_TARGET} APPEND PROPERTY LINK_DEPENDS
                "${crayon_content_host_binary}")
+  set_property(TARGET ${CRAYON_BROWSER_TARGET} APPEND PROPERTY LINK_DEPENDS
+               "${crayon_media_host_binary}")
   target_link_libraries(${CRAYON_BROWSER_TARGET}
                         PRIVATE libcef_dll_wrapper ${CEF_STANDARD_LIBS}
                                 crayon::browser-new-tab
@@ -348,6 +365,8 @@ if(OS_MAC)
             "${CRAYON_MACOS_APP}/Contents/Helpers"
     COMMAND "${CMAKE_COMMAND}" -E copy_if_different
             "${crayon_content_host_binary}" "${crayon_bundled_content_host}"
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "${crayon_media_host_binary}" "${crayon_bundled_media_host}"
     VERBATIM)
 
   set(crayon_macos_helper_names "")
@@ -423,6 +442,7 @@ if(OS_MAC)
       "${CMAKE_COMMAND}" "-DCRAYON_APP_BUNDLE=${CRAYON_MACOS_APP}"
       "-DCRAYON_HELPER_MANIFEST=${CMAKE_CURRENT_BINARY_DIR}/crayon-macos-helper-apps.txt"
       "-DCRAYON_CONTENT_HOST=${crayon_bundled_content_host}"
+      "-DCRAYON_MEDIA_HOST=${crayon_bundled_media_host}"
       "-DCRAYON_CEF_SHELL_SOURCE=${CMAKE_CURRENT_SOURCE_DIR}" -P
       "${CMAKE_CURRENT_SOURCE_DIR}/macos_adhoc_sign.cmake"
     COMMENT "Ad-hoc signing CrayonBrowser bundles for the macOS sandbox"
@@ -462,8 +482,40 @@ if(OS_MAC)
               crayon::cef-shell-core-client crayon::cef-shell-ipc)
     add_test(NAME content_host_adapter_mac
              COMMAND crayon_content_host_adapter_mac_test)
+
+    add_executable(
+      crayon_media_host_process_mac_test
+      tests/media_host_process_mac_test.cc
+      src/macos/media_host_process_mac.cc)
+    target_compile_features(crayon_media_host_process_mac_test
+                            PRIVATE cxx_std_17)
+    target_include_directories(crayon_media_host_process_mac_test
+                               PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_definitions(
+      crayon_media_host_process_mac_test
+      PRIVATE CRAYON_MEDIA_HOST_TEST_PATH="${crayon_media_host_binary}")
+    target_link_libraries(
+      crayon_media_host_process_mac_test
+      PRIVATE crayon::cef-shell-core-client crayon::cef-shell-ipc)
+    add_dependencies(crayon_media_host_process_mac_test crayon_media_host)
+    add_test(NAME media_host_process_mac COMMAND crayon_media_host_process_mac_test)
+
+    add_executable(
+      crayon_media_host_adapter_mac_test
+      tests/media_host_adapter_mac_test.cc
+      src/macos/media_host_adapter_mac.cc
+      src/macos/media_host_process_mac.cc)
+    target_compile_features(crayon_media_host_adapter_mac_test PRIVATE cxx_std_17)
+    target_include_directories(crayon_media_host_adapter_mac_test
+                               PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(
+      crayon_media_host_adapter_mac_test
+      PRIVATE crayon::cef-shell-core-client crayon::cef-shell-ipc)
+    add_test(NAME media_host_adapter_mac COMMAND crayon_media_host_adapter_mac_test)
     set_tests_properties(content_host_process_mac content_host_adapter_mac
                          PROPERTIES LABELS "cef;shell;macos;content")
+    set_tests_properties(media_host_process_mac media_host_adapter_mac
+                         PROPERTIES LABELS "cef;shell;macos;cast")
 
     add_test(
       NAME macos_cef_shell_source_contract

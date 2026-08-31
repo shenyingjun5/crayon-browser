@@ -71,6 +71,13 @@ if(DEFINED CRAYON_CONTENT_HOST AND NOT "${CRAYON_CONTENT_HOST}" STREQUAL "")
   sign_bundle("${CRAYON_CONTENT_HOST}")
 endif()
 
+if(DEFINED CRAYON_MEDIA_HOST AND NOT "${CRAYON_MEDIA_HOST}" STREQUAL "")
+  if(NOT EXISTS "${CRAYON_MEDIA_HOST}")
+    message(FATAL_ERROR "bundled media host missing: ${CRAYON_MEDIA_HOST}")
+  endif()
+  sign_bundle("${CRAYON_MEDIA_HOST}")
+endif()
+
 sign_bundle("${CRAYON_APP_BUNDLE}")
 message(STATUS
         "Ad-hoc signed ${CRAYON_APP_BUNDLE} (CEF dylibs/framework + embedded helpers) for the macOS sandbox")

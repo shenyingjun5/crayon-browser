@@ -20,13 +20,16 @@ set(cef_framework_binary
     "${cef_framework}/Chromium Embedded Framework")
 set(content_host
     "${CRAYON_APP_BUNDLE}/Contents/Helpers/crayon-content-host")
+set(media_host
+    "${CRAYON_APP_BUNDLE}/Contents/Helpers/crayon-media-host")
 foreach(required_path
         main_executable
         main_plist
         bundled_icon
         cef_framework
         cef_framework_binary
-        content_host)
+        content_host
+        media_host)
   if(NOT EXISTS "${${required_path}}")
     message(FATAL_ERROR "macOS bundle path is missing: ${${required_path}}")
   endif()
@@ -53,6 +56,7 @@ endfunction()
 assert_binary_arch("${main_executable}")
 assert_binary_arch("${cef_framework_binary}")
 assert_binary_arch("${content_host}")
+assert_binary_arch("${media_host}")
 
 if(NOT EXISTS "${CRAYON_HELPER_MANIFEST}")
   message(FATAL_ERROR "macOS helper manifest is missing")

@@ -8,6 +8,7 @@
 #include "crayon/cef_shell_ipc/ipc_channel_contract.h"
 
 bool RunContentHostCodecTests();
+bool RunMediaHostCodecTests();
 
 namespace {
 
@@ -239,7 +240,8 @@ bool HostileStreamInvariants() {
 }  // namespace
 
 int main() {
-  const bool ok = RunContentHostCodecTests() && FrameCodecRoundTrip() &&
+  const bool ok = RunContentHostCodecTests() && RunMediaHostCodecTests() &&
+                  FrameCodecRoundTrip() &&
                   FrameCodecPartialAndBackToBack() && FrameCodecOversizeAndHostileFeed() &&
                   ResetClearsHostileLeftovers() && SecretVerifyAndRotation() &&
                   ConstantTimeEqualsSanity() && ProcessTokenMatrix() && MessageGuardMatrix() &&
