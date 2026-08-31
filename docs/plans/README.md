@@ -48,7 +48,7 @@
 
 | 顺序 | 任务 | 状态 | 说明 |
 |---:|---|---|---|
-| 1 | `PLT-M05b3e` | READY | M05b3d DONE；将 Cast UI 协调器、真实 CEF 按钮/原生 picker 与 candidate、navigation/close/app-exit 生命周期接通 |
+| 1 | `PLT-M05b3e2` | READY | M05b3e1 DONE；接入 macOS 原生 browser-chrome Cast 按钮/picker、产品 drain 与真 CEF navigation/close/app-exit lifecycle |
 
 ### 平台收口与待拆装配
 

@@ -512,9 +512,23 @@ if(OS_MAC)
       crayon_media_host_adapter_mac_test
       PRIVATE crayon::cef-shell-core-client crayon::cef-shell-ipc)
     add_test(NAME media_host_adapter_mac COMMAND crayon_media_host_adapter_mac_test)
+    add_executable(
+      crayon_cast_shell_controller_mac_test
+      tests/cast_shell_controller_mac_test.cc
+      src/macos/cast_shell_controller.cc)
+    target_compile_features(crayon_cast_shell_controller_mac_test
+                            PRIVATE cxx_std_17)
+    target_include_directories(crayon_cast_shell_controller_mac_test
+                               PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(
+      crayon_cast_shell_controller_mac_test
+      PRIVATE crayon::browser-cast-view crayon::cef-shell-ipc)
+    add_test(NAME cast_shell_controller_mac
+             COMMAND crayon_cast_shell_controller_mac_test)
     set_tests_properties(content_host_process_mac content_host_adapter_mac
                          PROPERTIES LABELS "cef;shell;macos;content")
     set_tests_properties(media_host_process_mac media_host_adapter_mac
+                         cast_shell_controller_mac
                          PROPERTIES LABELS "cef;shell;macos;cast")
 
     add_test(
