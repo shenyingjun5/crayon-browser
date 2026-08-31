@@ -7,10 +7,6 @@ description = "Platform-neutral Crayon product runtime composition"
 publish = false
 
 [[bin]]
-name = "crayon-content-host"
-path = "src/bin/crayon-content-host.rs"
-
-[[bin]]
 name = "crayon-media-host"
 path = "src/bin/crayon-media-host.rs"
 

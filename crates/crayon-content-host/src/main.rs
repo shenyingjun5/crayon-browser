@@ -230,8 +230,242 @@ fn main() {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
+mod windows {
+    use crayon_app_runtime::content_host_runtime::ContentHostRuntime;
+    use crayon_ipc_schema::{
+        decode_content_host_message, encode_content_host_message, ContentHostMessage,
+        MAX_CONTENT_HOST_FRAME_BYTES,
+    };
+    use crayon_platform_api::local_agent_ipc::{LocalAgentIpcEndpoint, LocalAgentIpcError};
+    use crayon_platform_windows::local_agent_ipc::{
+        WindowsAgentIpcClient, WindowsAgentIpcEndpoint,
+    };
+    use std::io::{self, Read, Write};
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::{mpsc, Arc};
+    use std::thread::{self, JoinHandle};
+
+    const HEALTH_REQUEST: &[u8; 4] = b"PING";
+    const HEALTH_REPLY: &[u8; 4] = b"PONG";
+
+    pub fn run() -> Result<(), HostProcessError> {
+        let purpose = arguments()?;
+        let health = HealthServer::start(purpose)?;
+        let stdin = io::stdin();
+        let stdout = io::stdout();
+        let mut input = stdin.lock();
+        let mut output = stdout.lock();
+        let mut runtime = ContentHostRuntime::default();
+        loop {
+            let payload = read_frame(&mut input)?.ok_or(HostProcessError::UnexpectedEof)?;
+            let message = decode_content_host_message(&payload)
+                .map_err(|_| HostProcessError::InvalidMessage)?;
+            let request_id = request_id(&message).map(str::to_owned);
+            let shutdown = matches!(message, ContentHostMessage::Shutdown);
+            match runtime.handle(message) {
+                Ok(replies) => write_replies(&mut output, replies)?,
+                Err(error) => {
+                    let request_id = request_id.ok_or(HostProcessError::InvalidState)?;
+                    write_replies(
+                        &mut output,
+                        vec![ContentHostMessage::ErrorReply {
+                            request_id,
+                            code: error.reply_code(),
+                        }],
+                    )?;
+                }
+            }
+            if shutdown {
+                break;
+            }
+        }
+        drop(health);
+        Ok(())
+    }
+
+    fn arguments() -> Result<String, HostProcessError> {
+        let mut arguments = std::env::args().skip(1);
+        if arguments.next().as_deref() != Some("--health-pipe") {
+            return Err(HostProcessError::InvalidArguments);
+        }
+        let purpose = arguments.next().ok_or(HostProcessError::InvalidArguments)?;
+        if arguments.next().is_some() || purpose.is_empty() {
+            return Err(HostProcessError::InvalidArguments);
+        }
+        Ok(purpose)
+    }
+
+    fn request_id(message: &ContentHostMessage) -> Option<&str> {
+        match message {
+            ContentHostMessage::Begin { request_id, .. }
+            | ContentHostMessage::FactBatch { request_id, .. }
+            | ContentHostMessage::Terminal { request_id, .. }
+            | ContentHostMessage::Cancel { request_id }
+            | ContentHostMessage::MarkdownChunk { request_id, .. }
+            | ContentHostMessage::ErrorReply { request_id, .. } => Some(request_id),
+            ContentHostMessage::Navigation { .. }
+            | ContentHostMessage::CloseTab { .. }
+            | ContentHostMessage::Shutdown => None,
+        }
+    }
+
+    fn read_frame(reader: &mut impl Read) -> Result<Option<Vec<u8>>, HostProcessError> {
+        let mut header = [0u8; 4];
+        let mut offset = 0;
+        while offset < header.len() {
+            let read = reader.read(&mut header[offset..])?;
+            if read == 0 {
+                return if offset == 0 {
+                    Ok(None)
+                } else {
+                    Err(HostProcessError::TruncatedFrame)
+                };
+            }
+            offset += read;
+        }
+        let length = u32::from_be_bytes(header) as usize;
+        if length > MAX_CONTENT_HOST_FRAME_BYTES {
+            return Err(HostProcessError::FrameTooLarge);
+        }
+        let mut payload = vec![0; length];
+        reader
+            .read_exact(&mut payload)
+            .map_err(|_| HostProcessError::TruncatedFrame)?;
+        Ok(Some(payload))
+    }
+
+    fn write_replies(
+        writer: &mut impl Write,
+        replies: Vec<ContentHostMessage>,
+    ) -> Result<(), HostProcessError> {
+        for reply in replies {
+            let payload = encode_content_host_message(&reply)
+                .map_err(|_| HostProcessError::InvalidMessage)?;
+            let length =
+                u32::try_from(payload.len()).map_err(|_| HostProcessError::FrameTooLarge)?;
+            writer.write_all(&length.to_be_bytes())?;
+            writer.write_all(&payload)?;
+        }
+        writer.flush()?;
+        Ok(())
+    }
+
+    struct HealthServer {
+        path: Vec<u16>,
+        stop: Arc<AtomicBool>,
+        worker: Option<JoinHandle<()>>,
+    }
+
+    impl HealthServer {
+        fn start(purpose: String) -> Result<Self, HostProcessError> {
+            let stop = Arc::new(AtomicBool::new(false));
+            let worker_stop = Arc::clone(&stop);
+            let (ready_tx, ready_rx) = mpsc::sync_channel(1);
+            let worker = thread::Builder::new()
+                .name("content-host-health".to_owned())
+                .spawn(move || health_loop(purpose, worker_stop, ready_tx))
+                .map_err(|_| HostProcessError::Io)?;
+            let path = ready_rx
+                .recv()
+                .map_err(|_| HostProcessError::Io)?
+                .map_err(|_| HostProcessError::Io)?;
+            Ok(Self {
+                path,
+                stop,
+                worker: Some(worker),
+            })
+        }
+    }
+
+    impl Drop for HealthServer {
+        fn drop(&mut self) {
+            self.stop.store(true, Ordering::Release);
+            let _ = WindowsAgentIpcClient::connect(&self.path);
+            if let Some(worker) = self.worker.take() {
+                let _ = worker.join();
+            }
+        }
+    }
+
+    fn health_loop(
+        purpose: String,
+        stop: Arc<AtomicBool>,
+        ready: mpsc::SyncSender<Result<Vec<u16>, LocalAgentIpcError>>,
+    ) {
+        let mut endpoint = match WindowsAgentIpcEndpoint::new(&purpose) {
+            Ok(endpoint) => endpoint,
+            Err(_) => {
+                let _ = ready.send(Err(LocalAgentIpcError::NotRunning));
+                return;
+            }
+        };
+        if let Err(error) = endpoint.start() {
+            let _ = ready.send(Err(error));
+            return;
+        }
+        let path = endpoint.pipe_path_for_connect();
+        if ready.send(Ok(path)).is_err() {
+            let _ = endpoint.stop();
+            return;
+        }
+        while !stop.load(Ordering::Acquire) {
+            let Ok(mut client) = endpoint.accept_verified_client() else {
+                break;
+            };
+            if stop.load(Ordering::Acquire) {
+                break;
+            }
+            let mut request = [0; 4];
+            if client.read_exact(&mut request).is_ok() && request == *HEALTH_REQUEST {
+                let _ = client.write_all(HEALTH_REPLY);
+            }
+        }
+        let _ = endpoint.stop();
+    }
+
+    #[derive(Debug)]
+    pub enum HostProcessError {
+        InvalidArguments,
+        InvalidMessage,
+        InvalidState,
+        FrameTooLarge,
+        TruncatedFrame,
+        UnexpectedEof,
+        Io,
+    }
+
+    impl From<io::Error> for HostProcessError {
+        fn from(_: io::Error) -> Self {
+            Self::Io
+        }
+    }
+
+    impl std::fmt::Display for HostProcessError {
+        fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter.write_str(match self {
+                Self::InvalidArguments => "content host arguments rejected",
+                Self::InvalidMessage => "content host message rejected",
+                Self::InvalidState => "content host state rejected",
+                Self::FrameTooLarge => "content host frame exceeds limit",
+                Self::TruncatedFrame => "content host frame truncated",
+                Self::UnexpectedEof => "content host control pipe closed before shutdown",
+                Self::Io => "content host local I/O failed",
+            })
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
 fn main() {
-    eprintln!("crayon-content-host is supported on macOS in CNT-18c");
+    if let Err(error) = windows::run() {
+        eprintln!("{error}");
+        std::process::exit(1);
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn main() {
+    eprintln!("crayon-content-host is supported on Windows and macOS");
     std::process::exit(78);
 }

@@ -53,7 +53,7 @@ std::string SingleLine(std::string value, std::size_t max_bytes) {
   return BoundedUtf8(std::move(value), max_bytes);
 }
 
-std::optional<std::uint32_t> PositiveOrdinal(const CefString& value) {
+std::optional<std::uint32_t> PositiveOrdinal(const CefString &value) {
   const std::string text = value.ToString();
   if (text.empty()) return std::nullopt;
   std::uint32_t ordinal = 0;
@@ -122,8 +122,8 @@ bool Hidden(CefRefPtr<CefDOMNode> node) {
 }
 
 bool CollectTableRows(CefRefPtr<CefDOMNode> node,
-                      std::vector<std::vector<std::string>>* rows,
-                      std::size_t depth, std::size_t* remaining_nodes) {
+                      std::vector<std::vector<std::string>> *rows,
+                      std::size_t depth, std::size_t *remaining_nodes) {
   if (depth > kMaxSnapshotDomDepth) return false;
   for (auto current = node; current && rows->size() < 256;
        current = current->GetNextSibling()) {
@@ -159,8 +159,8 @@ bool CollectTableRows(CefRefPtr<CefDOMNode> node,
 std::optional<SnapshotFact> FactFor(CefRefPtr<CefDOMNode> node,
                                     CefRefPtr<CefDOMDocument> document,
                                     std::size_t depth,
-                                    std::size_t* remaining_nodes,
-                                    bool* capacity_exceeded) {
+                                    std::size_t *remaining_nodes,
+                                    bool *capacity_exceeded) {
   if (Hidden(node)) return std::nullopt;
   const std::string tag = Lower(node->GetElementTagName().ToString());
   SnapshotFact fact;
@@ -180,9 +180,9 @@ std::optional<SnapshotFact> FactFor(CefRefPtr<CefDOMNode> node,
     auto parent = node->GetParent();
     fact.ordered = parent && parent->IsElement() &&
                    Lower(parent->GetElementTagName().ToString()) == "ol";
-    auto depth = ListDepth(node);
-    if (!depth) return std::nullopt;
-    fact.depth = *depth;
+    auto list_depth = ListDepth(node);
+    if (!list_depth) return std::nullopt;
+    fact.depth = *list_depth;
     if (fact.ordered) {
       fact.ordinal = ListOrdinal(node);
       if (!fact.ordinal) return std::nullopt;
@@ -222,15 +222,15 @@ std::optional<SnapshotFact> FactFor(CefRefPtr<CefDOMNode> node,
     }
     if (rows.empty() || rows.front().empty()) return std::nullopt;
     const std::size_t columns = rows.front().size();
-    if (std::any_of(rows.begin(), rows.end(), [columns](const auto& row) {
+    if (std::any_of(rows.begin(), rows.end(), [columns](const auto &row) {
           return row.size() != columns;
         })) {
       return std::nullopt;
     }
     fact.kind = SnapshotFactKind::kTable;
     fact.table_columns = static_cast<std::uint16_t>(columns);
-    for (auto& row : rows) {
-      for (auto& cell : row) fact.table_cells.push_back(std::move(cell));
+    for (auto &row : rows) {
+      for (auto &cell : row) fact.table_cells.push_back(std::move(cell));
     }
   } else {
     return std::nullopt;
@@ -241,9 +241,9 @@ std::optional<SnapshotFact> FactFor(CefRefPtr<CefDOMNode> node,
 }
 
 bool Walk(CefRefPtr<CefDOMNode> node, CefRefPtr<CefDOMDocument> document,
-          PageSnapshotCollector* collector, std::uint64_t navigation_id,
-          const std::string& frame_id, std::size_t depth,
-          std::size_t* remaining_nodes) {
+          PageSnapshotCollector *collector, std::uint64_t navigation_id,
+          const std::string &frame_id, std::size_t depth,
+          std::size_t *remaining_nodes) {
   if (depth > kMaxSnapshotDomDepth) return false;
   for (auto current = node; current && collector->active();
        current = current->GetNextSibling()) {
@@ -277,7 +277,7 @@ class CefPageSnapshotRenderer::Session final
     : public CefDOMVisitor,
       public PageSnapshotCollectorSink {
  public:
-  Session(CefPageSnapshotRenderer* owner, CefRefPtr<CefFrame> frame,
+  Session(CefPageSnapshotRenderer *owner, CefRefPtr<CefFrame> frame,
           browser_engine::SnapshotRequest request)
       : owner_(owner),
         frame_(std::move(frame)),
@@ -328,17 +328,17 @@ class CefPageSnapshotRenderer::Session final
   int browser_id() const {
     return frame_ ? frame_->GetBrowser()->GetIdentifier() : 0;
   }
-  const std::string& request_id() const { return request_.request_id.value(); }
+  const std::string &request_id() const { return request_.request_id.value(); }
 
   void OnRendererSnapshotChunk(
-      const browser_engine::SnapshotChunk& chunk) override {
+      const browser_engine::SnapshotChunk &chunk) override {
     if (frame_)
       frame_->SendProcessMessage(PID_BROWSER,
                                  snapshot_ipc::CreateChunkMessage(chunk));
   }
 
   void OnRendererSnapshotTerminal(
-      const browser_engine::SnapshotTerminal& terminal) override {
+      const browser_engine::SnapshotTerminal &terminal) override {
     if (frame_)
       frame_->SendProcessMessage(PID_BROWSER,
                                  snapshot_ipc::CreateTerminalMessage(terminal));
@@ -356,7 +356,7 @@ class CefPageSnapshotRenderer::Session final
     if (owner_) owner_->CompleteSession(request_.request_id.value());
   }
 
-  CefPageSnapshotRenderer* owner_;
+  CefPageSnapshotRenderer *owner_;
   CefRefPtr<CefFrame> frame_;
   browser_engine::SnapshotRequest request_;
   PageSnapshotCollector collector_;
@@ -419,7 +419,7 @@ void CefPageSnapshotRenderer::OnBrowserDestroyed(
   }
 }
 
-void CefPageSnapshotRenderer::CompleteSession(const std::string& request_id) {
+void CefPageSnapshotRenderer::CompleteSession(const std::string &request_id) {
   const auto found = sessions_.find(request_id);
   if (found != sessions_.end()) sessions_.erase(found);
 }

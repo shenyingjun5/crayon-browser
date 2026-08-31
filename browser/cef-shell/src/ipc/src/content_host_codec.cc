@@ -31,12 +31,12 @@ enum class Kind : std::uint8_t {
   kErrorReply,
 };
 
-void SetError(CodecError value, CodecError* error) {
+void SetError(CodecError value, CodecError *error) {
   if (error != nullptr) *error = value;
 }
 
-bool IsValidUtf8(const std::string& value) {
-  const auto* data = reinterpret_cast<const unsigned char*>(value.data());
+bool IsValidUtf8(const std::string &value) {
+  const auto *data = reinterpret_cast<const unsigned char *>(value.data());
   std::size_t index = 0;
   while (index < value.size()) {
     const unsigned char first = data[index++];
@@ -74,7 +74,7 @@ bool IsValidUtf8(const std::string& value) {
   return true;
 }
 
-bool ValidLanguage(const std::string& value) {
+bool ValidLanguage(const std::string &value) {
   return !value.empty() && value.size() <= kMaxLanguageBytes &&
          std::all_of(value.begin(), value.end(), [](unsigned char c) {
            return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
@@ -82,7 +82,7 @@ bool ValidLanguage(const std::string& value) {
          });
 }
 
-bool ValidId(const std::string& value) {
+bool ValidId(const std::string &value) {
   return !value.empty() && value.size() <= kMaxIdBytes &&
          std::all_of(value.begin(), value.end(), [](unsigned char c) {
            return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
@@ -91,7 +91,7 @@ bool ValidId(const std::string& value) {
          });
 }
 
-bool ValidTabId(const std::string& value) {
+bool ValidTabId(const std::string &value) {
   return !value.empty() && value.size() <= kMaxIdBytes &&
          std::all_of(value.begin(), value.end(), [](unsigned char c) {
            return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
@@ -99,14 +99,14 @@ bool ValidTabId(const std::string& value) {
          });
 }
 
-bool ValidFact(const Fact& fact) {
+bool ValidFact(const Fact &fact) {
   if (!IsValidUtf8(fact.text) || fact.text.size() > kMaxFactTextBytes ||
       (fact.url && (!IsValidUtf8(*fact.url) || fact.url->empty() ||
                     fact.url->size() > kMaxUrlBytes)) ||
       (fact.language && !ValidLanguage(*fact.language)) ||
       fact.table_cells.size() > kMaxTableCells ||
       std::any_of(fact.table_cells.begin(), fact.table_cells.end(),
-                  [](const std::string& value) {
+                  [](const std::string &value) {
                     return value.size() > kMaxTableCellBytes ||
                            !IsValidUtf8(value);
                   }))
@@ -163,22 +163,23 @@ class Writer final {
   }
   void U8(std::uint8_t value) { bytes_.push_back(value); }
   void U16(std::uint16_t value) {
-    U8(value >> 8);
-    U8(value);
+    U8(static_cast<std::uint8_t>(value >> 8));
+    U8(static_cast<std::uint8_t>(value));
   }
   void U32(std::uint32_t value) {
-    U8(value >> 24);
-    U8(value >> 16);
-    U8(value >> 8);
-    U8(value);
+    U8(static_cast<std::uint8_t>(value >> 24));
+    U8(static_cast<std::uint8_t>(value >> 16));
+    U8(static_cast<std::uint8_t>(value >> 8));
+    U8(static_cast<std::uint8_t>(value));
   }
   bool U64Nonzero(std::uint64_t value) {
     if (value == 0) return Fail(CodecError::kInvalidValue);
-    for (int shift = 56; shift >= 0; shift -= 8) U8(value >> shift);
+    for (int shift = 56; shift >= 0; shift -= 8)
+      U8(static_cast<std::uint8_t>(value >> shift));
     return true;
   }
   void Bool(bool value) { U8(value ? 1 : 0); }
-  bool String(const std::string& value, std::size_t max, bool allow_empty) {
+  bool String(const std::string &value, std::size_t max, bool allow_empty) {
     if (value.size() > max) return Fail(CodecError::kLengthExceeded);
     if ((!allow_empty && value.empty()) || !IsValidUtf8(value))
       return Fail(CodecError::kInvalidValue);
@@ -186,15 +187,15 @@ class Writer final {
     bytes_.insert(bytes_.end(), value.begin(), value.end());
     return true;
   }
-  bool Id(const std::string& value) {
+  bool Id(const std::string &value) {
     return ValidId(value) ? String(value, kMaxIdBytes, false)
                           : Fail(CodecError::kInvalidValue);
   }
-  bool TabId(const std::string& value) {
+  bool TabId(const std::string &value) {
     return ValidTabId(value) ? String(value, kMaxIdBytes, false)
                              : Fail(CodecError::kInvalidValue);
   }
-  bool OptionalString(const std::optional<std::string>& value,
+  bool OptionalString(const std::optional<std::string> &value,
                       std::size_t max) {
     return String(value.value_or(""), max, true);
   }
@@ -202,7 +203,7 @@ class Writer final {
     if (!error_) error_ = error;
     return false;
   }
-  std::optional<std::vector<std::uint8_t>> Finish(CodecError* error) {
+  std::optional<std::vector<std::uint8_t>> Finish(CodecError *error) {
     if (!error_ && bytes_.size() > kMaxFrameBytes)
       error_ = CodecError::kFrameTooLarge;
     if (error_) {
@@ -219,28 +220,28 @@ class Writer final {
 
 class Reader final {
  public:
-  explicit Reader(const std::vector<std::uint8_t>& bytes) : bytes_(bytes) {}
-  bool U8(std::uint8_t* out) {
-    const auto* p = Take(1);
+  explicit Reader(const std::vector<std::uint8_t> &bytes) : bytes_(bytes) {}
+  bool U8(std::uint8_t *out) {
+    const auto *p = Take(1);
     if (!p) return false;
     *out = p[0];
     return true;
   }
-  bool U16(std::uint16_t* out) {
-    const auto* p = Take(2);
+  bool U16(std::uint16_t *out) {
+    const auto *p = Take(2);
     if (!p) return false;
     *out = (p[0] << 8) | p[1];
     return true;
   }
-  bool U32(std::uint32_t* out) {
-    const auto* p = Take(4);
+  bool U32(std::uint32_t *out) {
+    const auto *p = Take(4);
     if (!p) return false;
     *out = (std::uint32_t(p[0]) << 24) | (std::uint32_t(p[1]) << 16) |
            (std::uint32_t(p[2]) << 8) | p[3];
     return true;
   }
-  bool U64Nonzero(std::uint64_t* out) {
-    const auto* p = Take(8);
+  bool U64Nonzero(std::uint64_t *out) {
+    const auto *p = Take(8);
     if (!p) return false;
     std::uint64_t value = 0;
     for (int i = 0; i < 8; ++i) value = (value << 8) | p[i];
@@ -248,34 +249,34 @@ class Reader final {
     *out = value;
     return true;
   }
-  bool Bool(bool* out) {
+  bool Bool(bool *out) {
     std::uint8_t v = 0;
     if (!U8(&v)) return false;
     if (v > 1) return Fail(CodecError::kInvalidValue);
     *out = v == 1;
     return true;
   }
-  bool String(std::string* out, std::size_t max, bool allow_empty) {
+  bool String(std::string *out, std::size_t max, bool allow_empty) {
     std::uint32_t len = 0;
     if (!U32(&len)) return false;
     if (len > max) return Fail(CodecError::kLengthExceeded);
-    const auto* p = Take(len);
+    const auto *p = Take(len);
     if (!p) return false;
-    std::string value(reinterpret_cast<const char*>(p), len);
+    std::string value(reinterpret_cast<const char *>(p), len);
     if (!IsValidUtf8(value)) return Fail(CodecError::kInvalidUtf8);
     if (!allow_empty && value.empty()) return Fail(CodecError::kInvalidValue);
     *out = std::move(value);
     return true;
   }
-  bool Id(std::string* out) {
+  bool Id(std::string *out) {
     return String(out, kMaxIdBytes, false) &&
            (ValidId(*out) || Reject(CodecError::kInvalidValue));
   }
-  bool TabId(std::string* out) {
+  bool TabId(std::string *out) {
     return String(out, kMaxIdBytes, false) &&
            (ValidTabId(*out) || Reject(CodecError::kInvalidValue));
   }
-  bool OptionalString(std::optional<std::string>* out, std::size_t max) {
+  bool OptionalString(std::optional<std::string> *out, std::size_t max) {
     std::string value;
     if (!String(&value, max, true)) return false;
     *out = value.empty() ? std::nullopt
@@ -287,12 +288,12 @@ class Reader final {
   bool Reject(CodecError error) { return Fail(error); }
 
  private:
-  const std::uint8_t* Take(std::size_t count) {
+  const std::uint8_t *Take(std::size_t count) {
     if (count > bytes_.size() - offset_) {
       Fail(CodecError::kTruncated);
       return nullptr;
     }
-    const auto* value = bytes_.data() + offset_;
+    const auto *value = bytes_.data() + offset_;
     offset_ += count;
     return value;
   }
@@ -300,12 +301,12 @@ class Reader final {
     if (!error_) error_ = error;
     return false;
   }
-  const std::vector<std::uint8_t>& bytes_;
+  const std::vector<std::uint8_t> &bytes_;
   std::size_t offset_ = kHeaderBytes;
   std::optional<CodecError> error_;
 };
 
-bool EncodeFact(Writer* writer, const Fact& fact) {
+bool EncodeFact(Writer *writer, const Fact &fact) {
   if (!ValidFact(fact)) return writer->Fail(CodecError::kInvalidValue);
   writer->U8(static_cast<std::uint8_t>(fact.kind));
   if (!writer->String(fact.text, kMaxFactTextBytes, true) ||
@@ -318,12 +319,12 @@ bool EncodeFact(Writer* writer, const Fact& fact) {
   writer->U32(fact.ordinal.value_or(0));
   writer->U16(fact.table_columns);
   writer->U16(static_cast<std::uint16_t>(fact.table_cells.size()));
-  for (const auto& cell : fact.table_cells)
+  for (const auto &cell : fact.table_cells)
     if (!writer->String(cell, kMaxTableCellBytes, true)) return false;
   return true;
 }
 
-bool DecodeFact(Reader* reader, Fact* fact) {
+bool DecodeFact(Reader *reader, Fact *fact) {
   std::uint8_t kind = 0;
   std::uint32_t ordinal = 0;
   std::uint16_t count = 0;
@@ -358,22 +359,22 @@ Overloaded(Ts...) -> Overloaded<Ts...>;
 
 }  // namespace
 
-std::optional<std::vector<std::uint8_t>> Encode(const Message& message,
-                                                CodecError* error) {
+std::optional<std::vector<std::uint8_t>> Encode(const Message &message,
+                                                CodecError *error) {
   const Kind kind = std::visit(
-      Overloaded{[](const Begin&) { return Kind::kBegin; },
-                 [](const FactBatch&) { return Kind::kFactBatch; },
-                 [](const Terminal&) { return Kind::kTerminal; },
-                 [](const Cancel&) { return Kind::kCancel; },
-                 [](const Navigation&) { return Kind::kNavigation; },
-                 [](const CloseTab&) { return Kind::kCloseTab; },
-                 [](const Shutdown&) { return Kind::kShutdown; },
-                 [](const MarkdownChunk&) { return Kind::kMarkdownChunk; },
-                 [](const ErrorReply&) { return Kind::kErrorReply; }},
+      Overloaded{[](const Begin &) { return Kind::kBegin; },
+                 [](const FactBatch &) { return Kind::kFactBatch; },
+                 [](const Terminal &) { return Kind::kTerminal; },
+                 [](const Cancel &) { return Kind::kCancel; },
+                 [](const Navigation &) { return Kind::kNavigation; },
+                 [](const CloseTab &) { return Kind::kCloseTab; },
+                 [](const Shutdown &) { return Kind::kShutdown; },
+                 [](const MarkdownChunk &) { return Kind::kMarkdownChunk; },
+                 [](const ErrorReply &) { return Kind::kErrorReply; }},
       message);
   Writer writer(kind);
   std::visit(
-      Overloaded{[&](const Begin& v) {
+      Overloaded{[&](const Begin &v) {
                    writer.Id(v.request_id);
                    writer.TabId(v.tab_id);
                    writer.U64Nonzero(v.navigation_id);
@@ -386,7 +387,7 @@ std::optional<std::vector<std::uint8_t>> Encode(const Message& message,
                      writer.Fail(CodecError::kInvalidValue);
                    writer.String(v.title, kMaxTitleBytes, false);
                  },
-                 [&](const FactBatch& v) {
+                 [&](const FactBatch &v) {
                    writer.Id(v.request_id);
                    writer.TabId(v.tab_id);
                    writer.U64Nonzero(v.navigation_id);
@@ -397,10 +398,10 @@ std::optional<std::vector<std::uint8_t>> Encode(const Message& message,
                      return;
                    }
                    writer.U16(static_cast<std::uint16_t>(v.facts.size()));
-                   for (const auto& f : v.facts)
+                   for (const auto &f : v.facts)
                      if (!EncodeFact(&writer, f)) break;
                  },
-                 [&](const Terminal& v) {
+                 [&](const Terminal &v) {
                    writer.Id(v.request_id);
                    writer.TabId(v.tab_id);
                    writer.U64Nonzero(v.navigation_id);
@@ -413,15 +414,15 @@ std::optional<std::vector<std::uint8_t>> Encode(const Message& message,
                    writer.U8(static_cast<std::uint8_t>(v.status));
                    writer.U8(static_cast<std::uint8_t>(v.error));
                  },
-                 [&](const Cancel& v) { writer.Id(v.request_id); },
-                 [&](const Navigation& v) {
+                 [&](const Cancel &v) { writer.Id(v.request_id); },
+                 [&](const Navigation &v) {
                    writer.TabId(v.tab_id);
                    writer.U64Nonzero(v.navigation_id);
                    writer.U64Nonzero(v.generation);
                  },
-                 [&](const CloseTab& v) { writer.TabId(v.tab_id); },
-                 [&](const Shutdown&) {},
-                 [&](const MarkdownChunk& v) {
+                 [&](const CloseTab &v) { writer.TabId(v.tab_id); },
+                 [&](const Shutdown &) {},
+                 [&](const MarkdownChunk &v) {
                    writer.Id(v.request_id);
                    writer.TabId(v.tab_id);
                    writer.U64Nonzero(v.navigation_id);
@@ -430,7 +431,7 @@ std::optional<std::vector<std::uint8_t>> Encode(const Message& message,
                    writer.Bool(v.completed);
                    writer.String(v.markdown, kMaxMarkdownBytes, true);
                  },
-                 [&](const ErrorReply& v) {
+                 [&](const ErrorReply &v) {
                    writer.Id(v.request_id);
                    if (static_cast<std::uint8_t>(v.code) > 7)
                      writer.Fail(CodecError::kInvalidValue);
@@ -440,8 +441,8 @@ std::optional<std::vector<std::uint8_t>> Encode(const Message& message,
   return writer.Finish(error);
 }
 
-std::optional<Message> Decode(const std::vector<std::uint8_t>& bytes,
-                              CodecError* error) {
+std::optional<Message> Decode(const std::vector<std::uint8_t> &bytes,
+                              CodecError *error) {
   if (bytes.size() > kMaxFrameBytes) {
     SetError(CodecError::kFrameTooLarge, error);
     return std::nullopt;
@@ -586,7 +587,7 @@ std::optional<Message> Decode(const std::vector<std::uint8_t>& bytes,
   return result;
 }
 
-const char* ToString(CodecError error) {
+const char *ToString(CodecError error) {
   switch (error) {
     case CodecError::kFrameTooLarge:
       return "content-host frame exceeds size limit";

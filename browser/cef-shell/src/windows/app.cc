@@ -1,6 +1,7 @@
 #include "windows/app.h"
 
 #include <array>
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -10,9 +11,14 @@
 #include "browser/mdv/cef_mdv_entries.h"
 #include "browser/mdv/cef_mdv_handler.h"
 #include "browser/new_tab/cef_new_tab_handler.h"
+#include "include/base/cef_callback.h"
 #include "include/cef_browser.h"
+#include "include/cef_task.h"
+#include "include/wrapper/cef_closure_task.h"
 #include "include/wrapper/cef_helpers.h"
 #include "resource_ids.h"
+#include "windows/markdown_file_dialog_win.h"
+#include "windows/page_markdown_platform_win.h"
 
 namespace crayon::browser::cef_shell {
 namespace {
@@ -20,6 +26,8 @@ namespace {
 constexpr int kMainIconSize = 32;
 constexpr int kSmallIconSize = 16;
 constexpr std::size_t kResourceStringCapacity = 512;
+constexpr std::size_t kContentHostStartupChecks = 500;
+constexpr std::int64_t kContentHostTickMilliseconds = 20;
 
 std::string WideToUtf8(std::wstring_view value) {
   if (value.empty()) {
@@ -122,6 +130,30 @@ browser_mdv::MdvPageStrings LoadMdvStrings(HINSTANCE resource_module) {
   };
 }
 
+std::string ContentHostExecutablePath() {
+  std::array<wchar_t, MAX_PATH> path{};
+  const DWORD length =
+      GetModuleFileNameW(nullptr, path.data(), static_cast<DWORD>(path.size()));
+  if (length == 0 || length >= path.size()) return {};
+  return WideToUtf8(
+      (std::filesystem::path(
+           std::wstring(path.data(), static_cast<std::size_t>(length)))
+           .parent_path() /
+       L"crayon-content-host.exe")
+          .wstring());
+}
+
+page_markdown::PageMarkdownStrings LoadPageMarkdownStrings(
+    HINSTANCE resource_module) {
+  return page_markdown::PageMarkdownStrings{
+      LoadUtf8String(resource_module, IDS_CRAYON_PAGE_MARKDOWN_PREVIEW),
+      LoadUtf8String(resource_module, IDS_CRAYON_PAGE_MARKDOWN_COPY),
+      LoadUtf8String(resource_module, IDS_CRAYON_PAGE_MARKDOWN_SAVE_AS),
+      LoadUtf8String(resource_module, IDS_CRAYON_PAGE_MARKDOWN_COPIED),
+      LoadUtf8String(resource_module, IDS_CRAYON_PAGE_MARKDOWN_COPY_FAILED),
+      LoadUtf8String(resource_module, IDS_CRAYON_PAGE_MARKDOWN_SAVE_CANCELLED)};
+}
+
 }  // namespace
 
 WindowsWindowIcons::WindowsWindowIcons(HINSTANCE resource_module)
@@ -160,12 +192,14 @@ BrowserApp::BrowserApp(HINSTANCE resource_module, std::wstring product_name)
       window_icons_(std::make_shared<WindowsWindowIcons>(resource_module)),
       new_tab_strings_(LoadNewTabStrings(resource_module)),
       mdv_strings_(LoadMdvStrings(resource_module)),
+      page_markdown_strings_(LoadPageMarkdownStrings(resource_module)),
       mdv_runtime_(std::make_shared<mdv::MdvRuntimeState>()),
-      mdv_entries_(std::make_shared<mdv::MdvEntryController>(
-          mdv_runtime_, mdv_strings_)),
-      mdv_editing_(std::make_shared<mdv::MdvEditController>(mdv_runtime_,
-                                                            mdv_strings_)),
+      mdv_entries_(std::make_shared<mdv::MdvEntryController>(mdv_runtime_,
+                                                             mdv_strings_)),
+      mdv_editing_(
+          std::make_shared<mdv::MdvEditController>(mdv_runtime_, mdv_strings_)),
       permission_store_(std::make_unique<permission::PermissionStore>()),
+      content_host_(std::make_unique<windows::ContentHostAdapter>()),
       tab_controller_(new window::TabController(
           browser_new_tab::kNewTabUrl,
           [window_icons = window_icons_](CefRefPtr<CefBrowser> browser) {
@@ -173,6 +207,8 @@ BrowserApp::BrowserApp(HINSTANCE resource_module, std::wstring product_name)
           },
           browser_new_tab::kNewTabUrl, permission_store_.get())),
       shell_runtime_(std::make_shared<WindowsShellRuntime>(tab_controller_)) {}
+
+BrowserApp::~BrowserApp() = default;
 
 void BrowserApp::OnRegisterCustomSchemes(
     CefRawPtr<CefSchemeRegistrar> registrar) {
@@ -214,6 +250,7 @@ void BrowserApp::OnContextInitialized() {
         }
         return editing->HandleSaveCommand(browser, command_id);
       });
+  tab_controller_->SetFileDialogHandler(windows::HandleMarkdownFileDialog);
   mdv_entries_->SetDocumentLoadedCallback(
       [editing = mdv_editing_](CefRefPtr<CefBrowser> browser,
                                const std::string& path,
@@ -221,16 +258,16 @@ void BrowserApp::OnContextInitialized() {
                                std::uint64_t size, std::uint64_t mtime) {
         editing->OnDocumentLoaded(browser, path, normalized, size, mtime);
       });
-  tab_controller_->SetNavigationInterceptor(
-      [editing = mdv_editing_, entries = mdv_entries_](
-          CefRefPtr<CefBrowser> browser, const CefString& url,
-          bool user_gesture) {
-        if (editing->InterceptWhileDirty(browser, url.ToString(),
-                                         user_gesture)) {
-          return true;
-        }
-        return entries->InterceptNavigation(browser, url, user_gesture);
-      });
+  tab_controller_->SetNavigationInterceptor([editing = mdv_editing_,
+                                             entries = mdv_entries_](
+                                                CefRefPtr<CefBrowser> browser,
+                                                const CefString& url,
+                                                bool user_gesture) {
+    if (editing->InterceptWhileDirty(browser, url.ToString(), user_gesture)) {
+      return true;
+    }
+    return entries->InterceptNavigation(browser, url, user_gesture);
+  });
   tab_controller_->SetLocalEntryDragHandler(
       [entries = mdv_entries_](CefRefPtr<CefBrowser> browser,
                                CefRefPtr<CefDragData> dragData,
@@ -238,14 +275,23 @@ void BrowserApp::OnContextInitialized() {
         return entries->HandleDragEnter(browser, dragData, mask);
       });
   tab_controller_->SetContextMenuAugmenter(
-      [entries = mdv_entries_](CefRefPtr<CefBrowser> browser,
-                               CefRefPtr<CefContextMenuParams> params,
-                               CefRefPtr<CefMenuModel> model) {
-        return entries->HandleContextMenuAugment(browser, params, model);
+      [this, entries = mdv_entries_](CefRefPtr<CefBrowser> browser,
+                                     CefRefPtr<CefContextMenuParams> params,
+                                     CefRefPtr<CefMenuModel> model) {
+        const bool mdv =
+            entries->HandleContextMenuAugment(browser, params, model);
+        const bool page_markdown =
+            page_markdown_preview_->HandleContextMenuAugment(browser, params,
+                                                             model);
+        return mdv || page_markdown;
       });
   tab_controller_->SetContextMenuCommandHandler(
-      [entries = mdv_entries_](CefRefPtr<CefBrowser> browser, int command_id) {
-        return entries->HandleContextMenuCommand(browser, command_id);
+      [this, entries = mdv_entries_](CefRefPtr<CefBrowser> browser,
+                                     int command_id) {
+        if (entries->HandleContextMenuCommand(browser, command_id)) return true;
+        tab_controller_->NoteTrustedUserInputForActiveTab();
+        return page_markdown_preview_->HandleContextMenuCommand(browser,
+                                                                command_id);
       });
   tab_controller_->SetSaveCommandHandler(
       [editing = mdv_editing_](CefRefPtr<CefBrowser> browser) {
@@ -259,10 +305,72 @@ void BrowserApp::OnContextInitialized() {
         return editing->OnPageQuery(browser, frame, query_id, request,
                                     persistent, std::move(callback));
       });
-  if (!tab_controller_->CreateMainWindow()) {
+  page_markdown_preview_ =
+      std::make_unique<page_markdown::CefPageMarkdownPreviewController>(
+          tab_controller_.get(), mdv_editing_, page_markdown_strings_,
+          windows::CopyMarkdownToClipboard);
+  tab_controller_->SetPageSnapshotObserver(content_host_.get());
+  tab_controller_->SetPageSnapshotAdmission(
+      [host = content_host_.get()] { return host->healthy(); });
+  tab_controller_->SetPageSnapshotEventsReadyCallback([this] {
+    content_host_->Consume(tab_controller_->DrainPageSnapshots(16));
+  });
+  tab_controller_->SetBrowsersClosedCallback([this] {
+    content_host_tick_active_ = false;
+    page_markdown_preview_->Stop();
+    content_host_->Stop();
+    shell_runtime_->Shutdown();
+  });
+  if (!content_host_->Start(ContentHostExecutablePath())) {
     shell_runtime_->Shutdown();
     CefQuitMessageLoop();
+    return;
   }
+  ContinueContentHostStartup();
+}
+
+void BrowserApp::ContinueContentHostStartup() {
+  CEF_REQUIRE_UI_THREAD();
+  if (content_host_->healthy()) {
+    if (!tab_controller_->CreateMainWindow()) {
+      content_host_->Stop();
+      shell_runtime_->Shutdown();
+      CefQuitMessageLoop();
+      return;
+    }
+    content_host_tick_active_ = true;
+    ScheduleContentHostTick();
+    return;
+  }
+  if (++content_host_start_checks_ >= kContentHostStartupChecks) {
+    content_host_->Stop();
+    shell_runtime_->Shutdown();
+    CefQuitMessageLoop();
+    return;
+  }
+  CefPostDelayedTask(TID_UI,
+                     CefCreateClosureTask(
+                         base::BindOnce(&BrowserApp::ContinueContentHostStartup,
+                                        CefRefPtr<BrowserApp>(this))),
+                     kContentHostTickMilliseconds);
+}
+
+void BrowserApp::ScheduleContentHostTick() {
+  CefPostDelayedTask(
+      TID_UI,
+      CefCreateClosureTask(base::BindOnce(&BrowserApp::ContentHostTick,
+                                          CefRefPtr<BrowserApp>(this))),
+      kContentHostTickMilliseconds);
+}
+
+void BrowserApp::ContentHostTick() {
+  CEF_REQUIRE_UI_THREAD();
+  if (!content_host_tick_active_) return;
+  content_host_->Consume(tab_controller_->DrainPageSnapshots(16));
+  content_host_->Tick();
+  page_markdown_preview_->Tick(content_host_->Drain(64),
+                               content_host_->healthy());
+  ScheduleContentHostTick();
 }
 
 bool BrowserApp::new_tab_strings_valid() const {
@@ -320,6 +428,15 @@ bool BrowserApp::mdv_strings_valid() const {
          !mdv_strings_.tooltip_markdown.empty() &&
          !mdv_strings_.tooltip_structure.empty() &&
          !mdv_strings_.tooltip_table_alignment.empty();
+}
+
+bool BrowserApp::page_markdown_strings_valid() const {
+  return !page_markdown_strings_.preview_command.empty() &&
+         !page_markdown_strings_.copy_command.empty() &&
+         !page_markdown_strings_.save_as_command.empty() &&
+         !page_markdown_strings_.copied_status.empty() &&
+         !page_markdown_strings_.copy_failed_status.empty() &&
+         !page_markdown_strings_.save_cancelled_status.empty();
 }
 
 CefRefPtr<CefClient> BrowserApp::GetDefaultClient() {

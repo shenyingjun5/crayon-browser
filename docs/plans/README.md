@@ -48,7 +48,7 @@
 
 | 顺序 | 任务 | 状态 | 说明 |
 |---:|---|---|---|
-| 1 | `CNT-20W1` | READY | Windows content-host/process/platform UI 与真实 CEF 网页 Markdown 产品装配 |
+| 1 | `CNT-20W2` | READY | Windows 真实 CEF 网页 Markdown normal/边界/安全/20 次性能与退出零残留矩阵 |
 
 ### 平台收口与待拆装配
 

@@ -192,7 +192,7 @@ bool HostileAndBounds() {
   CHECK_MH(!mh::Encode(
       mh::Message(mh::ListDevices{"bad-list", std::nullopt, 16}), &error));
   auto bad_page = DevicePage();
-  bad_page.next_offset = 2;
+  bad_page.next_offset = uint16_t{2};
   CHECK_MH(!mh::Encode(mh::Message(bad_page), &error));
   bad_page = DevicePage();
   bad_page.devices.front().device_id = "receiver/invalid";

@@ -249,18 +249,18 @@ public:
   }
   void U8(std::uint8_t value) { bytes_.push_back(value); }
   void U16(std::uint16_t value) {
-    U8(value >> 8);
-    U8(value);
+    U8(static_cast<std::uint8_t>(value >> 8));
+    U8(static_cast<std::uint8_t>(value));
   }
   void U32(std::uint32_t value) {
-    U8(value >> 24);
-    U8(value >> 16);
-    U8(value >> 8);
-    U8(value);
+    U8(static_cast<std::uint8_t>(value >> 24));
+    U8(static_cast<std::uint8_t>(value >> 16));
+    U8(static_cast<std::uint8_t>(value >> 8));
+    U8(static_cast<std::uint8_t>(value));
   }
   void U64(std::uint64_t value) {
     for (int shift = 56; shift >= 0; shift -= 8)
-      U8(value >> shift);
+      U8(static_cast<std::uint8_t>(value >> shift));
   }
   bool Nonzero(std::uint64_t value) {
     if (!value)
@@ -662,43 +662,44 @@ Kind KindOf(const Message &message) {
         using T = std::decay_t<decltype(value)>;
         if constexpr (std::is_same_v<T, IngestUrl>)
           return Kind::kIngestUrl;
-        if constexpr (std::is_same_v<T, MarkEme>)
+        else if constexpr (std::is_same_v<T, MarkEme>)
           return Kind::kMarkEme;
-        if constexpr (std::is_same_v<T, Decide>)
+        else if constexpr (std::is_same_v<T, Decide>)
           return Kind::kDecide;
-        if constexpr (std::is_same_v<T, DecideUrlLess>)
+        else if constexpr (std::is_same_v<T, DecideUrlLess>)
           return Kind::kDecideUrlLess;
-        if constexpr (std::is_same_v<T, Cancel>)
+        else if constexpr (std::is_same_v<T, Cancel>)
           return Kind::kCancel;
-        if constexpr (std::is_same_v<T, Navigation>)
+        else if constexpr (std::is_same_v<T, Navigation>)
           return Kind::kNavigation;
-        if constexpr (std::is_same_v<T, CloseTab>)
+        else if constexpr (std::is_same_v<T, CloseTab>)
           return Kind::kCloseTab;
-        if constexpr (std::is_same_v<T, Shutdown>)
+        else if constexpr (std::is_same_v<T, Shutdown>)
           return Kind::kShutdown;
-        if constexpr (std::is_same_v<T, CandidateReply>)
+        else if constexpr (std::is_same_v<T, CandidateReply>)
           return Kind::kCandidateReply;
-        if constexpr (std::is_same_v<T, DecisionReply>)
+        else if constexpr (std::is_same_v<T, DecisionReply>)
           return Kind::kDecisionReply;
-        if constexpr (std::is_same_v<T, Ack>)
+        else if constexpr (std::is_same_v<T, Ack>)
           return Kind::kAck;
-        if constexpr (std::is_same_v<T, ErrorReply>)
+        else if constexpr (std::is_same_v<T, ErrorReply>)
           return Kind::kErrorReply;
-        if constexpr (std::is_same_v<T, Discovery>)
+        else if constexpr (std::is_same_v<T, Discovery>)
           return Kind::kDiscovery;
-        if constexpr (std::is_same_v<T, ListDevices>)
+        else if constexpr (std::is_same_v<T, ListDevices>)
           return Kind::kListDevices;
-        if constexpr (std::is_same_v<T, DevicePageReply>)
+        else if constexpr (std::is_same_v<T, DevicePageReply>)
           return Kind::kDevicePageReply;
-        if constexpr (std::is_same_v<T, StartCast>)
+        else if constexpr (std::is_same_v<T, StartCast>)
           return Kind::kStartCast;
-        if constexpr (std::is_same_v<T, StartCastReply>)
+        else if constexpr (std::is_same_v<T, StartCastReply>)
           return Kind::kStartCastReply;
-        if constexpr (std::is_same_v<T, StopCast>)
+        else if constexpr (std::is_same_v<T, StopCast>)
           return Kind::kStopCast;
-        if constexpr (std::is_same_v<T, PollSessionEvents>)
+        else if constexpr (std::is_same_v<T, PollSessionEvents>)
           return Kind::kPollSessionEvents;
-        return Kind::kSessionEventsReply;
+        else
+          return Kind::kSessionEventsReply;
       },
       message);
 }

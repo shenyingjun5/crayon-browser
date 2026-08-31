@@ -30,6 +30,7 @@ resolver = "2"
 members = [
     "crates/crayon-agent-gateway",
     "crates/crayon-app-runtime",
+    "crates/crayon-content-host",
     "crates/crayon-capability-hub",
     "crates/crayon-cast-adapter",
     "crates/crayon-content-extract",

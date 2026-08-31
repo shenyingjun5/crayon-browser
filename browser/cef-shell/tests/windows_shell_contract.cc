@@ -9,7 +9,7 @@
 
 namespace {
 
-constexpr int kExpectedArgumentCount = 4;
+constexpr int kExpectedArgumentCount = 5;
 constexpr int kMainIconSize = 32;
 constexpr int kSmallIconSize = 16;
 constexpr std::size_t kProductNameCapacity = 128;
@@ -53,18 +53,19 @@ bool HasIcon(HMODULE module, int resource_id, int size) {
   return true;
 }
 
-} // namespace
+}  // namespace
 
 int wmain(int argument_count, wchar_t *arguments[]) {
   if (argument_count != kExpectedArgumentCount) {
     std::cerr << "Expected executable, resource module and runtime manifest "
-                 "arguments\n";
+                 "and content-host arguments\n";
     return 1;
   }
 
   const std::filesystem::path executable(arguments[1]);
   const std::filesystem::path resource_module(arguments[2]);
   const std::filesystem::path manifest(arguments[3]);
+  const std::filesystem::path content_host(arguments[4]);
   DWORD binary_type = 0;
   if (!std::filesystem::is_regular_file(executable) ||
       !GetBinaryTypeW(executable.c_str(), &binary_type) ||
@@ -74,6 +75,12 @@ int wmain(int argument_count, wchar_t *arguments[]) {
   }
   if (!RuntimeFilesExist(executable, manifest)) {
     return 3;
+  }
+  if (!std::filesystem::is_regular_file(content_host) ||
+      !GetBinaryTypeW(content_host.c_str(), &binary_type) ||
+      binary_type != SCS_64BIT_BINARY) {
+    std::cerr << "Bundled content host is missing or is not Windows x64\n";
+    return 7;
   }
 
   HMODULE module =

@@ -3,16 +3,19 @@
 
 #include <windows.h>
 
+#include <cstdint>
 #include <memory>
 #include <string>
 
-#include "browser/permission/permission_store.h"
-#include "browser/window/tab_controller.h"
 #include "browser/mdv/cef_mdv_editing.h"
 #include "browser/mdv/cef_mdv_entries.h"
+#include "browser/page_markdown/cef_page_markdown_preview.h"
+#include "browser/permission/permission_store.h"
+#include "browser/window/tab_controller.h"
 #include "crayon/browser_mdv/mdv_page.h"
 #include "crayon/browser_new_tab/new_tab_page.h"
 #include "include/cef_app.h"
+#include "windows/content_host_adapter_win.h"
 #include "windows/shell_command_adapter.h"
 
 namespace crayon::browser::cef_shell {
@@ -29,13 +32,14 @@ class WindowsWindowIcons final {
   HICON main_icon_ = nullptr;
   HICON small_icon_ = nullptr;
 
-  WindowsWindowIcons(const WindowsWindowIcons&) = delete;
-  WindowsWindowIcons& operator=(const WindowsWindowIcons&) = delete;
+  WindowsWindowIcons(const WindowsWindowIcons &) = delete;
+  WindowsWindowIcons &operator=(const WindowsWindowIcons &) = delete;
 };
 
 class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
  public:
   BrowserApp(HINSTANCE resource_module, std::wstring product_name);
+  ~BrowserApp() override;
 
   CefRefPtr<CefBrowserProcessHandler> GetBrowserProcessHandler() override {
     return this;
@@ -47,18 +51,29 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   bool brand_icons_valid() const { return window_icons_->valid(); }
   bool new_tab_strings_valid() const;
   bool mdv_strings_valid() const;
+  bool page_markdown_strings_valid() const;
 
  private:
+  void ContinueContentHostStartup();
+  void ScheduleContentHostTick();
+  void ContentHostTick();
+
   const std::wstring product_name_;
   const std::shared_ptr<WindowsWindowIcons> window_icons_;
   const browser_new_tab::NewTabPageStrings new_tab_strings_;
   const browser_mdv::MdvPageStrings mdv_strings_;
+  const page_markdown::PageMarkdownStrings page_markdown_strings_;
   const std::shared_ptr<mdv::MdvRuntimeState> mdv_runtime_;
   const std::shared_ptr<mdv::MdvEntryController> mdv_entries_;
   const std::shared_ptr<mdv::MdvEditController> mdv_editing_;
   std::unique_ptr<permission::PermissionStore> permission_store_;
+  std::unique_ptr<windows::ContentHostAdapter> content_host_;
   CefRefPtr<window::TabController> tab_controller_;
   const std::shared_ptr<WindowsShellRuntime> shell_runtime_;
+  std::unique_ptr<page_markdown::CefPageMarkdownPreviewController>
+      page_markdown_preview_;
+  std::size_t content_host_start_checks_ = 0;
+  bool content_host_tick_active_ = false;
 
   IMPLEMENT_REFCOUNTING(BrowserApp);
   DISALLOW_COPY_AND_ASSIGN(BrowserApp);

@@ -1,0 +1,18 @@
+[package]
+name = "crayon-content-host"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Platform composition binary for the isolated Crayon content host"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+crayon-app-runtime = { path = "../crayon-app-runtime" }
+crayon-ipc-schema = { path = "../crayon-ipc-schema" }
+
+[target.'cfg(windows)'.dependencies]
+crayon-platform-api = { path = "../crayon-platform-api" }
+crayon-platform-windows = { path = "../crayon-platform-windows" }

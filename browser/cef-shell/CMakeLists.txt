@@ -35,6 +35,10 @@ if(OS_WINDOWS)
       src/browser/mdv/cef_mdv_entries.h
       src/browser/mdv/cef_mdv_handler.cc
       src/browser/mdv/cef_mdv_handler.h
+      src/browser/page_markdown/cef_page_markdown_preview.cc
+      src/browser/page_markdown/cef_page_markdown_preview.h
+      src/browser/page_markdown/page_markdown_preview.cc
+      src/browser/page_markdown/page_markdown_preview.h
       src/browser/page_snapshot_gateway/cef_page_snapshot_bridge.cc
       src/browser/page_snapshot_gateway/cef_page_snapshot_bridge.h
       src/browser/network_observer/cef_network_observer_adapter.cc
@@ -44,10 +48,6 @@ if(OS_WINDOWS)
       src/browser/new_tab/cef_new_tab_handler.cc
       src/browser/new_tab/cef_new_tab_handler.h
       src/ipc/page_snapshot_cef_message.cc
-      src/macos/cast_chrome_mac.h
-      src/macos/cast_chrome_mac.mm
-      src/macos/cast_shell_controller.cc
-      src/macos/cast_shell_controller.h
       src/ipc/page_snapshot_cef_message.h
       src/ipc/media_observation_cef_message.cc
       src/ipc/media_observation_cef_message.h
@@ -69,7 +69,15 @@ if(OS_WINDOWS)
       src/process/windows/bootstrap_entry.h
       src/windows/app.cc
       src/windows/app.h
+      src/windows/content_host_adapter_win.cc
+      src/windows/content_host_adapter_win.h
+      src/windows/content_host_process_win.cc
+      src/windows/content_host_process_win.h
       src/windows/main_win.cc
+      src/windows/markdown_file_dialog_win.cc
+      src/windows/markdown_file_dialog_win.h
+      src/windows/page_markdown_platform_win.cc
+      src/windows/page_markdown_platform_win.h
       src/windows/shell_command_adapter.cc
       src/windows/shell_command_adapter.h
       resources/windows/resource_ids.h
@@ -86,6 +94,28 @@ if(OS_WINDOWS)
   target_compile_definitions(${CRAYON_BROWSER_TARGET}
                              PRIVATE UNICODE _UNICODE)
   add_dependencies(${CRAYON_BROWSER_TARGET} libcef_dll_wrapper)
+  find_program(CRAYON_CARGO_EXECUTABLE NAMES cargo REQUIRED)
+  set(crayon_windows_content_host_target_dir
+      "${CMAKE_CURRENT_BINARY_DIR}/content-host-target")
+  set(crayon_windows_content_host_binary
+      "${crayon_windows_content_host_target_dir}/$<IF:$<CONFIG:Release>,release,debug>/crayon-content-host.exe")
+  file(
+    GLOB_RECURSE crayon_windows_content_host_rust_sources CONFIGURE_DEPENDS
+    "${PROJECT_SOURCE_DIR}/crates/*.rs"
+    "${PROJECT_SOURCE_DIR}/crates/*/Cargo.toml")
+  add_custom_target(
+    crayon_content_host_windows
+    COMMAND
+      "${CMAKE_COMMAND}" -E env
+      "CARGO_TARGET_DIR=${crayon_windows_content_host_target_dir}"
+      "${CRAYON_CARGO_EXECUTABLE}" build -p crayon-content-host --bin
+      crayon-content-host --profile
+      "$<IF:$<CONFIG:Release>,release,dev>"
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+    SOURCES ${crayon_windows_content_host_rust_sources}
+    COMMENT "Building the bundled Windows Rust content host"
+    VERBATIM)
+  add_dependencies(${CRAYON_BROWSER_TARGET} crayon_content_host_windows)
   target_link_libraries(
     ${CRAYON_BROWSER_TARGET}
     PRIVATE crayon::browser-mdv crayon::browser-new-tab
@@ -95,8 +125,10 @@ if(OS_WINDOWS)
             crayon::cef-shell-network-observer
             crayon::cef-shell-input-proof
             crayon::cef-shell-observation-gateway
-            crayon::browser-shared-shell crayon_libcef libcef_dll_wrapper
-            ${CEF_STANDARD_LIBS})
+            crayon::cef-shell-core-client crayon::cef-shell-ipc
+            crayon::browser-page-tools crayon::browser-shared-shell
+            crayon_libcef libcef_dll_wrapper
+            ${CEF_STANDARD_LIBS} comdlg32)
   set_target_properties(${CRAYON_BROWSER_TARGET}
                         PROPERTIES OUTPUT_NAME "CrayonBrowser")
   COPY_SINGLE_FILE(
@@ -114,6 +146,12 @@ if(OS_WINDOWS)
              "${CEF_BINARY_DIR}" "${CEF_TARGET_OUT_DIR}")
   COPY_FILES("${CRAYON_BROWSER_TARGET}" "${CEF_RESOURCE_FILES}"
              "${CEF_RESOURCE_DIR}" "${CEF_TARGET_OUT_DIR}")
+  add_custom_command(
+    TARGET ${CRAYON_BROWSER_TARGET} POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "${crayon_windows_content_host_binary}"
+            "$<TARGET_FILE_DIR:${CRAYON_BROWSER_TARGET}>/crayon-content-host.exe"
+    VERBATIM)
   SET_LPAC_ACLS("${CRAYON_BROWSER_TARGET}")
 
   string(REPLACE ";" "\n" crayon_cef_runtime_manifest
@@ -138,7 +176,40 @@ if(OS_WINDOWS)
       COMMAND crayon_windows_shell_contract
               "$<TARGET_FILE_DIR:${CRAYON_BROWSER_TARGET}>/CrayonBrowser.exe"
               "$<TARGET_FILE:${CRAYON_BROWSER_TARGET}>"
-              "$<TARGET_FILE_DIR:${CRAYON_BROWSER_TARGET}>/cef-runtime-files.txt")
+              "$<TARGET_FILE_DIR:${CRAYON_BROWSER_TARGET}>/cef-runtime-files.txt"
+              "$<TARGET_FILE_DIR:${CRAYON_BROWSER_TARGET}>/crayon-content-host.exe")
+    add_executable(
+      crayon_content_host_process_win_test
+      tests/content_host_process_win_test.cc
+      src/windows/content_host_process_win.cc)
+    target_compile_features(crayon_content_host_process_win_test PRIVATE cxx_std_17)
+    target_include_directories(crayon_content_host_process_win_test
+                               PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_definitions(
+      crayon_content_host_process_win_test
+      PRIVATE CRAYON_CONTENT_HOST_TEST_PATH="$<TARGET_FILE_DIR:${CRAYON_BROWSER_TARGET}>/crayon-content-host.exe")
+    target_link_libraries(crayon_content_host_process_win_test
+                          PRIVATE crayon::cef-shell-core-client
+                                  crayon::cef-shell-ipc)
+    add_dependencies(crayon_content_host_process_win_test
+                     ${CRAYON_BROWSER_TARGET})
+    add_test(NAME content_host_process_win
+             COMMAND crayon_content_host_process_win_test)
+
+    add_executable(
+      crayon_content_host_adapter_win_test
+      tests/content_host_adapter_win_test.cc
+      src/windows/content_host_adapter_win.cc
+      src/windows/content_host_process_win.cc)
+    target_compile_features(crayon_content_host_adapter_win_test PRIVATE cxx_std_17)
+    target_include_directories(crayon_content_host_adapter_win_test
+                               PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(crayon_content_host_adapter_win_test
+                          PRIVATE crayon::browser-page-snapshot-gateway
+                                  crayon::cef-shell-core-client
+                                  crayon::cef-shell-ipc)
+    add_test(NAME content_host_adapter_win
+             COMMAND crayon_content_host_adapter_win_test)
     add_test(
       NAME windows_cef_shell_source_contract
       COMMAND "${CMAKE_COMMAND}"
@@ -151,6 +222,7 @@ if(OS_WINDOWS)
               -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/macos_source_contract.cmake")
     set_tests_properties(
       windows_cef_shell_package_contract windows_cef_shell_source_contract
+      content_host_process_win content_host_adapter_win
       PROPERTIES LABELS "cef;shell;windows")
     set_tests_properties(macos_cef_shell_source_contract
                          PROPERTIES LABELS "cef;shell;macos;contract")
@@ -306,8 +378,8 @@ if(OS_MAC)
     COMMAND
       "${CMAKE_COMMAND}" -E env
       "CARGO_TARGET_DIR=${crayon_content_host_target_dir}"
-      "${CRAYON_CARGO_EXECUTABLE}" build -p crayon-app-runtime --bin
-      crayon-content-host --bin crayon-media-host --target
+      "${CRAYON_CARGO_EXECUTABLE}" build -p crayon-content-host -p
+      crayon-app-runtime --bins --target
       "${crayon_content_host_triple}"
       ${crayon_content_host_profile_argument}
     COMMAND "${CMAKE_COMMAND}" -E make_directory

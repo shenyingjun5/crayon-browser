@@ -164,9 +164,9 @@ void TestRouteMatrix() {
            "/runtime/mermaid/chunks/mermaid.esm.min/unknown.mjs",
            "/runtime/mermaid/CHUNKS/mermaid.esm.min/chunk-IJBDOHL6.mjs",
        }) {
-    auto route = ClassifyMdvRequest(BaseRequest(manifest_absent));
-    CHECK(route.kind == MdvResourceKind::kRuntimeAsset &&
-          route.runtime_namespace == "mermaid");
+    auto absent_route = ClassifyMdvRequest(BaseRequest(manifest_absent));
+    CHECK(absent_route.kind == MdvResourceKind::kRuntimeAsset &&
+          absent_route.runtime_namespace == "mermaid");
   }
 
   // HEAD is accepted with the body suppressed.

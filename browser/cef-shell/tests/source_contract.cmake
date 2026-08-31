@@ -51,6 +51,20 @@ if(managed_new_tab_count LESS 1)
 endif()
 
 file(READ "${CRAYON_CEF_SHELL_SOURCE}/src/windows/main_win.cc" windows_main)
+file(READ "${CRAYON_CEF_SHELL_SOURCE}/src/windows/app.cc" windows_app)
+file(READ
+     "${CRAYON_CEF_SHELL_SOURCE}/src/windows/content_host_process_win.cc"
+     windows_content_host)
+file(READ
+     "${CRAYON_CEF_SHELL_SOURCE}/src/windows/page_markdown_platform_win.cc"
+     windows_page_markdown)
+set(windows_markdown_dialog_path
+    "${CRAYON_CEF_SHELL_SOURCE}/src/windows/markdown_file_dialog_win.cc")
+if(NOT EXISTS "${windows_markdown_dialog_path}")
+  message(FATAL_ERROR
+          "Windows Markdown file-dialog adapter is missing")
+endif()
+file(READ "${windows_markdown_dialog_path}" windows_markdown_dialog)
 file(READ
      "${CRAYON_CEF_SHELL_SOURCE}/src/process/windows/bootstrap_entry.cc"
      windows_bootstrap)
@@ -76,7 +90,8 @@ foreach(required_bootstrap_token
         "CefInitialize"
         "sandbox_info"
         "GetClientModule"
-        "brand_icons_valid")
+        "brand_icons_valid"
+        "page_markdown_strings_valid")
   string(FIND "${windows_bootstrap}" "${required_bootstrap_token}" token_index)
   if(token_index EQUAL -1)
     message(FATAL_ERROR
@@ -91,10 +106,61 @@ foreach(required_cmake_token
         "Windows product builds require the CEF sandbox bootstrap"
         "COPY_SINGLE_FILE"
         "bootstrap.exe"
+        "crayon_content_host_windows"
+        "crayon-content-host.exe"
+        "src/windows/content_host_adapter_win.cc"
+        "src/browser/page_markdown/cef_page_markdown_preview.cc"
+        "src/windows/markdown_file_dialog_win.cc"
         "SET_LPAC_ACLS")
   string(FIND "${shell_cmake}" "${required_cmake_token}" token_index)
   if(token_index EQUAL -1)
     message(FATAL_ERROR "Windows sandbox CMake graph is missing ${required_cmake_token}")
+  endif()
+endforeach()
+foreach(required_app_token
+        "ContentHostExecutablePath"
+        "SetPageSnapshotObserver"
+        "SetPageSnapshotAdmission"
+        "SetFileDialogHandler"
+        "CefPageMarkdownPreviewController"
+        "CopyMarkdownToClipboard")
+  string(FIND "${windows_app}" "${required_app_token}" token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Windows BrowserApp is missing CNT-20W1 token ${required_app_token}")
+  endif()
+endforeach()
+foreach(required_host_token
+        "CoreClientSupervisor"
+        "JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE"
+        "CREATE_NO_WINDOW"
+        "PROC_THREAD_ATTRIBUTE_HANDLE_LIST"
+        "EXTENDED_STARTUPINFO_PRESENT"
+        "CancelSynchronousIo"
+        "crayon-agent-"
+        "kMaxFrames")
+  string(FIND "${windows_content_host}" "${required_host_token}" token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Windows content host is missing lifecycle token ${required_host_token}")
+  endif()
+endforeach()
+string(FIND "${windows_page_markdown}" "CF_UNICODETEXT" unicode_clipboard)
+if(unicode_clipboard EQUAL -1)
+  message(FATAL_ERROR "Windows page Markdown clipboard must use CF_UNICODETEXT")
+endif()
+foreach(required_dialog_token
+        "GetOpenFileNameW"
+        "GetSaveFileNameW"
+        "CefSetOSModalLoop"
+        "OFN_DONTADDTORECENT"
+        "callback->Continue"
+        "callback->Cancel")
+  string(FIND "${windows_markdown_dialog}" "${required_dialog_token}"
+         token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Windows Markdown file-dialog adapter is missing ${required_dialog_token}")
   endif()
 endforeach()
 

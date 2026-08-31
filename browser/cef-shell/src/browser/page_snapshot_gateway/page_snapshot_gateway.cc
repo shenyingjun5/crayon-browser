@@ -1,14 +1,15 @@
 #include "browser/page_snapshot_gateway/page_snapshot_gateway.h"
 
 #include <algorithm>
+#include <iterator>
 #include <utility>
 
 namespace crayon::cef_shell::gateway {
 
 SnapshotGatewayResult PageSnapshotGateway::BeginRequest(
-    const browser_engine::SnapshotRequest& request,
-    const RendererSource& expected_renderer,
-    const browser_engine::BrowserUrl& expected_document_url) {
+    const browser_engine::SnapshotRequest &request,
+    const RendererSource &expected_renderer,
+    const browser_engine::BrowserUrl &expected_document_url) {
   if (shut_down_ || request.navigation_id.value() == 0 ||
       !browser_engine::IsValid(request.mode) ||
       expected_renderer.kind != IpcSourceKind::kRenderer ||
@@ -30,7 +31,7 @@ SnapshotGatewayResult PageSnapshotGateway::BeginRequest(
 }
 
 SnapshotGatewayResult PageSnapshotGateway::SubmitChunk(
-    const RendererSource& source, browser_engine::SnapshotChunk chunk) {
+    const RendererSource &source, browser_engine::SnapshotChunk chunk) {
   const auto active = active_.find(chunk.request_id);
   if (active == active_.end()) {
     return SnapshotGatewayResult::kRejectedNotFound;
@@ -58,7 +59,7 @@ SnapshotGatewayResult PageSnapshotGateway::SubmitChunk(
     return SnapshotGatewayResult::kRejectedStaleNavigation;
   }
   std::size_t chunk_fact_bytes = 0;
-  for (const auto& fact : chunk.facts) {
+  for (const auto &fact : chunk.facts) {
     const auto fact_bytes = browser_engine::SnapshotFactByteSize(fact);
     if (!fact_bytes.has_value()) {
       return SnapshotGatewayResult::kRejectedInvalid;
@@ -85,7 +86,7 @@ SnapshotGatewayResult PageSnapshotGateway::SubmitChunk(
 }
 
 SnapshotGatewayResult PageSnapshotGateway::SubmitTerminal(
-    const RendererSource& source, browser_engine::SnapshotTerminal terminal) {
+    const RendererSource &source, browser_engine::SnapshotTerminal terminal) {
   const auto active = active_.find(terminal.request_id);
   if (active == active_.end()) {
     return SnapshotGatewayResult::kRejectedNotFound;
@@ -110,8 +111,8 @@ SnapshotGatewayResult PageSnapshotGateway::SubmitTerminal(
     const auto request_id = terminal.request_id;
     queue_.erase(
         std::remove_if(queue_.begin(), queue_.end(),
-                       [&request_id](const SnapshotGatewayEvent& event) {
-                         const auto* chunk =
+                       [&request_id](const SnapshotGatewayEvent &event) {
+                         const auto *chunk =
                              std::get_if<browser_engine::SnapshotChunk>(&event);
                          return chunk && chunk->request_id == request_id;
                        }),
@@ -124,7 +125,7 @@ SnapshotGatewayResult PageSnapshotGateway::SubmitTerminal(
 }
 
 SnapshotGatewayResult PageSnapshotGateway::Cancel(
-    const browser_engine::SnapshotRequestId& request_id) {
+    const browser_engine::SnapshotRequestId &request_id) {
   if (IsRetired(request_id)) {
     return SnapshotGatewayResult::kIdempotent;
   }
@@ -138,7 +139,7 @@ SnapshotGatewayResult PageSnapshotGateway::Cancel(
 }
 
 SnapshotGatewayResult PageSnapshotGateway::Reject(
-    const browser_engine::SnapshotRequestId& request_id,
+    const browser_engine::SnapshotRequestId &request_id,
     browser_engine::EngineErrorCode error) {
   if (error == browser_engine::EngineErrorCode::kNone) {
     return SnapshotGatewayResult::kRejectedInvalid;
@@ -153,16 +154,16 @@ SnapshotGatewayResult PageSnapshotGateway::Reject(
 }
 
 std::size_t PageSnapshotGateway::AdvanceNavigation(
-    const browser_engine::TabId& tab_id,
+    const browser_engine::TabId &tab_id,
     browser_engine::NavigationId navigation_id) {
   std::vector<browser_engine::SnapshotRequestId> stale;
-  for (const auto& entry : active_) {
+  for (const auto &entry : active_) {
     if (entry.second.request.tab_id == tab_id &&
         entry.second.request.navigation_id != navigation_id) {
       stale.push_back(entry.first);
     }
   }
-  for (const auto& request_id : stale) {
+  for (const auto &request_id : stale) {
     Complete(active_.find(request_id),
              browser_engine::SnapshotTerminalStatus::kStaleNavigation,
              browser_engine::EngineErrorCode::kStaleNavigation);
@@ -171,14 +172,14 @@ std::size_t PageSnapshotGateway::AdvanceNavigation(
   return stale.size();
 }
 
-std::size_t PageSnapshotGateway::CloseTab(const browser_engine::TabId& tab_id) {
+std::size_t PageSnapshotGateway::CloseTab(const browser_engine::TabId &tab_id) {
   std::vector<browser_engine::SnapshotRequestId> closing;
-  for (const auto& entry : active_) {
+  for (const auto &entry : active_) {
     if (entry.second.request.tab_id == tab_id) {
       closing.push_back(entry.first);
     }
   }
-  for (const auto& request_id : closing) {
+  for (const auto &request_id : closing) {
     Complete(active_.find(request_id),
              browser_engine::SnapshotTerminalStatus::kCancelled,
              browser_engine::EngineErrorCode::kNone);
@@ -187,16 +188,16 @@ std::size_t PageSnapshotGateway::CloseTab(const browser_engine::TabId& tab_id) {
 }
 
 std::size_t PageSnapshotGateway::FailTab(
-    const browser_engine::TabId& tab_id,
+    const browser_engine::TabId &tab_id,
     browser_engine::EngineErrorCode error) {
   if (error == browser_engine::EngineErrorCode::kNone) return 0;
   std::vector<browser_engine::SnapshotRequestId> failed;
-  for (const auto& entry : active_) {
+  for (const auto &entry : active_) {
     if (entry.second.request.tab_id == tab_id) {
       failed.push_back(entry.first);
     }
   }
-  for (const auto& request_id : failed) {
+  for (const auto &request_id : failed) {
     Complete(active_.find(request_id),
              browser_engine::SnapshotTerminalStatus::kRejected, error);
   }
@@ -228,8 +229,8 @@ SnapshotGatewayStats PageSnapshotGateway::stats() const noexcept {
       rejected_sequence_total_, dropped_backpressure_total_};
 }
 
-bool PageSnapshotGateway::SameSource(const RendererSource& left,
-                                     const RendererSource& right) noexcept {
+bool PageSnapshotGateway::SameSource(const RendererSource &left,
+                                     const RendererSource &right) noexcept {
   return left.kind == IpcSourceKind::kRenderer && left.kind == right.kind &&
          left.process_id == right.process_id &&
          left.frame_id == right.frame_id && left.is_main_frame &&
@@ -237,7 +238,7 @@ bool PageSnapshotGateway::SameSource(const RendererSource& left,
 }
 
 bool PageSnapshotGateway::ValidTerminal(
-    const browser_engine::SnapshotTerminal& terminal) noexcept {
+    const browser_engine::SnapshotTerminal &terminal) noexcept {
   if (!browser_engine::IsValid(terminal.status)) {
     return false;
   }
@@ -253,9 +254,9 @@ bool PageSnapshotGateway::ValidTerminal(
 }
 
 bool PageSnapshotGateway::Matches(
-    const ActiveRequest& active,
-    const browser_engine::SnapshotRequestId& request_id,
-    const browser_engine::TabId& tab_id,
+    const ActiveRequest &active,
+    const browser_engine::SnapshotRequestId &request_id,
+    const browser_engine::TabId &tab_id,
     browser_engine::NavigationId navigation_id) const noexcept {
   return active.request.request_id == request_id &&
          active.request.tab_id == tab_id &&
@@ -263,13 +264,13 @@ bool PageSnapshotGateway::Matches(
 }
 
 bool PageSnapshotGateway::IsRetired(
-    const browser_engine::SnapshotRequestId& request_id) const noexcept {
+    const browser_engine::SnapshotRequestId &request_id) const noexcept {
   return std::find(retired_.begin(), retired_.end(), request_id) !=
          retired_.end();
 }
 
 void PageSnapshotGateway::Retire(
-    const browser_engine::SnapshotRequestId& request_id) {
+    const browser_engine::SnapshotRequestId &request_id) {
   if (retired_.size() >= kMaxRetiredSnapshotRequests) {
     retired_.erase(retired_.begin());
   }
@@ -283,8 +284,8 @@ void PageSnapshotGateway::Complete(
   const auto request = active->second.request;
   queue_.erase(
       std::remove_if(queue_.begin(), queue_.end(),
-                     [&request](const SnapshotGatewayEvent& event) {
-                       const auto* chunk =
+                     [&request](const SnapshotGatewayEvent &event) {
+                       const auto *chunk =
                            std::get_if<browser_engine::SnapshotChunk>(&event);
                        return chunk != nullptr &&
                               chunk->request_id == request.request_id;

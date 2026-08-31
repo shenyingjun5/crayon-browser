@@ -28,11 +28,8 @@ class PageQueryRouterHandler final
   explicit PageQueryRouterHandler(TabController* controller)
       : controller_(controller) {}
 
-  bool OnQuery(CefRefPtr<CefBrowser> browser,
-               CefRefPtr<CefFrame> frame,
-               int64_t query_id,
-               const CefString& request,
-               bool persistent,
+  bool OnQuery(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
+               int64_t query_id, const CefString& request, bool persistent,
                CefRefPtr<Callback> callback) override {
     return controller_->HandlePageQuery(browser, frame, query_id, request,
                                         persistent, std::move(callback));
@@ -92,8 +89,7 @@ void WindowClient::OnAddressChange(CefRefPtr<CefBrowser> browser,
 }
 
 void WindowClient::OnLoadingStateChange(CefRefPtr<CefBrowser> browser,
-                                        bool isLoading,
-                                        bool canGoBack,
+                                        bool isLoading, bool canGoBack,
                                         bool canGoForward) {
   CEF_REQUIRE_UI_THREAD();
   controller_->OnLoadingUpdated(browser, isLoading, canGoBack, canGoForward);
@@ -118,10 +114,8 @@ void WindowClient::OnRenderProcessTerminated(CefRefPtr<CefBrowser> browser,
 }
 
 bool WindowClient::OnProcessMessageReceived(
-    CefRefPtr<CefBrowser> browser,
-    CefRefPtr<CefFrame> frame,
-    CefProcessId source_process,
-    CefRefPtr<CefProcessMessage> message) {
+    CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
+    CefProcessId source_process, CefRefPtr<CefProcessMessage> message) {
   CEF_REQUIRE_UI_THREAD();
   if (media_observation_bridge_.OnProcessMessageReceived(
           browser, frame, source_process, message)) {
@@ -137,13 +131,9 @@ bool WindowClient::OnProcessMessageReceived(
 }
 
 CefRefPtr<CefResourceRequestHandler> WindowClient::GetResourceRequestHandler(
-    CefRefPtr<CefBrowser> browser,
-    CefRefPtr<CefFrame> frame,
-    CefRefPtr<CefRequest> request,
-    bool is_navigation,
-    bool is_download,
-    const CefString& request_initiator,
-    bool& disable_default_handling) {
+    CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
+    CefRefPtr<CefRequest> request, bool is_navigation, bool is_download,
+    const CefString& request_initiator, bool& disable_default_handling) {
   static_cast<void>(frame);
   static_cast<void>(is_navigation);
   static_cast<void>(is_download);
@@ -198,8 +188,7 @@ void WindowClient::ClosePageSnapshotBrowser(CefRefPtr<CefBrowser> browser,
 }
 
 void WindowClient::AdvanceMediaObservationNavigation(
-    CefRefPtr<CefBrowser> browser,
-    std::uint32_t tab_id,
+    CefRefPtr<CefBrowser> browser, std::uint32_t tab_id,
     std::uint64_t navigation_id) {
   media_observation_bridge_.AdvanceNavigation(browser, tab_id, navigation_id);
 }
@@ -251,8 +240,7 @@ CefMessageRouterBrowserSide* WindowClient::EnsurePageRouter() {
 bool WindowClient::OnBeforeBrowse(CefRefPtr<CefBrowser> browser,
                                   CefRefPtr<CefFrame> frame,
                                   CefRefPtr<CefRequest> request,
-                                  bool user_gesture,
-                                  bool is_redirect) {
+                                  bool user_gesture, bool is_redirect) {
   CEF_REQUIRE_UI_THREAD();
   static_cast<void>(is_redirect);
   if (request) {
@@ -271,6 +259,19 @@ bool WindowClient::OnDragEnter(CefRefPtr<CefBrowser> browser,
                                DragOperationsMask mask) {
   CEF_REQUIRE_UI_THREAD();
   return controller_->HandleLocalEntryDrag(browser, dragData, mask);
+}
+
+bool WindowClient::OnFileDialog(
+    CefRefPtr<CefBrowser> browser, FileDialogMode mode, const CefString& title,
+    const CefString& default_file_path,
+    const std::vector<CefString>& accept_filters,
+    const std::vector<CefString>& accept_extensions,
+    const std::vector<CefString>& accept_descriptions,
+    CefRefPtr<CefFileDialogCallback> callback) {
+  CEF_REQUIRE_UI_THREAD();
+  return controller_->HandleFileDialog(
+      browser, mode, title, default_file_path, accept_filters,
+      accept_extensions, accept_descriptions, std::move(callback));
 }
 
 void WindowClient::OnBeforeContextMenu(CefRefPtr<CefBrowser> browser,
@@ -382,6 +383,11 @@ void TabController::SetNavigationInterceptor(
   navigation_interceptor_ = std::move(interceptor);
 }
 
+void TabController::SetFileDialogHandler(FileDialogHandler handler) {
+  CEF_REQUIRE_UI_THREAD();
+  file_dialog_handler_ = std::move(handler);
+}
+
 void TabController::SetPageQueryHandler(PageQueryHandler handler) {
   CEF_REQUIRE_UI_THREAD();
   page_query_handler_ = std::move(handler);
@@ -414,17 +420,29 @@ void TabController::SetContextMenuCommandHandler(
 }
 
 bool TabController::HandleLocalEntryDrag(
-    CefRefPtr<CefBrowser> browser,
-    CefRefPtr<CefDragData> dragData,
+    CefRefPtr<CefBrowser> browser, CefRefPtr<CefDragData> dragData,
     CefDragHandler::DragOperationsMask mask) {
   CEF_REQUIRE_UI_THREAD();
   return local_entry_drag_handler_ &&
          local_entry_drag_handler_(browser, dragData, mask);
 }
 
+bool TabController::HandleFileDialog(
+    CefRefPtr<CefBrowser> browser, CefDialogHandler::FileDialogMode mode,
+    const CefString& title, const CefString& default_file_path,
+    const std::vector<CefString>& accept_filters,
+    const std::vector<CefString>& accept_extensions,
+    const std::vector<CefString>& accept_descriptions,
+    CefRefPtr<CefFileDialogCallback> callback) {
+  CEF_REQUIRE_UI_THREAD();
+  return file_dialog_handler_ &&
+         file_dialog_handler_(browser, mode, title, default_file_path,
+                              accept_filters, accept_extensions,
+                              accept_descriptions, std::move(callback));
+}
+
 bool TabController::HandleContextMenuAugment(
-    CefRefPtr<CefBrowser> browser,
-    CefRefPtr<CefContextMenuParams> params,
+    CefRefPtr<CefBrowser> browser, CefRefPtr<CefContextMenuParams> params,
     CefRefPtr<CefMenuModel> model) {
   CEF_REQUIRE_UI_THREAD();
   return context_menu_augmenter_ &&
@@ -439,11 +457,8 @@ bool TabController::HandleContextMenuCommand(CefRefPtr<CefBrowser> browser,
 }
 
 bool TabController::HandlePageQuery(
-    CefRefPtr<CefBrowser> browser,
-    CefRefPtr<CefFrame> frame,
-    int64_t query_id,
-    const CefString& request,
-    bool persistent,
+    CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int64_t query_id,
+    const CefString& request, bool persistent,
     CefRefPtr<CefMessageRouterBrowserSide::Callback> callback) {
   CEF_REQUIRE_UI_THREAD();
   return page_query_handler_ &&
@@ -525,8 +540,7 @@ TabController::DrainMediaObservations(std::size_t max_events) {
 }
 
 std::optional<std::string> TabController::TrustedPageUrl(
-    std::uint32_t tab_id,
-    std::uint64_t navigation_id) const {
+    std::uint32_t tab_id, std::uint64_t navigation_id) const {
   CEF_REQUIRE_UI_THREAD();
   const TabSnapshot* tab = model_.Find(tab_id);
   if (!tab || tab->navigation_generation != navigation_id ||
@@ -781,8 +795,7 @@ void TabController::OnAddressUpdated(CefRefPtr<CefBrowser> browser,
 }
 
 void TabController::OnLoadingUpdated(CefRefPtr<CefBrowser> browser,
-                                     bool is_loading,
-                                     bool can_go_back,
+                                     bool is_loading, bool can_go_back,
                                      bool can_go_forward) {
   CEF_REQUIRE_UI_THREAD();
   const int browser_id = browser->GetIdentifier();

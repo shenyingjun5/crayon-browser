@@ -9,7 +9,7 @@
 ## 1. 当前结论
 
 - 已收口：`BRD-01..04`、Foundation、`MED-01..19`、`BUX-01..18`、`SDK-01..14`、`RNM-01..08`；CEF 为 `CEF-01..05/15 DONE`、`CEF-06..14 VERIFIED`，`ACT-01..12` 已完成契约/模型层总 Review，`MRT-01..08 DONE`。
-- 页面数据 C1 算法与数据面 `CNT-01..10` 已收口；一期 macOS 产品链 `CNT-17..19 DONE`、`CNT-18e/CNT-20 VERIFIED`。Windows 不能复用 macOS 装配证据，首发继续执行 `CNT-20W1 READY -> W2 -> CNT-21W`。
+- 页面数据 C1 算法与数据面 `CNT-01..10` 已收口；一期 macOS 产品链 `CNT-17..19 DONE`、`CNT-18e/CNT-20 VERIFIED`。Windows 不能复用 macOS 装配证据，`CNT-20W1 DONE` 后首发继续执行 `CNT-20W2 READY -> CNT-21W`。
 - 第一期范围由 `REL-01 DONE` 冻结为网页 Markdown、LAN Direct/Relay 投屏、本地 Markdown 编辑三大闭环；远程后续已在 macOS arm64 闭合共享协议与大部分产品链。`REL-05 DONE` 按 2026-08-31 用户决策改为 Windows 10/11 x64 先形成发布候选，macOS 特有验证后置且不阻塞 Windows。Agent/CLI/MCP、Workflow、Hub、Partner、模型与 HarmonyOS 默认关闭并进入第二期。
 - 平台剩余重点：先执行 `CNT-20W1/W2 -> CNT-21W` 闭合 Windows 网页 Markdown，再执行 `PLT-W05a..f` 及 ADB 正式接收端 Direct/Relay，随后完成 `MDV-20W/25W -> MRT-09W`、`PRV-13AW` 与 QAR Windows 核心矩阵。macOS `PLT-M05b4..b6/M05c`、QAR-10 和其他 macOS 特有门禁保留后续，不得改写已有证据或冒充 Windows 结果。
 - 产品依赖顺序不变，但发布拆为两期：第一期先完成浏览器/LAN 投屏/网页 Markdown/本地 MDV；第二期再开放 Agent 协议与语义动作、Workflow/Challenge、Capability Hub/合作方和模型。
@@ -238,7 +238,7 @@ flowchart LR
 
 ## 7. 当前领取顺序
 
-1. `CNT-20W1 READY`：实现 Windows content-host named-pipe process/adapter、网页 Markdown 平台 UI 与产品装配；再执行 `CNT-20W2 -> CNT-21W`。
+1. `CNT-20W2 READY`：执行 Windows Debug/Release 真实 CEF 网页 Markdown 正常/边界/安全/20 次性能、RSS/UI delay 与退出零残留矩阵；再执行 `CNT-21W`。
 2. `PLT-W05a..f`：Windows media-host/Cast UI 装配、ADB 正式接收端 Direct/Relay、拒绝/交接与 100 次资源稳定性。
 3. `MDV-25W/20W -> MRT-09W`：Windows 本地 Markdown 生产隔离、P0 Runtime、包体与真机回归。
 4. `PRV-13AW -> PLT-19W -> QAR Windows slices -> REL-03/04 -> QAR-16W`：安全、性能、长稳、安装/升级/回滚、SBOM 与候选 Go/NoGo。
