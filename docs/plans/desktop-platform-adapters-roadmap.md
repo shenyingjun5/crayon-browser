@@ -246,8 +246,8 @@
 | ID | 状态 | 依赖 | 单一目标 | 验收与边界 |
 |---|---|---|---|---|
 | PLT-M05b2 | DONE | M05b1 | 接通 observation → candidate/lifecycle → probe → `Direct/Relay/ExternalClientHandoff/Reject` 唯一策略 | 按 M05b2a/b/c 严格串行；MP4/HLS/DASH/DRM/credential fixture；普通失败不提权、不重试；不调用 SDK/UI |
-| PLT-M05b3 | IN_PROGRESS | M05b2 | 接通 CastButton/FeatureView、设备选择、Cast-SDK facade、session event pump 与 PLT 生命周期 | 按 M05b3a-e 严格串行；无设备/取消/失败/旧 session/stop；UI 线程不执行有界 SOAP 阻塞；不做真机结论 |
-| PLT-M05b4 | TODO | M05b3 | ADB 在线手机上的固定 Cast-SDK 正式接收端完成 clear fixture Direct 发现、连接、投送、控制和停止 | E2E-001；真实 Desktop Host，不以 ADB 在线或 SDK standalone Harness 代替 |
+| PLT-M05b3 | DONE | M05b2 | 接通 CastButton/FeatureView、设备选择、Cast-SDK facade、session event pump 与 PLT 生命周期 | 按 M05b3a-e 严格串行；无设备/取消/失败/旧 session/stop；UI 线程不执行有界 SOAP 阻塞；不做真机结论 |
+| PLT-M05b4 | READY | M05b3 | ADB 在线手机上的固定 Cast-SDK 正式接收端完成 clear fixture Direct 发现、连接、投送、控制和停止 | E2E-001；真实 Desktop Host，不以 ADB 在线或 SDK standalone Harness 代替 |
 | PLT-M05b5 | TODO | M05b4 | 同一 ADB 真机接收端完成 MP4 Range 与 HLS Relay 全链路 | E2E-002；opaque route、200/206/416、分片、撤销后拒绝；不支持 DASH Relay/加密 HLS |
 | PLT-M05b6 | TODO | M05b5 | DRM/EME/加密/凭证来源拒绝与无路由外部客户端确认/取消/未安装/失败反馈 | E2E-003/004；交接永不显示投屏中、不创建 SDK/Relay session |
 
@@ -263,7 +263,7 @@
 | PLT-M05b3b | DONE | M05b3a | 扩展私有 MHV1，使 bundled Browser/media-host 可表达 discovery、设备快照、选择/停止与有界 session event pump | Rust/C++ 双 codec、current/previous golden、未知 kind/超界/secret 扫描；不执行 SDK，不改 CastFacade |
 | PLT-M05b3c | DONE | M05b3b | 在 Rust media-host 内装配唯一 `CastUsecase`、`SenderCastFacade` 与 session drain owner，执行 discovery/select/start/stop 并把旧 session/错误投影为 MHV1 | `crayon-app-runtime`/既有 adapter facade；Fake + real facade contract；阻塞 SDK 调用不在协议 reader/callback；Relay 实际投送仍不验收 |
 | PLT-M05b3d | DONE | M05b3c | macOS C++ media-host process/adapter 增加有界后台 command worker 和 session event pump，CEF UI 线程只 enqueue/drain | `browser/cef-shell/src/{ipc,macos}` 与相邻 tests；无 UI 线程 SOAP/discovery、取消/stop/shutdown 逆序、队列满显式失败 |
-| PLT-M05b3e | IN_PROGRESS | M05b3d | 将协调器与真实浏览器 chrome Cast 按钮、原生 receiver picker、M05b2 candidate 和 PLT navigation/close/app-exit 生命周期接通 | 按 b3e1/e2 严格串行；macOS Debug/Release 真 CEF：无设备、刷新、取消、失败、旧 session、stop/退出；mock keychain；不做真机 Direct/Relay 结论 |
+| PLT-M05b3e | DONE | M05b3d | 将协调器与真实浏览器 chrome Cast 按钮、原生 receiver picker、M05b2 candidate 和 PLT navigation/close/app-exit 生命周期接通 | 按 b3e1/e2 严格串行；macOS Debug/Release 真 CEF：无设备、刷新、取消、失败、旧 session、stop/退出；mock keychain；不做真机 Direct/Relay 结论 |
 
 五切片共用边界：页面事实不能打开 picker 或选择设备；UI 永不接收 IP、控制 URL、媒体 URL、Cookie/Authorization；只有 `crayon-cast-adapter` 调 Cast-SDK；ExternalClientHandoff 不创建 SDK/Relay session且归 M05b6 呈现；M05b3 不以 Fake、ADB 在线或 standalone SDK Harness 宣称真机投送通过。若 b3b/c 发现必须修改 Cast-SDK facade、暴露 receiver locator 或改变 Relay 安全绑定，立即停止并建立独立 SDK/Relay gap 任务。
 
@@ -346,7 +346,7 @@
 | ID | 状态 | 依赖 | 单一目标 | 允许范围与门禁 |
 |---|---|---|---|---|
 | PLT-M05b3e1 | DONE | M05b3d DONE | 建立 UI-thread-only Cast shell controller，把 Browser-verified media、opaque candidate、设备分页、start/session reply 与 navigation/close/shutdown 映射到既有 `CastUiCoordinator` 和 b3d async command port | `browser/cef-shell/src/macos/cast_shell_controller*`、独立 Fake command test、CMake 与 Roadmap；无 CEF/AppKit/SDK/网络，页面事实不能直接启用或选择设备 |
-| PLT-M05b3e2 | READY | M05b3e1 | 增加 macOS 原生 browser-chrome Cast 按钮与非阻塞 receiver picker，并在真实 CEF App 接通 e1 controller、M05b2/b3d drain 和 navigation/close/app-exit | AppKit adapter、CEF App/Tab lifecycle、locales/自有 `cast.device` glyph、真 CEF fixture；不得调用 Chromium MediaRouter，不覆盖网页 viewport，不访问 Keychain |
+| PLT-M05b3e2 | DONE | M05b3e1 | 增加 macOS 原生 browser-chrome Cast 按钮与非阻塞 receiver picker，并在真实 CEF App 接通 e1 controller、M05b2/b3d drain 和 navigation/close/app-exit | AppKit adapter、CEF App/Tab lifecycle、locales/自有 `cast.device` glyph、真 CEF fixture；不得调用 Chromium MediaRouter，不覆盖网页 viewport，不访问 Keychain |
 
 两切片共用边界：只有 Browser process 已通过真实输入与播放推进门禁的 media fact 才能建立 eligibility；network/candidate/page 文本单独不能启用按钮。receiver 仅显示稳定 id、展示名和闭合可用状态，不向 UI 暴露 IP/URL/UDN/token。Handoff 的确认/安装/启动反馈仍归 M05b6，e1/e2 遇到 Handoff 只闭合为非 Casting 状态；手机 Direct/Relay 仍由 M05b4/b5 验收。
 
@@ -367,6 +367,24 @@
 - 验证：macOS arm64 Debug/Release `crayon_cast_shell_controller_mac_test` 各 1/1；两配置 `ctest -R '^(cast_ui_coordinator|cast_shell_controller_mac|media_host_adapter_mac)$'` 各 3/3。测试覆盖 candidate 无 proof、verified media、Ready/Offline、多页、空设备、刷新/取消、乱序页、重复选择、Direct/Relay/Handoff/Reject/Failed、旧/terminal event、stop、navigation/close/shutdown、host loss与 command reject。`cargo run -p repo-guard -- scan --root .`、`bash scripts/check.sh security`（relay security 7/7）、Apple clang-format dry-run 与 `git diff --check` 通过；无 Keychain 调用。
 - Code Review：按 v0.8 复核可信 eligibility、唯一状态 owner、分页/队列边界、generation、迟到结果、命令拒绝和生命周期；关闭 2 个 P1（Stop enqueue 失败会遗留 Stopping；selection/protocol 失败未停止 discovery）后最终 P0/P1/P2=`0/0/0`。生产函数均未触发 100 行提醒，无锁、线程、I/O、日志或 secret/locator DTO。
 - 未覆盖与风险：本切片没有真实 CEF/AppKit UI，也未加入产品 target；`PLT-M05b3e2 READY` 负责原生 browser-chrome button/picker、App drain 与真 CEF lifecycle。固定 CEF Chrome Runtime 不能注入自有 toolbar button，e2 必须使用受控 AppKit browser-chrome surface，禁止回退 Chromium MediaRouter。Release Ninja 仍出现既有 `premature end of file; recovering` 后自恢复并完成目标；真机仍归 M05b4/b5。
+
+##### PLT-M05b3e2 原子范围（macOS browser-chrome button/picker 与产品接线）
+
+- 状态：`DONE`；依赖 `PLT-M05b3e1 DONE`。
+- 单一目标：使用 AppKit titlebar accessory 建立不覆盖网页 viewport 的真实 macOS browser-chrome Cast 按钮与非阻塞 receiver sheet，并在产品 `BrowserApp` 接通 e1 controller、M05b2 planning/b3d Cast drain 以及 active navigation/close/focus/app-exit。
+- 输入/输出与允许修改：允许新增 `browser/cef-shell/src/macos/cast_chrome_mac.{h,mm}`，修改 macOS App、相邻 `TabController` lifecycle callback、`MediaHostAdapter` 只读生命周期 epoch、CMake/resources/locales、真 CEF fixture/source/package contract 和 Roadmap。按钮图形只复用 manifest 注册的 `browser/shared-ui/design/icons/cast-device.svg`，文案只来自 `Localizable.strings`。
+- 禁止修改：Rust/MHV1/Cast-SDK/Relay/shared coordinator、Chromium MediaRouter/`IDC_ROUTE_MEDIA`、网页/Renderer、Windows；不得在页面 viewport 注入按钮，不得阻塞 CEF UI 线程或访问 Keychain。
+- 状态/生命周期：每个真实 CEF window 可挂一个 accessory，只有 active browser surface 显示当前状态；Hidden/Disabled/Eligible/Selecting/Casting/Stopping 映射到可见、enabled、tooltip/accessibility。sheet 最多展示 64 个闭合 receiver option，无设备可刷新/取消；select/cancel/refresh 只调用 e1。active target navigation/focus change/close、host loss和最后窗口退出必须关闭 sheet、停 session/discovery 并逆序释放；内置 route-media command 一律不得成为调用路径。
+- 验收：AppKit 独立 test 覆盖 attach/detach、active window、状态映射、空/多设备、refresh/cancel/select和关闭；真实 CEF fixture 覆盖 Browser proof 后按钮 Eligible、打开空 picker、取消、navigation/close/host stop 零残留并输出 mock keychain。Debug/Release完整构建与 focused/full CTest、资源/package/source contract、clang-format、repo guard/security、Review P0/P1=0。
+- 明确不做：手机 Direct/Relay 结论（b4/b5）、handoff 执行（b6）、100 次长稳（M05c）、Windows、真实 Keychain。
+
+##### PLT-M05b3e2 完成记录（2026-08-31，macOS browser-chrome Cast UI）
+
+- 实现：新增 AppKit titlebar accessory Cast 按钮与非阻塞 receiver sheet，不覆盖网页 viewport；按钮图形来自已登记 `cast-device.svg`，中英文文案来自资源。产品 App 接通 e1 controller、media-host planning/Cast drain、Browser-verified media、active focus/navigation/close/app-exit，并以只读 host epoch 在进程快速重启时清除假 Casting。真实 CEF window 尚未挂到 `NSWindow` 时采用幂等延迟 attach；不调用 Chromium MediaRouter，也不访问系统 Keychain。
+- 生命周期与边界：每个 CEF window 只挂一个 accessory，仅 active surface 显示；空设备可刷新/取消，多设备只回传闭合 device id。navigation、跨窗口 focus、close、host generation 变化与最后窗口退出均关闭 sheet、停止 session/discovery并逆序释放。source contract 只精确允许 controller 内一处闭合 route 到共享 UI state 的枚举映射，其他 macOS 生产代码仍禁止平台自建传输栈。
+- 验证：macOS arm64 Debug/Release 产品、AppKit test 与真 CEF fixture 均编译、链接并 ad-hoc 签名；两配置最终 focused CTest 各 6/6。真实 CEF `media-cast-ui` 两配置均完成 Browser proof→Eligible→空 picker→Cancel→navigation 清理，并输出 `mock_keychain=1`。Release 完整 CTest 82/82；Debug 完整矩阵两轮均为 81/82，唯一旧 source-contract 误报修正后该项及最终 focused 回归通过，完整真 CEF fixture 两轮通过。`cargo run -p repo-guard -- scan --root .`、`bash scripts/check.sh security`（relay security 7/7）、fixture `py_compile` 与 `git diff --check` 通过。
+- Code Review：按 v0.8 复核可信 eligibility、唯一状态 owner、CEF/AppKit 生命周期、异步 sheet teardown、host generation、资源打包、隐私与 UI 线程热路径；修正真实 CEF 创建早于 `NSView.window` 导致 attach 失败、AppKit 测试 window close 释放和 host restart 假状态，最终 P0/P1/P2=`0/0/0`。无新增线程、锁、网络 I/O、receiver locator/URL/token 或 Keychain 路径。
+- 未覆盖与风险：尚未用正式手机接收端验证 Direct/Relay 实际可播放性；下一任务为 `PLT-M05b4 READY`，但按用户要求本提交后暂停。Release Ninja 仍出现既有 `premature end of file; recovering` 后自恢复并完成构建；CEF 退出仍有既有 GPU/cache/signing warning，不影响场景退出码。
 
 ### PLT-M05b2 原子范围（按 a/b/c 三切片）
 

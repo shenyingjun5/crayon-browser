@@ -50,3 +50,10 @@
 "page_markdown.copied_status" = "Markdown copied";
 "page_markdown.copy_failed_status" = "Could not copy Markdown";
 "page_markdown.save_cancelled_status" = "Save cancelled";
+"cast.select_receiver" = "Choose cast device";
+"cast.stop" = "Stop casting";
+"cast.picker.title" = "Cast to device";
+"cast.picker.empty" = "No available devices found. Refresh or cancel.";
+"cast.picker.select" = "Cast";
+"cast.picker.refresh" = "Refresh";
+"cast.picker.cancel" = "Cancel";

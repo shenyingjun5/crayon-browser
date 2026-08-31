@@ -632,6 +632,9 @@ void MediaHostAdapter::InvalidateTab(const std::string &tab_id) {
 }
 
 void MediaHostAdapter::FailAll() {
+  ++cast_state_epoch_;
+  if (cast_state_epoch_ == 0)
+    ++cast_state_epoch_;
   requests_.clear();
   cast_requests_.clear();
   candidates_.clear();

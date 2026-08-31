@@ -44,6 +44,10 @@ if(OS_WINDOWS)
       src/browser/new_tab/cef_new_tab_handler.cc
       src/browser/new_tab/cef_new_tab_handler.h
       src/ipc/page_snapshot_cef_message.cc
+      src/macos/cast_chrome_mac.h
+      src/macos/cast_chrome_mac.mm
+      src/macos/cast_shell_controller.cc
+      src/macos/cast_shell_controller.h
       src/ipc/page_snapshot_cef_message.h
       src/ipc/media_observation_cef_message.cc
       src/ipc/media_observation_cef_message.h
@@ -182,6 +186,7 @@ if(OS_MAC)
 
   set(crayon_macos_resources
       "${CRAYON_MACOS_APP_ICON}"
+      "${PROJECT_SOURCE_DIR}/browser/shared-ui/design/icons/cast-device.svg"
       resources/macos/en.lproj/InfoPlist.strings
       resources/macos/en.lproj/Localizable.strings
       resources/macos/zh-Hans.lproj/InfoPlist.strings
@@ -229,6 +234,10 @@ if(OS_MAC)
       src/browser/window/tab_model.cc
       src/macos/app.cc
       src/macos/app.h
+      src/macos/cast_chrome_mac.h
+      src/macos/cast_chrome_mac.mm
+      src/macos/cast_shell_controller.cc
+      src/macos/cast_shell_controller.h
       src/macos/content_host_adapter_mac.cc
       src/macos/content_host_adapter_mac.h
       src/macos/content_host_process_mac.cc
@@ -328,6 +337,7 @@ if(OS_MAC)
                         PROPERTIES OBJCXX_STANDARD 20
                                    OBJCXX_STANDARD_REQUIRED ON)
   set_source_files_properties(src/macos/main_mac.mm
+                              src/macos/cast_chrome_mac.mm
                               src/macos/page_markdown_platform_mac.mm
                               src/macos/trusted_input_monitor_mac.mm
                               PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
@@ -342,6 +352,7 @@ if(OS_MAC)
   target_link_libraries(${CRAYON_BROWSER_TARGET}
                         PRIVATE libcef_dll_wrapper ${CEF_STANDARD_LIBS}
                                 crayon::browser-new-tab
+                                crayon::browser-cast-view
                                 crayon::browser-page-tools
                                 crayon::browser-page-snapshot-gateway
                                 crayon::cef-page-snapshot-collector
@@ -420,7 +431,7 @@ if(OS_MAC)
   endforeach()
 
   set(crayon_macos_resource_prefixes
-      "assets/brand/generated/macos/;resources/macos/")
+      "assets/brand/generated/macos/;browser/shared-ui/design/icons/;resources/macos/")
   COPY_MAC_RESOURCES("${crayon_macos_resources}"
                      "${crayon_macos_resource_prefixes}"
                      "${CRAYON_BROWSER_TARGET}"
@@ -525,10 +536,40 @@ if(OS_MAC)
       PRIVATE crayon::browser-cast-view crayon::cef-shell-ipc)
     add_test(NAME cast_shell_controller_mac
              COMMAND crayon_cast_shell_controller_mac_test)
+    add_executable(
+      crayon_cast_chrome_mac_test MACOSX_BUNDLE
+      tests/cast_chrome_mac_test.mm
+      src/macos/cast_chrome_mac.mm)
+    target_compile_features(crayon_cast_chrome_mac_test PRIVATE cxx_std_17)
+    set_target_properties(
+      crayon_cast_chrome_mac_test
+      PROPERTIES OBJCXX_STANDARD 20
+                 OBJCXX_STANDARD_REQUIRED ON
+                 MACOSX_BUNDLE_GUI_IDENTIFIER "com.crayon.browser.cast-ui-test"
+                 MACOSX_BUNDLE_BUNDLE_NAME "CrayonCastChromeTest"
+                 MACOSX_BUNDLE_BUNDLE_VERSION "1")
+    set_source_files_properties(
+      tests/cast_chrome_mac_test.mm src/macos/cast_chrome_mac.mm
+      PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+    target_include_directories(
+      crayon_cast_chrome_mac_test
+      PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CEF_ROOT}")
+    target_link_libraries(
+      crayon_cast_chrome_mac_test
+      PRIVATE crayon::browser-cast-view "-framework AppKit")
+    add_custom_command(
+      TARGET crayon_cast_chrome_mac_test POST_BUILD
+      COMMAND "${CMAKE_COMMAND}" -E make_directory
+              "$<TARGET_BUNDLE_DIR:crayon_cast_chrome_mac_test>/Contents/Resources"
+      COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+              "${PROJECT_SOURCE_DIR}/browser/shared-ui/design/icons/cast-device.svg"
+              "$<TARGET_BUNDLE_DIR:crayon_cast_chrome_mac_test>/Contents/Resources/cast-device.svg"
+      VERBATIM)
+    add_test(NAME cast_chrome_mac COMMAND crayon_cast_chrome_mac_test)
     set_tests_properties(content_host_process_mac content_host_adapter_mac
                          PROPERTIES LABELS "cef;shell;macos;content")
     set_tests_properties(media_host_process_mac media_host_adapter_mac
-                         cast_shell_controller_mac
+                         cast_shell_controller_mac cast_chrome_mac
                          PROPERTIES LABELS "cef;shell;macos;cast")
 
     add_test(
@@ -567,6 +608,10 @@ if(CRAYON_BUILD_TESTS)
       src/browser/window/tab_model.cc
       src/ipc/media_observation_cef_message.cc
       src/ipc/page_snapshot_cef_message.cc
+      src/macos/cast_chrome_mac.h
+      src/macos/cast_chrome_mac.mm
+      src/macos/cast_shell_controller.cc
+      src/macos/cast_shell_controller.h
       src/macos/content_host_adapter_mac.cc
       src/macos/content_host_process_mac.cc
       src/macos/media_host_adapter_mac.cc
@@ -587,6 +632,7 @@ if(CRAYON_BUILD_TESTS)
                  MACOSX_BUNDLE_BUNDLE_VERSION "1")
     set_source_files_properties(
       tests/page_snapshot_cef_integration_mac.mm
+      src/macos/cast_chrome_mac.mm
       src/macos/trusted_input_monitor_mac.mm
       PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
     target_include_directories(crayon_page_snapshot_cef_integration_test
@@ -600,6 +646,7 @@ if(CRAYON_BUILD_TESTS)
     target_link_libraries(
       crayon_page_snapshot_cef_integration_test
       PRIVATE libcef_dll_wrapper ${CEF_STANDARD_LIBS}
+              crayon::browser-cast-view
               crayon::browser-page-snapshot-gateway
               crayon::cef-shell-media-observer
               crayon::cef-shell-network-observer
@@ -622,6 +669,11 @@ if(CRAYON_BUILD_TESTS)
     endforeach()
     add_custom_command(
       TARGET crayon_page_snapshot_cef_integration_test POST_BUILD
+      COMMAND "${CMAKE_COMMAND}" -E make_directory
+              "$<TARGET_BUNDLE_DIR:crayon_page_snapshot_cef_integration_test>/Contents/Resources"
+      COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+              "${PROJECT_SOURCE_DIR}/browser/shared-ui/design/icons/cast-device.svg"
+              "$<TARGET_BUNDLE_DIR:crayon_page_snapshot_cef_integration_test>/Contents/Resources/cast-device.svg"
       COMMAND
         "${CMAKE_COMMAND}"
         "-DCRAYON_APP_BUNDLE=$<TARGET_BUNDLE_DIR:crayon_page_snapshot_cef_integration_test>"

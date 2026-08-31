@@ -395,9 +395,11 @@ bool Run() {
   if (adapter.Drain(2).size() != 1)
     return false;
   // A fast restart can hide the unhealthy transition from the UI thread.
+  const std::uint64_t cast_epoch_before_restart = adapter.cast_state_epoch();
   ++fake->generation_;
   adapter.Tick();
-  if (!adapter.Drain(4).empty())
+  if (!adapter.Drain(4).empty() ||
+      adapter.cast_state_epoch() == cast_epoch_before_restart)
     return false;
   if (!adapter.Submit(mh::Navigation{"seed", "tab-seed", 1, 1}))
     return false;
@@ -424,4 +426,6 @@ bool Run() {
 
 } // namespace
 
-int main() { return Run() ? 0 : 1; }
+int main() {
+  return Run() ? 0 : 1;
+}

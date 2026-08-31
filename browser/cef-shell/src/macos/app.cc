@@ -2,8 +2,8 @@
 
 #include <CoreFoundation/CoreFoundation.h>
 
-#include <cstdint>
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -46,7 +46,8 @@ browser_new_tab::NewTabPageStrings DefaultNewTabStrings() {
 }
 
 std::string Utf8(CFStringRef value) {
-  if (!value) return {};
+  if (!value)
+    return {};
   const CFIndex length = CFStringGetLength(value);
   const CFIndex capacity =
       CFStringGetMaximumSizeForEncoding(length, kCFStringEncodingUTF8) + 1;
@@ -60,11 +61,13 @@ std::string Utf8(CFStringRef value) {
 std::string Localized(const char* key) {
   CFStringRef key_string = CFStringCreateWithCString(kCFAllocatorDefault, key,
                                                      kCFStringEncodingUTF8);
-  if (!key_string) return {};
+  if (!key_string)
+    return {};
   CFStringRef value = CFBundleCopyLocalizedString(
       CFBundleGetMainBundle(), key_string, key_string, CFSTR("Localizable"));
   const std::string result = Utf8(value);
-  if (value) CFRelease(value);
+  if (value)
+    CFRelease(value);
   CFRelease(key_string);
   return result;
 }
@@ -76,23 +79,27 @@ std::string PreferredLanguage() {
     const auto first =
         static_cast<CFStringRef>(CFArrayGetValueAtIndex(languages, 0));
     const std::string tag = Utf8(first);
-    if (tag.rfind("zh", 0) == 0) language = "zh-CN";
+    if (tag.rfind("zh", 0) == 0)
+      language = "zh-CN";
   }
-  if (languages) CFRelease(languages);
+  if (languages)
+    CFRelease(languages);
   return language;
 }
 
 std::string HelperExecutablePath(const char* helper_name) {
   CFURLRef bundle_url = CFBundleCopyBundleURL(CFBundleGetMainBundle());
-  if (!bundle_url) return {};
+  if (!bundle_url)
+    return {};
   CFStringRef bundle_path =
       CFURLCopyFileSystemPath(bundle_url, kCFURLPOSIXPathStyle);
   CFRelease(bundle_url);
   const std::string path = Utf8(bundle_path);
-  if (bundle_path) CFRelease(bundle_path);
-  if (path.empty()) return {};
-  return (std::filesystem::path(path) / "Contents" / "Helpers" /
-          helper_name)
+  if (bundle_path)
+    CFRelease(bundle_path);
+  if (path.empty())
+    return {};
+  return (std::filesystem::path(path) / "Contents" / "Helpers" / helper_name)
       .string();
 }
 
@@ -156,6 +163,14 @@ browser_mdv::MdvPageStrings DefaultMdvStrings() {
   };
 }
 
+macos::CastChromeStrings DefaultCastStrings() {
+  return macos::CastChromeStrings{
+      Localized("cast.select_receiver"), Localized("cast.stop"),
+      Localized("cast.picker.title"),    Localized("cast.picker.empty"),
+      Localized("cast.picker.select"),   Localized("cast.picker.refresh"),
+      Localized("cast.picker.cancel")};
+}
+
 }  // namespace
 
 BrowserApp::BrowserApp(std::string product_name)
@@ -169,15 +184,41 @@ BrowserApp::BrowserApp(std::string product_name)
       permission_store_(std::make_unique<permission::PermissionStore>()),
       content_host_(std::make_unique<macos::ContentHostAdapter>()),
       media_host_(std::make_unique<macos::MediaHostAdapter>()),
+      cast_shell_(std::make_unique<
+                  macos::CastShellController>(macos::CastCommandPort{
+          [this](macos::media_host_ipc::DiscoveryAction action) {
+            return media_host_->RequestDiscovery(action);
+          },
+          [this](std::optional<std::uint64_t> revision, std::uint16_t offset) {
+            return media_host_->RequestDevicePage(revision, offset);
+          },
+          [this](std::uint64_t candidate, std::string device, bool handoff) {
+            return media_host_->RequestStartCast(candidate, std::move(device),
+                                                 handoff);
+          },
+          [this](std::uint64_t generation) {
+            return media_host_->RequestStopCast(generation);
+          }})),
       trusted_input_monitor_(std::make_unique<macos::TrustedInputMonitor>()),
       tab_controller_(new window::TabController(
-          kInitialUrl, window::TabController::BrowserCreatedCallback{},
-          std::nullopt, permission_store_.get())) {}
+          kInitialUrl,
+          [this](CefRefPtr<CefBrowser> browser) {
+            if (!cast_chrome_)
+              return;
+            active_browser_id_ = browser->GetIdentifier();
+            static_cast<void>(cast_chrome_->AttachWindow(
+                active_browser_id_, browser->GetHost()->GetWindowHandle()));
+            cast_chrome_->SetActiveWindow(active_browser_id_);
+            cast_chrome_->Render(cast_shell_->coordinator());
+          },
+          std::nullopt,
+          permission_store_.get())) {}
 
 BrowserApp::~BrowserApp() = default;
 
 void BrowserApp::OnBeforeCommandLineProcessing(
-    const CefString& process_type, CefRefPtr<CefCommandLine> command_line) {
+    const CefString& process_type,
+    CefRefPtr<CefCommandLine> command_line) {
   static_cast<void>(process_type);
   command_line->AppendSwitch("use-mock-keychain");
 }
@@ -189,6 +230,15 @@ void BrowserApp::OnRegisterCustomSchemes(
 
 void BrowserApp::OnContextInitialized() {
   CEF_REQUIRE_UI_THREAD();
+  cast_chrome_ = std::make_unique<macos::CastChromeMac>(
+      DefaultCastStrings(),
+      macos::CastChromeCallbacks{
+          [this] { return cast_shell_->ActivateCastButton(); },
+          [this] { return cast_shell_->RefreshReceivers(); },
+          [this] { cast_shell_->CancelReceiverPicker(); },
+          [this](const std::string& device_id) {
+            return cast_shell_->SelectReceiver(device_id);
+          }});
   new_tab::RegisterNewTabSchemeHandlerFactory(
       browser_new_tab::BuildNewTabPageModel(
           browser_new_tab::NewTabProfileMode::kRegular, {}),
@@ -200,7 +250,8 @@ void BrowserApp::OnContextInitialized() {
   tab_controller_->SetLocalEntryCommandHandler(
       [entries = mdv_entries_, editing = mdv_editing_](
           CefRefPtr<CefBrowser> browser, int command_id) {
-        if (entries->HandleChromeCommand(browser, command_id)) return true;
+        if (entries->HandleChromeCommand(browser, command_id))
+          return true;
         return editing->HandleSaveCommand(browser, command_id);
       });
   mdv_entries_->SetDocumentLoadedCallback(
@@ -240,7 +291,8 @@ void BrowserApp::OnContextInitialized() {
   tab_controller_->SetContextMenuCommandHandler(
       [this, entries = mdv_entries_](CefRefPtr<CefBrowser> browser,
                                      int command_id) {
-        if (entries->HandleContextMenuCommand(browser, command_id)) return true;
+        if (entries->HandleContextMenuCommand(browser, command_id))
+          return true;
         return page_markdown_preview_->HandleContextMenuCommand(browser,
                                                                 command_id);
       });
@@ -278,15 +330,38 @@ void BrowserApp::OnContextInitialized() {
     content_host_->Consume(tab_controller_->DrainPageSnapshots(16));
   });
   tab_controller_->SetMediaObservationLifecycleCallback(
-      [host = media_host_.get()](std::uint32_t tab_id,
+      [this, host = media_host_.get()](std::uint32_t tab_id,
                                  std::uint64_t navigation_id,
                                  std::uint32_t generation, bool closed) {
+        const bool active = tab_controller_->model().active_tab() == tab_id;
         if (closed) {
           static_cast<void>(host->CloseTab(tab_id, generation));
+          if (active)
+            cast_shell_->OnPageClosed();
         } else {
           static_cast<void>(
               host->AdvanceNavigation(tab_id, navigation_id, generation));
+          if (active)
+            cast_shell_->OnNavigation();
         }
+      });
+  tab_controller_->SetBrowserFocusedCallback(
+      [this](CefRefPtr<CefBrowser> browser) {
+        if (active_browser_id_ != 0 &&
+            active_browser_id_ != browser->GetIdentifier()) {
+          cast_shell_->OnNavigation();
+        }
+        active_browser_id_ = browser->GetIdentifier();
+        static_cast<void>(cast_chrome_->AttachWindow(
+            active_browser_id_, browser->GetHost()->GetWindowHandle()));
+        cast_chrome_->SetActiveWindow(active_browser_id_);
+        cast_chrome_->Render(cast_shell_->coordinator());
+      });
+  tab_controller_->SetBrowserClosingCallback(
+      [this](CefRefPtr<CefBrowser> browser) {
+        cast_chrome_->DetachWindow(browser->GetIdentifier());
+        if (active_browser_id_ == browser->GetIdentifier())
+          active_browser_id_ = 0;
       });
   tab_controller_->SetMediaObservationEventsReadyCallback(
       [this] { ConsumeMediaObservations(); });
@@ -294,6 +369,8 @@ void BrowserApp::OnContextInitialized() {
     content_host_tick_active_ = false;
     trusted_input_monitor_->Stop();
     page_markdown_preview_->Stop();
+    cast_shell_->Shutdown();
+    cast_chrome_->Close();
     content_host_->Stop();
     media_host_->Stop();
   });
@@ -343,17 +420,32 @@ void BrowserApp::ScheduleContentHostTick() {
 
 void BrowserApp::ContentHostTick() {
   CEF_REQUIRE_UI_THREAD();
-  if (!content_host_tick_active_) return;
+  if (!content_host_tick_active_)
+    return;
   content_host_->Consume(tab_controller_->DrainPageSnapshots(16));
   ConsumeMediaObservations();
   content_host_->Tick();
   media_host_->Tick();
   page_markdown_preview_->Tick(content_host_->Drain(64),
                                content_host_->healthy());
-  // M05b3 will consume this closed DTO stream. Until its UI owner exists,
-  // drain it so repeated page observations cannot create backpressure.
   static_cast<void>(media_host_->Drain(64));
-  static_cast<void>(media_host_->DrainPlanning(64));
+  cast_shell_->ConsumePlanning(media_host_->DrainPlanning(64));
+  cast_shell_->ConsumeCast(media_host_->DrainCast(64));
+  const bool media_healthy = media_host_->healthy();
+  const std::uint64_t cast_epoch = media_host_->cast_state_epoch();
+  if ((!media_healthy && media_host_was_healthy_) ||
+      (media_host_cast_epoch_ != 0 && cast_epoch != media_host_cast_epoch_)) {
+    cast_shell_->OnHostUnavailable();
+  }
+  media_host_was_healthy_ = media_healthy;
+  media_host_cast_epoch_ = cast_epoch;
+  if (CefRefPtr<CefBrowser> active_browser = tab_controller_->ActiveBrowser()) {
+    active_browser_id_ = active_browser->GetIdentifier();
+    static_cast<void>(cast_chrome_->AttachWindow(
+        active_browser_id_, active_browser->GetHost()->GetWindowHandle()));
+    cast_chrome_->SetActiveWindow(active_browser_id_);
+  }
+  cast_chrome_->Render(cast_shell_->coordinator());
   ScheduleContentHostTick();
 }
 
@@ -363,10 +455,14 @@ void BrowserApp::ConsumeMediaObservations() {
   for (auto& event : tab_controller_->DrainMediaObservations(16)) {
     auto page_url =
         tab_controller_->TrustedPageUrl(event.tab_id, event.navigation_id);
-    if (!page_url) continue;
-    facts.push_back(
-        macos::BrowserMediaFact{std::move(event), std::move(*page_url),
-                                MonotonicMilliseconds()});
+    if (!page_url)
+      continue;
+    if (event.source == ::crayon::cef_shell::gateway::EventSource::kMedia &&
+        tab_controller_->model().active_tab() == event.tab_id) {
+      cast_shell_->OnBrowserVerifiedMedia();
+    }
+    facts.push_back(macos::BrowserMediaFact{
+        std::move(event), std::move(*page_url), MonotonicMilliseconds()});
   }
   media_host_->Consume(std::move(facts));
 }

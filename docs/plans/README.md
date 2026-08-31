@@ -48,7 +48,7 @@
 
 | 顺序 | 任务 | 状态 | 说明 |
 |---:|---|---|---|
-| 1 | `PLT-M05b3e2` | READY | M05b3e1 DONE；接入 macOS 原生 browser-chrome Cast 按钮/picker、产品 drain 与真 CEF navigation/close/app-exit lifecycle |
+| 1 | `PLT-M05b4` | READY | M05b3 DONE；使用 ADB 在线正式接收端验证真实 Desktop Host 的 clear fixture Direct 发现、连接、投送、控制与停止 |
 
 ### 平台收口与待拆装配
 

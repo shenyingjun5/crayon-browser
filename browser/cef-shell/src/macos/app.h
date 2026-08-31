@@ -1,6 +1,7 @@
 #ifndef CRAYON_BROWSER_CEF_SHELL_SRC_MACOS_APP_H_
 #define CRAYON_BROWSER_CEF_SHELL_SRC_MACOS_APP_H_
 
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -11,6 +12,8 @@
 #include "browser/window/tab_controller.h"
 #include "crayon/browser_mdv/mdv_page.h"
 #include "include/cef_app.h"
+#include "macos/cast_chrome_mac.h"
+#include "macos/cast_shell_controller.h"
 #include "macos/content_host_adapter_mac.h"
 #include "macos/media_host_adapter_mac.h"
 
@@ -62,12 +65,17 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   std::unique_ptr<permission::PermissionStore> permission_store_;
   std::unique_ptr<macos::ContentHostAdapter> content_host_;
   std::unique_ptr<macos::MediaHostAdapter> media_host_;
+  std::unique_ptr<macos::CastShellController> cast_shell_;
+  std::unique_ptr<macos::CastChromeMac> cast_chrome_;
   std::unique_ptr<macos::TrustedInputMonitor> trusted_input_monitor_;
   CefRefPtr<window::TabController> tab_controller_;
   std::unique_ptr<page_markdown::CefPageMarkdownPreviewController>
       page_markdown_preview_;
   std::size_t content_host_start_checks_ = 0;
   bool content_host_tick_active_ = false;
+  bool media_host_was_healthy_ = false;
+  std::uint64_t media_host_cast_epoch_ = 0;
+  int active_browser_id_ = 0;
 
   IMPLEMENT_REFCOUNTING(BrowserApp);
   DISALLOW_COPY_AND_ASSIGN(BrowserApp);

@@ -50,3 +50,10 @@
 "page_markdown.copied_status" = "Markdown 已复制";
 "page_markdown.copy_failed_status" = "无法复制 Markdown";
 "page_markdown.save_cancelled_status" = "已取消保存";
+"cast.select_receiver" = "选择投屏设备";
+"cast.stop" = "停止投屏";
+"cast.picker.title" = "投屏到设备";
+"cast.picker.empty" = "未发现可用设备，可以刷新或取消。";
+"cast.picker.select" = "投屏";
+"cast.picker.refresh" = "刷新";
+"cast.picker.cancel" = "取消";

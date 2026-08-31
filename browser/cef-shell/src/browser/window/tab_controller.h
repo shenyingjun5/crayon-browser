@@ -58,18 +58,25 @@ class WindowClient final : public CefClient,
   bool DoClose(CefRefPtr<CefBrowser> browser) override;
   void OnBeforeClose(CefRefPtr<CefBrowser> browser) override;
 
-  void OnAddressChange(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
+  void OnAddressChange(CefRefPtr<CefBrowser> browser,
+                       CefRefPtr<CefFrame> frame,
                        const CefString& url) override;
-  void OnLoadingStateChange(CefRefPtr<CefBrowser> browser, bool isLoading,
-                            bool canGoBack, bool canGoForward) override;
+  void OnLoadingStateChange(CefRefPtr<CefBrowser> browser,
+                            bool isLoading,
+                            bool canGoBack,
+                            bool canGoForward) override;
   void OnRenderProcessTerminated(CefRefPtr<CefBrowser> browser,
-                                 TerminationStatus status, int error_code,
+                                 TerminationStatus status,
+                                 int error_code,
                                  const CefString& error_string) override;
-  bool OnBeforeBrowse(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
-                      CefRefPtr<CefRequest> request, bool user_gesture,
+  bool OnBeforeBrowse(CefRefPtr<CefBrowser> browser,
+                      CefRefPtr<CefFrame> frame,
+                      CefRefPtr<CefRequest> request,
+                      bool user_gesture,
                       bool is_redirect) override;
   void OnGotFocus(CefRefPtr<CefBrowser> browser) override;
-  bool OnChromeCommand(CefRefPtr<CefBrowser> browser, int command_id,
+  bool OnChromeCommand(CefRefPtr<CefBrowser> browser,
+                       int command_id,
                        cef_window_open_disposition_t disposition) override;
   bool OnDragEnter(CefRefPtr<CefBrowser> browser,
                    CefRefPtr<CefDragData> dragData,
@@ -81,15 +88,21 @@ class WindowClient final : public CefClient,
   bool OnContextMenuCommand(CefRefPtr<CefBrowser> browser,
                             CefRefPtr<CefFrame> frame,
                             CefRefPtr<CefContextMenuParams> params,
-                            int command_id, EventFlags event_flags) override;
-  bool OnKeyEvent(CefRefPtr<CefBrowser> browser, const CefKeyEvent& event,
+                            int command_id,
+                            EventFlags event_flags) override;
+  bool OnKeyEvent(CefRefPtr<CefBrowser> browser,
+                  const CefKeyEvent& event,
                   CefEventHandle os_event) override;
-  bool OnPreKeyEvent(CefRefPtr<CefBrowser> browser, const CefKeyEvent& event,
+  bool OnPreKeyEvent(CefRefPtr<CefBrowser> browser,
+                     const CefKeyEvent& event,
                      CefEventHandle os_event,
                      bool* is_keyboard_shortcut) override;
   CefRefPtr<CefResourceRequestHandler> GetResourceRequestHandler(
-      CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
-      CefRefPtr<CefRequest> request, bool is_navigation, bool is_download,
+      CefRefPtr<CefBrowser> browser,
+      CefRefPtr<CefFrame> frame,
+      CefRefPtr<CefRequest> request,
+      bool is_navigation,
+      bool is_download,
       const CefString& request_initiator,
       bool& disable_default_handling) override;
   bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
@@ -98,8 +111,10 @@ class WindowClient final : public CefClient,
                                 CefRefPtr<CefProcessMessage> message) override;
 
   std::optional<browser_engine::SnapshotRequestId> StartPageSnapshot(
-      CefRefPtr<CefBrowser> browser, std::uint64_t tab_id,
-      std::uint64_t navigation_id, browser_engine::SnapshotMode mode);
+      CefRefPtr<CefBrowser> browser,
+      std::uint64_t tab_id,
+      std::uint64_t navigation_id,
+      browser_engine::SnapshotMode mode);
   std::vector<gateway::SnapshotGatewayEvent> DrainPageSnapshots(
       std::size_t max_events);
   gateway::SnapshotGatewayResult CancelPageSnapshot(
@@ -111,7 +126,8 @@ class WindowClient final : public CefClient,
                                      std::uint64_t tab_id,
                                      std::uint64_t navigation_id);
   void ClosePageSnapshotBrowser(CefRefPtr<CefBrowser> browser,
-                                std::uint64_t tab_id, bool renderer_gone);
+                                std::uint64_t tab_id,
+                                bool renderer_gone);
 
   void AdvanceMediaObservationNavigation(CefRefPtr<CefBrowser> browser,
                                          std::uint32_t tab_id,
@@ -162,6 +178,10 @@ class TabController final : public CefBaseRefCounted {
  public:
   using BrowserCreatedCallback =
       std::function<void(CefRefPtr<CefBrowser> browser)>;
+  using BrowserFocusedCallback =
+      std::function<void(CefRefPtr<CefBrowser> browser)>;
+  using BrowserClosingCallback =
+      std::function<void(CefRefPtr<CefBrowser> browser)>;
   using ChromeCommandCallback = std::function<void(int command_id)>;
   using BrowsersClosedCallback = std::function<void()>;
   using PageLoadCompletedCallback =
@@ -198,37 +218,48 @@ class TabController final : public CefBaseRefCounted {
   void ShowMainWindow();
 
   const TabModel& model() const noexcept { return model_; }
+  CefRefPtr<CefBrowser> ActiveBrowser() const;
   CefRefPtr<WindowClient> client() const { return client_; }
   permission::PermissionStore* permission_store() const {
     return permission_store_;
   }
   void SetChromeCommandCallback(ChromeCommandCallback callback);
+  void SetBrowserFocusedCallback(BrowserFocusedCallback callback);
+  void SetBrowserClosingCallback(BrowserClosingCallback callback);
 
   // MDV-09 local-entry hooks: consulted by WindowClient before the
   // default behavior; a true return swallows the command/navigation.
   // Both optional, owned by the shell assembly.
   using LocalEntryCommandHandler =
       std::function<bool(CefRefPtr<CefBrowser> browser, int command_id)>;
-  using NavigationInterceptor = std::function<bool(
-      CefRefPtr<CefBrowser> browser, const CefString& url, bool user_gesture)>;
+  using NavigationInterceptor =
+      std::function<bool(CefRefPtr<CefBrowser> browser,
+                         const CefString& url,
+                         bool user_gesture)>;
   void SetLocalEntryCommandHandler(LocalEntryCommandHandler handler);
   void SetNavigationInterceptor(NavigationInterceptor interceptor);
 
   // MDV-10 page-query delegate (crayon://mdv editing binding).  The
   // WindowClient owns the browser-side message router and forwards
   // queries to this delegate.
-  using PageQueryHandler = std::function<bool(
-      CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, int64_t, const CefString&,
-      bool, CefRefPtr<CefMessageRouterBrowserSide::Callback>)>;
+  using PageQueryHandler =
+      std::function<bool(CefRefPtr<CefBrowser>,
+                         CefRefPtr<CefFrame>,
+                         int64_t,
+                         const CefString&,
+                         bool,
+                         CefRefPtr<CefMessageRouterBrowserSide::Callback>)>;
   void SetPageQueryHandler(PageQueryHandler handler);
 
   // MDV-11: local-entry drag and context-menu delegates (consulted
   // before default behavior; true = handled).  Optional.
   using LocalEntryDragHandler =
-      std::function<bool(CefRefPtr<CefBrowser>, CefRefPtr<CefDragData>,
+      std::function<bool(CefRefPtr<CefBrowser>,
+                         CefRefPtr<CefDragData>,
                          CefDragHandler::DragOperationsMask)>;
   using ContextMenuAugmenter =
-      std::function<bool(CefRefPtr<CefBrowser>, CefRefPtr<CefContextMenuParams>,
+      std::function<bool(CefRefPtr<CefBrowser>,
+                         CefRefPtr<CefContextMenuParams>,
                          CefRefPtr<CefMenuModel>)>;
   using ContextMenuCommandHandler =
       std::function<bool(CefRefPtr<CefBrowser>, int)>;
@@ -250,14 +281,18 @@ class TabController final : public CefBaseRefCounted {
                                 CefRefPtr<CefMenuModel> model);
   bool HandleContextMenuCommand(CefRefPtr<CefBrowser> browser, int command_id);
   bool HandlePageQuery(
-      CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
-      int64_t query_id, const CefString& request, bool persistent,
+      CefRefPtr<CefBrowser> browser,
+      CefRefPtr<CefFrame> frame,
+      int64_t query_id,
+      const CefString& request,
+      bool persistent,
       CefRefPtr<CefMessageRouterBrowserSide::Callback> callback);
 
   /// Consults the local-entry command handler (true = swallowed).
   bool HandleLocalEntryCommand(CefRefPtr<CefBrowser> browser, int command_id);
   /// Consults the navigation interceptor (true = cancelled).
-  bool InterceptNavigation(CefRefPtr<CefBrowser> browser, const CefString& url,
+  bool InterceptNavigation(CefRefPtr<CefBrowser> browser,
+                           const CefString& url,
                            bool user_gesture);
   void SetBrowsersClosedCallback(BrowsersClosedCallback callback);
   void SetPageLoadCompletedCallback(PageLoadCompletedCallback callback);
@@ -272,8 +307,8 @@ class TabController final : public CefBaseRefCounted {
       MediaObservationLifecycleCallback callback);
   std::vector<::crayon::cef_shell::gateway::GatewayEvent>
   DrainMediaObservations(std::size_t max_events);
-  std::optional<std::string> TrustedPageUrl(
-      std::uint32_t tab_id, std::uint64_t navigation_id) const;
+  std::optional<std::string> TrustedPageUrl(std::uint32_t tab_id,
+                                            std::uint64_t navigation_id) const;
   observation::MediaObservationDiagnostics media_observation_diagnostics()
       const;
   void NoteTrustedUserInputForActiveTab();
@@ -292,8 +327,10 @@ class TabController final : public CefBaseRefCounted {
   void OnBrowserClosing(CefRefPtr<CefBrowser> browser);
   void OnBrowserFocused(CefRefPtr<CefBrowser> browser);
   void OnAddressUpdated(CefRefPtr<CefBrowser> browser, const std::string& url);
-  void OnLoadingUpdated(CefRefPtr<CefBrowser> browser, bool is_loading,
-                        bool can_go_back, bool can_go_forward);
+  void OnLoadingUpdated(CefRefPtr<CefBrowser> browser,
+                        bool is_loading,
+                        bool can_go_back,
+                        bool can_go_forward);
   void OnRenderProcessGone(CefRefPtr<CefBrowser> browser);
   void OnChromeCommand(int command_id);
   bool RedirectBuiltInNewTab(CefRefPtr<CefFrame> frame,
@@ -301,13 +338,14 @@ class TabController final : public CefBaseRefCounted {
 
  private:
   bool CreateBrowserWindow();
-  CefRefPtr<CefBrowser> ActiveBrowser() const;
   void ApplyZoom(TabId tab_id);
 
   const std::string initial_url_;
   const BrowserCreatedCallback browser_created_callback_;
   const std::optional<std::string> new_tab_url_;
   ChromeCommandCallback chrome_command_callback_;
+  BrowserFocusedCallback browser_focused_callback_;
+  BrowserClosingCallback browser_closing_callback_;
   LocalEntryCommandHandler local_entry_command_handler_;
   NavigationInterceptor navigation_interceptor_;
   PageQueryHandler page_query_handler_;

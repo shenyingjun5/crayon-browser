@@ -165,6 +165,12 @@ file(GLOB_RECURSE production_files
      "${macos_source_root}/*.mm")
 foreach(production_file IN LISTS production_files)
   file(READ "${production_file}" contents)
+  # The shell controller may project the closed host route into the shared UI
+  # state enum. Keep every other occurrence forbidden so this exception cannot
+  # grow into a platform-owned transport implementation.
+  if(production_file MATCHES "/cast_shell_controller\\.cc$")
+    string(REPLACE "PolicyOutcome::kRelay" "" contents "${contents}")
+  endif()
   foreach(forbidden_token
           "http://"
           "https://"

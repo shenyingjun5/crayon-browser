@@ -43,6 +43,7 @@ public:
   bool Start(std::string executable_path);
   void Stop();
   bool healthy() const noexcept;
+  std::uint64_t cast_state_epoch() const noexcept { return cast_state_epoch_; }
 
   bool Submit(media_host_ipc::Message message);
   bool AdvanceNavigation(std::uint32_t tab_id, std::uint64_t navigation_id,
@@ -114,6 +115,7 @@ private:
   bool saw_healthy_ = false;
   std::uint64_t process_generation_ = 0;
   std::uint64_t next_request_id_ = 1;
+  std::uint64_t cast_state_epoch_ = 0;
 };
 
 } // namespace crayon::browser::cef_shell::macos
