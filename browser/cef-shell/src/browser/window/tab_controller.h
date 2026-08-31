@@ -8,6 +8,7 @@
 #include <optional>
 #include <string>
 
+#include "browser/observation_gateway/cef_observation_bridge.h"
 #include "browser/page_snapshot_gateway/cef_page_snapshot_bridge.h"
 #include "browser/permission/cef_download_handler.h"
 #include "browser/permission/cef_permission_handler.h"
@@ -83,6 +84,14 @@ class WindowClient final : public CefClient,
                             int command_id, EventFlags event_flags) override;
   bool OnKeyEvent(CefRefPtr<CefBrowser> browser, const CefKeyEvent& event,
                   CefEventHandle os_event) override;
+  bool OnPreKeyEvent(CefRefPtr<CefBrowser> browser, const CefKeyEvent& event,
+                     CefEventHandle os_event,
+                     bool* is_keyboard_shortcut) override;
+  CefRefPtr<CefResourceRequestHandler> GetResourceRequestHandler(
+      CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
+      CefRefPtr<CefRequest> request, bool is_navigation, bool is_download,
+      const CefString& request_initiator,
+      bool& disable_default_handling) override;
   bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
                                 CefRefPtr<CefFrame> frame,
                                 CefProcessId source_process,
@@ -104,6 +113,20 @@ class WindowClient final : public CefClient,
   void ClosePageSnapshotBrowser(CefRefPtr<CefBrowser> browser,
                                 std::uint64_t tab_id, bool renderer_gone);
 
+  void AdvanceMediaObservationNavigation(CefRefPtr<CefBrowser> browser,
+                                         std::uint32_t tab_id,
+                                         std::uint64_t navigation_id);
+  void CloseMediaObservationBrowser(CefRefPtr<CefBrowser> browser,
+                                    std::uint32_t tab_id);
+  void SetActiveMediaObservationTab(std::uint32_t tab_id);
+  void NoteTrustedUserInput(CefRefPtr<CefBrowser> browser);
+  std::vector<::crayon::cef_shell::gateway::GatewayEvent>
+  DrainMediaObservations(std::size_t max_events);
+  observation::MediaObservationDiagnostics media_observation_diagnostics()
+      const;
+  void SetMediaObservationEventsReadyCallback(
+      observation::CefObservationBridge::EventsReadyCallback callback);
+
   // Permission handlers: default-deny unless explicitly allowed by the store.
   CefRefPtr<CefPermissionHandler> GetPermissionHandler() override {
     return permission_handler_;
@@ -122,6 +145,7 @@ class WindowClient final : public CefClient,
   CefMessageRouterBrowserSide* EnsurePageRouter();
   CefRefPtr<CefMessageRouterBrowserSide> page_router_;
   gateway::CefPageSnapshotBridge page_snapshot_bridge_;
+  observation::CefObservationBridge media_observation_bridge_;
 
   IMPLEMENT_REFCOUNTING(WindowClient);
   DISALLOW_COPY_AND_ASSIGN(WindowClient);
@@ -141,6 +165,7 @@ class TabController final : public CefBaseRefCounted {
   using PageLoadCompletedCallback =
       std::function<void(CefRefPtr<CefBrowser> browser)>;
   using PageSnapshotEventsReadyCallback = std::function<void()>;
+  using MediaObservationEventsReadyCallback = std::function<void()>;
 
   explicit TabController(
       std::string initial_url,
@@ -237,6 +262,13 @@ class TabController final : public CefBaseRefCounted {
   void SetPageSnapshotObserver(gateway::PageSnapshotObserver* observer);
   void SetPageSnapshotAdmission(std::function<bool()> admission);
   void OnPageSnapshotEventsReady();
+  void SetMediaObservationEventsReadyCallback(
+      MediaObservationEventsReadyCallback callback);
+  std::vector<::crayon::cef_shell::gateway::GatewayEvent>
+  DrainMediaObservations(std::size_t max_events);
+  observation::MediaObservationDiagnostics media_observation_diagnostics()
+      const;
+  void NoteTrustedUserInputForActiveTab();
 
   std::optional<browser_engine::SnapshotRequestId> StartPageSnapshot(
       CefRefPtr<CefBrowser> browser,
@@ -278,6 +310,7 @@ class TabController final : public CefBaseRefCounted {
   BrowsersClosedCallback browsers_closed_callback_;
   PageLoadCompletedCallback page_load_completed_callback_;
   PageSnapshotEventsReadyCallback page_snapshot_events_ready_callback_;
+  MediaObservationEventsReadyCallback media_observation_events_ready_callback_;
   std::function<bool()> page_snapshot_admission_;
   TabModel model_;
   permission::PermissionStore* permission_store_;

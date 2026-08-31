@@ -17,7 +17,8 @@ bool HasAsciiControl(const std::string& url) {
 
 }  // namespace
 
-MediaSourceKind ClassifySourceUrl(const std::string& url, std::string* normalized) {
+MediaSourceKind ClassifySourceUrl(const std::string& url,
+                                  std::string* normalized) {
   if (normalized != nullptr) {
     normalized->clear();
   }
@@ -27,8 +28,7 @@ MediaSourceKind ClassifySourceUrl(const std::string& url, std::string* normalize
   if (url.rfind("blob:", 0) == 0) {
     return MediaSourceKind::kBlobUrl;
   }
-  if (url.rfind("mediastream:", 0) == 0 ||
-      url.rfind("media-stream:", 0) == 0) {
+  if (url.rfind("mediastream:", 0) == 0 || url.rfind("media-stream:", 0) == 0) {
     return MediaSourceKind::kMediaStream;
   }
   if (IsHttpUrl(url)) {
@@ -55,19 +55,26 @@ ObserveResult MediaObserver::Observe(MediaObservation observation) {
     return ObserveResult::kDroppedStaleNavigation;
   }
   std::string normalized;
-  const MediaSourceKind kind = ClassifySourceUrl(observation.source_url, &normalized);
+  const MediaSourceKind kind =
+      ClassifySourceUrl(observation.source_url, &normalized);
+  const bool url_less_source =
+      observation.source_url.empty() &&
+      (observation.source_kind == MediaSourceKind::kBlobUrl ||
+       observation.source_kind == MediaSourceKind::kMediaStream);
   if (kind != observation.source_kind) {
     // The caller must classify first; a mismatching tag is dropped
     // rather than silently reinterpreted.
-    if (observation.source_kind == MediaSourceKind::kHttpUrl ||
-        (observation.source_kind == MediaSourceKind::kBlobUrl &&
-         kind != MediaSourceKind::kBlobUrl) ||
-        (observation.source_kind == MediaSourceKind::kMediaStream &&
-         kind != MediaSourceKind::kMediaStream)) {
+    if (!url_less_source &&
+        (observation.source_kind == MediaSourceKind::kHttpUrl ||
+         (observation.source_kind == MediaSourceKind::kBlobUrl &&
+          kind != MediaSourceKind::kBlobUrl) ||
+         (observation.source_kind == MediaSourceKind::kMediaStream &&
+          kind != MediaSourceKind::kMediaStream))) {
       return ObserveResult::kDroppedInvalidUrl;
     }
   }
-  if (observation.source_kind == MediaSourceKind::kHttpUrl && normalized.empty()) {
+  if (observation.source_kind == MediaSourceKind::kHttpUrl &&
+      normalized.empty()) {
     return ObserveResult::kDroppedInvalidUrl;
   }
   // blob:/stream sources must never carry a fabricated URL.
@@ -75,7 +82,7 @@ ObserveResult MediaObserver::Observe(MediaObservation observation) {
       !observation.source_url.empty()) {
     return ObserveResult::kDroppedInvalidUrl;
   }
-  observation.source_url = normalized;
+  observation.source_url = url_less_source ? std::string{} : normalized;
   observation.frame_id = frame_id_;
   observation.visible_fraction =
       std::min(1.0, std::max(0.0, observation.visible_fraction));
@@ -113,8 +120,7 @@ std::optional<MediaObservation> MediaObserver::FindEligible(
         element.visible_fraction <= 0.0) {
       continue;
     }
-    if (best == nullptr ||
-        element.visible_fraction > best->visible_fraction) {
+    if (best == nullptr || element.visible_fraction > best->visible_fraction) {
       best = &element;
     }
   }

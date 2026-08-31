@@ -10,15 +10,19 @@
 #include "browser/permission/permission_store.h"
 #include "browser/window/tab_controller.h"
 #include "crayon/browser_mdv/mdv_page.h"
+#include "include/cef_app.h"
 #include "macos/content_host_adapter_mac.h"
 
-#include "include/cef_app.h"
-
 namespace crayon::browser::cef_shell {
+
+namespace macos {
+class TrustedInputMonitor;
+}
 
 class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
  public:
   explicit BrowserApp(std::string product_name);
+  ~BrowserApp() override;
 
   CefRefPtr<CefBrowserProcessHandler> GetBrowserProcessHandler() override {
     return this;
@@ -30,8 +34,9 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   // by the SecureStore platform adapter (PLT-M04/PRV-05) when the user
   // actually saves or reads a secret, so launches stay prompt-free by
   // design and cookies at rest use the in-memory mock key.
-  void OnBeforeCommandLineProcessing(const CefString& process_type,
-                                     CefRefPtr<CefCommandLine> command_line) override;
+  void OnBeforeCommandLineProcessing(
+      const CefString& process_type,
+      CefRefPtr<CefCommandLine> command_line) override;
   void OnRegisterCustomSchemes(
       CefRawPtr<CefSchemeRegistrar> registrar) override;
   void OnContextInitialized() override;
@@ -54,6 +59,7 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   const std::shared_ptr<mdv::MdvEditController> mdv_editing_;
   std::unique_ptr<permission::PermissionStore> permission_store_;
   std::unique_ptr<macos::ContentHostAdapter> content_host_;
+  std::unique_ptr<macos::TrustedInputMonitor> trusted_input_monitor_;
   CefRefPtr<window::TabController> tab_controller_;
   std::unique_ptr<page_markdown::CefPageMarkdownPreviewController>
       page_markdown_preview_;

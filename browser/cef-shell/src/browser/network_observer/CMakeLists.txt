@@ -40,5 +40,5 @@ if(CRAYON_BUILD_TESTS)
       PRIVATE -Wall -Wextra -Wpedantic -Werror
     )
   endif()
-  add_test(NAME network_observer COMMAND crayon_core_client_supervisor_test)
+  add_test(NAME network_observer COMMAND crayon_network_observer_test)
 endif()

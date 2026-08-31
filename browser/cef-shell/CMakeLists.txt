@@ -37,10 +37,18 @@ if(OS_WINDOWS)
       src/browser/mdv/cef_mdv_handler.h
       src/browser/page_snapshot_gateway/cef_page_snapshot_bridge.cc
       src/browser/page_snapshot_gateway/cef_page_snapshot_bridge.h
+      src/browser/network_observer/cef_network_observer_adapter.cc
+      src/browser/network_observer/cef_network_observer_adapter.h
+      src/browser/observation_gateway/cef_observation_bridge.cc
+      src/browser/observation_gateway/cef_observation_bridge.h
       src/browser/new_tab/cef_new_tab_handler.cc
       src/browser/new_tab/cef_new_tab_handler.h
       src/ipc/page_snapshot_cef_message.cc
       src/ipc/page_snapshot_cef_message.h
+      src/ipc/media_observation_cef_message.cc
+      src/ipc/media_observation_cef_message.h
+      src/renderer/media_observer/cef_media_observer_renderer.cc
+      src/renderer/media_observer/cef_media_observer_renderer.h
       src/renderer/page_snapshot_collector/cef_page_snapshot_renderer.cc
       src/renderer/page_snapshot_collector/cef_page_snapshot_renderer.h
       src/browser/permission/cef_download_handler.cc
@@ -79,6 +87,10 @@ if(OS_WINDOWS)
     PRIVATE crayon::browser-mdv crayon::browser-new-tab
             crayon::browser-page-snapshot-gateway
             crayon::cef-page-snapshot-collector
+            crayon::cef-shell-media-observer
+            crayon::cef-shell-network-observer
+            crayon::cef-shell-input-proof
+            crayon::cef-shell-observation-gateway
             crayon::browser-shared-shell crayon_libcef libcef_dll_wrapper
             ${CEF_STANDARD_LIBS})
   set_target_properties(${CRAYON_BROWSER_TARGET}
@@ -187,6 +199,10 @@ if(OS_MAC)
       src/browser/mdv/cef_mdv_handler.h
       src/browser/page_snapshot_gateway/cef_page_snapshot_bridge.cc
       src/browser/page_snapshot_gateway/cef_page_snapshot_bridge.h
+      src/browser/network_observer/cef_network_observer_adapter.cc
+      src/browser/network_observer/cef_network_observer_adapter.h
+      src/browser/observation_gateway/cef_observation_bridge.cc
+      src/browser/observation_gateway/cef_observation_bridge.h
       src/browser/page_markdown/cef_page_markdown_preview.cc
       src/browser/page_markdown/cef_page_markdown_preview.h
       src/browser/page_markdown/page_markdown_preview.cc
@@ -203,6 +219,10 @@ if(OS_MAC)
       src/browser/new_tab/cef_new_tab_handler.h
       src/ipc/page_snapshot_cef_message.cc
       src/ipc/page_snapshot_cef_message.h
+      src/ipc/media_observation_cef_message.cc
+      src/ipc/media_observation_cef_message.h
+      src/renderer/media_observer/cef_media_observer_renderer.cc
+      src/renderer/media_observer/cef_media_observer_renderer.h
       src/renderer/page_snapshot_collector/cef_page_snapshot_renderer.cc
       src/renderer/page_snapshot_collector/cef_page_snapshot_renderer.h
       src/browser/window/tab_controller.cc
@@ -216,12 +236,18 @@ if(OS_MAC)
       src/macos/main_mac.mm)
   list(APPEND crayon_macos_sources
        src/macos/page_markdown_platform_mac.h
-       src/macos/page_markdown_platform_mac.mm)
+       src/macos/page_markdown_platform_mac.mm
+       src/macos/trusted_input_monitor_mac.h
+       src/macos/trusted_input_monitor_mac.mm)
   set(crayon_macos_helper_sources
       src/browser/new_tab/cef_new_tab_handler.cc
       src/browser/new_tab/cef_new_tab_handler.h
       src/ipc/page_snapshot_cef_message.cc
       src/ipc/page_snapshot_cef_message.h
+      src/ipc/media_observation_cef_message.cc
+      src/ipc/media_observation_cef_message.h
+      src/renderer/media_observer/cef_media_observer_renderer.cc
+      src/renderer/media_observer/cef_media_observer_renderer.h
       src/renderer/page_snapshot_collector/cef_page_snapshot_renderer.cc
       src/renderer/page_snapshot_collector/cef_page_snapshot_renderer.h
       src/macos/process_helper_mac.cc)
@@ -288,6 +314,7 @@ if(OS_MAC)
                                    OBJCXX_STANDARD_REQUIRED ON)
   set_source_files_properties(src/macos/main_mac.mm
                               src/macos/page_markdown_platform_mac.mm
+                              src/macos/trusted_input_monitor_mac.mm
                               PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
   target_include_directories(${CRAYON_BROWSER_TARGET}
                              PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -301,6 +328,10 @@ if(OS_MAC)
                                 crayon::browser-page-tools
                                 crayon::browser-page-snapshot-gateway
                                 crayon::cef-page-snapshot-collector
+                                crayon::cef-shell-media-observer
+                                crayon::cef-shell-network-observer
+                                crayon::cef-shell-input-proof
+                                crayon::cef-shell-observation-gateway
                                 crayon::cef-shell-core-client
                                 crayon::cef-shell-ipc)
   set_target_properties(
@@ -346,7 +377,8 @@ if(OS_MAC)
     target_link_libraries(${helper_target}
                           PRIVATE libcef_dll_wrapper ${CEF_STANDARD_LIBS}
                                   crayon::browser-new-tab
-                                  crayon::cef-page-snapshot-collector)
+                                  crayon::cef-page-snapshot-collector
+                                  crayon::cef-shell-media-observer)
     set_target_properties(
       ${helper_target}
       PROPERTIES OUTPUT_NAME "${CRAYON_MACOS_HELPER_EXECUTABLE}"
@@ -458,6 +490,8 @@ if(CRAYON_BUILD_TESTS)
     add_executable(
       crayon_page_snapshot_cef_integration_test MACOSX_BUNDLE
       tests/page_snapshot_cef_integration_mac.mm
+      src/browser/network_observer/cef_network_observer_adapter.cc
+      src/browser/observation_gateway/cef_observation_bridge.cc
       src/browser/page_snapshot_gateway/cef_page_snapshot_bridge.cc
       src/browser/permission/cef_download_handler.cc
       src/browser/permission/cef_permission_handler.cc
@@ -465,9 +499,12 @@ if(CRAYON_BUILD_TESTS)
       src/browser/permission/site_origin.cc
       src/browser/window/tab_controller.cc
       src/browser/window/tab_model.cc
+      src/ipc/media_observation_cef_message.cc
       src/ipc/page_snapshot_cef_message.cc
       src/macos/content_host_adapter_mac.cc
-      src/macos/content_host_process_mac.cc)
+      src/macos/content_host_process_mac.cc
+      src/macos/trusted_input_monitor_mac.h
+      src/macos/trusted_input_monitor_mac.mm)
     SET_EXECUTABLE_TARGET_PROPERTIES(crayon_page_snapshot_cef_integration_test)
     target_compile_features(crayon_page_snapshot_cef_integration_test
                             PRIVATE cxx_std_17)
@@ -480,8 +517,10 @@ if(CRAYON_BUILD_TESTS)
                  MACOSX_BUNDLE_BUNDLE_NAME
                  "CrayonPageSnapshotIntegrationTest"
                  MACOSX_BUNDLE_BUNDLE_VERSION "1")
-    set_source_files_properties(tests/page_snapshot_cef_integration_mac.mm
-                                PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+    set_source_files_properties(
+      tests/page_snapshot_cef_integration_mac.mm
+      src/macos/trusted_input_monitor_mac.mm
+      PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
     target_include_directories(crayon_page_snapshot_cef_integration_test
                                PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     target_compile_definitions(
@@ -493,6 +532,10 @@ if(CRAYON_BUILD_TESTS)
       crayon_page_snapshot_cef_integration_test
       PRIVATE libcef_dll_wrapper ${CEF_STANDARD_LIBS}
               crayon::browser-page-snapshot-gateway
+              crayon::cef-shell-media-observer
+              crayon::cef-shell-network-observer
+              crayon::cef-shell-input-proof
+              crayon::cef-shell-observation-gateway
               crayon::cef-shell-core-client crayon::cef-shell-ipc)
     add_dependencies(crayon_page_snapshot_cef_integration_test
                      ${CRAYON_BROWSER_TARGET} crayon_content_host)

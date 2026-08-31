@@ -14,12 +14,13 @@
 #include "browser/mdv/cef_mdv_handler.h"
 #include "browser/new_tab/cef_new_tab_handler.h"
 #include "browser/permission/permission_store.h"
-#include "macos/page_markdown_platform_mac.h"
 #include "include/base/cef_callback.h"
 #include "include/cef_app.h"
 #include "include/cef_task.h"
 #include "include/wrapper/cef_closure_task.h"
 #include "include/wrapper/cef_helpers.h"
+#include "macos/page_markdown_platform_mac.h"
+#include "macos/trusted_input_monitor_mac.h"
 
 namespace crayon::browser::cef_shell {
 namespace {
@@ -56,8 +57,8 @@ std::string Utf8(CFStringRef value) {
 }
 
 std::string Localized(const char* key) {
-  CFStringRef key_string = CFStringCreateWithCString(
-      kCFAllocatorDefault, key, kCFStringEncodingUTF8);
+  CFStringRef key_string = CFStringCreateWithCString(kCFAllocatorDefault, key,
+                                                     kCFStringEncodingUTF8);
   if (!key_string) return {};
   CFStringRef value = CFBundleCopyLocalizedString(
       CFBundleGetMainBundle(), key_string, key_string, CFSTR("Localizable"));
@@ -71,8 +72,8 @@ std::string PreferredLanguage() {
   CFArrayRef languages = CFLocaleCopyPreferredLanguages();
   std::string language = "en-US";
   if (languages && CFArrayGetCount(languages) > 0) {
-    const auto first = static_cast<CFStringRef>(
-        CFArrayGetValueAtIndex(languages, 0));
+    const auto first =
+        static_cast<CFStringRef>(CFArrayGetValueAtIndex(languages, 0));
     const std::string tag = Utf8(first);
     if (tag.rfind("zh", 0) == 0) language = "zh-CN";
   }
@@ -152,21 +153,23 @@ browser_mdv::MdvPageStrings DefaultMdvStrings() {
 BrowserApp::BrowserApp(std::string product_name)
     : product_name_(std::move(product_name)),
       mdv_strings_(DefaultMdvStrings()),
-      mdv_runtime_(std::make_shared<mdv::MdvRuntimeState>(
-          mdv::BuildFixtureSnapshot())),
-      mdv_entries_(std::make_shared<mdv::MdvEntryController>(
-          mdv_runtime_, mdv_strings_)),
-      mdv_editing_(std::make_shared<mdv::MdvEditController>(mdv_runtime_,
-                                                            mdv_strings_)),
+      mdv_runtime_(
+          std::make_shared<mdv::MdvRuntimeState>(mdv::BuildFixtureSnapshot())),
+      mdv_entries_(std::make_shared<mdv::MdvEntryController>(mdv_runtime_,
+                                                             mdv_strings_)),
+      mdv_editing_(
+          std::make_shared<mdv::MdvEditController>(mdv_runtime_, mdv_strings_)),
       permission_store_(std::make_unique<permission::PermissionStore>()),
       content_host_(std::make_unique<macos::ContentHostAdapter>()),
+      trusted_input_monitor_(std::make_unique<macos::TrustedInputMonitor>()),
       tab_controller_(new window::TabController(
           kInitialUrl, window::TabController::BrowserCreatedCallback{},
           std::nullopt, permission_store_.get())) {}
 
+BrowserApp::~BrowserApp() = default;
+
 void BrowserApp::OnBeforeCommandLineProcessing(
-    const CefString& process_type,
-    CefRefPtr<CefCommandLine> command_line) {
+    const CefString& process_type, CefRefPtr<CefCommandLine> command_line) {
   static_cast<void>(process_type);
   command_line->AppendSwitch("use-mock-keychain");
 }
@@ -199,15 +202,16 @@ void BrowserApp::OnContextInitialized() {
                                std::uint64_t size, std::uint64_t mtime) {
         editing->OnDocumentLoaded(browser, path, normalized, size, mtime);
       });
-  tab_controller_->SetNavigationInterceptor(
-      [editing = mdv_editing_, entries = mdv_entries_](
-          CefRefPtr<CefBrowser> browser, const CefString& url,
-          bool user_gesture) {
-        if (editing->InterceptWhileDirty(browser, url.ToString(), user_gesture)) {
-          return true;
-        }
-        return entries->InterceptNavigation(browser, url, user_gesture);
-      });
+  tab_controller_->SetNavigationInterceptor([editing = mdv_editing_,
+                                             entries = mdv_entries_](
+                                                CefRefPtr<CefBrowser> browser,
+                                                const CefString& url,
+                                                bool user_gesture) {
+    if (editing->InterceptWhileDirty(browser, url.ToString(), user_gesture)) {
+      return true;
+    }
+    return entries->InterceptNavigation(browser, url, user_gesture);
+  });
   tab_controller_->SetLocalEntryDragHandler(
       [entries = mdv_entries_](CefRefPtr<CefBrowser> browser,
                                CefRefPtr<CefDragData> drag_data,
@@ -245,6 +249,10 @@ void BrowserApp::OnContextInitialized() {
                                     persistent, std::move(callback));
       });
   tab_controller_->SetPageSnapshotObserver(content_host_.get());
+  static_cast<void>(
+      trusted_input_monitor_->Start([controller = tab_controller_] {
+        controller->NoteTrustedUserInputForActiveTab();
+      }));
   page_markdown_preview_ =
       std::make_unique<page_markdown::CefPageMarkdownPreviewController>(
           tab_controller_.get(), mdv_editing_,
@@ -263,6 +271,7 @@ void BrowserApp::OnContextInitialized() {
   });
   tab_controller_->SetBrowsersClosedCallback([this] {
     content_host_tick_active_ = false;
+    trusted_input_monitor_->Stop();
     page_markdown_preview_->Stop();
     content_host_->Stop();
   });
@@ -290,11 +299,11 @@ void BrowserApp::ContinueContentHostStartup() {
     CefQuitMessageLoop();
     return;
   }
-  CefPostDelayedTask(
-      TID_UI,
-      CefCreateClosureTask(base::BindOnce(
-          &BrowserApp::ContinueContentHostStartup, CefRefPtr<BrowserApp>(this))),
-      kContentHostTickMilliseconds);
+  CefPostDelayedTask(TID_UI,
+                     CefCreateClosureTask(
+                         base::BindOnce(&BrowserApp::ContinueContentHostStartup,
+                                        CefRefPtr<BrowserApp>(this))),
+                     kContentHostTickMilliseconds);
 }
 
 void BrowserApp::ScheduleContentHostTick() {

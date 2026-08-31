@@ -40,5 +40,5 @@ if(CRAYON_BUILD_TESTS)
       PRIVATE -Wall -Wextra -Wpedantic -Werror
     )
   endif()
-  add_test(NAME input_proof_gate COMMAND crayon_core_client_supervisor_test)
+  add_test(NAME input_proof_gate COMMAND crayon_input_proof_gate_test)
 endif()

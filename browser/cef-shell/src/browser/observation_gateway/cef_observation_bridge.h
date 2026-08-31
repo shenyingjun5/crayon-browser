@@ -1,0 +1,83 @@
+#pragma once
+
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <map>
+#include <mutex>
+#include <optional>
+#include <vector>
+
+#include "browser/input_proof/input_proof_gate.h"
+#include "browser/network_observer/cef_network_observer_adapter.h"
+#include "browser/network_observer/network_observer.h"
+#include "browser/observation_gateway/observation_gateway.h"
+#include "include/cef_browser.h"
+#include "include/cef_process_message.h"
+#include "include/cef_resource_request_handler.h"
+
+namespace crayon::browser::cef_shell::observation {
+
+struct MediaObservationDiagnostics {
+  std::uint64_t received_total = 0;
+  std::uint64_t accepted_current_total = 0;
+  std::uint64_t proof_denied_total = 0;
+  std::uint64_t eligible_total = 0;
+};
+
+// Browser-process owner for PLT-M05b1. Renderer media claims and CEF resource
+// callbacks are fenced to the current tab/navigation; only the InputProofGate
+// can emit an eligible media event.
+class CefObservationBridge final {
+ public:
+  using EventsReadyCallback = std::function<void()>;
+
+  CefObservationBridge();
+
+  void AdvanceNavigation(CefRefPtr<CefBrowser> browser, std::uint32_t tab_id,
+                         std::uint64_t navigation_id);
+  void CloseBrowser(CefRefPtr<CefBrowser> browser, std::uint32_t tab_id);
+  void SetActiveTab(std::uint32_t tab_id);
+  void NoteTrustedUserInput(CefRefPtr<CefBrowser> browser);
+
+  bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
+                                CefRefPtr<CefFrame> frame,
+                                CefProcessId source_process,
+                                CefRefPtr<CefProcessMessage> message);
+  CefRefPtr<CefResourceRequestHandler> CreateResourceRequestHandler(
+      CefRefPtr<CefBrowser> browser, CefRefPtr<CefRequest> request,
+      CefNetworkResourceCallback callback,
+      CefRefPtr<CefBaseRefCounted> callback_owner);
+  void OnNetworkResourceFact(CefNetworkResourceFact fact);
+
+  std::vector<::crayon::cef_shell::gateway::GatewayEvent> Drain(
+      std::size_t max_events);
+  ::crayon::cef_shell::gateway::GatewayStats stats() const;
+  MediaObservationDiagnostics diagnostics() const;
+  void SetEventsReadyCallback(EventsReadyCallback callback);
+
+ private:
+  struct Binding {
+    std::uint32_t tab_id = 0;
+    std::uint64_t navigation_id = 0;
+    ::crayon::cef_shell::network::NetworkObserver network_observer;
+  };
+
+  struct IoBinding {
+    std::uint32_t tab_id = 0;
+    std::uint64_t navigation_id = 0;
+  };
+
+  std::optional<IoBinding> BindingForIo(int browser_id) const;
+  void NotifyEventsReady();
+
+  std::map<int, Binding> bindings_;
+  mutable std::mutex io_bindings_mutex_;
+  std::map<int, IoBinding> io_bindings_;
+  ::crayon::cef_shell::input_proof::InputProofGate input_proof_{0};
+  ::crayon::cef_shell::gateway::ObservationGateway gateway_;
+  EventsReadyCallback events_ready_callback_;
+  MediaObservationDiagnostics diagnostics_;
+};
+
+}  // namespace crayon::browser::cef_shell::observation

@@ -1,11 +1,11 @@
 // CEF-11 contract tests: closed URL/header field set, size/rate caps,
 // sensitive headers rejected, EME association, blob without fabricated
 // URLs.
+#include "browser/network_observer/network_observer.h"
+
 #include <cstdlib>
 #include <iostream>
 #include <string>
-
-#include "browser/network_observer/network_observer.h"
 
 namespace {
 
@@ -13,8 +13,8 @@ using crayon::cef_shell::network::HeaderClass;
 using crayon::cef_shell::network::kMaxObservations;
 using crayon::cef_shell::network::kRateBurst;
 using crayon::cef_shell::network::NetworkObservation;
-using crayon::cef_shell::network::NetworkObserveResult;
 using crayon::cef_shell::network::NetworkObserver;
+using crayon::cef_shell::network::NetworkObserveResult;
 using crayon::cef_shell::network::ResourceKind;
 
 #define CHECK(condition)                                    \
@@ -38,14 +38,19 @@ NetworkObservation Media(const char* url, std::uint64_t nav) {
 bool UrlClassificationMatrix() {
   std::string normalized;
   bool is_blob = false;
-  CHECK(NetworkObserver::ClassifyUrl("https://a.example/v.mp4", &normalized, &is_blob));
+  CHECK(NetworkObserver::ClassifyUrl("https://a.example/v.mp4", &normalized,
+                                     &is_blob));
   CHECK(normalized == "https://a.example/v.mp4" && !is_blob);
-  CHECK(NetworkObserver::ClassifyUrl("blob:https://a.example/x", &normalized, &is_blob));
+  CHECK(NetworkObserver::ClassifyUrl("blob:https://a.example/x", &normalized,
+                                     &is_blob));
   CHECK(normalized.empty() && is_blob);
-  CHECK(!NetworkObserver::ClassifyUrl("javascript:alert(1)", &normalized, &is_blob));
+  CHECK(!NetworkObserver::ClassifyUrl("javascript:alert(1)", &normalized,
+                                      &is_blob));
   CHECK(!NetworkObserver::ClassifyUrl("", &normalized, &is_blob));
-  CHECK(!NetworkObserver::ClassifyUrl(std::string(2049, 'a'), &normalized, &is_blob));
-  CHECK(!NetworkObserver::ClassifyUrl(std::string("https://a\tx"), &normalized, &is_blob));
+  CHECK(!NetworkObserver::ClassifyUrl(std::string(2049, 'a'), &normalized,
+                                      &is_blob));
+  CHECK(!NetworkObserver::ClassifyUrl(std::string("https://a\tx"), &normalized,
+                                      &is_blob));
   return true;
 }
 
@@ -75,12 +80,14 @@ bool SensitiveHeaderRejectsObservation() {
         NetworkObserveResult::kDroppedSensitiveHeader);
   CHECK(observer.retained_count() == 0);
   // Authorization is observable only as a closed class: the DTO keeps
-  // no header value.
+  // no header value. Match the real CEF adapter: it provides only the
+  // closed name and the observer derives the DTO class.
   NetworkObservation auth = Media("https://a.example/v.mp4", 1);
-  auth.header_class = HeaderClass::kAuthorization;
-  CHECK(observer.Observe(auth, "authorization", 1) == NetworkObserveResult::kAccepted);
+  CHECK(observer.Observe(auth, "authorization", 1) ==
+        NetworkObserveResult::kAccepted);
   const auto drained = observer.Drain();
-  CHECK(drained.size() == 1 && drained[0].header_class == HeaderClass::kAuthorization);
+  CHECK(drained.size() == 1 &&
+        drained[0].header_class == HeaderClass::kAuthorization);
   return true;
 }
 
@@ -108,7 +115,8 @@ bool EmeAssociationUpgradesProtection() {  // BR-011
   for (const auto& observation : drained) {
     if (observation.navigation_id == 7) {
       // Media upgrades; the document on the same navigation does not.
-      CHECK(observation.eme_encrypted == (observation.kind != ResourceKind::kDocument));
+      CHECK(observation.eme_encrypted ==
+            (observation.kind != ResourceKind::kDocument));
     } else {
       CHECK(!observation.eme_encrypted);
     }
@@ -118,8 +126,13 @@ bool EmeAssociationUpgradesProtection() {  // BR-011
 
 bool RateAndCapacityBounds() {
   NetworkObserver observer;
-  // Token bucket: drain the burst inside one instant.
+  // Token bucket: drain the burst inside one instant. Empty the bounded
+  // retention store partway through so the independent capacity limit does
+  // not mask the rate-limit assertion.
   for (std::uint32_t i = 0; i < kRateBurst; ++i) {
+    if (observer.retained_count() == kMaxObservations) {
+      static_cast<void>(observer.Drain());
+    }
     CHECK(observer.Observe(Media("https://a.example/s.mp4", 1), "", 0) ==
           NetworkObserveResult::kAccepted);
   }
@@ -131,12 +144,14 @@ bool RateAndCapacityBounds() {
   CHECK(observer.Observe(Media("https://a.example/s.mp4", 1), "", 1) ==
         NetworkObserveResult::kDroppedRateLimited);
   // After enough elapsed time the bucket refills toward capacity.
+  static_cast<void>(observer.Drain());
   CHECK(observer.Observe(Media("https://a.example/s.mp4", 1), "", 100'000) ==
         NetworkObserveResult::kAccepted);
   // Capacity still binds the retained store.
   std::size_t accepted = observer.retained_count();
   for (std::uint32_t i = 0; accepted < kMaxObservations; ++i) {
-    const auto result = observer.Observe(Media("https://a.example/s.mp4", 1), "", 100'000 + i * 100'000ULL);
+    const auto result = observer.Observe(Media("https://a.example/s.mp4", 1),
+                                         "", 100'000 + i * 100'000ULL);
     if (result == NetworkObserveResult::kAccepted) {
       ++accepted;
     } else {
@@ -159,8 +174,9 @@ bool RateAndCapacityBounds() {
 
 int main() {
   const bool ok = UrlClassificationMatrix() && HeaderAllowlistMatrix() &&
-                  SensitiveHeaderRejectsObservation() && BlobNeverFabricated() &&
-                  EmeAssociationUpgradesProtection() && RateAndCapacityBounds();
+                  SensitiveHeaderRejectsObservation() &&
+                  BlobNeverFabricated() && EmeAssociationUpgradesProtection() &&
+                  RateAndCapacityBounds();
   if (!ok) {
     return EXIT_FAILURE;
   }

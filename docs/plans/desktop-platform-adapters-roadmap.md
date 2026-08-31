@@ -226,18 +226,26 @@
 
 ### PLT-M05b1 原子范围（真实 CEF 媒体观察接线）
 
-- 状态：`READY`；依赖 `PLT-M05a VERIFIED`、`CEF-09..12 VERIFIED`。
+- 状态：`DONE`；依赖 `PLT-M05a VERIFIED`、`CEF-09..12 VERIFIED`。
 - 单一目标：把 `MediaObserver`、`NetworkObserver`、`InputProofGate` 与 `ObservationGateway` 接到真实 CEF document/resource/input/navigation 生命周期，向下游只输出 Browser 验证、当前导航、有界的媒体候选证据；不做投屏策略或 SDK 调用。
 - 允许修改：`browser/cef-shell/src/{renderer,browser}/**` 中上述四模块与最小 process/window 装配、独立 fixture/E2E、macOS shell CMake；禁止修改 MED/SDK 策略和协议、自动点击/seek/rate、Cookie/Authorization 值、Cast UI、Relay。
 - 边界：只有 Browser process 验证的前台标签、真实用户输入和播放推进可达 eligible；页面自报、旧导航、隐藏/跨源、畸形 URL、DRM/EME 只作为不可信证据或保护标记；队列/速率/容量沿用冻结上限，锁内无 IO/回调。
 - 验收：本地 clear MP4/HLS、blob/MSE、DRM/EME、广告语义 fixture；页面伪造与旧 generation 全拒；macOS arm64 真实 CEF build/CTest/E2E、fast/security、Review P0/P1=0。
 - 明确不做：candidate/probe/policy（M05b2）、Cast UI/SDK（M05b3）、真接收端（M05b4/5）。
 
+### PLT-M05b1 完成记录（2026-08-31，真实 CEF 媒体观察接线）
+
+- 实现：Renderer process 注入固定、被动且有界的 `HTMLMediaElement` collector，经过严格类型/长度 IPC 进入 Browser process；Browser 侧把 main-frame/current-navigation 媒体事实、CEF resource 完成事实、前台 tab、键盘与 AppKit 真实鼠标输入、播放推进统一接入 `MediaObserver`、`NetworkObserver`、`InputProofGate`、`ObservationGateway`。新增 URL/source/visibility/currentTime/EME 校验、generation fence、256 事件背压、Browser owner 生命周期及只含 header 类别的网络 DTO；不读取 header value/body，不注入 play/click/seek/rate，不过滤广告语义。修复四个 CMake contract test 误指向同一 supervisor executable 的既有接线错误；Review 发现并关闭 `Authorization` 存在性未落入 `HeaderClass::kAuthorization` 的 P1，模型现在从闭合 header name 自行派生类别。
+- 验证：`cmake --build .cache/build/macos-arm64-cef-debug --target crayon_browser crayon_page_snapshot_cef_integration_test -j4` 通过并对 App/Helper ad-hoc 签名；`ctest --test-dir .cache/build/macos-arm64-cef-debug -R '^(media_observer|input_proof_gate|network_observer|observation_gateway)$' --output-on-failure` 4/4；`ctest --test-dir .cache/build/macos-arm64-cef-debug -R '^page_snapshot_cef_integration$' --output-on-failure` 1/1、68.02s，覆盖原 Markdown 矩阵及 clear WAV/AV1 MP4、HLS manifest、blob、MSE、EME、广告命名、hidden、cross-frame、页面伪造；真实 UI 鼠标 fixture `media-manual` 完成，`media=1 actual_media=1 media_network=1 mock_keychain=1`。全 CTest 先在受限 sandbox 得到 75/77，唯一失败为 UDS/loopback 权限，随后 `content_host_process_mac` 与 `page_snapshot_cef_integration` 在所需本机权限下分别通过。`bash scripts/check.sh security` 在 loopback 权限下通过；`cargo test --workspace --exclude crayon-platform-macos && cargo test -p crayon-browser-core --no-default-features --features legacy-dev --lib` 通过（明确排除真实 Keychain crate，legacy 58/58）；`git diff --check` 与 fixture `py_compile` 通过。
+- Keychain 说明：首次执行 `scripts/check.sh fast` 时确认该脚本会无条件包含真实 `crayon-platform-macos` Keychain tests；该 crate 已跑完 34/34 且未弹密码框后立即中止，此命令不作为本任务通过证据。后续全部验证改用上述显式排除组合；产品与 CEF Harness 均固定 `use-mock-keychain`。
+- Code Review：P0 0、P1 0（发现 1 项 header class 丢失并在本提交关闭）、P2 0；按需求/正确性/架构/并发与生命周期/安全隐私/性能/测试/可维护性检查，未发现持锁 IO/回调、无界队列、敏感值泄漏或页面事实绕过 Browser proof gate。
+- 未覆盖与风险：当前 CEF 分发可真实播放 AV1 MP4/MSE，但不解码本地 HLS，故本切片只证明 HLS manifest 的真实 resource observation，manifest/probe/策略归 `PLT-M05b2`；未调用 Cast-SDK/UI/Direct/Relay，未做 Windows 构建或行为结论。`PLT-M05b1` 转为 `DONE`，解锁 `PLT-M05b2 READY`。
+
 ### PLT-M05b2..b6 原子切片
 
 | ID | 状态 | 依赖 | 单一目标 | 验收与边界 |
 |---|---|---|---|---|
-| PLT-M05b2 | TODO | M05b1 | 接通 observation → candidate/lifecycle → probe → `Direct/Relay/ExternalClientHandoff/Reject` 唯一策略 | MP4/HLS/DASH/DRM/credential fixture；普通失败不提权、不重试；不调用 SDK/UI |
+| PLT-M05b2 | READY | M05b1 | 接通 observation → candidate/lifecycle → probe → `Direct/Relay/ExternalClientHandoff/Reject` 唯一策略 | MP4/HLS/DASH/DRM/credential fixture；普通失败不提权、不重试；不调用 SDK/UI |
 | PLT-M05b3 | TODO | M05b2 | 接通 CastButton/FeatureView、设备选择、Cast-SDK facade、session event pump 与 PLT 生命周期 | 无设备/取消/失败/旧 session/stop；UI 线程不执行有界 SOAP 阻塞；不做真机结论 |
 | PLT-M05b4 | TODO | M05b3 | ADB 在线手机上的固定 Cast-SDK 正式接收端完成 clear fixture Direct 发现、连接、投送、控制和停止 | E2E-001；真实 Desktop Host，不以 ADB 在线或 SDK standalone Harness 代替 |
 | PLT-M05b5 | TODO | M05b4 | 同一 ADB 真机接收端完成 MP4 Range 与 HLS Relay 全链路 | E2E-002；opaque route、200/206/416、分片、撤销后拒绝；不支持 DASH Relay/加密 HLS |

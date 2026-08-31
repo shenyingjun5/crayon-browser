@@ -69,6 +69,7 @@ void WindowClient::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
       controller_->model().FindByBrowser(browser->GetIdentifier());
   if (tab) {
     ClosePageSnapshotBrowser(browser, tab->id, false);
+    CloseMediaObservationBrowser(browser, static_cast<std::uint32_t>(tab->id));
   }
   controller_->OnBrowserClosing(browser);
 }
@@ -107,6 +108,7 @@ void WindowClient::OnRenderProcessTerminated(CefRefPtr<CefBrowser> browser,
       controller_->model().FindByBrowser(browser->GetIdentifier());
   if (tab) {
     ClosePageSnapshotBrowser(browser, tab->id, true);
+    CloseMediaObservationBrowser(browser, static_cast<std::uint32_t>(tab->id));
   }
   controller_->OnRenderProcessGone(browser);
 }
@@ -115,6 +117,10 @@ bool WindowClient::OnProcessMessageReceived(
     CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
     CefProcessId source_process, CefRefPtr<CefProcessMessage> message) {
   CEF_REQUIRE_UI_THREAD();
+  if (media_observation_bridge_.OnProcessMessageReceived(
+          browser, frame, source_process, message)) {
+    return true;
+  }
   if (page_snapshot_bridge_.OnProcessMessageReceived(browser, frame,
                                                      source_process, message)) {
     controller_->OnPageSnapshotEventsReady();
@@ -122,6 +128,24 @@ bool WindowClient::OnProcessMessageReceived(
   }
   return EnsurePageRouter()->OnProcessMessageReceived(browser, frame,
                                                       source_process, message);
+}
+
+CefRefPtr<CefResourceRequestHandler> WindowClient::GetResourceRequestHandler(
+    CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
+    CefRefPtr<CefRequest> request, bool is_navigation, bool is_download,
+    const CefString& request_initiator, bool& disable_default_handling) {
+  static_cast<void>(frame);
+  static_cast<void>(is_navigation);
+  static_cast<void>(is_download);
+  static_cast<void>(request_initiator);
+  disable_default_handling = false;
+  CefRefPtr<WindowClient> owner(this);
+  return media_observation_bridge_.CreateResourceRequestHandler(
+      browser, request,
+      [this](observation::CefNetworkResourceFact fact) {
+        media_observation_bridge_.OnNetworkResourceFact(std::move(fact));
+      },
+      owner);
 }
 
 std::optional<browser_engine::SnapshotRequestId>
@@ -161,6 +185,40 @@ void WindowClient::ClosePageSnapshotBrowser(CefRefPtr<CefBrowser> browser,
     page_snapshot_bridge_.CloseBrowser(browser, tab_id);
   }
   controller_->OnPageSnapshotEventsReady();
+}
+
+void WindowClient::AdvanceMediaObservationNavigation(
+    CefRefPtr<CefBrowser> browser, std::uint32_t tab_id,
+    std::uint64_t navigation_id) {
+  media_observation_bridge_.AdvanceNavigation(browser, tab_id, navigation_id);
+}
+
+void WindowClient::CloseMediaObservationBrowser(CefRefPtr<CefBrowser> browser,
+                                                std::uint32_t tab_id) {
+  media_observation_bridge_.CloseBrowser(browser, tab_id);
+}
+
+void WindowClient::SetActiveMediaObservationTab(std::uint32_t tab_id) {
+  media_observation_bridge_.SetActiveTab(tab_id);
+}
+
+void WindowClient::NoteTrustedUserInput(CefRefPtr<CefBrowser> browser) {
+  media_observation_bridge_.NoteTrustedUserInput(browser);
+}
+
+std::vector<::crayon::cef_shell::gateway::GatewayEvent>
+WindowClient::DrainMediaObservations(std::size_t max_events) {
+  return media_observation_bridge_.Drain(max_events);
+}
+
+observation::MediaObservationDiagnostics
+WindowClient::media_observation_diagnostics() const {
+  return media_observation_bridge_.diagnostics();
+}
+
+void WindowClient::SetMediaObservationEventsReadyCallback(
+    observation::CefObservationBridge::EventsReadyCallback callback) {
+  media_observation_bridge_.SetEventsReadyCallback(std::move(callback));
 }
 
 CefMessageRouterBrowserSide* WindowClient::EnsurePageRouter() {
@@ -228,6 +286,19 @@ bool WindowClient::OnKeyEvent(CefRefPtr<CefBrowser> browser,
       (event.modifiers & EVENTFLAG_CONTROL_DOWN) &&
       (event.windows_key_code == 'S' || event.windows_key_code == 's')) {
     return controller_->HandleSaveKey(browser);
+  }
+  return false;
+}
+
+bool WindowClient::OnPreKeyEvent(CefRefPtr<CefBrowser> browser,
+                                 const CefKeyEvent& event,
+                                 CefEventHandle os_event,
+                                 bool* is_keyboard_shortcut) {
+  CEF_REQUIRE_UI_THREAD();
+  static_cast<void>(os_event);
+  static_cast<void>(is_keyboard_shortcut);
+  if (event.type == KEYEVENT_RAWKEYDOWN) {
+    NoteTrustedUserInput(browser);
   }
   return false;
 }
@@ -396,6 +467,34 @@ void TabController::OnPageSnapshotEventsReady() {
   if (page_snapshot_events_ready_callback_) {
     page_snapshot_events_ready_callback_();
   }
+}
+
+void TabController::SetMediaObservationEventsReadyCallback(
+    MediaObservationEventsReadyCallback callback) {
+  CEF_REQUIRE_UI_THREAD();
+  media_observation_events_ready_callback_ = std::move(callback);
+  client_->SetMediaObservationEventsReadyCallback([this] {
+    if (media_observation_events_ready_callback_) {
+      media_observation_events_ready_callback_();
+    }
+  });
+}
+
+std::vector<::crayon::cef_shell::gateway::GatewayEvent>
+TabController::DrainMediaObservations(std::size_t max_events) {
+  CEF_REQUIRE_UI_THREAD();
+  return client_->DrainMediaObservations(max_events);
+}
+
+observation::MediaObservationDiagnostics
+TabController::media_observation_diagnostics() const {
+  CEF_REQUIRE_UI_THREAD();
+  return client_->media_observation_diagnostics();
+}
+
+void TabController::NoteTrustedUserInputForActiveTab() {
+  CEF_REQUIRE_UI_THREAD();
+  client_->NoteTrustedUserInput(ActiveBrowser());
 }
 
 std::optional<browser_engine::SnapshotRequestId>
@@ -590,6 +689,11 @@ void TabController::OnBrowserCreated(CefRefPtr<CefBrowser> browser) {
   if (browser_created_callback_) {
     browser_created_callback_(browser);
   }
+  const TabSnapshot* bound_tab = model_.FindByBrowser(browser_id);
+  if (bound_tab) {
+    client_->SetActiveMediaObservationTab(
+        static_cast<std::uint32_t>(bound_tab->id));
+  }
 }
 
 void TabController::OnBrowserClosing(CefRefPtr<CefBrowser> browser) {
@@ -610,6 +714,7 @@ void TabController::OnBrowserFocused(CefRefPtr<CefBrowser> browser) {
   const TabSnapshot* tab = model_.FindByBrowser(browser->GetIdentifier());
   if (tab) {
     model_.Activate(tab->id);
+    client_->SetActiveMediaObservationTab(static_cast<std::uint32_t>(tab->id));
   }
 }
 
@@ -630,6 +735,9 @@ void TabController::OnLoadingUpdated(CefRefPtr<CefBrowser> browser,
     if (tab) {
       client_->AdvancePageSnapshotNavigation(browser, tab->id,
                                              tab->navigation_generation);
+      client_->AdvanceMediaObservationNavigation(
+          browser, static_cast<std::uint32_t>(tab->id),
+          tab->navigation_generation);
     }
   }
   model_.UpdateLoading(browser_id, is_loading, can_go_back, can_go_forward);

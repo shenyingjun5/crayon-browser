@@ -11,6 +11,7 @@
 #include "include/cef_response.h"
 #include "include/wrapper/cef_helpers.h"
 #include "include/wrapper/cef_message_router.h"
+#include "renderer/media_observer/cef_media_observer_renderer.h"
 #include "renderer/page_snapshot_collector/cef_page_snapshot_renderer.h"
 
 namespace crayon::browser::cef_shell::new_tab {
@@ -194,20 +195,25 @@ class NewTabProcessApp final : public CefApp, public CefRenderProcessHandler {
     return this;
   }
 
+  void OnWebKitInitialized() override { media_renderer_.OnWebKitInitialized(); }
+
   void OnContextCreated(CefRefPtr<CefBrowser> browser,
                         CefRefPtr<CefFrame> frame,
                         CefRefPtr<CefV8Context> context) override {
+    media_renderer_.OnContextCreated(browser, frame);
     router_->OnContextCreated(browser, frame, context);
   }
 
   void OnContextReleased(CefRefPtr<CefBrowser> browser,
                          CefRefPtr<CefFrame> frame,
                          CefRefPtr<CefV8Context> context) override {
+    media_renderer_.OnContextReleased(browser, frame);
     snapshot_renderer_.OnContextReleased(browser, frame);
     router_->OnContextReleased(browser, frame, context);
   }
 
   void OnBrowserDestroyed(CefRefPtr<CefBrowser> browser) override {
+    media_renderer_.OnBrowserDestroyed(browser);
     snapshot_renderer_.OnBrowserDestroyed(browser);
   }
 
@@ -215,6 +221,10 @@ class NewTabProcessApp final : public CefApp, public CefRenderProcessHandler {
                                 CefRefPtr<CefFrame> frame,
                                 CefProcessId source_process,
                                 CefRefPtr<CefProcessMessage> message) override {
+    if (media_renderer_.OnProcessMessageReceived(browser, frame, source_process,
+                                                 message)) {
+      return true;
+    }
     if (snapshot_renderer_.OnProcessMessageReceived(browser, frame,
                                                     source_process, message)) {
       return true;
@@ -225,6 +235,7 @@ class NewTabProcessApp final : public CefApp, public CefRenderProcessHandler {
 
  private:
   CefRefPtr<CefMessageRouterRendererSide> router_;
+  renderer::CefMediaObserverRenderer media_renderer_;
   renderer::CefPageSnapshotRenderer snapshot_renderer_;
 
   IMPLEMENT_REFCOUNTING(NewTabProcessApp);

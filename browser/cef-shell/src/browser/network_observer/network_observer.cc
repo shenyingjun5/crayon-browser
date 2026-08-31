@@ -74,10 +74,16 @@ NetworkObserveResult NetworkObserver::Observe(NetworkObservation observation,
   }
   // Sensitive headers outside the closed observable set (cookie, and
   // anything unclassified) reject the observation instead of leaking.
-  if (!present_header_name.empty() &&
-      !IsObservableHeader(present_header_name, nullptr)) {
-    return NetworkObserveResult::kDroppedSensitiveHeader;
+  HeaderClass observed_header_class = HeaderClass::kNone;
+  if (!present_header_name.empty()) {
+    if (!IsObservableHeader(present_header_name, &observed_header_class)) {
+      return NetworkObserveResult::kDroppedSensitiveHeader;
+    }
   }
+  // The adapter reports only the closed header name. Derive the DTO class
+  // here instead of trusting a caller-populated value; header values never
+  // cross this boundary.
+  observation.header_class = observed_header_class;
   if (observation.content_length > kMaxUrlLen * 1024) {
     return NetworkObserveResult::kDroppedOversize;
   }
