@@ -78,6 +78,9 @@ class CastButtonModel final {
 
   /// Session lifecycle from the cast feature layer (CEF-13).
   void NotifySessionStarted();
+  /// User requested stop. Returns true only for the transition that should
+  /// emit the stop action; repeated requests while stopping are idempotent.
+  bool RequestStop();
   void NotifySessionStopped();
 
   CastButtonState state() const { return state_; }

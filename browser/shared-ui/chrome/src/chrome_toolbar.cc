@@ -76,6 +76,14 @@ void CastButtonModel::NotifySessionStarted() {
   }
 }
 
+bool CastButtonModel::RequestStop() {
+  if (state_ != CastButtonState::kCasting) {
+    return false;
+  }
+  state_ = CastButtonState::kStopping;
+  return true;
+}
+
 void CastButtonModel::NotifySessionStopped() {
   if (state_ == CastButtonState::kCasting || state_ == CastButtonState::kStopping) {
     // Falls to Disabled: eligibility must be re-verified after stop.

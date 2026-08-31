@@ -48,7 +48,7 @@
 
 | 顺序 | 任务 | 状态 | 说明 |
 |---:|---|---|---|
-| 1 | `PLT-M05b3` | READY | M05b2 DONE；接通 Cast UI、设备选择、Cast-SDK facade 与 session event pump，不做真机结论 |
+| 1 | `PLT-M05b3b` | READY | M05b3a DONE；下一步冻结 discovery/device/select/stop/session event 的 MHV1 Rust/C++ 双端协议，不执行 SDK |
 
 ### 平台收口与待拆装配
 

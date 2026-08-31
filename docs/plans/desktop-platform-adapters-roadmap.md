@@ -1,6 +1,6 @@
 # PLT Windows/macOS 平台适配 Roadmap
 
-- 状态：`PLT-01/02/W04/M04 DONE`；第一期 macOS 装配 `PLT-M05 IN_PROGRESS`（M05a 已完成基础壳，M05b1 READY），Windows 对称装配 `PLT-W05 TODO`
+- 状态：`PLT-01/02/W04/M04 DONE`；第一期 macOS 装配 `PLT-M05 IN_PROGRESS`（M05a、M05b1/b2/b3a 已完成，M05b3b READY），Windows 对称装配 `PLT-W05 TODO`
 - 任务数：7
 - 平台：Windows、macOS
 - 非目标：Linux、屏幕/标签页/系统音频采集、编码器、WebRTC sender
@@ -246,12 +246,45 @@
 | ID | 状态 | 依赖 | 单一目标 | 验收与边界 |
 |---|---|---|---|---|
 | PLT-M05b2 | DONE | M05b1 | 接通 observation → candidate/lifecycle → probe → `Direct/Relay/ExternalClientHandoff/Reject` 唯一策略 | 按 M05b2a/b/c 严格串行；MP4/HLS/DASH/DRM/credential fixture；普通失败不提权、不重试；不调用 SDK/UI |
-| PLT-M05b3 | READY | M05b2 | 接通 CastButton/FeatureView、设备选择、Cast-SDK facade、session event pump 与 PLT 生命周期 | 无设备/取消/失败/旧 session/stop；UI 线程不执行有界 SOAP 阻塞；不做真机结论 |
+| PLT-M05b3 | IN_PROGRESS | M05b2 | 接通 CastButton/FeatureView、设备选择、Cast-SDK facade、session event pump 与 PLT 生命周期 | 按 M05b3a-e 严格串行；无设备/取消/失败/旧 session/stop；UI 线程不执行有界 SOAP 阻塞；不做真机结论 |
 | PLT-M05b4 | TODO | M05b3 | ADB 在线手机上的固定 Cast-SDK 正式接收端完成 clear fixture Direct 发现、连接、投送、控制和停止 | E2E-001；真实 Desktop Host，不以 ADB 在线或 SDK standalone Harness 代替 |
 | PLT-M05b5 | TODO | M05b4 | 同一 ADB 真机接收端完成 MP4 Range 与 HLS Relay 全链路 | E2E-002；opaque route、200/206/416、分片、撤销后拒绝；不支持 DASH Relay/加密 HLS |
 | PLT-M05b6 | TODO | M05b5 | DRM/EME/加密/凭证来源拒绝与无路由外部客户端确认/取消/未安装/失败反馈 | E2E-003/004；交接永不显示投屏中、不创建 SDK/Relay session |
 
 每个切片允许修改其所属 `browser/cef-shell` 装配、既有 MED/SDK/app-runtime 调用入口和独立测试；发现需要改变公共协议、Cast-SDK facade 或 Relay 安全边界时停止并新建原子任务。M05b1..b6 不包含 M05c 100 次稳定性、PLT-W05、PLT-19 或 QAR 发布矩阵。
+
+### PLT-M05b3 原子范围（按 a-e 五切片）
+
+审计结论（2026-08-31）：`CastButtonModel`、`CastFeatureViewModel`、`CastUsecase` 与真实 `SenderCastFacade` 均已存在，但彼此没有生产调用方；CEF App 只 drain M05b2 的 candidate/decision，当前 MHV1 也无法表达设备快照、执行命令或 session event。一次性接线会同时新增 UI 状态 owner、跨语言协议、Rust 执行 runtime、阻塞 SDK worker 和平台 UI/生命周期，超过原子任务边界，因此拆为：
+
+| ID | 状态 | 依赖 | 单一目标 | 允许范围与门禁 |
+|---|---|---|---|---|
+| PLT-M05b3a | DONE | M05b2 DONE | 建立单 UI 线程的 Cast UI 协调器，唯一同步 `CastButtonModel`/`CastFeatureViewModel` 与有界 receiver picker；只消费闭合 Browser/runtime facts、只产出用户 action | `browser/shared-ui/{features/cast,chrome}/**`；最多 64 设备、稳定 device id、名称 512 bytes、无 IP/URL；无 SDK/CEF/网络/线程 |
+| PLT-M05b3b | READY | M05b3a | 扩展私有 MHV1，使 bundled Browser/media-host 可表达 discovery、设备快照、选择/停止与有界 session event pump | Rust/C++ 双 codec、current/previous golden、未知 kind/超界/secret 扫描；不执行 SDK，不改 CastFacade |
+| PLT-M05b3c | TODO | M05b3b | 在 Rust media-host 内装配唯一 `CastUsecase`、`SenderCastFacade` 与 session drain owner，执行 discovery/select/start/stop 并把旧 session/错误投影为 MHV1 | `crayon-app-runtime`/既有 adapter facade；Fake + real facade contract；阻塞 SDK 调用不在协议 reader/callback；Relay 实际投送仍不验收 |
+| PLT-M05b3d | TODO | M05b3c | macOS C++ media-host process/adapter 增加有界后台 command worker 和 session event pump，CEF UI 线程只 enqueue/drain | `browser/cef-shell/src/{ipc,macos}` 与相邻 tests；无 UI 线程 SOAP/discovery、取消/stop/shutdown 逆序、队列满显式失败 |
+| PLT-M05b3e | TODO | M05b3d | 将协调器与真实 CEF Cast 按钮、原生 receiver picker、M05b2 candidate 和 PLT navigation/close/app-exit 生命周期接通 | macOS Debug/Release 真 CEF：无设备、刷新、取消、失败、旧 session、stop/退出；mock keychain；不做真机 Direct/Relay 结论 |
+
+五切片共用边界：页面事实不能打开 picker 或选择设备；UI 永不接收 IP、控制 URL、媒体 URL、Cookie/Authorization；只有 `crayon-cast-adapter` 调 Cast-SDK；ExternalClientHandoff 不创建 SDK/Relay session且归 M05b6 呈现；M05b3 不以 Fake、ADB 在线或 standalone SDK Harness 宣称真机投送通过。若 b3b/c 发现必须修改 Cast-SDK facade、暴露 receiver locator 或改变 Relay 安全绑定，立即停止并建立独立 SDK/Relay gap 任务。
+
+#### PLT-M05b3a 原子范围（Cast UI 协调器与 receiver picker）
+
+- 状态：`IN_PROGRESS`；依赖 `PLT-M05b2 DONE`、CEF-08/13 既有 `CastButtonModel`/`CastFeatureViewModel`。
+- 单一目标：新增一个 UI-thread-only 协调器，原子驱动 CastButton 与 FeatureView 的重复状态，并保存 Browser/runtime 提供的有界 receiver snapshot；用户打开/关闭 picker、刷新、选择稳定 device id 和停止只返回闭合 action，不直接执行外部调用。
+- 输入/输出与允许修改：输入仅 page active、media present、Browser-verified eligibility、最多 64 个 `{device_id, display_name, is_crayon_receiver}`、闭合 policy/session/failed facts；输出仅 `RefreshReceivers/SelectReceiver/StopSession` action。允许修改 `browser/shared-ui/features/cast/**`、其 CMake/test 和为依赖模型所需的 `browser/shared-ui/chrome` 链接声明、本 Roadmap/索引。
+- 禁止修改：CEF shell、MHV1、Rust、Cast-SDK、Relay、平台 adapter/locales、文件/网络；不得携带 IP/host/UDN/control URL/media URL/secret，不得让 page-reported state 进入 eligibility。
+- 边界：receiver id 1..128 bytes、display name 1..512 bytes，空/重复 id/超界 snapshot 整体拒绝且保留旧 snapshot；稳定顺序按输入保持，选择必须命中当前 snapshot且仅在 picker open；无设备时 picker 可见并允许 refresh/cancel；session start/end、policy reject/handoff、page inactive 保持两个模型不出现相互矛盾的 Casting；Stop action 必须携带当前 session generation，重复取消/stop/session end 幂等。
+- 验收：独立 C++ unit 覆盖 CS-001/002/007 的无设备、同名不同 id、重复/畸形/超界 snapshot、刷新/取消、非法选择、Direct/Relay started、旧/重复 session end 投影和 stop action；clang-format scoped check、Debug/Release build/CTest、repo guard、`git diff --check`。
+- 明确不做：真实 receiver picker widget、发现/SDK/协议/worker/生命周期接线（b3b-e）、真机 Direct/Relay（b4/b5）、ExternalClientHandoff UI（b6）、100 次资源稳定性（M05c）、Windows。
+
+#### PLT-M05b3a 完成记录（2026-08-31）
+
+- 实现：新增 UI-thread-only `CastUiCoordinator`，成为 `CastButtonModel`、`CastFeatureViewModel` 与 receiver snapshot 的单一协调 owner；Browser-verified eligibility 是唯一启用入口。picker 打开只产出 refresh action，设备选择只产出稳定 device id，stop action 携带当前 session generation；没有 SDK、网络、CEF 或平台调用。
+- 有界与隐私：receiver snapshot 最多 64 项，device id 严格复用 `[A-Za-z0-9_-]`/1..128 bytes，展示名 1..512 bytes 且拒绝控制字符；空、重复、畸形或超界 snapshot 整体拒绝并保留旧值。DTO 不可表达 IP、host、UDN、control/media URL 或 secret，输入顺序保持稳定。
+- 状态与并发：无设备仍可刷新/取消；选择必须命中当前 snapshot 且 picker 已打开；Direct/Relay start、stop、media withdrawal、page loss 与 session end 统一投影到两个既有模型。session generation 单调 fencing，旧 end 拒绝、重复 end 幂等；Review 发现并关闭迟到 Stop 未携带 generation、可能误停新 session 的 P1。
+- 验证：macOS arm64 Debug/Release 构建通过；两配置 `chrome_contract`、`cast_feature_view`、`cast_ui_coordinator` 均 3/3 通过。新增 4 组 coordinator 行为测试覆盖 CS-001/002/007 的无设备、同名不同 id、畸形/重复/65 项、刷新/取消/非法选择、Direct/Relay、旧/重复 session、stop 与 page loss；`cargo run -p repo-guard -- scan --root .` 和 `bash scripts/check.sh security` 通过（relay security 7/7），新增文件 Apple clang-format dry-run 与 `git diff --check` 通过。未运行真实 Keychain。
+- Code Review：按 v0.8 复核需求/边界、状态唯一 owner、页面不可信、generation、隐私、容量、生命周期和测试；修复 1 个 P1 后最终 P0/P1/P2=`0/0/0`。既有 chrome 三文件的全文件 Apple clang-format 仍有历史风格漂移，本次只格式化新增行，未混入无关重排。
+- 未覆盖与风险：本切片只有共享 UI 合同，无真实 widget、设备发现、Cast-SDK、MHV1、worker 或 CEF/PLT 生命周期；`PLT-M05b3b READY` 下一步先冻结跨语言执行协议。真机 Direct/Relay 仍严格归 M05b4/b5。
 
 ### PLT-M05b2 原子范围（按 a/b/c 三切片）
 

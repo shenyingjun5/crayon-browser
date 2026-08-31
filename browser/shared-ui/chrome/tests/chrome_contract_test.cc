@@ -64,6 +64,9 @@ bool CastButtonStickyDefaults() {
   button.NotifySessionStarted();
   CHECK(button.state() == CastButtonState::kCasting);
   CHECK(std::string(button.label_key()) == "cast.stop");
+  CHECK(button.RequestStop());
+  CHECK(!button.RequestStop());
+  CHECK(button.state() == CastButtonState::kStopping);
   button.NotifySessionStopped();
   // Stopping resets to Disabled: eligibility must be re-verified.
   CHECK(button.state() == CastButtonState::kDisabled);

@@ -1,5 +1,6 @@
 add_library(crayon-browser-cast-view STATIC
   src/cast_feature_view.cc
+  src/cast_ui_coordinator.cc
 )
 add_library(crayon::browser-cast-view ALIAS crayon-browser-cast-view)
 
@@ -8,6 +9,9 @@ target_include_directories(crayon-browser-cast-view
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 )
 target_compile_features(crayon-browser-cast-view PUBLIC cxx_std_17)
+target_link_libraries(crayon-browser-cast-view
+  PUBLIC crayon::browser-chrome
+)
 set_target_properties(crayon-browser-cast-view PROPERTIES
   CXX_EXTENSIONS OFF
 )
@@ -45,4 +49,22 @@ if(CRAYON_BUILD_TESTS)
                        PROPERTIES ENVIRONMENT "CRAYON_REPO_ROOT=${PROJECT_SOURCE_DIR}")
   set_tests_properties(cast_feature_view
                        PROPERTIES ENVIRONMENT "CRAYON_REPO_ROOT=${PROJECT_SOURCE_DIR}")
+
+  add_executable(crayon_cast_ui_coordinator_test
+    tests/cast_ui_coordinator_test.cc
+  )
+  target_compile_features(crayon_cast_ui_coordinator_test PRIVATE cxx_std_17)
+  target_link_libraries(crayon_cast_ui_coordinator_test
+    PRIVATE crayon::browser-cast-view
+  )
+  if(MSVC)
+    target_compile_options(crayon_cast_ui_coordinator_test
+      PRIVATE /W4 /WX /permissive-
+    )
+  else()
+    target_compile_options(crayon_cast_ui_coordinator_test
+      PRIVATE -Wall -Wextra -Wpedantic -Werror
+    )
+  endif()
+  add_test(NAME cast_ui_coordinator COMMAND crayon_cast_ui_coordinator_test)
 endif()
