@@ -245,13 +245,28 @@
 
 | ID | 状态 | 依赖 | 单一目标 | 验收与边界 |
 |---|---|---|---|---|
-| PLT-M05b2 | READY | M05b1 | 接通 observation → candidate/lifecycle → probe → `Direct/Relay/ExternalClientHandoff/Reject` 唯一策略 | MP4/HLS/DASH/DRM/credential fixture；普通失败不提权、不重试；不调用 SDK/UI |
+| PLT-M05b2 | IN_PROGRESS | M05b1 | 接通 observation → candidate/lifecycle → probe → `Direct/Relay/ExternalClientHandoff/Reject` 唯一策略 | 按 M05b2a/b/c 严格串行；MP4/HLS/DASH/DRM/credential fixture；普通失败不提权、不重试；不调用 SDK/UI |
 | PLT-M05b3 | TODO | M05b2 | 接通 CastButton/FeatureView、设备选择、Cast-SDK facade、session event pump 与 PLT 生命周期 | 无设备/取消/失败/旧 session/stop；UI 线程不执行有界 SOAP 阻塞；不做真机结论 |
 | PLT-M05b4 | TODO | M05b3 | ADB 在线手机上的固定 Cast-SDK 正式接收端完成 clear fixture Direct 发现、连接、投送、控制和停止 | E2E-001；真实 Desktop Host，不以 ADB 在线或 SDK standalone Harness 代替 |
 | PLT-M05b5 | TODO | M05b4 | 同一 ADB 真机接收端完成 MP4 Range 与 HLS Relay 全链路 | E2E-002；opaque route、200/206/416、分片、撤销后拒绝；不支持 DASH Relay/加密 HLS |
 | PLT-M05b6 | TODO | M05b5 | DRM/EME/加密/凭证来源拒绝与无路由外部客户端确认/取消/未安装/失败反馈 | E2E-003/004；交接永不显示投屏中、不创建 SDK/Relay session |
 
 每个切片允许修改其所属 `browser/cef-shell` 装配、既有 MED/SDK/app-runtime 调用入口和独立测试；发现需要改变公共协议、Cast-SDK facade 或 Relay 安全边界时停止并新建原子任务。M05b1..b6 不包含 M05c 100 次稳定性、PLT-W05、PLT-19 或 QAR 发布矩阵。
+
+### PLT-M05b2 原子范围（按 a/b/c 三切片）
+
+- **M05b2a（Rust 唯一媒体规划 owner）**：状态 `VERIFIED`；依赖 M05b1 DONE、MED-01..08/17/19 DONE。单一目标是在 `crayon-app-runtime` 新增唯一 `MediaPlanningRuntime`，消费 Browser-verified、current-navigation 的 URL/URL-less/EME/header-class/playback facts，复用 `CandidateStore` lifecycle、`MediaInspector`/`assess_protection` 与 `cast-policy::decide` 生成候选摘要及按显式 receiver capability 的唯一决策；probe 普通失败固定为 inconclusive，Cookie/Authorization 只表达 `CredentialBound` 类别且值不可进入 API。允许修改 `crates/crayon-app-runtime/src/media_planning_runtime*`、对应 crate tests/lib export；禁止修改 CEF、IPC schema、Cast-SDK、Relay、UI。验收：MP4/HLS/DASH、EME/DRM、blob/stream、credential、referer/UA、旧 navigation、close/TTL、probe timeout/error、receiver mismatch；`cargo test -p crayon-app-runtime`、clippy、fmt、非 Keychain workspace 回归。明确不做：进程/transport、CEF 调用方、SDK/session/Relay 创建。
+- **M05b2b（版本化本机 media-host 协议）**：状态 `READY`；依赖 M05b2a VERIFIED。单一目标是增加独立 `crayon-media-host` 本机子进程与双端严格 codec/transport，把完整 URL 只保留在 Browser↔host 私有内存通道，向 UI 只返回 opaque candidate id/redacted origin/闭合 decision；协议有版本、长度/数量/超时/取消/generation/关闭/崩溃边界。允许修改 app-runtime bin、ipc-schema 的独立 media-host 模块、`browser/cef-shell/src/ipc` 与 macOS media-host process/adapter、CMake 和独立 golden/contract/process tests；禁止复用/扩张 CAAP、content-host CHV1、远程监听、SDK/UI/Relay。验收：current/previous golden、畸形/截断/超长/未知 kind、队列背压、取消/导航/close/shutdown、host crash/restart，无 URL/header 值日志。明确不做：CEF ObservationGateway 消费和策略 UI。
+- **M05b2c（CEF 产品接线与 fixture）**：状态 `TODO`；依赖 M05b2b VERIFIED。单一目标是 Browser UI 线程有界 drain M05b1 `ObservationGateway`，补充可信 page URL/lifecycle 后送入 media-host，并把候选/决策事件以 opaque DTO 暴露给 M05b3；不得在 UI 线程执行 probe 网络 IO。允许修改 M05b1 bridge/window、macOS app/CMake、media-host adapter 与独立 CEF fixture；禁止 SDK/UI/Relay/session。验收：真实 CEF MP4/HLS/DASH/EME/blob/credential/页面伪造/旧 generation、probe SSRF/timeout、host crash，Debug/Release arm64 build + CTest/E2E/security，Review P0/P1=0。明确不做：设备发现/选择、Cast-SDK、真实接收端。
+
+拆分理由：真实代码事实表明 CEF C++ 与 Rust MED owner 之间没有生产 transport；该连接同时引入公共运行时 owner、独立版本化进程协议与平台装配，合并会超过约 10 个生产文件/1000 行并混合三个变化原因。三切片保持同一策略 owner，不在 C++ 复制 candidate/probe/policy。
+
+### PLT-M05b2a 完成记录（2026-08-31，Rust 唯一媒体规划 owner）
+
+- 实现：`crayon-app-runtime::media_planning_runtime` 新增单一 `MediaPlanningRuntime`：完整 page/media URL 只留在无 `Debug` 的内存 owner；复用 MED `CandidateStore` 合并与 navigation/close/TTL/256 容量驱逐、`rank` 稳定排序、credential-free `MediaInspector`、`assess_protection` 和唯一 `cast-policy::decide`。输出仅含 opaque `CandidateId`、redacted origin、闭合 protocol/decision。URL-less blob/MediaStream 使用真实 tab/page context 且 media URL 为空，直接进入 `NoDirectUrl`/DRM 分支；CredentialBound/EME 跳过 probe，普通 probe error/timeout 变为 `ProbeInconclusive`，无重试/提权。事实形态二次闭合：仅 CurrentSrc 可携带 Browser-verified playback/EME，仅 NetworkRequest 可携带 header class，NaN/负时间/非 http(s) page/media URL 拒绝。
+- 验证：`cargo test -p crayon-app-runtime --lib media_planning_runtime` 13/13（clear MP4 Direct、HLS Referer/UA Relay、HLS AES KeyRequired 且 key 零请求、DASH ContentProtection、EME、credential 零 probe、URL-less、probe 404/timeout、receiver mismatch、旧 navigation/close/TTL、owner sidecar 256 上限、MED ranking、畸形字段/时间/page context 零状态变更）；`cargo test -p crayon-app-runtime` 全量通过（lib 46 + integration 23）；`cargo clippy -p crayon-app-runtime --all-targets -- -D warnings` 与 `cargo fmt --all -- --check` 通过；`cargo test --workspace --exclude crayon-platform-macos && cargo test -p crayon-browser-core --no-default-features --features legacy-dev --lib` 通过，明确未运行真实 Keychain crate，legacy 58/58。
+- Code Review：P0 0、P1 0（Review 中发现并关闭 3 项：sidecar 未随底层驱逐会无界增长；source/header/playback 字段错配未二次拒绝；page context 错配在报错前可能更新候选）、P2 0。无锁/回调/日志；probe 使用既有 DNS pinning、SSRF、body/time bounds；决策结果不含上游 URL/header value。
+- 未覆盖与风险：尚无 Browser↔Rust 生产 transport 或 CEF 调用方，取消/崩溃/背压由 M05b2b/c 闭合；MP4 codec 仍以现有 inspector 可得证据为准，不猜测未知 codec；本切片不创建 Relay/session、不调用 Cast-SDK/UI。`M05b2a` 转为 `VERIFIED`，解锁 `M05b2b READY`。
 
 ### PLT-M05c 原子范围（macOS 资源稳定性与 CP-M01 收口）
 

@@ -48,7 +48,7 @@
 
 | 顺序 | 任务 | 状态 | 说明 |
 |---:|---|---|---|
-| 1 | `PLT-M05b2` | READY | 接通 observation → candidate/lifecycle → probe → 唯一投屏策略；不调用 SDK/UI |
+| 1 | `PLT-M05b2b` | READY | `b2a VERIFIED`；实现版本化本机 media-host 协议，随后 b2c CEF 接线，不调用 SDK/UI |
 | 2 | `MDV-25` | READY | 移除 `BuildFixtureSnapshot()` 生产初始化；同样触及 CEF App/CMake，串行领取 |
 | 3 | `CNT-20` | READY | 网页→Markdown 双平台 E2E/security/perf；macOS 先行，Windows x64 最后回归 |
 
