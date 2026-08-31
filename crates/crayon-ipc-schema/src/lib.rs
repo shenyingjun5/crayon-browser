@@ -3,6 +3,7 @@
 
 mod caap;
 mod content_host;
+mod media_host;
 mod messages;
 mod secret;
 
@@ -16,6 +17,11 @@ pub use content_host::{
     ContentHostErrorCode, ContentHostFact, ContentHostFactKind, ContentHostMessage,
     ContentHostMode, ContentHostTerminalStatus, EngineErrorCode as ContentHostEngineErrorCode,
     MAX_CONTENT_HOST_FACTS, MAX_CONTENT_HOST_FRAME_BYTES, MAX_CONTENT_HOST_MARKDOWN_BYTES,
+};
+pub use media_host::{
+    decode_media_host_message, encode_media_host_message, MediaHostError, MediaHostErrorCode,
+    MediaHostMessage, MediaHostPlayback, MediaHostSource, MediaHostUrlFact,
+    MAX_MEDIA_HOST_FRAME_BYTES,
 };
 pub use messages::{
     AdContinuity, AudioCodecKind, CastPolicyDecision, CastPolicyInput, ExternalClientHandoff,

@@ -10,6 +10,10 @@ publish = false
 name = "crayon-content-host"
 path = "src/bin/crayon-content-host.rs"
 
+[[bin]]
+name = "crayon-media-host"
+path = "src/bin/crayon-media-host.rs"
+
 [lints]
 workspace = true
 
@@ -26,6 +30,7 @@ crayon-media-observer = { path = "../crayon-media-observer" }
 crayon-media-probe = { path = "../crayon-media-probe" }
 crayon-page-data = { path = "../crayon-page-data" }
 crayon-relay = { path = "../crayon-relay" }
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "sync", "time"] }
 url = "2"
 
 [dev-dependencies]

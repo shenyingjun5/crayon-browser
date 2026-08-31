@@ -569,6 +569,7 @@ dependencies = [
  "crayon-domain",
  "serde",
  "serde_json",
+ "url",
 ]
 
 [[package]]

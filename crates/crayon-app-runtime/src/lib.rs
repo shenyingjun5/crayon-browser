@@ -5,6 +5,9 @@ pub mod content_host_runtime;
 #[cfg(test)]
 mod content_host_runtime_tests;
 pub mod delivery;
+pub mod media_host_runtime;
+#[cfg(test)]
+mod media_host_runtime_tests;
 pub mod media_planning_runtime;
 #[cfg(test)]
 mod media_planning_runtime_tests;
