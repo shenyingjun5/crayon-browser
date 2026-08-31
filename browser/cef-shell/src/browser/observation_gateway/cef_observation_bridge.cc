@@ -150,9 +150,20 @@ bool CefObservationBridge::OnProcessMessageReceived(
         gateway_.SubmitNetwork(tab_id, navigation_id, protection_marker));
     NotifyEventsReady();
   }
-  if (observation.playback != MediaPlaybackState::kPlaying ||
-      observation.visible_fraction <= 0.0 ||
-      input_proof_.Evaluate(tab_id, navigation_id) != ProofResult::kEligible) {
+  if (observation.playback != MediaPlaybackState::kPlaying) {
+    ++diagnostics_.not_playing_denied_total;
+    ++diagnostics_.proof_denied_total;
+    return true;
+  }
+  if (observation.visible_fraction <= 0.0) {
+    ++diagnostics_.not_visible_denied_total;
+    ++diagnostics_.proof_denied_total;
+    return true;
+  }
+  diagnostics_.last_input_proof_result =
+      input_proof_.Evaluate(tab_id, navigation_id);
+  if (diagnostics_.last_input_proof_result != ProofResult::kEligible) {
+    ++diagnostics_.input_proof_denied_total;
     ++diagnostics_.proof_denied_total;
     return true;
   }

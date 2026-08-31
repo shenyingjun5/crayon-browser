@@ -185,9 +185,9 @@ BrowserApp::BrowserApp(std::string product_name)
       content_host_(std::make_unique<macos::ContentHostAdapter>()),
       media_host_(std::make_unique<media_host::MediaHostAdapter>(
           std::make_unique<macos::MediaHostProcess>())),
-      cast_shell_(std::make_unique<
-                  macos::CastShellController>(macos::CastCommandPort{
-          [this](macos::media_host_ipc::DiscoveryAction action) {
+      cast_shell_(std::make_unique<media_host::CastShellController>(
+          media_host::CastCommandPort{
+          [this](media_host::media_host_ipc::DiscoveryAction action) {
             return media_host_->RequestDiscovery(action);
           },
           [this](std::optional<std::uint64_t> revision, std::uint16_t offset) {

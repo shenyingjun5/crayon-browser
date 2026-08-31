@@ -63,6 +63,17 @@ std::string LoadUtf8String(HINSTANCE resource_module,
       std::wstring_view(buffer.data(), static_cast<std::size_t>(length)));
 }
 
+std::wstring LoadWideString(HINSTANCE resource_module,
+                            unsigned int resource_id) {
+  std::array<wchar_t, kResourceStringCapacity> buffer{};
+  const int length = LoadStringW(resource_module, resource_id, buffer.data(),
+                                 static_cast<int>(buffer.size()));
+  if (length <= 0 || static_cast<std::size_t>(length) >= buffer.size() - 1) {
+    return {};
+  }
+  return std::wstring(buffer.data(), static_cast<std::size_t>(length));
+}
+
 browser_new_tab::NewTabPageStrings LoadNewTabStrings(
     HINSTANCE resource_module) {
   return browser_new_tab::NewTabPageStrings{
@@ -156,6 +167,17 @@ page_markdown::PageMarkdownStrings LoadPageMarkdownStrings(
       LoadUtf8String(resource_module, IDS_CRAYON_PAGE_MARKDOWN_SAVE_CANCELLED)};
 }
 
+windows::CastChromeStrings LoadCastStrings(HINSTANCE resource_module) {
+  return windows::CastChromeStrings{
+      LoadWideString(resource_module, IDS_CRAYON_CAST_SELECT_RECEIVER),
+      LoadWideString(resource_module, IDS_CRAYON_CAST_STOP),
+      LoadWideString(resource_module, IDS_CRAYON_CAST_PICKER_TITLE),
+      LoadWideString(resource_module, IDS_CRAYON_CAST_PICKER_EMPTY),
+      LoadWideString(resource_module, IDS_CRAYON_CAST_PICKER_SELECT),
+      LoadWideString(resource_module, IDS_CRAYON_CAST_PICKER_REFRESH),
+      LoadWideString(resource_module, IDS_CRAYON_CAST_PICKER_CANCEL)};
+}
+
 }  // namespace
 
 WindowsWindowIcons::WindowsWindowIcons(HINSTANCE resource_module)
@@ -195,6 +217,7 @@ BrowserApp::BrowserApp(HINSTANCE resource_module, std::wstring product_name)
       new_tab_strings_(LoadNewTabStrings(resource_module)),
       mdv_strings_(LoadMdvStrings(resource_module)),
       page_markdown_strings_(LoadPageMarkdownStrings(resource_module)),
+      cast_strings_(LoadCastStrings(resource_module)),
       mdv_runtime_(std::make_shared<mdv::MdvRuntimeState>()),
       mdv_entries_(std::make_shared<mdv::MdvEntryController>(mdv_runtime_,
                                                              mdv_strings_)),
@@ -204,10 +227,35 @@ BrowserApp::BrowserApp(HINSTANCE resource_module, std::wstring product_name)
       content_host_(std::make_unique<windows::ContentHostAdapter>()),
       media_host_(std::make_unique<media_host::MediaHostAdapter>(
           std::make_unique<windows::MediaHostProcess>())),
+      cast_shell_(std::make_unique<media_host::CastShellController>(
+          media_host::CastCommandPort{
+              [this](media_host::media_host_ipc::DiscoveryAction action) {
+                return media_host_->RequestDiscovery(action);
+              },
+              [this](std::optional<std::uint64_t> revision,
+                     std::uint16_t offset) {
+                return media_host_->RequestDevicePage(revision, offset);
+              },
+              [this](std::uint64_t candidate, std::string device,
+                     bool handoff) {
+                return media_host_->RequestStartCast(
+                    candidate, std::move(device), handoff);
+              },
+              [this](std::uint64_t generation) {
+                return media_host_->RequestStopCast(generation);
+              }})),
+      trusted_input_monitor_(
+          std::make_unique<windows::TrustedInputMonitorWin>()),
       tab_controller_(new window::TabController(
           browser_new_tab::kNewTabUrl,
-          [window_icons = window_icons_](CefRefPtr<CefBrowser> browser) {
-            window_icons->Apply(browser);
+          [this](CefRefPtr<CefBrowser> browser) {
+            window_icons_->Apply(browser);
+            if (!cast_chrome_) return;
+            active_browser_id_ = browser->GetIdentifier();
+            static_cast<void>(cast_chrome_->AttachWindow(
+                active_browser_id_, browser->GetHost()->GetWindowHandle()));
+            cast_chrome_->SetActiveWindow(active_browser_id_);
+            cast_chrome_->Render(cast_shell_->coordinator());
           },
           browser_new_tab::kNewTabUrl, permission_store_.get())),
       shell_runtime_(std::make_shared<WindowsShellRuntime>(tab_controller_)) {}
@@ -221,6 +269,15 @@ void BrowserApp::OnRegisterCustomSchemes(
 
 void BrowserApp::OnContextInitialized() {
   CEF_REQUIRE_UI_THREAD();
+  cast_chrome_ = std::make_unique<windows::CastChromeWin>(
+      cast_strings_,
+      windows::CastChromeCallbacks{
+          [this] { return cast_shell_->ActivateCastButton(); },
+          [this] { return cast_shell_->RefreshReceivers(); },
+          [this] { cast_shell_->CancelReceiverPicker(); },
+          [this](const std::string& device_id) {
+            return cast_shell_->SelectReceiver(device_id);
+          }});
   std::weak_ptr<WindowsShellRuntime> shell_runtime = shell_runtime_;
   tab_controller_->SetChromeCommandCallback([shell_runtime](int command_id) {
     if (const auto runtime = shell_runtime.lock()) {
@@ -323,24 +380,56 @@ void BrowserApp::OnContextInitialized() {
       [this, host = media_host_.get()](std::uint32_t tab_id,
                                        std::uint64_t navigation_id,
                                        std::uint32_t generation, bool closed) {
+        const bool active = tab_controller_->model().active_tab() == tab_id;
         if (closed) {
           static_cast<void>(host->CloseTab(tab_id, generation));
+          if (active) cast_shell_->OnPageClosed();
         } else {
           static_cast<void>(
               host->AdvanceNavigation(tab_id, navigation_id, generation));
+          if (active) cast_shell_->OnNavigation();
         }
+      });
+  tab_controller_->SetBrowserFocusedCallback(
+      [this](CefRefPtr<CefBrowser> browser) {
+        if (active_browser_id_ != 0 &&
+            active_browser_id_ != browser->GetIdentifier()) {
+          cast_shell_->OnNavigation();
+        }
+        active_browser_id_ = browser->GetIdentifier();
+        static_cast<void>(cast_chrome_->AttachWindow(
+            active_browser_id_, browser->GetHost()->GetWindowHandle()));
+        cast_chrome_->SetActiveWindow(active_browser_id_);
+        cast_chrome_->Render(cast_shell_->coordinator());
+      });
+  tab_controller_->SetBrowserClosingCallback(
+      [this](CefRefPtr<CefBrowser> browser) {
+        cast_chrome_->DetachWindow(browser->GetIdentifier());
+        if (active_browser_id_ == browser->GetIdentifier())
+          active_browser_id_ = 0;
       });
   tab_controller_->SetMediaObservationEventsReadyCallback(
       [this] { ConsumeMediaObservations(); });
+  if (!trusted_input_monitor_->Start([controller = tab_controller_] {
+        controller->NoteTrustedUserInputForActiveTab();
+      })) {
+    shell_runtime_->Shutdown();
+    CefQuitMessageLoop();
+    return;
+  }
   tab_controller_->SetBrowsersClosedCallback([this] {
     content_host_tick_active_ = false;
+    trusted_input_monitor_->Stop();
     page_markdown_preview_->Stop();
+    cast_shell_->Shutdown();
+    cast_chrome_->Close();
     content_host_->Stop();
     media_host_->Stop();
     shell_runtime_->Shutdown();
   });
   if (!content_host_->Start(HelperExecutablePath(L"crayon-content-host.exe")) ||
       !media_host_->Start(HelperExecutablePath(L"crayon-media-host.exe"))) {
+    trusted_input_monitor_->Stop();
     content_host_->Stop();
     media_host_->Stop();
     shell_runtime_->Shutdown();
@@ -354,6 +443,7 @@ void BrowserApp::ContinueContentHostStartup() {
   CEF_REQUIRE_UI_THREAD();
   if (content_host_->healthy() && media_host_->healthy()) {
     if (!tab_controller_->CreateMainWindow()) {
+      trusted_input_monitor_->Stop();
       content_host_->Stop();
       media_host_->Stop();
       shell_runtime_->Shutdown();
@@ -365,6 +455,7 @@ void BrowserApp::ContinueContentHostStartup() {
     return;
   }
   if (++content_host_start_checks_ >= kContentHostStartupChecks) {
+    trusted_input_monitor_->Stop();
     content_host_->Stop();
     media_host_->Stop();
     shell_runtime_->Shutdown();
@@ -396,7 +487,23 @@ void BrowserApp::ContentHostTick() {
   page_markdown_preview_->Tick(content_host_->Drain(64),
                                content_host_->healthy());
   static_cast<void>(media_host_->Drain(64));
-  static_cast<void>(media_host_->DrainPlanning(64));
+  cast_shell_->ConsumePlanning(media_host_->DrainPlanning(64));
+  cast_shell_->ConsumeCast(media_host_->DrainCast(64));
+  const bool media_healthy = media_host_->healthy();
+  const std::uint64_t cast_epoch = media_host_->cast_state_epoch();
+  if ((!media_healthy && media_host_was_healthy_) ||
+      (media_host_cast_epoch_ != 0 && cast_epoch != media_host_cast_epoch_)) {
+    cast_shell_->OnHostUnavailable();
+  }
+  media_host_was_healthy_ = media_healthy;
+  media_host_cast_epoch_ = cast_epoch;
+  if (CefRefPtr<CefBrowser> active_browser = tab_controller_->ActiveBrowser()) {
+    active_browser_id_ = active_browser->GetIdentifier();
+    static_cast<void>(cast_chrome_->AttachWindow(
+        active_browser_id_, active_browser->GetHost()->GetWindowHandle()));
+    cast_chrome_->SetActiveWindow(active_browser_id_);
+  }
+  cast_chrome_->Render(cast_shell_->coordinator());
   ScheduleContentHostTick();
 }
 
@@ -407,6 +514,10 @@ void BrowserApp::ConsumeMediaObservations() {
     auto page_url =
         tab_controller_->TrustedPageUrl(event.tab_id, event.navigation_id);
     if (!page_url) continue;
+    if (event.source == ::crayon::cef_shell::gateway::EventSource::kMedia &&
+        tab_controller_->model().active_tab() == event.tab_id) {
+      cast_shell_->OnBrowserVerifiedMedia();
+    }
     const auto observed_at = static_cast<std::uint64_t>(
         std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now().time_since_epoch())
@@ -481,6 +592,16 @@ bool BrowserApp::page_markdown_strings_valid() const {
          !page_markdown_strings_.copied_status.empty() &&
          !page_markdown_strings_.copy_failed_status.empty() &&
          !page_markdown_strings_.save_cancelled_status.empty();
+}
+
+bool BrowserApp::cast_strings_valid() const {
+  return !cast_strings_.button_select.empty() &&
+         !cast_strings_.button_stop.empty() &&
+         !cast_strings_.picker_title.empty() &&
+         !cast_strings_.picker_empty.empty() &&
+         !cast_strings_.picker_select.empty() &&
+         !cast_strings_.picker_refresh.empty() &&
+         !cast_strings_.picker_cancel.empty();
 }
 
 CefRefPtr<CefClient> BrowserApp::GetDefaultClient() {

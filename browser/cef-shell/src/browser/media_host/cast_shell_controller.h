@@ -6,13 +6,12 @@
 #include <string>
 #include <vector>
 
-#include "crayon/browser_cast_view/cast_ui_coordinator.h"
 #include "browser/media_host/media_host_adapter.h"
+#include "crayon/browser_cast_view/cast_ui_coordinator.h"
 
-namespace crayon::browser::cef_shell::macos {
+namespace crayon::browser::cef_shell::media_host {
 
 namespace media_host_ipc = ::crayon::cef_shell::ipc::media_host;
-using media_host::MediaPlanningEvent;
 
 // UI-thread command port. Every callback must only enqueue into the bounded
 // media-host adapter; implementations must not perform SDK or pipe I/O.
@@ -27,7 +26,7 @@ struct CastCommandPort final {
 // shared CastUiCoordinator and the asynchronous MHV1 command port. Platform
 // chrome and picker widgets consume this closed presentation state in b3e2.
 class CastShellController final {
-public:
+ public:
   explicit CastShellController(CastCommandPort commands);
 
   void OnNavigation();
@@ -42,22 +41,22 @@ public:
   bool ActivateCastButton();
   bool RefreshReceivers();
   void CancelReceiverPicker();
-  bool SelectReceiver(const std::string &device_id);
+  bool SelectReceiver(const std::string& device_id);
   bool StopSession();
 
-  const browser_cast_view::CastUiCoordinator &coordinator() const {
+  const browser_cast_view::CastUiCoordinator& coordinator() const {
     return coordinator_;
   }
   bool device_page_pending() const { return device_page_pending_; }
   bool start_pending() const { return start_pending_; }
 
-private:
+ private:
   void ResetPage(bool page_active);
   void StopActiveSession();
   bool RequestFirstDevicePage(media_host_ipc::DiscoveryAction action);
-  bool HandleDevicePage(const media_host_ipc::DevicePageReply &page);
-  void HandleStartReply(const media_host_ipc::StartCastReply &reply);
-  void HandleSessionEvents(const media_host_ipc::SessionEventsReply &reply);
+  bool HandleDevicePage(const media_host_ipc::DevicePageReply& page);
+  void HandleStartReply(const media_host_ipc::StartCastReply& reply);
+  void HandleSessionEvents(const media_host_ipc::SessionEventsReply& reply);
   void FailSelection();
 
   CastCommandPort commands_;
@@ -74,4 +73,4 @@ private:
   bool shutdown_ = false;
 };
 
-} // namespace crayon::browser::cef_shell::macos
+}  // namespace crayon::browser::cef_shell::media_host

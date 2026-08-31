@@ -25,6 +25,7 @@ enum class ExitCode : int {
   kNewTabStringsMissing = 15,
   kMdvStringsMissing = 16,
   kPageMarkdownStringsMissing = 17,
+  kCastStringsMissing = 18,
   kCefInitializeFailed = 20,
 };
 
@@ -92,6 +93,9 @@ int RunBrowserProcess(HINSTANCE bootstrap_instance, void *sandbox_info) {
   }
   if (!app->page_markdown_strings_valid()) {
     return static_cast<int>(ExitCode::kPageMarkdownStringsMissing);
+  }
+  if (!app->cast_strings_valid()) {
+    return static_cast<int>(ExitCode::kCastStringsMissing);
   }
   if (!CefInitialize(main_args, settings, app, sandbox_info)) {
     const int cef_exit_code = CefGetExitCode();

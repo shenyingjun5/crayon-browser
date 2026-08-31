@@ -9,6 +9,7 @@
 
 #include "browser/mdv/cef_mdv_editing.h"
 #include "browser/mdv/cef_mdv_entries.h"
+#include "browser/media_host/cast_shell_controller.h"
 #include "browser/media_host/media_host_adapter.h"
 #include "browser/page_markdown/cef_page_markdown_preview.h"
 #include "browser/permission/permission_store.h"
@@ -17,8 +18,10 @@
 #include "crayon/browser_new_tab/new_tab_page.h"
 #include "include/cef_app.h"
 #include "windows/content_host_adapter_win.h"
+#include "windows/cast_chrome_win.h"
 #include "windows/media_host_process_win.h"
 #include "windows/shell_command_adapter.h"
+#include "windows/trusted_input_monitor_win.h"
 
 namespace crayon::browser::cef_shell {
 
@@ -54,6 +57,7 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   bool new_tab_strings_valid() const;
   bool mdv_strings_valid() const;
   bool page_markdown_strings_valid() const;
+  bool cast_strings_valid() const;
 
  private:
   void ContinueContentHostStartup();
@@ -66,18 +70,25 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   const browser_new_tab::NewTabPageStrings new_tab_strings_;
   const browser_mdv::MdvPageStrings mdv_strings_;
   const page_markdown::PageMarkdownStrings page_markdown_strings_;
+  const windows::CastChromeStrings cast_strings_;
   const std::shared_ptr<mdv::MdvRuntimeState> mdv_runtime_;
   const std::shared_ptr<mdv::MdvEntryController> mdv_entries_;
   const std::shared_ptr<mdv::MdvEditController> mdv_editing_;
   std::unique_ptr<permission::PermissionStore> permission_store_;
   std::unique_ptr<windows::ContentHostAdapter> content_host_;
   std::unique_ptr<media_host::MediaHostAdapter> media_host_;
+  std::unique_ptr<media_host::CastShellController> cast_shell_;
+  std::unique_ptr<windows::CastChromeWin> cast_chrome_;
+  std::unique_ptr<windows::TrustedInputMonitorWin> trusted_input_monitor_;
   CefRefPtr<window::TabController> tab_controller_;
   const std::shared_ptr<WindowsShellRuntime> shell_runtime_;
   std::unique_ptr<page_markdown::CefPageMarkdownPreviewController>
       page_markdown_preview_;
   std::size_t content_host_start_checks_ = 0;
   bool content_host_tick_active_ = false;
+  bool media_host_was_healthy_ = false;
+  std::uint64_t media_host_cast_epoch_ = 0;
+  int active_browser_id_ = 0;
 
   IMPLEMENT_REFCOUNTING(BrowserApp);
   DISALLOW_COPY_AND_ASSIGN(BrowserApp);

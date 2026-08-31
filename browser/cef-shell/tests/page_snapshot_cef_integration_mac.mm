@@ -25,7 +25,7 @@
 #include "include/wrapper/cef_library_loader.h"
 #include "ipc/media_observation_cef_message.h"
 #include "macos/cast_chrome_mac.h"
-#include "macos/cast_shell_controller.h"
+#include "browser/media_host/cast_shell_controller.h"
 #include "macos/content_host_adapter_mac.h"
 #include "macos/trusted_input_monitor_mac.h"
 
@@ -48,8 +48,8 @@ using crayon::browser::cef_shell::media_host::BrowserMediaFact;
 using crayon::browser::cef_shell::macos::CastChromeCallbacks;
 using crayon::browser::cef_shell::macos::CastChromeMac;
 using crayon::browser::cef_shell::macos::CastChromeStrings;
-using crayon::browser::cef_shell::macos::CastCommandPort;
-using crayon::browser::cef_shell::macos::CastShellController;
+using crayon::browser::cef_shell::media_host::CastCommandPort;
+using crayon::browser::cef_shell::media_host::CastShellController;
 using crayon::browser::cef_shell::macos::ContentHostAdapter;
 using crayon::browser::cef_shell::macos::ContentHostProcess;
 using crayon::browser::cef_shell::macos::ContentHostTransport;

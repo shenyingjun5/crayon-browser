@@ -1,6 +1,6 @@
 # PLT Windows/macOS 平台适配 Roadmap
 
-- 状态：`PLT-01/02/W04/M04 DONE`；macOS 共享装配 `PLT-M05 IN_PROGRESS`（M05a、M05b1/b2/b3 DONE，b4..b6/M05c 后置）；Windows 首发装配 `PLT-W05 IN_PROGRESS`（W05a DONE、W05b READY，后续严格串行）
+- 状态：`PLT-01/02/W04/M04 DONE`；macOS 共享装配 `PLT-M05 IN_PROGRESS`（M05a、M05b1/b2/b3 DONE，b4..b6/M05c 后置）；Windows 首发装配 `PLT-W05 IN_PROGRESS`（W05a DONE、W05b IN_PROGRESS，后续严格串行）
 - 任务数：7
 - 平台：Windows、macOS
 - 非目标：Linux、屏幕/标签页/系统音频采集、编码器、WebRTC sender
@@ -347,7 +347,7 @@
 
 | ID | 状态 | 依赖 | 单一目标 | 允许范围与门禁 |
 |---|---|---|---|---|
-| PLT-M05b3e1 | DONE | M05b3d DONE | 建立 UI-thread-only Cast shell controller，把 Browser-verified media、opaque candidate、设备分页、start/session reply 与 navigation/close/shutdown 映射到既有 `CastUiCoordinator` 和 b3d async command port | `browser/cef-shell/src/macos/cast_shell_controller*`、独立 Fake command test、CMake 与 Roadmap；无 CEF/AppKit/SDK/网络，页面事实不能直接启用或选择设备 |
+| PLT-M05b3e1 | DONE | M05b3d DONE | 建立 UI-thread-only Cast shell controller，把 Browser-verified media、opaque candidate、设备分页、start/session reply 与 navigation/close/shutdown 映射到既有 `CastUiCoordinator` 和 b3d async command port | `browser/cef-shell/src/browser/media_host/cast_shell_controller*`、独立 Fake command test、CMake 与 Roadmap；无 CEF/AppKit/SDK/网络，页面事实不能直接启用或选择设备 |
 | PLT-M05b3e2 | DONE | M05b3e1 | 增加 macOS 原生 browser-chrome Cast 按钮与非阻塞 receiver picker，并在真实 CEF App 接通 e1 controller、M05b2/b3d drain 和 navigation/close/app-exit | AppKit adapter、CEF App/Tab lifecycle、locales/自有 `cast.device` glyph、真 CEF fixture；不得调用 Chromium MediaRouter，不覆盖网页 viewport，不访问 Keychain |
 
 两切片共用边界：只有 Browser process 已通过真实输入与播放推进门禁的 media fact 才能建立 eligibility；network/candidate/page 文本单独不能启用按钮。receiver 仅显示稳定 id、展示名和闭合可用状态，不向 UI 暴露 IP/URL/UDN/token。Handoff 的确认/安装/启动反馈仍归 M05b6，e1/e2 遇到 Handoff 只闭合为非 Casting 状态；手机 Direct/Relay 仍由 M05b4/b5 验收。
@@ -356,7 +356,7 @@
 
 - 状态：`DONE`；依赖 `PLT-M05b3d DONE`、`PLT-M05b3a DONE`。
 - 单一目标：新增无平台 UI/CEF 类型的单 UI 线程 controller，消费 Browser-verified media 标记、opaque candidate、b3d Cast reply 和显式 navigation/close/shutdown，驱动 `CastUiCoordinator` 并通过注入的异步 command port 发 discovery/list/start/stop。
-- 输入/输出与允许修改：允许新增 `browser/cef-shell/src/macos/cast_shell_controller.{h,cc}`、独立 test、相邻 CMake 和 Roadmap。输入只含闭合 planning/Cast DTO 与显式 Browser lifecycle；输出只含 coordinator presentation state、receiver option 和异步闭合命令。
+- 输入/输出与允许修改：平台无关 controller 当前位于 `browser/cef-shell/src/browser/media_host/cast_shell_controller.{h,cc}`，配套独立 test、相邻 CMake 和 Roadmap。输入只含闭合 planning/Cast DTO 与显式 Browser lifecycle；输出只含 coordinator presentation state、receiver option 和异步闭合命令。
 - 禁止修改：CEF App/WindowClient、AppKit、Rust/MHV1/adapter、Cast-SDK/Relay、shared UI 状态机、locales/assets；不得使用 Chromium MediaRouter/`IDC_ROUTE_MEDIA`，不得执行 I/O、等待或创建线程。
 - 状态/容量/生命周期：仅 Browser-verified media 与 current candidate 同时存在才 eligible；设备分页 revision/offset 连续、最多 64，仅 Ready 设备可选择；同时最多一个分页和一个 Start。navigation/close/shutdown 先 generation-bound stop active session、停止 discovery，再清 picker/candidate/eligibility；Start outcome 与 session terminal 只按闭合 route/generation 投影，Handoff/Reject/Failed 不显示 Casting。
 - 验收：Fake command port 覆盖 network/candidate 不能启用、verified media、无设备/多页/刷新/取消、非法页、重复选择、Direct/Relay/Handoff/Reject/Failed、旧/terminal event、stop、navigation/close/shutdown 和命令拒绝；Debug/Release unit、clang-format、repo guard/security、Review P0/P1=0。
@@ -441,8 +441,8 @@
 | Slice | 状态 | 依赖 | 单一目标 | 允许路径与验收 |
 |---|---|---|---|---|
 | PLT-W05a | DONE | PLT-M05b3 DONE | 用 Windows named pipe/Job/process owner 装配 bundled `crayon-media-host`，接通现有 CEF observation/planning 与有界 health/kill/reap | `browser/cef-shell/src/windows/**`、`browser/cef-shell/src/browser/media_host/**`（仅提取既有平台无关 adapter）、顶层组合 crate `crates/crayon-media-host/**`（从 runtime 提升 binary owner，仅补平台 health/启动）、平台 CMake/package、相邻 process/adapter tests；Debug/Release build/CTest；不接 UI/SDK 真机 |
-| PLT-W05b | READY | W05a DONE | 接通共享 `CastUiCoordinator`、浏览器 chrome 按钮/receiver picker、Cast command/event worker 与 navigation/close/app-exit | Windows shell/chrome/locale、相邻 tests；无设备/刷新/取消/失败/旧 session/stop；UI 线程无阻塞 SDK |
-| PLT-W05c | TODO | W05b | 使用 ADB 正式接收端完成 clear fixture Direct 发现、连接、投送、pause/resume/seek/stop | E2E-001/CS-010；真实 Desktop Host 与真实上屏；不以 SDK standalone/Fake/ADB 在线代替 |
+| PLT-W05b | DONE | W05a DONE | 接通共享 `CastUiCoordinator`、浏览器 chrome 按钮/receiver picker、Cast command/event worker 与 navigation/close/app-exit | Windows shell/chrome/locale、相邻 tests；无设备/刷新/取消/失败/旧 session/stop；UI 线程无阻塞 SDK |
+| PLT-W05c | READY | W05b DONE | 使用 ADB 正式接收端完成 clear fixture Direct 发现、连接、投送、pause/resume/seek/stop | E2E-001/CS-010；真实 Desktop Host 与真实上屏；不以 SDK standalone/Fake/ADB 在线代替 |
 | PLT-W05d | TODO | W05c | 同一接收端完成 MP4 Range 与 HLS Relay 全链路 | E2E-002；opaque route、200/206/416、分片、撤销后拒绝、零 secret；不支持 DASH Relay/加密 HLS |
 | PLT-W05e | TODO | W05d | DRM/EME/加密/credential 拒绝与 ExternalClientHandoff 确认/取消/未安装/失败反馈 | E2E-003/004；交接不创建 SDK/Relay session、不显示投屏中 |
 | PLT-W05f | TODO | W05e | 100 次开始/停止/设备/网络切换及睡眠/唤醒/退出，关闭 CP-W01 | E2E-005；进程/线程/socket/RSS/UI delay/dropped、旧 generation、退出零残留 |
@@ -457,6 +457,15 @@
 - 失败与修复：首次把 Windows 平台 crate 直接依赖加入 `crayon-app-runtime` 被 repo-guard `RG-005` 稳定拒绝，改为独立顶层组合 crate 后通过，未放松守卫；一次 package contract 使用未重建的旧 executable 报参数数量错误，重建对应 contract target 后 Debug/Release 均通过。两项均保留为可审计失败，不计入最终通过数。
 - Code Review：按 v0.9 依次审查需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试/证据、可维护性/供应链；P0 0、P1 0、P2 0、P3 0，`APPROVE`。未复制 Cast-SDK/MED/Relay/schema，句柄、队列、重启、generation、URL/secret 边界均有代码或行为测试。
 - 未覆盖与风险：按切片明确未接 Cast chrome UI、receiver picker 或 SDK command，未做 ADB/Direct/Relay 真机结论，由 `PLT-W05b..f` 严格串行闭合。macOS 特有构建、签名与行为验证按用户决策 `NOT_RUN` 并后置；共享 adapter/binary owner 的平台中立机械迁移保留原有 macOS 接口，但须在后续 macOS 矩阵复验。`PLT-W05a DONE`，`PLT-W05b READY`，顶层 `PLT-W05` 保持 `IN_PROGRESS`。
+
+### PLT-W05b 完成记录（2026-09-01，Windows Cast UI 与生命周期装配）
+
+- 实现：将既有无平台依赖的 `CastShellController` 从 macOS 目录提升到 `browser/media_host`，Windows 与 macOS 继续消费同一 `CastUiCoordinator`、opaque candidate、设备分页、start/stop/session 和 navigation/close/shutdown 状态机。Windows 新增原生 owner-draw Cast 按钮、tooltip/可访问名称、DPI 布局和 modeless receiver picker，覆盖无设备空态、刷新、选择、pending discovery 即时取消与 Stop 文案；所有按钮只同步回调共享 controller，SDK、网络和 pipe 工作仍由既有单 worker/有界 adapter owner 执行。产品 App 接通本地化 fail-fast、active tab/focus/close/navigation、host health/epoch、planning/cast drain 与 app-exit 逆序关闭；Browser UI 线程同时装配键盘可信输入与 Windows `WH_MOUSE_LL` 鼠标输入，鼠标只接受当前进程窗口上的按下事件并拒绝 `LLMHF_INJECTED/LLMHF_LOWER_IL_INJECTED`。门禁诊断只细分 not-playing/not-visible/input-proof 拒绝原因，不改变授权判定。
+- 自动化验证：Windows x64 Debug `ALL_BUILD` 最终通过（67.9s），`ctest --test-dir .cache/build/windows-cef-debug -C Debug --output-on-failure` **85/85**（426.15s）；Release `ALL_BUILD` 通过（138.0s），完整 CTest **85/85**（251.14s）。新增 `trusted_input_monitor_win` 连同 `cast_shell_controller_win`、`cast_chrome_win`、`windows_cef_shell_source_contract` 全绿；`page_snapshot_cef_integration_windows` 连续 3 次通过（62.81s/66.86s/85.59s），`cast_cef_integration_windows` 连续 3 次通过（4.11s/3.86s/4.13s），最终双配置真实 CEF 分别为 68.36s/4.21s 与 41.17s/3.52s。`RUST_TEST_THREADS=1 scripts/check.ps1 fast` 后接 `scripts/check.ps1 security` 串行退出码 0（合计 136.5s）；`git diff --check` 通过。
+- 真实 CEF 证据：Windows CEF fixture 使用随包 `crayon-media-host.exe`、真实 renderer media observer/Browser input-proof、共享 planning/controller 和原生 Win32 chrome；离线 PCM WAV 在测试专用 `autoplay-policy=no-user-gesture-required` 下真实推进，产品命令行未放宽。可信输入经产品已有 `WindowClient::OnPreKeyEvent` 路径进入门禁，不直接调用 proof seam；场景确认 Browser eligible fact 生成 opaque candidate，原生 Cast 按钮可见可用，picker 打开后即使 device page 仍 pending 也可取消，导航到 recovery page 后按钮/picker 清理。普通 Markdown fixture 对 content-host supervisor 的瞬时重启做 10s 有界 admission 等待，连续三轮覆盖正常/空页/navigation/cancel/close/backpressure/crash/security/100KiB 性能并全部收敛。测试只闭合 UI/command/event 装配，不伪造接收端或 Direct/Relay 成功。
+- 失败与修复：最初 AV1 MP4 在 Windows CEF 无可用播放推进，切到确定性 PCM WAV；随后 Chromium autoplay 拒绝，通过仅限测试场景的 autoplay policy 获得真实推进。fixture 曾用 `location.hash` 记录播放结果，导致 navigation generation 前移、input-proof 以 stale navigation 正确拒绝，改为 DOM `data-playback`。独立 Review 发现产品只接键盘可信输入而漏接鼠标，补 Windows hook 后又发现最初实现会接受 `SendInput` 注入；最终拒绝两类 injected flag，以可审计策略单测覆盖 owned/down/injected/foreign/lifecycle，CEF 改走键盘产品路径。自动化桌面存在系统 `Shell_SystemDim` 遮罩，无法取得物理鼠标真点击证据，未绕过该边界。Cast CEF 三连第三次暴露 SDK device page 超过原 5s 预算；没有继续扩大超时，而是补 pending-cancel 断言并验证 UI 不等待 LAN。Debug 全量首轮还暴露 content-host 在页面完成时瞬时 unhealthy，诊断为 `host_healthy=0/process_healthy=0/browser_loading=0`，fixture 改为复用既有 10s supervisor admission 门禁，随后双 CEF 各三连与双配置全量通过。workspace 默认并行 `fast` 两次分别抖动于既有 `stalled_probe...`（请求数 0/2）和 `cnt_20w1_real_process...`（Win32 pipe 233）；两个失败项单独复验均立即通过，最终单线程完整 fast 通过，未夹带跨任务修复。
+- Code Review：按 v0.9 顺序独立审查需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试/证据、可维护性/供应链；审查中关闭“Windows 鼠标未进入 trusted-input owner”和“注入鼠标可被误认”两项 P1，最终 P0 0、P1 0、P2 0、P3 0，`APPROVE`。UI thread 仅做有界 enqueue/drain、hook callback 与 Win32 presentation，不复制 Cast-SDK/Relay/MHV1；旧 session、host epoch、导航、关闭与 shutdown 均 fail-closed。
+- 未覆盖与风险：ADB 正式接收端发现、连接、真实上屏与 pause/resume/seek/stop 明确属于 `PLT-W05c`，MP4 Range/HLS Relay 属于 W05d，拒绝/外部交接与 100 次稳定性属于 W05e/f。自动化桌面遮罩下的**物理鼠标点击**、Narrator、原生 200% DPI 和 macOS 特有构建/签名/行为本切片 `NOT_RUN`；鼠标策略与 hook 生命周期已自动化通过，但不能冒充真实物理输入。macOS source contract 在 Windows CTest 通过，但不能替代 macOS 验证。workspace 默认并行 fast 的两处独立时序抖动须在发布总门禁前治理或证明稳定。`PLT-W05b DONE`，`PLT-W05c READY`，顶层 `PLT-W05` 保持 `IN_PROGRESS`。
 
 ### PLT-19W/19M Review 边界
 

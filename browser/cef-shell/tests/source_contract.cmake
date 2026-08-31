@@ -58,6 +58,14 @@ file(READ
 file(READ
      "${CRAYON_CEF_SHELL_SOURCE}/src/windows/media_host_process_win.cc"
      windows_media_host)
+file(READ "${CRAYON_CEF_SHELL_SOURCE}/src/windows/cast_chrome_win.cc"
+     windows_cast_chrome)
+file(READ
+     "${CRAYON_CEF_SHELL_SOURCE}/src/windows/trusted_input_monitor_win.cc"
+     windows_trusted_input)
+file(READ
+     "${CRAYON_CEF_SHELL_SOURCE}/src/browser/media_host/cast_shell_controller.cc"
+     cast_shell_controller)
 file(READ
      "${CRAYON_CEF_SHELL_SOURCE}/src/windows/page_markdown_platform_win.cc"
      windows_page_markdown)
@@ -94,7 +102,8 @@ foreach(required_bootstrap_token
         "sandbox_info"
         "GetClientModule"
         "brand_icons_valid"
-        "page_markdown_strings_valid")
+        "page_markdown_strings_valid"
+        "cast_strings_valid")
   string(FIND "${windows_bootstrap}" "${required_bootstrap_token}" token_index)
   if(token_index EQUAL -1)
     message(FATAL_ERROR
@@ -113,6 +122,8 @@ foreach(required_cmake_token
         "crayon-content-host.exe"
         "crayon-media-host.exe"
         "src/browser/media_host/media_host_adapter.cc"
+        "src/browser/media_host/cast_shell_controller.cc"
+        "src/windows/cast_chrome_win.cc"
         "src/windows/media_host_process_win.cc"
         "src/windows/content_host_adapter_win.cc"
         "src/browser/page_markdown/cef_page_markdown_preview.cc"
@@ -141,11 +152,64 @@ foreach(required_media_app_token
         "SetMediaObservationEventsReadyCallback"
         "DrainMediaObservations"
         "TrustedPageUrl"
-        "media_host_->Consume")
+        "media_host_->Consume"
+        "CastShellController"
+        "CastChromeWin"
+        "TrustedInputMonitorWin"
+        "DrainPlanning"
+        "DrainCast"
+        "cast_state_epoch")
   string(FIND "${windows_app}" "${required_media_app_token}" token_index)
   if(token_index EQUAL -1)
     message(FATAL_ERROR
             "Windows BrowserApp is missing PLT-W05a token ${required_media_app_token}")
+  endif()
+endforeach()
+foreach(required_cast_chrome_token
+        "SetWindowSubclass"
+        "TOOLTIPS_CLASSW"
+        "WM_DPICHANGED_AFTERPARENT"
+        "LBS_NOTIFY"
+        "UpdatePicker"
+        "EnableWindow"
+        "RemoveWindowSubclass")
+  string(FIND "${windows_cast_chrome}" "${required_cast_chrome_token}"
+         token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Windows Cast chrome is missing lifecycle/UI token ${required_cast_chrome_token}")
+  endif()
+endforeach()
+foreach(required_trusted_input_token
+        "SetWindowsHookExW"
+        "WH_MOUSE_LL"
+        "WindowFromPoint"
+        "GetCurrentProcessId"
+        "LLMHF_INJECTED"
+        "LLMHF_LOWER_IL_INJECTED"
+        "WM_LBUTTONDOWN"
+        "WM_RBUTTONDOWN"
+        "UnhookWindowsHookEx")
+  string(FIND "${windows_trusted_input}" "${required_trusted_input_token}"
+         token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Windows trusted input adapter is missing ${required_trusted_input_token}")
+  endif()
+endforeach()
+foreach(required_cast_controller_token
+        "OnNavigation"
+        "OnPageClosed"
+        "OnHostUnavailable"
+        "Shutdown"
+        "DiscoveryAction::kRefresh"
+        "RequestStop"
+        "NotifySessionEnded")
+  string(FIND "${cast_shell_controller}" "${required_cast_controller_token}"
+         token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Shared Cast controller is missing lifecycle token ${required_cast_controller_token}")
   endif()
 endforeach()
 foreach(required_host_token

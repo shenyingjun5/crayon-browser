@@ -1,4 +1,4 @@
-#include "macos/cast_shell_controller.h"
+#include "browser/media_host/cast_shell_controller.h"
 
 #include <iostream>
 #include <optional>
@@ -9,17 +9,16 @@
 namespace {
 
 namespace cast = crayon::browser_cast_view;
-namespace macos = crayon::browser::cef_shell::macos;
-namespace mh = crayon::browser::cef_shell::macos::media_host_ipc;
 namespace media_host = crayon::browser::cef_shell::media_host;
+namespace mh = crayon::browser::cef_shell::media_host::media_host_ipc;
 
-#define CHECK_CAST(condition)                                                  \
-  do {                                                                         \
-    if (!(condition)) {                                                        \
-      std::cerr << "check failed at line " << __LINE__ << ": " #condition      \
-                << '\n';                                                       \
-      return false;                                                            \
-    }                                                                          \
+#define CHECK_CAST(condition)                                             \
+  do {                                                                    \
+    if (!(condition)) {                                                   \
+      std::cerr << "check failed at line " << __LINE__ << ": " #condition \
+                << '\n';                                                  \
+      return false;                                                       \
+    }                                                                     \
   } while (false)
 
 struct CommandLog final {
@@ -29,8 +28,8 @@ struct CommandLog final {
   std::vector<std::uint64_t> stops;
   bool accept = true;
 
-  macos::CastCommandPort Port() {
-    return macos::CastCommandPort{
+  media_host::CastCommandPort Port() {
+    return media_host::CastCommandPort{
         [this](mh::DiscoveryAction action) {
           discovery.push_back(action);
           return accept;
@@ -40,8 +39,7 @@ struct CommandLog final {
           return accept;
         },
         [this](std::uint64_t candidate, std::string device, bool handoff) {
-          if (handoff)
-            return false;
+          if (handoff) return false;
           starts.emplace_back(candidate, std::move(device));
           return accept;
         },
@@ -54,8 +52,12 @@ struct CommandLog final {
 
 media_host::MediaPlanningEvent Candidate(std::optional<std::uint64_t> id) {
   return media_host::MediaPlanningEvent{
-      media_host::MediaPlanningEventKind::kCandidate, id, "fixture.invalid",
-      std::nullopt, std::nullopt, std::nullopt};
+      media_host::MediaPlanningEventKind::kCandidate,
+      id,
+      "fixture.invalid",
+      std::nullopt,
+      std::nullopt,
+      std::nullopt};
 }
 
 mh::Device Device(std::string id, std::string name,
@@ -78,7 +80,7 @@ mh::Message Started(std::uint64_t generation, mh::DeliveryRoute route) {
 
 bool EligibilityAndPaging() {
   CommandLog log;
-  macos::CastShellController controller(log.Port());
+  media_host::CastShellController controller(log.Port());
   controller.OnNavigation();
   controller.ConsumePlanning({Candidate(41)});
   CHECK_CAST(controller.coordinator().button().state() ==
@@ -112,7 +114,7 @@ bool EligibilityAndPaging() {
 
 bool DirectStopAndLifecycle() {
   CommandLog log;
-  macos::CastShellController controller(log.Port());
+  media_host::CastShellController controller(log.Port());
   controller.OnNavigation();
   controller.OnBrowserVerifiedMedia();
   controller.ConsumePlanning({Candidate(7)});
@@ -168,7 +170,7 @@ bool DirectStopAndLifecycle() {
 
 bool ClosedOutcomesAndFailures() {
   CommandLog log;
-  macos::CastShellController controller(log.Port());
+  media_host::CastShellController controller(log.Port());
   controller.OnNavigation();
   controller.OnBrowserVerifiedMedia();
   controller.ConsumePlanning({Candidate(11)});
@@ -209,7 +211,7 @@ bool ClosedOutcomesAndFailures() {
 bool RejectAndFailedOutcomes() {
   for (const bool rejected : {true, false}) {
     CommandLog log;
-    macos::CastShellController controller(log.Port());
+    media_host::CastShellController controller(log.Port());
     controller.OnNavigation();
     controller.OnBrowserVerifiedMedia();
     controller.ConsumePlanning({Candidate(rejected ? 31 : 32)});
@@ -238,10 +240,15 @@ bool RejectAndFailedOutcomes() {
 
 bool CancelRefreshAndHostFailure() {
   CommandLog log;
-  macos::CastShellController controller(log.Port());
+  media_host::CastShellController controller(log.Port());
   controller.OnNavigation();
   controller.OnBrowserVerifiedMedia();
   controller.ConsumePlanning({Candidate(21)});
+  CHECK_CAST(controller.ActivateCastButton());
+  CHECK_CAST(controller.device_page_pending());
+  controller.CancelReceiverPicker();
+  CHECK_CAST(!controller.device_page_pending());
+  CHECK_CAST(log.discovery.back() == mh::DiscoveryAction::kStop);
   CHECK_CAST(controller.ActivateCastButton());
   controller.ConsumeCast({Page(5, 0, std::nullopt, {})});
   CHECK_CAST(controller.RefreshReceivers());
@@ -255,13 +262,12 @@ bool CancelRefreshAndHostFailure() {
   return true;
 }
 
-} // namespace
+}  // namespace
 
 int main() {
   const bool ok = EligibilityAndPaging() && DirectStopAndLifecycle() &&
                   ClosedOutcomesAndFailures() && RejectAndFailedOutcomes() &&
                   CancelRefreshAndHostFailure();
-  if (ok)
-    std::cout << "cast_shell_controller_mac_test passed\n";
+  if (ok) std::cout << "cast_shell_controller_test passed\n";
   return ok ? 0 : 1;
 }

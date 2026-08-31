@@ -22,6 +22,11 @@ struct MediaObservationDiagnostics {
   std::uint64_t received_total = 0;
   std::uint64_t accepted_current_total = 0;
   std::uint64_t proof_denied_total = 0;
+  std::uint64_t not_playing_denied_total = 0;
+  std::uint64_t not_visible_denied_total = 0;
+  std::uint64_t input_proof_denied_total = 0;
+  ::crayon::cef_shell::input_proof::ProofResult last_input_proof_result =
+      ::crayon::cef_shell::input_proof::ProofResult::kEligible;
   std::uint64_t eligible_total = 0;
 };
 

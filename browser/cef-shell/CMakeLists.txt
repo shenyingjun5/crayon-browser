@@ -38,6 +38,8 @@ if(OS_WINDOWS)
       src/browser/media_host/media_host_adapter.cc
       src/browser/media_host/media_host_adapter.h
       src/browser/media_host/media_host_transport.h
+      src/browser/media_host/cast_shell_controller.cc
+      src/browser/media_host/cast_shell_controller.h
       src/browser/page_markdown/cef_page_markdown_preview.cc
       src/browser/page_markdown/cef_page_markdown_preview.h
       src/browser/page_markdown/page_markdown_preview.cc
@@ -72,6 +74,8 @@ if(OS_WINDOWS)
       src/process/windows/bootstrap_entry.h
       src/windows/app.cc
       src/windows/app.h
+      src/windows/cast_chrome_win.cc
+      src/windows/cast_chrome_win.h
       src/windows/content_host_adapter_win.cc
       src/windows/content_host_adapter_win.h
       src/windows/content_host_process_win.cc
@@ -85,6 +89,8 @@ if(OS_WINDOWS)
       src/windows/page_markdown_platform_win.h
       src/windows/shell_command_adapter.cc
       src/windows/shell_command_adapter.h
+      src/windows/trusted_input_monitor_win.cc
+      src/windows/trusted_input_monitor_win.h
       resources/windows/resource_ids.h
       "${CMAKE_CURRENT_BINARY_DIR}/generated/app.rc")
 
@@ -133,9 +139,10 @@ if(OS_WINDOWS)
             crayon::cef-shell-input-proof
             crayon::cef-shell-observation-gateway
             crayon::cef-shell-core-client crayon::cef-shell-ipc
-            crayon::browser-page-tools crayon::browser-shared-shell
+            crayon::browser-cast-view crayon::browser-page-tools
+            crayon::browser-shared-shell
             crayon_libcef libcef_dll_wrapper
-            ${CEF_STANDARD_LIBS} comdlg32)
+            ${CEF_STANDARD_LIBS} comctl32 comdlg32)
   set_target_properties(${CRAYON_BROWSER_TARGET}
                         PROPERTIES OUTPUT_NAME "CrayonBrowser")
   COPY_SINGLE_FILE(
@@ -254,10 +261,57 @@ if(OS_WINDOWS)
     set_tests_properties(media_host_process_win media_host_adapter_win
                          PROPERTIES LABELS "cef;shell;windows;cast")
 
+    add_executable(
+      crayon_cast_shell_controller_win_test
+      tests/cast_shell_controller_test.cc
+      src/browser/media_host/cast_shell_controller.cc)
+    target_compile_features(crayon_cast_shell_controller_win_test
+                            PRIVATE cxx_std_17)
+    target_include_directories(crayon_cast_shell_controller_win_test
+                               PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(
+      crayon_cast_shell_controller_win_test
+      PRIVATE crayon::browser-cast-view crayon::cef-shell-ipc)
+    add_test(NAME cast_shell_controller_win
+             COMMAND crayon_cast_shell_controller_win_test)
+
+    add_executable(
+      crayon_cast_chrome_win_test
+      tests/cast_chrome_win_test.cc
+      src/windows/cast_chrome_win.cc)
+    target_compile_features(crayon_cast_chrome_win_test PRIVATE cxx_std_17)
+    target_include_directories(crayon_cast_chrome_win_test
+                               PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_definitions(crayon_cast_chrome_win_test
+                               PRIVATE UNICODE _UNICODE)
+    target_compile_options(crayon_cast_chrome_win_test PRIVATE /W4 /WX)
+    target_link_libraries(crayon_cast_chrome_win_test
+                          PRIVATE crayon::browser-cast-view comctl32)
+    add_test(NAME cast_chrome_win COMMAND crayon_cast_chrome_win_test)
+    add_executable(
+      crayon_trusted_input_monitor_win_test
+      tests/trusted_input_monitor_win_test.cc
+      src/windows/trusted_input_monitor_win.cc)
+    target_compile_features(crayon_trusted_input_monitor_win_test
+                            PRIVATE cxx_std_17)
+    target_include_directories(crayon_trusted_input_monitor_win_test
+                               PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_definitions(crayon_trusted_input_monitor_win_test
+                               PRIVATE UNICODE _UNICODE)
+    target_compile_options(crayon_trusted_input_monitor_win_test
+                           PRIVATE /W4 /WX)
+    add_test(NAME trusted_input_monitor_win
+             COMMAND crayon_trusted_input_monitor_win_test)
+    set_tests_properties(cast_shell_controller_win cast_chrome_win
+                         trusted_input_monitor_win
+                         PROPERTIES LABELS "cef;shell;windows;cast")
+
     find_program(CRAYON_PYTHON3_EXECUTABLE NAMES python python3 REQUIRED)
     add_library(
       crayon_page_snapshot_cef_integration_win SHARED
       tests/page_snapshot_cef_integration_win.cc
+      src/browser/media_host/cast_shell_controller.cc
+      src/browser/media_host/media_host_adapter.cc
       src/browser/new_tab/cef_new_tab_handler.cc
       src/browser/network_observer/cef_network_observer_adapter.cc
       src/browser/observation_gateway/cef_observation_bridge.cc
@@ -274,6 +328,11 @@ if(OS_WINDOWS)
       src/ipc/media_observation_cef_message.cc
       src/windows/content_host_adapter_win.cc
       src/windows/content_host_process_win.cc)
+    target_sources(
+      crayon_page_snapshot_cef_integration_win
+      PRIVATE src/windows/cast_chrome_win.cc
+              src/windows/trusted_input_monitor_win.cc
+              src/windows/media_host_process_win.cc)
     SET_LIBRARY_TARGET_PROPERTIES(crayon_page_snapshot_cef_integration_win)
     set(crayon_windows_snapshot_test_dir
         "${CMAKE_CURRENT_BINARY_DIR}/snapshot-test/$<CONFIG>")
@@ -288,13 +347,15 @@ if(OS_WINDOWS)
     target_compile_definitions(
       crayon_page_snapshot_cef_integration_win
       PRIVATE UNICODE _UNICODE
-              CRAYON_CONTENT_HOST_TEST_PATH="$<TARGET_FILE_DIR:crayon_page_snapshot_cef_integration_win>/crayon-content-host.exe")
+              CRAYON_CONTENT_HOST_TEST_PATH="$<TARGET_FILE_DIR:crayon_page_snapshot_cef_integration_win>/crayon-content-host.exe"
+              CRAYON_MEDIA_HOST_TEST_PATH="$<TARGET_FILE_DIR:crayon_page_snapshot_cef_integration_win>/crayon-media-host.exe")
     target_include_directories(
       crayon_page_snapshot_cef_integration_win
       PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     target_link_libraries(
       crayon_page_snapshot_cef_integration_win
       PRIVATE crayon::browser-new-tab
+              crayon::browser-cast-view
               crayon::browser-page-snapshot-gateway
               crayon::cef-page-snapshot-collector
               crayon::cef-shell-media-observer
@@ -303,7 +364,7 @@ if(OS_WINDOWS)
               crayon::cef-shell-observation-gateway
               crayon::cef-shell-core-client crayon::cef-shell-ipc
               crayon::browser-shared-shell crayon_libcef libcef_dll_wrapper
-              ${CEF_STANDARD_LIBS} shell32)
+              ${CEF_STANDARD_LIBS} comctl32 shell32)
     add_dependencies(crayon_page_snapshot_cef_integration_win
                      ${CRAYON_BROWSER_TARGET})
     COPY_SINGLE_FILE(
@@ -323,6 +384,9 @@ if(OS_WINDOWS)
       COMMAND "${CMAKE_COMMAND}" -E copy_if_different
               "$<TARGET_FILE_DIR:${CRAYON_BROWSER_TARGET}>/crayon-content-host.exe"
               "$<TARGET_FILE_DIR:crayon_page_snapshot_cef_integration_win>/crayon-content-host.exe"
+      COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+              "$<TARGET_FILE_DIR:${CRAYON_BROWSER_TARGET}>/crayon-media-host.exe"
+              "$<TARGET_FILE_DIR:crayon_page_snapshot_cef_integration_win>/crayon-media-host.exe"
       VERBATIM)
     add_test(
       NAME page_snapshot_cef_integration_windows
@@ -333,6 +397,15 @@ if(OS_WINDOWS)
     set_tests_properties(
       page_snapshot_cef_integration_windows
       PROPERTIES LABELS "cef;shell;windows;content;integration" TIMEOUT 900)
+    add_test(
+      NAME cast_cef_integration_windows
+      COMMAND "${CRAYON_PYTHON3_EXECUTABLE}"
+              "${PROJECT_SOURCE_DIR}/tests/e2e/desktop/browser/run_page_snapshot_fixture.py"
+              "$<TARGET_FILE_DIR:crayon_page_snapshot_cef_integration_win>/CrayonPageSnapshotIntegrationTest.exe"
+              media-cast-ui-win)
+    set_tests_properties(
+      cast_cef_integration_windows
+      PROPERTIES LABELS "cef;shell;windows;cast;integration" TIMEOUT 120)
     add_test(
       NAME windows_cef_shell_source_contract
       COMMAND "${CMAKE_COMMAND}"
@@ -431,8 +504,8 @@ if(OS_MAC)
       src/macos/app.h
       src/macos/cast_chrome_mac.h
       src/macos/cast_chrome_mac.mm
-      src/macos/cast_shell_controller.cc
-      src/macos/cast_shell_controller.h
+      src/browser/media_host/cast_shell_controller.cc
+      src/browser/media_host/cast_shell_controller.h
       src/macos/content_host_adapter_mac.cc
       src/macos/content_host_adapter_mac.h
       src/macos/content_host_process_mac.cc
@@ -721,8 +794,8 @@ if(OS_MAC)
     add_test(NAME media_host_adapter_mac COMMAND crayon_media_host_adapter_mac_test)
     add_executable(
       crayon_cast_shell_controller_mac_test
-      tests/cast_shell_controller_mac_test.cc
-      src/macos/cast_shell_controller.cc)
+      tests/cast_shell_controller_test.cc
+      src/browser/media_host/cast_shell_controller.cc)
     target_compile_features(crayon_cast_shell_controller_mac_test
                             PRIVATE cxx_std_17)
     target_include_directories(crayon_cast_shell_controller_mac_test
@@ -806,8 +879,8 @@ if(CRAYON_BUILD_TESTS)
       src/ipc/page_snapshot_cef_message.cc
       src/macos/cast_chrome_mac.h
       src/macos/cast_chrome_mac.mm
-      src/macos/cast_shell_controller.cc
-      src/macos/cast_shell_controller.h
+      src/browser/media_host/cast_shell_controller.cc
+      src/browser/media_host/cast_shell_controller.h
       src/macos/content_host_adapter_mac.cc
       src/macos/content_host_process_mac.cc
       src/browser/media_host/media_host_adapter.cc
