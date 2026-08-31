@@ -380,6 +380,7 @@ class SnapshotFixtureApp final : public CefApp, public CefBrowserProcessHandler 
 
   void StartSnapshot(CefRefPtr<CefBrowser> browser) {
     snapshot_started_ = std::chrono::steady_clock::now();
+    first_chunk_elapsed_.reset();
     active_request_ = controller_->StartPageSnapshot(browser);
     expected_sequence_ = 0;
     events_ready_count_ = 0;
@@ -525,6 +526,10 @@ class SnapshotFixtureApp final : public CefApp, public CefBrowserProcessHandler 
         Finish(false, "stale or out-of-order reply");
         return;
       }
+      if (!first_chunk_elapsed_ && snapshot_started_) {
+        first_chunk_elapsed_ = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - *snapshot_started_);
+      }
       markdown_ += chunk->markdown;
       if (chunk->completed) {
         ValidateCompletedMarkdown();
@@ -606,6 +611,8 @@ class SnapshotFixtureApp final : public CefApp, public CefBrowserProcessHandler 
               << " media_current=" << media_diagnostics.accepted_current_total
               << " media_denied=" << media_diagnostics.proof_denied_total
               << " media_eligible=" << media_diagnostics.eligible_total
+              << " first_chunk_ms="
+              << (first_chunk_elapsed_ ? first_chunk_elapsed_->count() : 0)
               << " complete_ms=" << complete_time
               << " max_tick_delay_ms=" << max_tick_delay_.count() << std::endl;
     if (controller_) {
@@ -636,6 +643,7 @@ class SnapshotFixtureApp final : public CefApp, public CefBrowserProcessHandler 
   std::size_t no_reply_checks_ = 0;
   std::size_t media_checks_ = 0;
   std::optional<std::chrono::steady_clock::time_point> snapshot_started_;
+  std::optional<std::chrono::milliseconds> first_chunk_elapsed_;
   std::optional<std::chrono::steady_clock::time_point> last_tick_;
   std::chrono::milliseconds max_tick_delay_{0};
   bool tick_active_ = false;

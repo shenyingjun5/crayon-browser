@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import wave
 
 
@@ -90,6 +91,39 @@ AUTOMATED_SCENARIOS = (
     "media-forged",
 )
 MANUAL_SCENARIOS = ("media-manual",)
+PERF_SAMPLES = 20
+
+
+def process_tree_rss_kib(root_pid: int) -> int:
+    result = subprocess.run(
+        ["ps", "-axo", "pid=,ppid=,rss="], capture_output=True, text=True, check=False
+    )
+    rows = []
+    for line in result.stdout.splitlines():
+        parts = line.split()
+        if len(parts) == 3 and all(part.isdigit() for part in parts):
+            rows.append(tuple(map(int, parts)))
+    descendants = {root_pid}
+    changed = True
+    while changed:
+        changed = False
+        for pid, parent, _ in rows:
+            if parent in descendants and pid not in descendants:
+                descendants.add(pid)
+                changed = True
+    return sum(rss for pid, _, rss in rows if pid in descendants)
+
+
+def communicate_with_metrics(process: subprocess.Popen[str], timeout: float):
+    deadline = time.monotonic() + timeout
+    peak_rss_kib = 0
+    while process.poll() is None and time.monotonic() < deadline:
+        peak_rss_kib = max(peak_rss_kib, process_tree_rss_kib(process.pid))
+        time.sleep(0.02)
+    if process.poll() is None:
+        raise subprocess.TimeoutExpired(process.args, timeout)
+    stdout, stderr = process.communicate(timeout=5)
+    return stdout, stderr, peak_rss_kib
 
 
 class FixtureServer(http.server.ThreadingHTTPServer):
@@ -190,6 +224,10 @@ def main() -> int:
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
+            perf_complete_ms = []
+            perf_first_chunk_ms = []
+            perf_tick_delay_ms = []
+            perf_peak_rss_kib = []
             for scenario in scenarios:
                 fixture = {
                     "empty": "empty.html",
@@ -212,32 +250,64 @@ def main() -> int:
                     "media-forged": "media-forged.html",
                 }.get(scenario, "index.html")
                 url = f"http://127.0.0.1:{server.server_port}/{fixture}"
-                process = subprocess.Popen(
-                    [str(executable), url, scenario],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                )
-                try:
-                    stdout, stderr = process.communicate(timeout=35)
-                except subprocess.TimeoutExpired:
-                    process.terminate()
+                runs = PERF_SAMPLES if scenario == "perf" else 1
+                for _ in range(runs):
+                    process = subprocess.Popen(
+                        [str(executable), url, scenario],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                    )
                     try:
-                        stdout, stderr = process.communicate(timeout=5)
+                        stdout, stderr, peak_rss_kib = communicate_with_metrics(
+                            process, 35
+                        )
                     except subprocess.TimeoutExpired:
-                        process.kill()
-                        stdout, stderr = process.communicate(timeout=5)
+                        process.terminate()
+                        try:
+                            stdout, stderr = process.communicate(timeout=5)
+                        except subprocess.TimeoutExpired:
+                            process.kill()
+                            stdout, stderr = process.communicate(timeout=5)
+                        sys.stdout.write(stdout)
+                        sys.stderr.write(stderr)
+                        return 124
                     sys.stdout.write(stdout)
                     sys.stderr.write(stderr)
-                    return 124
-                sys.stdout.write(stdout)
-                sys.stderr.write(stderr)
-                if process.returncode != 0:
-                    return process.returncode
-                if scenario == "perf":
-                    match = re.search(r"complete_ms=(\d+).*max_tick_delay_ms=(\d+)", stdout)
-                    if not match or int(match.group(1)) > 500:
-                        return 1
+                    if process.returncode != 0:
+                        return process.returncode
+                    if scenario == "perf":
+                        match = re.search(
+                            r"first_chunk_ms=(\d+).*complete_ms=(\d+).*"
+                            r"max_tick_delay_ms=(\d+)",
+                            stdout,
+                        )
+                        if not match:
+                            return 1
+                        perf_first_chunk_ms.append(int(match.group(1)))
+                        perf_complete_ms.append(int(match.group(2)))
+                        perf_tick_delay_ms.append(int(match.group(3)))
+                        perf_peak_rss_kib.append(peak_rss_kib)
+            if perf_complete_ms:
+                sorted_complete = sorted(perf_complete_ms)
+                sorted_first_chunk = sorted(perf_first_chunk_ms)
+                p95_index = (len(sorted_complete) * 95 + 99) // 100 - 1
+                complete_p95 = sorted_complete[p95_index]
+                first_chunk_p95 = sorted_first_chunk[p95_index]
+                print(
+                    "snapshot_fixture_perf "
+                    f"samples={len(sorted_complete)} "
+                    f"first_chunk_p95_ms={first_chunk_p95} "
+                    f"complete_p95_ms={complete_p95} "
+                    f"max_tick_delay_ms={max(perf_tick_delay_ms)} "
+                    f"peak_process_tree_rss_kib={max(perf_peak_rss_kib)}"
+                )
+                if (
+                    len(sorted_complete) != PERF_SAMPLES
+                    or complete_p95 > 500
+                    or max(perf_peak_rss_kib) <= 0
+                ):
+                    return 1
         finally:
             server.shutdown()
             thread.join(timeout=5)
