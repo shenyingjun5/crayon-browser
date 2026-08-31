@@ -1,6 +1,6 @@
 # CNT 页面数据、Markdown 与第二阶段模型 Roadmap
 
-- 状态：C1 数据面已收口；一期产品闭环 `CNT-17..19 DONE`、`CNT-20 READY`、`CNT-21 TODO`；M2 统一进入第二期并等待 `AGT-16/PRV-13B` 与 provider ADR
+- 状态：C1 数据面已收口；一期产品闭环 `CNT-17..19 DONE`、`CNT-18e VERIFIED`、`CNT-20 IN_PROGRESS`、`CNT-21 TODO`；M2 统一进入第二期并等待 `AGT-16/PRV-13B` 与 provider ADR
 - 任务数：21
 - C1 开始门禁：`CEF-15`、`BUX-18`、`SDK-14`、`MED-19`、`PRV-08`
 - 一期产品门禁：`REL-01`、`CNT-10`、`CEF-15`、`PRV-12`
@@ -29,8 +29,9 @@
 | CNT-10 | DONE | CNT-09 | `docs/current/**`,`docs/plans/**` | C1 独立 Review 与 Agent data-plane 接口冻结 | CT-001..008；P0/P1=0 | C1 |
 | CNT-17 | DONE | REL-01,CNT-10,CEF-15 | `browser/cef-shell/src/renderer/page_snapshot_collector/**`,`browser/cef-shell/src/browser/page_snapshot_gateway/**`,`browser/engine-api/**` | 将现有有界 collector/gateway 接入真实 CEF 主 frame、导航与 IPC 生命周期 | `CT-001`,`CT-002`,`CT-007`; macOS CEF fixture/integration | R1 |
 | CNT-18 | DONE | CNT-17 | `crates/crayon-app-runtime/**`,`crates/crayon-page-data/**`,`crates/crayon-content-extract/**`,`crates/crayon-content-markdown/**`,`browser/cef-shell/**` | 接通 Browser 验证 facts → owner → 正文提取 → Markdown 的生产调用链 | CT-001..008；导航/取消/关闭/背压 E2E | R1 |
+| CNT-18e | VERIFIED | CNT-18d | `browser/cef-shell/src/{macos,windows}`,相邻 adapter tests | 修复合法近 64KiB snapshot chunk 因 CHV1 framing overhead 失效且请求静默悬挂 | CT-002/007；大 chunk 分批、顺序、terminal、真 CEF 100KiB | R1 |
 | CNT-19 | DONE | CNT-18,CNT-08 | `browser/shared-ui/page-tools/**`,`browser/cef-shell/src/browser/**`,locales | 增加用户入口并接通预览、复制、保存、取消、覆盖与失败反馈 | CT-005/006；真实菜单、剪贴板、文件对话框 | R1 |
-| CNT-20 | READY | CNT-19 | `tests/e2e/desktop/**`,`tests/security/content/**`,`tests/perf/content/**`,`test-support/**` | 用真实 CEF 本地站点 fixture 完成网页→Markdown 产品 E2E、安全和 UI delay/RSS 回归 | CT-001..008；macOS/Windows Debug/Release | R1 |
+| CNT-20 | IN_PROGRESS | CNT-19,CNT-18e | `tests/e2e/desktop/**`,`tests/security/content/**`,`tests/perf/content/**`,`test-support/**` | 用真实 CEF 本地站点 fixture 完成网页→Markdown 产品 E2E、安全和 UI delay/RSS 回归 | CT-001..008；macOS/Windows Debug/Release | R1 |
 | CNT-21 | TODO | CNT-20,PRV-13A | `docs/current/**`,`docs/plans/**`,`tests/**` | 一期网页 Markdown 产品层总 Review，关闭 CNT-08 真实 UI 缺口 | P0/P1=0；两平台证据；无页面触发写入 | R1 |
 | CNT-11 | TODO | CNT-21,AGT-16,PRV-13B | ADR,`crayon-model-contract/**`,`docs/current/**` | 决定本地/云端/BYOK/provider、地区、费用、保留、密钥和数据发送契约 | `CT-009`; ADR/contract；未决策不开网络 | M2 |
 | CNT-12 | TODO | CNT-11 | `crayon-model-adapter/**`,`crayon-profile/**` | provider registry、安全存储、origin/redirect、发送前 payload preview 和 Fake provider | `CT-009..011`; security/integration | M2 |
@@ -436,3 +437,30 @@ CNT-19 同时涉及 CEF 用户手势状态机、平台剪贴板/文件对话框�
 - 自动验证：最终产品增量构建为 `ninja: no work to do`；CNT-19 scoped CTest 8/8（包含真 CEF `page_snapshot_cef_integration` 17.49s）通过。沙箱内首次专项仅该 loopback test 因 `PermissionError: [Errno 1] Operation not permitted` 失败，授权本地 bind 后原命令全绿。前序同代码基线串行完整 CTest 77/77；repo-guard passed（仅既有 RG-003/RG-004 warning），CNT-19 生产改动 Google clang-format、最终 `git diff --check` 通过。
 - Code Review：按 v0.8 总复核真实 Browser 用户手势、主 frame/origin、Core generation/sequence、当前编辑缓冲区、1MiB clipboard、原生覆盖授权、`.md`/路径、原子写入/residual、取消/失败反馈、旧 callback、关闭释放、loopback-only、日志和 Keychain 边界；真 UI 未发现新生产缺陷，CNT-19 macOS 最终 P0/P1/P2=`0/0/0`。
 - 未覆盖与风险：Windows x64 对称入口、clipboard/Save panel 及 Debug/Release E2E 归 `CNT-20 READY`；网页→Markdown 性能、安全与双平台发布矩阵同归 CNT-20/21。真实 SecureStore/Keychain 不属于该闭环，继续保留为最后的可选专项验证。
+
+## CNT-18e 原子范围（CHV1 大 chunk 有界分批）
+
+- 状态：`VERIFIED`；依赖 `CNT-18d DONE`；由 CNT-20 首个真实 100KiB CEF 场景稳定复现。
+- 单一目标：保持 PageSnapshot/CHV1 schema 与 64KiB frame 上限不变，由平台 ContentHost adapter 将一个合法但计入 wire overhead 后无法编码的 Browser chunk，按实际 codec 结果拆成多个有序 `FactBatch`，避免 transport 自毁且请求无 terminal。
+- 允许修改：macOS/Windows content-host adapter、相邻 adapter 单测、触发缺陷的 CNT-20 本地 fixture 与本 Roadmap；禁止放宽 frame/文档预算、修改 schema/Core、吞掉事实、测试特判或无界重试。
+- 边界与验收：空 chunk 语义不变；单 fact 不可编码时 fail closed；拆分保持事实顺序、batch sequence 连续、每批可编码且总事实不变；发送失败清理 request；正常/错误 terminal、取消、导航、关闭不回退。macOS adapter unit、真实 CEF security/100KiB perf、Debug/Release build；Windows 对称实现与测试最后回归。
+- 明确不做：改变 64KiB CHV1、扩大 Markdown/页面上限、CNT-20 总 E2E/性能结论、任何 UI/Agent/Cast/Keychain 改动。
+
+### CNT-18e 完成记录（2026-08-31，macOS arm64）
+
+- 缺陷：真实 100KiB CEF fixture 首次运行在 35 秒内无 terminal 并超时；Browser chunk 的 64KiB 预算只统计语义字段，macOS adapter 将整块转为 CHV1 `FactBatch` 后，wire 长度前缀与字段元数据使合法 chunk 超过 65,536-byte frame，`Encode` 失败触发 `FailAll()`，上层 request 因无 reply 持续等待。
+- 修复：不改变 PageSnapshot/CHV1 schema、64KiB frame 或文档预算；adapter 使用真实 codec 对剩余事实做有界二分，选择可编码的最大幂次子批，按原顺序和连续 batch sequence 发送。每个 Browser chunk 最多 64 facts，探测次数有界；单 fact/transport 失败仍 fail closed。
+- 测试：adapter unit 新增 64×1024-byte 合法事实回归，断言拆成至少两批、sequence 连续、事实总数不变。macOS arm64 Debug/Release build 与 adapter unit 均通过；真实 CEF security 场景 Debug/Release 分别 50/30ms，隐藏、`aria-hidden`、敏感控件和子 frame 零泄漏；100KiB 场景从超时恢复，Debug 两次 complete 217/74ms、Release 463ms，Markdown 113,110 bytes，均小于 500ms，mock_keychain=1。`python3 -m py_compile` 与 `git diff --check` 通过。
+- Review：按 v0.8 复核协议边界、顺序/终止、编码失败、容量、UI 线程开销、生命周期与测试；P0/P1/P2=`0/0/0`。Windows 尚无同等 product content-host adapter，不能以 macOS 证据冒充；任务保持 `VERIFIED`，CNT-20 恢复 `IN_PROGRESS`。
+
+## CNT-20 原子范围（网页→Markdown 产品 E2E、安全与性能）
+
+- 状态：`IN_PROGRESS`；依赖 `CNT-19 DONE`、`CNT-18e VERIFIED`。按已确认平台策略先闭合 macOS arm64，Windows x64 最后对称回归；未跑的平台不得标记通过。
+- 单一目标：以仅绑定 loopback 的确定性站点和真实 CEF Renderer/Browser、产品 Helper、真实 `crayon-content-host`，覆盖当前网页从用户入口到确定性 Markdown、MDV 预览/当前缓冲区导出的完整产品链，并记录 100KiB 页面 complete latency、UI event-loop delay 与进程 RSS 防回归数据。
+- 输入：CT-001..008、CNT-17..19 的真实 CEF/产品 UI 证据、CNT-07 的 100KiB `P95 <=500ms` Core 基线、现有 `run_page_snapshot_fixture.py`、content security/perf suites 与 `run_smoke.py` 进程/socket/退出门禁。
+- 允许修改：`tests/e2e/desktop/**`、`tests/security/content/**`、`tests/perf/content/**`、`test-support/**`、相邻 CEF test target 装配和本 Roadmap；发现生产缺陷时停止并回到对应生产原子任务，不得在 Harness 中绕过。
+- 禁止修改：生产 collector/gateway/Core/UI 行为、PageSnapshot/MHV1/Agent schema、Cast、MDV 文件权限、真实 Keychain；不得使用公网、第三方影视站、真实用户文件、固定长 sleep、页面触发写入或测试专用生产分支。
+- 正常与边界：覆盖中英文标题/段落、列表、引用、代码、表格、链接、空页、长文分块；隐藏/`aria-hidden`/敏感控件/子 frame/跨源事实不得进入 Markdown；导航、取消、关闭、Core crash/backpressure 后旧正文不可复活；重复用户命令只能保留当前 request；复制/Save As 必须来自当前编辑缓冲区且取消/覆盖保持 CNT-19 语义。
+- 资源门禁：固定约 100KiB 页面至少 20 次样本，记录 first chunk/complete P95、最大 UI tick delay、主进程+Helper+Core RSS 与 Markdown bytes；Core `P95 <=500ms` 既有门禁不放宽，真实 CEF 产品墙钟与 RSS 先建立双平台基线并拒绝无界增长/退出残留，具体发布阈值由 QAR-05A 固化。
+- 验收：macOS arm64 Debug/Release build；真实 CEF E2E 的 normal/empty/navigation/cancel/close/backpressure/crash/security/perf；产品真 UI 生成→MDV→复制→Save As/取消/覆盖 smoke；content security/perf、repo-guard/security、源码/包体、loopback-only、mock keychain、退出零残留、格式与 `git diff --check`。Windows x64 使用同一 fixture/断言完成 Debug/Release 后任务才可 `DONE`。
+- 明确不做：CNT-21 产品总 Review、QAR-05A 发布阈值/8 小时长稳、Agent/CLI/MCP、模型总结、投屏、真实 SecureStore/Keychain、Windows Narrator/IME/DPI。

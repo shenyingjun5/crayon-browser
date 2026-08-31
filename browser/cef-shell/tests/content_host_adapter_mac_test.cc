@@ -97,6 +97,31 @@ bool Run() {
     return false;
   }
 
+  const auto large_id = MakeId<engine::SnapshotRequestId>("request-large");
+  adapter.OnSnapshotStarted(engine::SnapshotRequest{
+      large_id, tab_id, navigation, engine::SnapshotMode::kStandard});
+  std::vector<engine::SnapshotFact> large_facts(64);
+  for (auto& fact : large_facts) {
+    fact.kind = engine::SnapshotFactKind::kParagraph;
+    fact.text.assign(1024, 'x');
+  }
+  const std::size_t sent_before_large = fake->sent.size();
+  adapter.Consume({engine::SnapshotChunk{
+      large_id, tab_id, navigation, 0,
+      engine::SnapshotDocumentMetadata{*url, "Large"}, large_facts}});
+  std::size_t batch_count = 0;
+  std::size_t fact_count = 0;
+  std::uint32_t expected_batch_sequence = 0;
+  for (std::size_t index = sent_before_large; index < fake->sent.size();
+       ++index) {
+    const auto* batch = std::get_if<host::FactBatch>(&fake->sent[index]);
+    if (!batch) continue;
+    if (batch->sequence != expected_batch_sequence++) return false;
+    ++batch_count;
+    fact_count += batch->facts.size();
+  }
+  if (batch_count < 2 || fact_count != large_facts.size()) return false;
+
   const auto stale_id = MakeId<engine::SnapshotRequestId>("request-2");
   adapter.OnSnapshotStarted(engine::SnapshotRequest{
       stale_id, tab_id, navigation, engine::SnapshotMode::kCompact});

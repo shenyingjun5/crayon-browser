@@ -232,14 +232,32 @@ void ContentHostAdapter::ConsumeChunk(
   std::transform(
       chunk.facts.begin(), chunk.facts.end(), std::back_inserter(facts),
       [](const browser_engine::SnapshotFact& fact) { return Convert(fact); });
-  const std::uint32_t sequence = state.next_batch_sequence;
-  if (!Send(content_host_ipc::FactBatch{
+  std::size_t offset = 0;
+  while (offset < facts.size()) {
+    std::size_t count = facts.size() - offset;
+    std::optional<content_host_ipc::FactBatch> encodable;
+    while (count > 0) {
+      content_host_ipc::FactBatch candidate{
           chunk.request_id.value(), state.tab_id, state.navigation_id,
-          state.navigation_id, sequence, std::move(facts)})) {
-    FailAll();
-    return;
+          state.navigation_id, state.next_batch_sequence,
+          std::vector<Fact>(facts.begin() + static_cast<std::ptrdiff_t>(offset),
+                            facts.begin() +
+                                static_cast<std::ptrdiff_t>(offset + count))};
+      content_host_ipc::CodecError error =
+          content_host_ipc::CodecError::kInvalidValue;
+      if (content_host_ipc::Encode(candidate, &error)) {
+        encodable = std::move(candidate);
+        break;
+      }
+      count /= 2;
+    }
+    if (!encodable || !Send(std::move(*encodable))) {
+      FailAll();
+      return;
+    }
+    offset += count;
+    ++state.next_batch_sequence;
   }
-  ++state.next_batch_sequence;
 }
 
 void ContentHostAdapter::ConsumeTerminal(

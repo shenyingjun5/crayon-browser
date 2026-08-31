@@ -48,7 +48,7 @@
 
 | 顺序 | 任务 | 状态 | 说明 |
 |---:|---|---|---|
-| 1 | `CNT-20` | READY | 网页→Markdown 双平台 E2E/security/perf；macOS 先行，Windows x64 最后回归 |
+| 1 | `CNT-20` | IN_PROGRESS | CNT-18e 已修复 64KiB framing 缺陷；继续网页→Markdown E2E/security/perf |
 | 2 | `PLT-M05b3` | READY | M05b2 DONE；接通 Cast UI、设备选择、Cast-SDK facade 与 session event pump，不做真机结论 |
 
 ### 平台收口与待拆装配

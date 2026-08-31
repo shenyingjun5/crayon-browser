@@ -2,6 +2,7 @@
 
 #include <unistd.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
@@ -235,6 +236,13 @@ class SnapshotFixtureApp final : public CefApp, public CefBrowserProcessHandler 
   void Tick() {
     CEF_REQUIRE_UI_THREAD();
     if (!tick_active_) return;
+    const auto tick_now = std::chrono::steady_clock::now();
+    if (last_tick_) {
+      max_tick_delay_ = std::max(
+          max_tick_delay_,
+          std::chrono::duration_cast<std::chrono::milliseconds>(tick_now - *last_tick_));
+    }
+    last_tick_ = tick_now;
     if (scenario_ != "backpressure" || backpressure_released_) {
       ConsumeGatewayEvents();
     }
@@ -371,6 +379,7 @@ class SnapshotFixtureApp final : public CefApp, public CefBrowserProcessHandler 
   }
 
   void StartSnapshot(CefRefPtr<CefBrowser> browser) {
+    snapshot_started_ = std::chrono::steady_clock::now();
     active_request_ = controller_->StartPageSnapshot(browser);
     expected_sequence_ = 0;
     events_ready_count_ = 0;
@@ -529,6 +538,25 @@ class SnapshotFixtureApp final : public CefApp, public CefBrowserProcessHandler 
       Finish(markdown_.empty(), "empty Markdown");
       return;
     }
+    if (scenario_ == "security") {
+      const bool includes_public =
+          markdown_.find("# Security fixture heading") != std::string::npos &&
+          markdown_.find("Visible security content") != std::string::npos;
+      const bool excludes_private =
+          markdown_.find("hidden-security-secret") == std::string::npos &&
+          markdown_.find("aria-security-secret") == std::string::npos &&
+          markdown_.find("styled-security-secret") == std::string::npos &&
+          markdown_.find("password-security-secret") == std::string::npos &&
+          markdown_.find("frame-security-secret") == std::string::npos;
+      Finish(includes_public && excludes_private,
+             "hidden sensitive and child-frame content excluded");
+      return;
+    }
+    if (scenario_ == "perf") {
+      Finish(markdown_.size() >= 100 * 1024,
+             "100KiB deterministic Markdown performance fixture");
+      return;
+    }
     const bool recovery = scenario_ == "navigation" || scenario_ == "crash";
     const bool has_expected_heading =
         recovery ? markdown_.find("# Recovery fixture heading") != std::string::npos
@@ -564,6 +592,11 @@ class SnapshotFixtureApp final : public CefApp, public CefBrowserProcessHandler 
     const auto media_diagnostics =
         controller_ ? controller_->media_observation_diagnostics()
                     : crayon::browser::cef_shell::observation::MediaObservationDiagnostics{};
+    const auto complete_time = snapshot_started_
+                                   ? std::chrono::duration_cast<std::chrono::milliseconds>(
+                                         std::chrono::steady_clock::now() - *snapshot_started_)
+                                         .count()
+                                   : 0;
     std::cout << "snapshot_fixture scenario=" << scenario_
               << " terminal=" << (passed ? "completed" : "failed") << " detail=" << detail
               << " markdown_bytes=" << markdown_.size() << " media=" << (saw_media_ ? 1 : 0)
@@ -572,7 +605,9 @@ class SnapshotFixtureApp final : public CefApp, public CefBrowserProcessHandler 
               << " media_received=" << media_diagnostics.received_total
               << " media_current=" << media_diagnostics.accepted_current_total
               << " media_denied=" << media_diagnostics.proof_denied_total
-              << " media_eligible=" << media_diagnostics.eligible_total << std::endl;
+              << " media_eligible=" << media_diagnostics.eligible_total
+              << " complete_ms=" << complete_time
+              << " max_tick_delay_ms=" << max_tick_delay_.count() << std::endl;
     if (controller_) {
       controller_->CloseAllBrowsers(true);
     } else {
@@ -600,6 +635,9 @@ class SnapshotFixtureApp final : public CefApp, public CefBrowserProcessHandler 
   std::size_t events_ready_count_ = 0;
   std::size_t no_reply_checks_ = 0;
   std::size_t media_checks_ = 0;
+  std::optional<std::chrono::steady_clock::time_point> snapshot_started_;
+  std::optional<std::chrono::steady_clock::time_point> last_tick_;
+  std::chrono::milliseconds max_tick_delay_{0};
   bool tick_active_ = false;
   bool initial_started_ = false;
   bool recovery_requested_ = false;

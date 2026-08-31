@@ -6,6 +6,7 @@ from __future__ import annotations
 import http.server
 import base64
 import pathlib
+import re
 import subprocess
 import sys
 import tempfile
@@ -26,6 +27,17 @@ FIXTURE = f"""<!doctype html><meta charset=utf-8><title>Snapshot fixture</title>
 EMPTY_FIXTURE = "<!doctype html><meta charset=utf-8><title>Empty fixture</title><main></main>"
 BACKPRESSURE_FIXTURE = f"""<!doctype html><meta charset=utf-8>
 <title>Backpressure fixture</title><main>{BACKPRESSURE_PARAGRAPHS}</main>"""
+SECURITY_FIXTURE = """<!doctype html><meta charset=utf-8><title>Security fixture</title>
+<main><h1>Security fixture heading</h1><p>Visible security content.</p>
+<p hidden>hidden-security-secret</p><p aria-hidden=true>aria-security-secret</p>
+<p style='display:none'>styled-security-secret</p>
+<input type=password value='password-security-secret'>
+<iframe src=/frame-secret.html></iframe></main>"""
+PERF_PARAGRAPHS = "".join(
+    f"<p>Performance paragraph {index}: {'x' * 1000}</p>" for index in range(110)
+)
+PERF_FIXTURE = f"""<!doctype html><meta charset=utf-8><title>Performance fixture</title>
+<main><h1>Performance fixture heading</h1>{PERF_PARAGRAPHS}</main>"""
 RECOVERY_FIXTURE = """<!doctype html><meta charset=utf-8><title>Recovery fixture</title>
 <main><h1>Recovery fixture heading</h1><p>Recovered after lifecycle fence.</p></main>"""
 MEDIA_FIXTURE = """<!doctype html><meta charset=utf-8><title>Media fixture</title>
@@ -61,6 +73,8 @@ AUTOMATED_SCENARIOS = (
     "close",
     "backpressure",
     "crash",
+    "security",
+    "perf",
     "media",
     "media-clear-mp4",
     "media-hls",
@@ -105,6 +119,13 @@ def main() -> int:
         root_path.joinpath("recovery.html").write_text(
             RECOVERY_FIXTURE, encoding="utf-8"
         )
+        root_path.joinpath("security.html").write_text(
+            SECURITY_FIXTURE, encoding="utf-8"
+        )
+        root_path.joinpath("frame-secret.html").write_text(
+            "<!doctype html><main>frame-security-secret</main>", encoding="utf-8"
+        )
+        root_path.joinpath("perf.html").write_text(PERF_FIXTURE, encoding="utf-8")
         root_path.joinpath("media.html").write_text(MEDIA_FIXTURE, encoding="utf-8")
         root_path.joinpath("media-mp4.html").write_text(MEDIA_MP4_FIXTURE, encoding="utf-8")
         root_path.joinpath("media-hls.html").write_text(MEDIA_HLS_FIXTURE, encoding="utf-8")
@@ -173,6 +194,8 @@ def main() -> int:
                 fixture = {
                     "empty": "empty.html",
                     "backpressure": "backpressure.html",
+                    "security": "security.html",
+                    "perf": "perf.html",
                     "media": "media.html",
                     "media-manual": "media.html",
                     "media-clear-mp4": "media-mp4.html",
@@ -211,6 +234,10 @@ def main() -> int:
                 sys.stderr.write(stderr)
                 if process.returncode != 0:
                     return process.returncode
+                if scenario == "perf":
+                    match = re.search(r"complete_ms=(\d+).*max_tick_delay_ms=(\d+)", stdout)
+                    if not match or int(match.group(1)) > 500:
+                        return 1
         finally:
             server.shutdown()
             thread.join(timeout=5)
