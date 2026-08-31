@@ -1,6 +1,6 @@
 # PLT Windows/macOS 平台适配 Roadmap
 
-- 状态：`PLT-01/02/W04/M04 DONE`；第一期 macOS 装配 `PLT-M05 IN_PROGRESS`（M05a、M05b1/b2/b3a 已完成，M05b3b READY），Windows 对称装配 `PLT-W05 TODO`
+- 状态：`PLT-01/02/W04/M04 DONE`；第一期 macOS 装配 `PLT-M05 IN_PROGRESS`（M05a、M05b1/b2/b3a/b3b 已完成，M05b3c READY），Windows 对称装配 `PLT-W05 TODO`
 - 任务数：7
 - 平台：Windows、macOS
 - 非目标：Linux、屏幕/标签页/系统音频采集、编码器、WebRTC sender
@@ -260,8 +260,8 @@
 | ID | 状态 | 依赖 | 单一目标 | 允许范围与门禁 |
 |---|---|---|---|---|
 | PLT-M05b3a | DONE | M05b2 DONE | 建立单 UI 线程的 Cast UI 协调器，唯一同步 `CastButtonModel`/`CastFeatureViewModel` 与有界 receiver picker；只消费闭合 Browser/runtime facts、只产出用户 action | `browser/shared-ui/{features/cast,chrome}/**`；最多 64 设备、稳定 device id、名称 512 bytes、无 IP/URL；无 SDK/CEF/网络/线程 |
-| PLT-M05b3b | READY | M05b3a | 扩展私有 MHV1，使 bundled Browser/media-host 可表达 discovery、设备快照、选择/停止与有界 session event pump | Rust/C++ 双 codec、current/previous golden、未知 kind/超界/secret 扫描；不执行 SDK，不改 CastFacade |
-| PLT-M05b3c | TODO | M05b3b | 在 Rust media-host 内装配唯一 `CastUsecase`、`SenderCastFacade` 与 session drain owner，执行 discovery/select/start/stop 并把旧 session/错误投影为 MHV1 | `crayon-app-runtime`/既有 adapter facade；Fake + real facade contract；阻塞 SDK 调用不在协议 reader/callback；Relay 实际投送仍不验收 |
+| PLT-M05b3b | DONE | M05b3a | 扩展私有 MHV1，使 bundled Browser/media-host 可表达 discovery、设备快照、选择/停止与有界 session event pump | Rust/C++ 双 codec、current/previous golden、未知 kind/超界/secret 扫描；不执行 SDK，不改 CastFacade |
+| PLT-M05b3c | READY | M05b3b | 在 Rust media-host 内装配唯一 `CastUsecase`、`SenderCastFacade` 与 session drain owner，执行 discovery/select/start/stop 并把旧 session/错误投影为 MHV1 | `crayon-app-runtime`/既有 adapter facade；Fake + real facade contract；阻塞 SDK 调用不在协议 reader/callback；Relay 实际投送仍不验收 |
 | PLT-M05b3d | TODO | M05b3c | macOS C++ media-host process/adapter 增加有界后台 command worker 和 session event pump，CEF UI 线程只 enqueue/drain | `browser/cef-shell/src/{ipc,macos}` 与相邻 tests；无 UI 线程 SOAP/discovery、取消/stop/shutdown 逆序、队列满显式失败 |
 | PLT-M05b3e | TODO | M05b3d | 将协调器与真实 CEF Cast 按钮、原生 receiver picker、M05b2 candidate 和 PLT navigation/close/app-exit 生命周期接通 | macOS Debug/Release 真 CEF：无设备、刷新、取消、失败、旧 session、stop/退出；mock keychain；不做真机 Direct/Relay 结论 |
 
@@ -285,6 +285,24 @@
 - 验证：macOS arm64 Debug/Release 构建通过；两配置 `chrome_contract`、`cast_feature_view`、`cast_ui_coordinator` 均 3/3 通过。新增 4 组 coordinator 行为测试覆盖 CS-001/002/007 的无设备、同名不同 id、畸形/重复/65 项、刷新/取消/非法选择、Direct/Relay、旧/重复 session、stop 与 page loss；`cargo run -p repo-guard -- scan --root .` 和 `bash scripts/check.sh security` 通过（relay security 7/7），新增文件 Apple clang-format dry-run 与 `git diff --check` 通过。未运行真实 Keychain。
 - Code Review：按 v0.8 复核需求/边界、状态唯一 owner、页面不可信、generation、隐私、容量、生命周期和测试；修复 1 个 P1 后最终 P0/P1/P2=`0/0/0`。既有 chrome 三文件的全文件 Apple clang-format 仍有历史风格漂移，本次只格式化新增行，未混入无关重排。
 - 未覆盖与风险：本切片只有共享 UI 合同，无真实 widget、设备发现、Cast-SDK、MHV1、worker 或 CEF/PLT 生命周期；`PLT-M05b3b READY` 下一步先冻结跨语言执行协议。真机 Direct/Relay 仍严格归 M05b4/b5。
+
+#### PLT-M05b3b 原子范围（MHV1 Cast 执行扩展）
+
+- 状态：`DONE`；依赖 `PLT-M05b3a DONE`、M05b2b 既有 MHV1 双端 codec/process contract。
+- 单一目标：在不改变 `MHV1` magic/version、16KiB frame 和既有 1..12 kind 字节的前提下，追加 bundled Browser↔media-host 私有 Cast 执行消息，使后续 runtime/UI 能表达 discovery、revision-bound 设备分页、按 candidate/device 启动、generation-bound stop 与有界 session event drain；本任务只冻结/验证协议，不执行 SDK。
+- 输入/输出与允许修改：新增 `Discovery(Start/Stop/Refresh)`、`ListDevices(snapshot_revision,offset)`、`StartCast(candidate_id,device_id,handoff_available)`、`StopCast(session_generation)`、`PollSessionEvents` 请求；新增 `DevicePageReply`、闭合 `CastStartReply`（Casting/Handoff/Rejected/Failed）和 `SessionEventsReply`。允许修改 `crates/crayon-ipc-schema/src/media_host.rs`、其 contract/golden、`browser/cef-shell/src/ipc/{include,src,tests}/media_host_codec*`、相邻 CMake contract 与本 Roadmap/索引；允许仅为保持 workspace 可编译，在既有 `media_host_runtime.rs` exhaustive match 中提取新增消息 request id，并在 b3c 接线前 fail-closed 返回 `InvalidState`/`InvalidMessage`，不得执行任何 Cast 行为。
+- 禁止修改：media-host runtime/process 的既有行为或增加 Cast 执行、CastUsecase/CastFacade/SDK、CEF UI/adapter、Relay、平台生命周期；协议不得携带 receiver IP/host/port/UDN/control URL、媒体/page URL、Cookie/Authorization、SDK 文案或外部客户端启动结果。
+- 预算与分页：总 receiver snapshot 沿用 64 项，单 `DevicePageReply` 最多 16 项；device id 1..128 ASCII、display name 1..512 UTF-8，page 绑定非零 revision、offset 0..63 与严格 next offset，整体保持 16KiB。session event 每回复最多 64 项，generation/revision 非零，phase/playback/terminal reason 为闭合枚举；reply 额外携带累计 dropped count。Stop 必须带非零 generation；Start 只带 opaque candidate id、device id 和 handoff availability。
+- 兼容与错误：旧 1..12 frames 逐字节 current/previous golden 均继续 decode；新增 kind 仅追加不重编号。未知 kind/enum、非法 optional 组合、重复/超量设备、错误 offset/next、终态无 reason、非终态带 reason、0 generation/revision、截断/尾随/超 frame 全 fail closed；Rust/C++ 对同一新增 golden 逐字节一致。
+- 验收：Rust `media_host_v1_contract` 与 C++ `media_host_codec` 覆盖全部消息 roundtrip、双端 golden、分页/union/fencing/hostile mutation；cargo test/clippy/fmt、macOS Debug/Release codec build/CTest、repo guard/security、源码 secret/locator 扫描、clang-format scoped、`git diff --check`。
+- 明确不做：SDK/runtime/worker/UI/lifecycle（b3c-e）、设备真实发现或投送（b4/b5）、Cast code UI、播放控制、ExternalClientHandoff 执行（b6）、协议远程监听或独立升级协商。
+
+完成记录（2026-08-31）：
+
+- 实现：MHV1 保持 magic/version、16KiB frame 与 kind 1..12 原字节不变，追加 kind 13..20 的 discovery、revision-bound device page、start/stop 和有界 session event DTO/codec；Rust/C++ 共用新增 device-page golden，设备 id/名称、分页、union、generation/revision、终态 reason、重复设备和数量在分配前均 fail closed。新增消息不携带 receiver locator、媒体/page URL 或凭证；b3c 接线前既有 Rust runtime 只提取 request id 并以 `InvalidState`/`InvalidMessage` 拒绝，不执行 SDK/Cast。
+- 验证：`cargo test --workspace --exclude crayon-platform-macos` 全通过；`cargo clippy --workspace --all-targets --exclude crayon-platform-macos -- -D warnings`、`cargo fmt --all -- --check` 通过。`cargo test -p crayon-ipc-schema --test media_host_v1_contract` 3/3；macOS arm64 Debug/Release `crayon_cef_shell_ipc_test` 构建及 `ctest -R '^ipc_channel_contract$'` 各 1/1；Debug/Release `crayon_browser` 完整构建并 ad-hoc 签名通过，产品仍固定 mock Keychain。`cargo run -p repo-guard -- scan --root .` 通过；`bash scripts/check.sh security` 首次在受限 sandbox 因 loopback bind 权限 7/7 报 `Operation not permitted`，按本机权限复跑后 7/7、整体通过。Apple clang-format dry-run、源码新增行 locator/secret 扫描与 `git diff --check` 通过。
+- Code Review：按 v0.8 复核兼容、跨语言字节序、非法组合、分配前容量、重复 id、generation fencing、隐私与 b3c 前 fail-closed 行为；Review 中关闭 1 个 P1（C++ decoder 在验证 16 项上限前按不可信 count 分配），最终 P0/P1/P2=`0/0/0`。现有 Rust encode/decode 分别约 157/135 行，保持单一 wire-kind dispatch，字段逻辑已拆 helper，未机械拆分。
+- 未覆盖与风险：本任务只冻结并验证协议，未执行 Cast-SDK、Relay 投送、worker 或 CEF UI；这些依次属于 `PLT-M05b3c/d/e`，真机 Direct/Relay 仍属于 M05b4/b5。Release Ninja 曾输出既有 `premature end of file; recovering` 警告，但目标重建、链接和 CTest 均成功；未访问真实 Keychain。
 
 ### PLT-M05b2 原子范围（按 a/b/c 三切片）
 

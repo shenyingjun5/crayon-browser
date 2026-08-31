@@ -1,8 +1,11 @@
 use crayon_domain::{CoreError, ReceiverCapabilities};
 use crayon_ipc_schema::{
     decode_media_host_message, encode_media_host_message, AdContinuity, CastPolicyDecision,
-    ExternalClientHandoff, HandoffReason, HeadersClass, MediaHostError, MediaHostErrorCode,
-    MediaHostMessage, MediaHostPlayback, MediaHostSource, MediaHostUrlFact, ProtocolKind,
+    ExternalClientHandoff, HandoffReason, HeadersClass, MediaHostCastErrorCode,
+    MediaHostCastStartOutcome, MediaHostDeliveryRoute, MediaHostDevice, MediaHostDeviceState,
+    MediaHostDiscoveryAction, MediaHostError, MediaHostErrorCode, MediaHostMessage,
+    MediaHostPlayback, MediaHostSessionEvent, MediaHostSessionPhase, MediaHostSessionPlayback,
+    MediaHostSource, MediaHostTerminalReason, MediaHostUrlFact, ProtocolKind,
     MAX_MEDIA_HOST_FRAME_BYTES,
 };
 
@@ -121,7 +124,78 @@ fn all_messages() -> Vec<MediaHostMessage> {
             request_id: "bad-1".to_owned(),
             code: MediaHostErrorCode::StaleContext,
         },
+        MediaHostMessage::Discovery {
+            request_id: "discover-1".to_owned(),
+            action: MediaHostDiscoveryAction::Refresh,
+        },
+        MediaHostMessage::ListDevices {
+            request_id: "devices-1".to_owned(),
+            snapshot_revision: None,
+            offset: 0,
+        },
+        device_page(),
+        MediaHostMessage::StartCast {
+            request_id: "cast-1".to_owned(),
+            candidate_id: 7,
+            device_id: "receiver_1".to_owned(),
+            handoff_available: true,
+        },
+        MediaHostMessage::StartCastReply {
+            request_id: "cast-1".to_owned(),
+            outcome: MediaHostCastStartOutcome::Casting {
+                session_generation: 11,
+                route: MediaHostDeliveryRoute::Relay,
+            },
+        },
+        MediaHostMessage::StartCastReply {
+            request_id: "cast-failed".to_owned(),
+            outcome: MediaHostCastStartOutcome::Failed {
+                code: MediaHostCastErrorCode::ReceiverUnreachable,
+            },
+        },
+        MediaHostMessage::StopCast {
+            request_id: "stop-1".to_owned(),
+            session_generation: 11,
+        },
+        MediaHostMessage::PollSessionEvents {
+            request_id: "events-1".to_owned(),
+        },
+        MediaHostMessage::SessionEventsReply {
+            request_id: "events-1".to_owned(),
+            dropped_events: 2,
+            events: vec![
+                MediaHostSessionEvent {
+                    session_generation: 11,
+                    state_revision: 3,
+                    phase: MediaHostSessionPhase::Active,
+                    playback: MediaHostSessionPlayback::Playing,
+                    terminal_reason: None,
+                },
+                MediaHostSessionEvent {
+                    session_generation: 11,
+                    state_revision: 4,
+                    phase: MediaHostSessionPhase::Terminated,
+                    playback: MediaHostSessionPlayback::Stopped,
+                    terminal_reason: Some(MediaHostTerminalReason::StoppedBySender),
+                },
+            ],
+        },
     ]
+}
+
+fn device_page() -> MediaHostMessage {
+    MediaHostMessage::DevicePageReply {
+        request_id: "devices-1".to_owned(),
+        snapshot_revision: 5,
+        offset: 0,
+        next_offset: None,
+        devices: vec![MediaHostDevice {
+            device_id: "receiver_1".to_owned(),
+            display_name: "Living Room".to_owned(),
+            state: MediaHostDeviceState::Ready,
+            is_crayon_receiver: true,
+        }],
+    }
 }
 
 #[test]
@@ -137,6 +211,12 @@ fn current_and_previous_vectors_roundtrip() {
     assert_eq!(hex(&current), CURRENT_INGEST_GOLDEN);
     assert_eq!(hex(&previous), PREVIOUS_INGEST_GOLDEN);
     assert!(decode_media_host_message(&previous).unwrap() == ingest());
+
+    const CAST_GOLDEN: &str = "4d48563100010f0000000009646576696365732d3100000000000000050000ffff00010000000a72656365697665725f310000000b4c6976696e6720526f6f6d0001";
+    assert_eq!(
+        hex(&encode_media_host_message(&device_page()).unwrap()),
+        CAST_GOLDEN
+    );
 }
 
 #[test]
@@ -207,11 +287,82 @@ fn bounds_invalid_shapes_and_hostile_mutations_are_rejected() {
     })
     .is_err());
 
+    assert!(encode_media_host_message(&MediaHostMessage::ListDevices {
+        request_id: "devices-invalid".to_owned(),
+        snapshot_revision: None,
+        offset: 16,
+    })
+    .is_err());
+    assert!(
+        encode_media_host_message(&MediaHostMessage::DevicePageReply {
+            request_id: "devices-invalid".to_owned(),
+            snapshot_revision: 1,
+            offset: 0,
+            next_offset: Some(2),
+            devices: vec![MediaHostDevice {
+                device_id: "receiver/invalid".to_owned(),
+                display_name: "Living Room".to_owned(),
+                state: MediaHostDeviceState::Ready,
+                is_crayon_receiver: true,
+            }],
+        })
+        .is_err()
+    );
+    let duplicate = MediaHostDevice {
+        device_id: "receiver_1".to_owned(),
+        display_name: "Duplicate".to_owned(),
+        state: MediaHostDeviceState::Ready,
+        is_crayon_receiver: false,
+    };
+    let mut devices = match device_page() {
+        MediaHostMessage::DevicePageReply { devices, .. } => devices,
+        _ => unreachable!(),
+    };
+    devices.push(duplicate);
+    assert!(
+        encode_media_host_message(&MediaHostMessage::DevicePageReply {
+            request_id: "devices-duplicate".to_owned(),
+            snapshot_revision: 1,
+            offset: 0,
+            next_offset: None,
+            devices,
+        })
+        .is_err()
+    );
+    assert!(
+        encode_media_host_message(&MediaHostMessage::StartCastReply {
+            request_id: "cast-invalid".to_owned(),
+            outcome: MediaHostCastStartOutcome::Casting {
+                session_generation: 0,
+                route: MediaHostDeliveryRoute::Direct,
+            },
+        })
+        .is_err()
+    );
+    assert!(
+        encode_media_host_message(&MediaHostMessage::SessionEventsReply {
+            request_id: "events-invalid".to_owned(),
+            dropped_events: 0,
+            events: vec![MediaHostSessionEvent {
+                session_generation: 1,
+                state_revision: 1,
+                phase: MediaHostSessionPhase::Terminated,
+                playback: MediaHostSessionPlayback::Stopped,
+                terminal_reason: None,
+            }],
+        })
+        .is_err()
+    );
+
     let seed = encode_media_host_message(&ingest()).unwrap();
     for index in 0..seed.len() {
         let mut mutated = seed.clone();
         mutated[index] ^= 0xa5;
         let _ = decode_media_host_message(&mutated);
+    }
+    let cast_seed = encode_media_host_message(&device_page()).unwrap();
+    for length in 0..cast_seed.len() {
+        assert!(decode_media_host_message(&cast_seed[..length]).is_err());
     }
 }
 

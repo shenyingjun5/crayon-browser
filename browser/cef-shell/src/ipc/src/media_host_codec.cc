@@ -29,6 +29,14 @@ enum class Kind : std::uint8_t {
   kDecisionReply,
   kAck,
   kErrorReply,
+  kDiscovery,
+  kListDevices,
+  kDevicePageReply,
+  kStartCast,
+  kStartCastReply,
+  kStopCast,
+  kPollSessionEvents,
+  kSessionEventsReply,
 };
 
 void SetError(CodecError value, CodecError *error) {
@@ -186,6 +194,52 @@ bool ValidDecision(const Decision &value) {
   return !value.handoff_reason && !value.reject_reason;
 }
 
+bool ValidDevicePage(const DevicePageReply &value) {
+  const auto end =
+      static_cast<std::size_t>(value.offset) + value.devices.size();
+  return value.snapshot_revision && value.offset < kMaxDevices &&
+         value.devices.size() <= kMaxDevicePage && end <= kMaxDevices &&
+         (!value.devices.empty() || !value.next_offset) &&
+         (!value.next_offset ||
+          (*value.next_offset == end && end < kMaxDevices));
+}
+
+bool HasUniqueDevices(const DevicePageReply &value) {
+  for (std::size_t i = 0; i < value.devices.size(); ++i) {
+    for (std::size_t prior = 0; prior < i; ++prior) {
+      if (value.devices[prior].device_id == value.devices[i].device_id)
+        return false;
+    }
+  }
+  return true;
+}
+
+bool ValidCastStartOutcome(const CastStartOutcome &value) {
+  if (!EnumAtMost(value.kind, 3))
+    return false;
+  const bool casting = value.kind == CastStartKind::kCasting;
+  const bool handoff = value.kind == CastStartKind::kHandoff;
+  const bool rejected = value.kind == CastStartKind::kRejected;
+  const bool failed = value.kind == CastStartKind::kFailed;
+  return (casting == (value.session_generation && *value.session_generation)) &&
+         (casting == value.route.has_value()) &&
+         (!value.route || EnumAtMost(*value.route, 1)) &&
+         (handoff == value.handoff_reason.has_value()) &&
+         (!value.handoff_reason || EnumAtMost(*value.handoff_reason, 8)) &&
+         (rejected == value.reject_reason.has_value()) &&
+         (!value.reject_reason || EnumAtMost(*value.reject_reason, 13)) &&
+         (failed == value.error.has_value()) &&
+         (!value.error || EnumAtMost(*value.error, 12));
+}
+
+bool ValidSessionEvent(const SessionEvent &value) {
+  const bool terminated = value.phase == SessionPhase::kTerminated;
+  return value.session_generation && value.state_revision &&
+         EnumAtMost(value.phase, 5) && EnumAtMost(value.playback, 7) &&
+         terminated == value.terminal_reason.has_value() &&
+         (!value.terminal_reason || EnumAtMost(*value.terminal_reason, 10));
+}
+
 class Writer final {
 public:
   explicit Writer(Kind kind) : bytes_(kMagic.begin(), kMagic.end()) {
@@ -230,6 +284,10 @@ public:
   bool Id(const std::string &value, bool tab = false) {
     return ValidId(value, tab) ? String(value, kMaxIdBytes, false)
                                : Fail(CodecError::kInvalidValue);
+  }
+  bool DeviceId(const std::string &value) { return Id(value, true); }
+  bool Text(const std::string &value, std::size_t max) {
+    return String(value, max, false);
   }
   bool Url(const std::string &value) {
     return ValidUrl(value) ? String(value, kMaxUrlBytes, false)
@@ -339,6 +397,10 @@ public:
   bool Id(std::string *out, bool tab = false) {
     return String(out, kMaxIdBytes, false) &&
            (ValidId(*out, tab) || Fail(CodecError::kInvalidValue));
+  }
+  bool DeviceId(std::string *out) { return Id(out, true); }
+  bool Text(std::string *out, std::size_t max) {
+    return String(out, max, false);
   }
   bool Url(std::string *out) {
     return String(out, kMaxUrlBytes, false) &&
@@ -452,6 +514,148 @@ bool DecodeDecision(Reader *reader, Decision *value) {
   return true;
 }
 
+void EncodeDevicePage(Writer *writer, const DevicePageReply &value) {
+  if (!ValidDevicePage(value) || !HasUniqueDevices(value)) {
+    writer->Fail(CodecError::kInvalidValue);
+    return;
+  }
+  writer->Id(value.request_id);
+  writer->Nonzero(value.snapshot_revision);
+  writer->U16(value.offset);
+  writer->U16(
+      value.next_offset.value_or(std::numeric_limits<std::uint16_t>::max()));
+  writer->U16(static_cast<std::uint16_t>(value.devices.size()));
+  for (const auto &device : value.devices) {
+    writer->DeviceId(device.device_id);
+    writer->Text(device.display_name, kMaxDeviceNameBytes);
+    if (!EnumAtMost(device.state, 4))
+      writer->Fail(CodecError::kInvalidValue);
+    writer->U8(static_cast<std::uint8_t>(device.state));
+    writer->Bool(device.is_crayon_receiver);
+  }
+}
+
+bool DecodeDevicePage(Reader *reader, DevicePageReply *value) {
+  std::uint16_t next = 0, count = 0;
+  if (!reader->Id(&value->request_id) ||
+      !reader->Nonzero(&value->snapshot_revision) ||
+      !reader->U16(&value->offset) || !reader->U16(&next) ||
+      !reader->U16(&count))
+    return false;
+  value->next_offset = next == std::numeric_limits<std::uint16_t>::max()
+                           ? std::nullopt
+                           : std::optional<std::uint16_t>(next);
+  if (count > kMaxDevicePage)
+    return reader->Fail(CodecError::kInvalidValue);
+  value->devices.resize(count);
+  if (!ValidDevicePage(*value))
+    return reader->Fail(CodecError::kInvalidValue);
+  for (auto &device : value->devices) {
+    std::uint8_t state = 0;
+    if (!reader->DeviceId(&device.device_id) ||
+        !reader->Text(&device.display_name, kMaxDeviceNameBytes) ||
+        !reader->U8(&state) || state > 4 ||
+        !reader->Bool(&device.is_crayon_receiver))
+      return reader->Fail(CodecError::kInvalidValue);
+    device.state = static_cast<DeviceState>(state);
+  }
+  return HasUniqueDevices(*value) || reader->Fail(CodecError::kInvalidValue);
+}
+
+void EncodeCastStartOutcome(Writer *writer, const CastStartOutcome &value) {
+  if (!ValidCastStartOutcome(value)) {
+    writer->Fail(CodecError::kInvalidValue);
+    return;
+  }
+  writer->U8(static_cast<std::uint8_t>(value.kind));
+  if (value.session_generation) {
+    writer->Nonzero(*value.session_generation);
+    writer->U8(static_cast<std::uint8_t>(*value.route));
+  } else if (value.handoff_reason) {
+    writer->U8(static_cast<std::uint8_t>(*value.handoff_reason));
+  } else if (value.reject_reason) {
+    writer->U8(static_cast<std::uint8_t>(*value.reject_reason));
+  } else if (value.error) {
+    writer->U8(static_cast<std::uint8_t>(*value.error));
+  }
+}
+
+bool DecodeCastStartOutcome(Reader *reader, CastStartOutcome *value) {
+  std::uint8_t kind = 0, detail = 0;
+  if (!reader->U8(&kind) || kind > 3)
+    return reader->Fail(CodecError::kInvalidValue);
+  value->kind = static_cast<CastStartKind>(kind);
+  if (value->kind == CastStartKind::kCasting) {
+    std::uint64_t generation = 0;
+    if (!reader->Nonzero(&generation) || !reader->U8(&detail) || detail > 1)
+      return reader->Fail(CodecError::kInvalidValue);
+    value->session_generation = generation;
+    value->route = static_cast<DeliveryRoute>(detail);
+  } else {
+    if (!reader->U8(&detail))
+      return false;
+    if (value->kind == CastStartKind::kHandoff && detail <= 8)
+      value->handoff_reason = static_cast<HandoffReason>(detail);
+    else if (value->kind == CastStartKind::kRejected && detail <= 13)
+      value->reject_reason = static_cast<CoreError>(detail);
+    else if (value->kind == CastStartKind::kFailed && detail <= 12)
+      value->error = static_cast<CastError>(detail);
+    else
+      return reader->Fail(CodecError::kInvalidValue);
+  }
+  return ValidCastStartOutcome(*value) ||
+         reader->Fail(CodecError::kInvalidValue);
+}
+
+void EncodeSessionEvents(Writer *writer, const SessionEventsReply &value) {
+  if (value.events.size() > kMaxSessionEvents) {
+    writer->Fail(CodecError::kInvalidValue);
+    return;
+  }
+  writer->Id(value.request_id);
+  writer->U64(value.dropped_events);
+  writer->U16(static_cast<std::uint16_t>(value.events.size()));
+  for (const auto &event : value.events) {
+    if (!ValidSessionEvent(event)) {
+      writer->Fail(CodecError::kInvalidValue);
+      return;
+    }
+    writer->Nonzero(event.session_generation);
+    writer->Nonzero(event.state_revision);
+    writer->U8(static_cast<std::uint8_t>(event.phase));
+    writer->U8(static_cast<std::uint8_t>(event.playback));
+    writer->U8(event.terminal_reason
+                   ? static_cast<std::uint8_t>(*event.terminal_reason)
+                   : 0xff);
+  }
+}
+
+bool DecodeSessionEvents(Reader *reader, SessionEventsReply *value) {
+  std::uint16_t count = 0;
+  if (!reader->Id(&value->request_id) || !reader->U64(&value->dropped_events) ||
+      !reader->U16(&count) || count > kMaxSessionEvents)
+    return reader->Fail(CodecError::kInvalidValue);
+  value->events.resize(count);
+  for (auto &event : value->events) {
+    std::uint8_t phase = 0, playback = 0, reason = 0;
+    if (!reader->Nonzero(&event.session_generation) ||
+        !reader->Nonzero(&event.state_revision) || !reader->U8(&phase) ||
+        phase > 5 || !reader->U8(&playback) || playback > 7 ||
+        !reader->U8(&reason))
+      return reader->Fail(CodecError::kInvalidValue);
+    event.phase = static_cast<SessionPhase>(phase);
+    event.playback = static_cast<SessionPlayback>(playback);
+    if (reason != 0xff) {
+      if (reason > 10)
+        return reader->Fail(CodecError::kInvalidValue);
+      event.terminal_reason = static_cast<TerminalReason>(reason);
+    }
+    if (!ValidSessionEvent(event))
+      return reader->Fail(CodecError::kInvalidValue);
+  }
+  return true;
+}
+
 Kind KindOf(const Message &message) {
   return std::visit(
       [](const auto &value) {
@@ -478,7 +682,23 @@ Kind KindOf(const Message &message) {
           return Kind::kDecisionReply;
         if constexpr (std::is_same_v<T, Ack>)
           return Kind::kAck;
-        return Kind::kErrorReply;
+        if constexpr (std::is_same_v<T, ErrorReply>)
+          return Kind::kErrorReply;
+        if constexpr (std::is_same_v<T, Discovery>)
+          return Kind::kDiscovery;
+        if constexpr (std::is_same_v<T, ListDevices>)
+          return Kind::kListDevices;
+        if constexpr (std::is_same_v<T, DevicePageReply>)
+          return Kind::kDevicePageReply;
+        if constexpr (std::is_same_v<T, StartCast>)
+          return Kind::kStartCast;
+        if constexpr (std::is_same_v<T, StartCastReply>)
+          return Kind::kStartCastReply;
+        if constexpr (std::is_same_v<T, StopCast>)
+          return Kind::kStopCast;
+        if constexpr (std::is_same_v<T, PollSessionEvents>)
+          return Kind::kPollSessionEvents;
+        return Kind::kSessionEventsReply;
       },
       message);
 }
@@ -556,6 +776,35 @@ std::optional<std::vector<std::uint8_t>> Encode(const Message &message,
           if (!EnumAtMost(value.code, 6))
             writer.Fail(CodecError::kInvalidValue);
           writer.U8(static_cast<std::uint8_t>(value.code));
+        } else if constexpr (std::is_same_v<T, Discovery>) {
+          writer.Id(value.request_id);
+          if (!EnumAtMost(value.action, 2))
+            writer.Fail(CodecError::kInvalidValue);
+          writer.U8(static_cast<std::uint8_t>(value.action));
+        } else if constexpr (std::is_same_v<T, ListDevices>) {
+          writer.Id(value.request_id);
+          writer.OptionalNonzero(value.snapshot_revision);
+          if (value.offset >= kMaxDevices ||
+              (!value.snapshot_revision && value.offset != 0))
+            writer.Fail(CodecError::kInvalidValue);
+          writer.U16(value.offset);
+        } else if constexpr (std::is_same_v<T, DevicePageReply>) {
+          EncodeDevicePage(&writer, value);
+        } else if constexpr (std::is_same_v<T, StartCast>) {
+          writer.Id(value.request_id);
+          writer.Nonzero(value.candidate_id);
+          writer.DeviceId(value.device_id);
+          writer.Bool(value.handoff_available);
+        } else if constexpr (std::is_same_v<T, StartCastReply>) {
+          writer.Id(value.request_id);
+          EncodeCastStartOutcome(&writer, value.outcome);
+        } else if constexpr (std::is_same_v<T, StopCast>) {
+          writer.Id(value.request_id);
+          writer.Nonzero(value.session_generation);
+        } else if constexpr (std::is_same_v<T, PollSessionEvents>) {
+          writer.Id(value.request_id);
+        } else if constexpr (std::is_same_v<T, SessionEventsReply>) {
+          EncodeSessionEvents(&writer, value);
         }
       },
       message);
@@ -699,6 +948,65 @@ std::optional<Message> Decode(const std::vector<std::uint8_t> &bytes,
       message = std::move(v);
     } else
       reader.Fail(CodecError::kInvalidValue);
+    break;
+  }
+  case 13: {
+    Discovery v;
+    std::uint8_t action = 0;
+    if (reader.Id(&v.request_id) && reader.U8(&action) && action <= 2) {
+      v.action = static_cast<DiscoveryAction>(action);
+      message = std::move(v);
+    } else {
+      reader.Fail(CodecError::kInvalidValue);
+    }
+    break;
+  }
+  case 14: {
+    ListDevices v;
+    if (reader.Id(&v.request_id) &&
+        reader.OptionalNonzero(&v.snapshot_revision) && reader.U16(&v.offset) &&
+        v.offset < kMaxDevices && (v.snapshot_revision || v.offset == 0)) {
+      message = std::move(v);
+    } else {
+      reader.Fail(CodecError::kInvalidValue);
+    }
+    break;
+  }
+  case 15: {
+    DevicePageReply v;
+    if (DecodeDevicePage(&reader, &v))
+      message = std::move(v);
+    break;
+  }
+  case 16: {
+    StartCast v;
+    if (reader.Id(&v.request_id) && reader.Nonzero(&v.candidate_id) &&
+        reader.DeviceId(&v.device_id) && reader.Bool(&v.handoff_available))
+      message = std::move(v);
+    break;
+  }
+  case 17: {
+    StartCastReply v;
+    if (reader.Id(&v.request_id) && DecodeCastStartOutcome(&reader, &v.outcome))
+      message = std::move(v);
+    break;
+  }
+  case 18: {
+    StopCast v;
+    if (reader.Id(&v.request_id) && reader.Nonzero(&v.session_generation))
+      message = std::move(v);
+    break;
+  }
+  case 19: {
+    PollSessionEvents v;
+    if (reader.Id(&v.request_id))
+      message = std::move(v);
+    break;
+  }
+  case 20: {
+    SessionEventsReply v;
+    if (DecodeSessionEvents(&reader, &v))
+      message = std::move(v);
     break;
   }
   default:

@@ -252,10 +252,22 @@ impl MediaHostRuntime {
             MediaHostMessage::Decide { .. } | MediaHostMessage::DecideUrlLess { .. } => {
                 Err(MediaHostRuntimeError::InvalidState)
             }
+            MediaHostMessage::Discovery { .. }
+            | MediaHostMessage::ListDevices { .. }
+            | MediaHostMessage::StartCast { .. }
+            | MediaHostMessage::StopCast { .. }
+            | MediaHostMessage::PollSessionEvents { .. } => {
+                Err(MediaHostRuntimeError::InvalidState)
+            }
             MediaHostMessage::CandidateReply { .. }
             | MediaHostMessage::DecisionReply { .. }
             | MediaHostMessage::Ack { .. }
-            | MediaHostMessage::ErrorReply { .. } => Err(MediaHostRuntimeError::InvalidMessage),
+            | MediaHostMessage::ErrorReply { .. }
+            | MediaHostMessage::DevicePageReply { .. }
+            | MediaHostMessage::StartCastReply { .. }
+            | MediaHostMessage::SessionEventsReply { .. } => {
+                Err(MediaHostRuntimeError::InvalidMessage)
+            }
         }
     }
 
@@ -629,7 +641,15 @@ pub fn message_request_id(message: &MediaHostMessage) -> Option<&str> {
         | MediaHostMessage::CandidateReply { request_id, .. }
         | MediaHostMessage::DecisionReply { request_id, .. }
         | MediaHostMessage::Ack { request_id }
-        | MediaHostMessage::ErrorReply { request_id, .. } => Some(request_id),
+        | MediaHostMessage::ErrorReply { request_id, .. }
+        | MediaHostMessage::Discovery { request_id, .. }
+        | MediaHostMessage::ListDevices { request_id, .. }
+        | MediaHostMessage::DevicePageReply { request_id, .. }
+        | MediaHostMessage::StartCast { request_id, .. }
+        | MediaHostMessage::StartCastReply { request_id, .. }
+        | MediaHostMessage::StopCast { request_id, .. }
+        | MediaHostMessage::PollSessionEvents { request_id }
+        | MediaHostMessage::SessionEventsReply { request_id, .. } => Some(request_id),
         MediaHostMessage::Shutdown => None,
     }
 }

@@ -36,6 +36,14 @@ mh::IngestUrl Ingest() {
           false};
 }
 
+mh::DevicePageReply DevicePage() {
+  return {"devices-1",
+          5,
+          0,
+          std::nullopt,
+          {{"receiver_1", "Living Room", mh::DeviceState::kReady, true}}};
+}
+
 std::vector<mh::Message> Messages() {
   return {
       Ingest(),
@@ -70,6 +78,27 @@ std::vector<mh::Message> Messages() {
                          mh::CoreError::kDrmProtected}},
       mh::Ack{"nav-1"},
       mh::ErrorReply{"bad-1", mh::HostError::kStaleContext},
+      mh::Discovery{"discover-1", mh::DiscoveryAction::kRefresh},
+      mh::ListDevices{"devices-1", std::nullopt, 0},
+      DevicePage(),
+      mh::StartCast{"cast-1", 7, "receiver_1", true},
+      mh::StartCastReply{"cast-1",
+                         {mh::CastStartKind::kCasting, 11,
+                          mh::DeliveryRoute::kRelay, std::nullopt, std::nullopt,
+                          std::nullopt}},
+      mh::StartCastReply{"cast-failed",
+                         {mh::CastStartKind::kFailed, std::nullopt,
+                          std::nullopt, std::nullopt, std::nullopt,
+                          mh::CastError::kReceiverUnreachable}},
+      mh::StopCast{"stop-1", 11},
+      mh::PollSessionEvents{"events-1"},
+      mh::SessionEventsReply{
+          "events-1",
+          2,
+          {{11, 3, mh::SessionPhase::kActive, mh::SessionPlayback::kPlaying,
+            std::nullopt},
+           {11, 4, mh::SessionPhase::kTerminated, mh::SessionPlayback::kStopped,
+            mh::TerminalReason::kStoppedBySender}}},
   };
 }
 
@@ -100,6 +129,11 @@ bool RoundTripAndRustGolden() {
   }
   auto encoded = mh::Encode(mh::Message(Ingest()), &error);
   CHECK_MH(encoded && Hex(*encoded) == kRustCurrentAndPrevious);
+  constexpr char kRustCastGolden[] =
+      "4d48563100010f0000000009646576696365732d3100000000000000050000ffff"
+      "00010000000a72656365697665725f310000000b4c6976696e6720526f6f6d0001";
+  encoded = mh::Encode(mh::Message(DevicePage()), &error);
+  CHECK_MH(encoded && Hex(*encoded) == kRustCastGolden);
   return true;
 }
 
@@ -155,6 +189,39 @@ bool HostileAndBounds() {
                       std::nullopt,
                       {mh::DecisionKind::kDirect, std::nullopt, std::nullopt}}),
                   &error));
+  CHECK_MH(!mh::Encode(
+      mh::Message(mh::ListDevices{"bad-list", std::nullopt, 16}), &error));
+  auto bad_page = DevicePage();
+  bad_page.next_offset = 2;
+  CHECK_MH(!mh::Encode(mh::Message(bad_page), &error));
+  bad_page = DevicePage();
+  bad_page.devices.front().device_id = "receiver/invalid";
+  CHECK_MH(!mh::Encode(mh::Message(bad_page), &error));
+  bad_page = DevicePage();
+  bad_page.devices.push_back(bad_page.devices.front());
+  CHECK_MH(!mh::Encode(mh::Message(bad_page), &error));
+  auto bad_outcome = mh::CastStartOutcome{mh::CastStartKind::kCasting,
+                                          0,
+                                          mh::DeliveryRoute::kDirect,
+                                          std::nullopt,
+                                          std::nullopt,
+                                          std::nullopt};
+  CHECK_MH(!mh::Encode(mh::Message(mh::StartCastReply{"bad-cast", bad_outcome}),
+                       &error));
+  CHECK_MH(!mh::Encode(mh::Message(mh::SessionEventsReply{
+                           "bad-events",
+                           0,
+                           {{1, 1, mh::SessionPhase::kTerminated,
+                             mh::SessionPlayback::kStopped, std::nullopt}}}),
+                       &error));
+  auto cast = mh::Encode(mh::Message(DevicePage()), &error).value();
+  auto oversized_count = cast;
+  oversized_count[33] = 0;
+  oversized_count[34] = static_cast<std::uint8_t>(mh::kMaxDevicePage + 1);
+  CHECK_MH(!mh::Decode(oversized_count, &error));
+  for (std::size_t cut = 0; cut < cast.size(); ++cut) {
+    CHECK_MH(!mh::Decode({cast.begin(), cast.begin() + cut}, &error));
+  }
   return true;
 }
 

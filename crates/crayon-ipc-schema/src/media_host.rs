@@ -18,6 +18,10 @@ pub const MAX_MEDIA_HOST_FRAME_BYTES: usize = 16 * 1024;
 const MAX_ID_BYTES: usize = 128;
 const MAX_URL_BYTES: usize = 2_048;
 const MAX_ORIGIN_BYTES: usize = 512;
+pub const MAX_MEDIA_HOST_DEVICES: usize = 64;
+pub const MAX_MEDIA_HOST_DEVICE_PAGE: usize = 16;
+pub const MAX_MEDIA_HOST_DEVICE_NAME_BYTES: usize = 512;
+pub const MAX_MEDIA_HOST_SESSION_EVENTS: usize = 64;
 const MAX_EXACT_F64_INTEGER: u64 = 9_007_199_254_740_992;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -53,6 +57,123 @@ pub struct MediaHostUrlFact {
     pub headers_class: HeadersClass,
     pub playback: Option<MediaHostPlayback>,
     pub eme_encrypted: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum MediaHostDiscoveryAction {
+    Start = 0,
+    Stop = 1,
+    Refresh = 2,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum MediaHostDeviceState {
+    Ready = 0,
+    Incomplete = 1,
+    RequiresAuthorization = 2,
+    Stale = 3,
+    Offline = 4,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MediaHostDevice {
+    pub device_id: String,
+    pub display_name: String,
+    pub state: MediaHostDeviceState,
+    pub is_crayon_receiver: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum MediaHostDeliveryRoute {
+    Direct = 0,
+    Relay = 1,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum MediaHostCastErrorCode {
+    DeviceNotFound = 0,
+    InvalidCastCode = 1,
+    InvalidInput = 2,
+    InvalidState = 3,
+    NoActiveSession = 4,
+    StaleSessionGeneration = 5,
+    CastStartFailed = 6,
+    UnsupportedByReceiver = 7,
+    RouteLost = 8,
+    NetworkUnavailable = 9,
+    ReceiverUnreachable = 10,
+    ReceiverProtocol = 11,
+    Internal = 12,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MediaHostCastStartOutcome {
+    Casting {
+        session_generation: u64,
+        route: MediaHostDeliveryRoute,
+    },
+    Handoff {
+        reason: HandoffReason,
+    },
+    Rejected {
+        reason: CoreError,
+    },
+    Failed {
+        code: MediaHostCastErrorCode,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum MediaHostSessionPhase {
+    Starting = 0,
+    Active = 1,
+    Suspended = 2,
+    Recovering = 3,
+    Terminating = 4,
+    Terminated = 5,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum MediaHostSessionPlayback {
+    Unknown = 0,
+    Preparing = 1,
+    Buffering = 2,
+    Playing = 3,
+    Paused = 4,
+    Ended = 5,
+    Stopped = 6,
+    Failed = 7,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum MediaHostTerminalReason {
+    StoppedBySender = 0,
+    StoppedByReceiver = 1,
+    EndedNormally = 2,
+    ReplacedByNewCast = 3,
+    ReplacedByOtherController = 4,
+    ReceiverShutdown = 5,
+    ReceiverSessionLost = 6,
+    ReceiverUnreachable = 7,
+    PlaybackFailed = 8,
+    SourceFailed = 9,
+    ProtocolError = 10,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MediaHostSessionEvent {
+    pub session_generation: u64,
+    pub state_revision: u64,
+    pub phase: MediaHostSessionPhase,
+    pub playback: MediaHostSessionPlayback,
+    pub terminal_reason: Option<MediaHostTerminalReason>,
 }
 
 #[derive(Clone, PartialEq)]
@@ -113,6 +234,44 @@ pub enum MediaHostMessage {
     ErrorReply {
         request_id: String,
         code: MediaHostErrorCode,
+    },
+    Discovery {
+        request_id: String,
+        action: MediaHostDiscoveryAction,
+    },
+    ListDevices {
+        request_id: String,
+        snapshot_revision: Option<u64>,
+        offset: u16,
+    },
+    DevicePageReply {
+        request_id: String,
+        snapshot_revision: u64,
+        offset: u16,
+        next_offset: Option<u16>,
+        devices: Vec<MediaHostDevice>,
+    },
+    StartCast {
+        request_id: String,
+        candidate_id: u64,
+        device_id: String,
+        handoff_available: bool,
+    },
+    StartCastReply {
+        request_id: String,
+        outcome: MediaHostCastStartOutcome,
+    },
+    StopCast {
+        request_id: String,
+        session_generation: u64,
+    },
+    PollSessionEvents {
+        request_id: String,
+    },
+    SessionEventsReply {
+        request_id: String,
+        dropped_events: u64,
+        events: Vec<MediaHostSessionEvent>,
     },
 }
 
@@ -175,6 +334,14 @@ enum Kind {
     DecisionReply = 10,
     Ack = 11,
     ErrorReply = 12,
+    Discovery = 13,
+    ListDevices = 14,
+    DevicePageReply = 15,
+    StartCast = 16,
+    StartCastReply = 17,
+    StopCast = 18,
+    PollSessionEvents = 19,
+    SessionEventsReply = 20,
 }
 
 pub fn encode_media_host_message(message: &MediaHostMessage) -> Result<Vec<u8>, MediaHostError> {
@@ -272,6 +439,65 @@ pub fn encode_media_host_message(message: &MediaHostMessage) -> Result<Vec<u8>, 
             writer.id(request_id)?;
             writer.u8(*code as u8);
         }
+        MediaHostMessage::Discovery { request_id, action } => {
+            writer.id(request_id)?;
+            writer.u8(*action as u8);
+        }
+        MediaHostMessage::ListDevices {
+            request_id,
+            snapshot_revision,
+            offset,
+        } => {
+            writer.id(request_id)?;
+            writer.optional_nonzero_u64(*snapshot_revision)?;
+            validate_device_page_request(*snapshot_revision, *offset)?;
+            writer.u16(*offset);
+        }
+        MediaHostMessage::DevicePageReply {
+            request_id,
+            snapshot_revision,
+            offset,
+            next_offset,
+            devices,
+        } => encode_device_page(
+            &mut writer,
+            request_id,
+            *snapshot_revision,
+            *offset,
+            *next_offset,
+            devices,
+        )?,
+        MediaHostMessage::StartCast {
+            request_id,
+            candidate_id,
+            device_id,
+            handoff_available,
+        } => {
+            writer.id(request_id)?;
+            writer.nonzero_u64(*candidate_id)?;
+            writer.device_id(device_id)?;
+            writer.boolean(*handoff_available);
+        }
+        MediaHostMessage::StartCastReply {
+            request_id,
+            outcome,
+        } => {
+            writer.id(request_id)?;
+            encode_cast_start_outcome(&mut writer, *outcome)?;
+        }
+        MediaHostMessage::StopCast {
+            request_id,
+            session_generation,
+        } => {
+            writer.id(request_id)?;
+            writer.nonzero_u64(*session_generation)?;
+        }
+        MediaHostMessage::PollSessionEvents { request_id } => writer.id(request_id)?,
+        MediaHostMessage::SessionEventsReply {
+            request_id,
+            dropped_events,
+            events,
+        } => encode_session_events(&mut writer, request_id, *dropped_events, events)?,
     }
     writer.finish()
 }
@@ -370,6 +596,40 @@ pub fn decode_media_host_message(bytes: &[u8]) -> Result<MediaHostMessage, Media
             request_id: reader.id()?,
             code: decode_host_error(reader.u8()?)?,
         },
+        13 => MediaHostMessage::Discovery {
+            request_id: reader.id()?,
+            action: decode_discovery_action(reader.u8()?)?,
+        },
+        14 => {
+            let request_id = reader.id()?;
+            let snapshot_revision = reader.optional_nonzero_u64()?;
+            let offset = reader.u16()?;
+            validate_device_page_request(snapshot_revision, offset)?;
+            MediaHostMessage::ListDevices {
+                request_id,
+                snapshot_revision,
+                offset,
+            }
+        }
+        15 => decode_device_page(&mut reader)?,
+        16 => MediaHostMessage::StartCast {
+            request_id: reader.id()?,
+            candidate_id: reader.nonzero_u64()?,
+            device_id: reader.device_id()?,
+            handoff_available: reader.boolean()?,
+        },
+        17 => MediaHostMessage::StartCastReply {
+            request_id: reader.id()?,
+            outcome: decode_cast_start_outcome(&mut reader)?,
+        },
+        18 => MediaHostMessage::StopCast {
+            request_id: reader.id()?,
+            session_generation: reader.nonzero_u64()?,
+        },
+        19 => MediaHostMessage::PollSessionEvents {
+            request_id: reader.id()?,
+        },
+        20 => decode_session_events(&mut reader)?,
         _ => return Err(MediaHostError::UnknownKind),
     };
     if !reader.is_empty() {
@@ -392,7 +652,226 @@ fn kind_of(message: &MediaHostMessage) -> Kind {
         MediaHostMessage::DecisionReply { .. } => Kind::DecisionReply,
         MediaHostMessage::Ack { .. } => Kind::Ack,
         MediaHostMessage::ErrorReply { .. } => Kind::ErrorReply,
+        MediaHostMessage::Discovery { .. } => Kind::Discovery,
+        MediaHostMessage::ListDevices { .. } => Kind::ListDevices,
+        MediaHostMessage::DevicePageReply { .. } => Kind::DevicePageReply,
+        MediaHostMessage::StartCast { .. } => Kind::StartCast,
+        MediaHostMessage::StartCastReply { .. } => Kind::StartCastReply,
+        MediaHostMessage::StopCast { .. } => Kind::StopCast,
+        MediaHostMessage::PollSessionEvents { .. } => Kind::PollSessionEvents,
+        MediaHostMessage::SessionEventsReply { .. } => Kind::SessionEventsReply,
     }
+}
+
+fn validate_device_page_request(
+    snapshot_revision: Option<u64>,
+    offset: u16,
+) -> Result<(), MediaHostError> {
+    if offset as usize >= MAX_MEDIA_HOST_DEVICES || (snapshot_revision.is_none() && offset != 0) {
+        return Err(MediaHostError::InvalidValue);
+    }
+    Ok(())
+}
+
+fn encode_device_page(
+    writer: &mut Writer,
+    request_id: &str,
+    snapshot_revision: u64,
+    offset: u16,
+    next_offset: Option<u16>,
+    devices: &[MediaHostDevice],
+) -> Result<(), MediaHostError> {
+    validate_device_page(snapshot_revision, offset, next_offset, devices.len())?;
+    validate_unique_devices(devices)?;
+    writer.id(request_id)?;
+    writer.nonzero_u64(snapshot_revision)?;
+    writer.u16(offset);
+    writer.u16(next_offset.unwrap_or(u16::MAX));
+    writer.u16(devices.len() as u16);
+    for device in devices {
+        writer.device_id(&device.device_id)?;
+        writer.string(
+            &device.display_name,
+            MAX_MEDIA_HOST_DEVICE_NAME_BYTES,
+            false,
+        )?;
+        writer.u8(device.state as u8);
+        writer.boolean(device.is_crayon_receiver);
+    }
+    Ok(())
+}
+
+fn decode_device_page(reader: &mut Reader<'_>) -> Result<MediaHostMessage, MediaHostError> {
+    let request_id = reader.id()?;
+    let snapshot_revision = reader.nonzero_u64()?;
+    let offset = reader.u16()?;
+    let next_offset = match reader.u16()? {
+        u16::MAX => None,
+        value => Some(value),
+    };
+    let count = reader.u16()? as usize;
+    validate_device_page(snapshot_revision, offset, next_offset, count)?;
+    let mut devices = Vec::with_capacity(count);
+    for _ in 0..count {
+        devices.push(MediaHostDevice {
+            device_id: reader.device_id()?,
+            display_name: reader.string(MAX_MEDIA_HOST_DEVICE_NAME_BYTES, false)?,
+            state: decode_device_state(reader.u8()?)?,
+            is_crayon_receiver: reader.boolean()?,
+        });
+    }
+    validate_unique_devices(&devices)?;
+    Ok(MediaHostMessage::DevicePageReply {
+        request_id,
+        snapshot_revision,
+        offset,
+        next_offset,
+        devices,
+    })
+}
+
+fn validate_device_page(
+    snapshot_revision: u64,
+    offset: u16,
+    next_offset: Option<u16>,
+    count: usize,
+) -> Result<(), MediaHostError> {
+    let end = offset as usize + count;
+    if snapshot_revision == 0
+        || offset as usize >= MAX_MEDIA_HOST_DEVICES
+        || count > MAX_MEDIA_HOST_DEVICE_PAGE
+        || end > MAX_MEDIA_HOST_DEVICES
+        || (count == 0 && next_offset.is_some())
+        || next_offset.is_some_and(|next| next as usize != end || end >= MAX_MEDIA_HOST_DEVICES)
+    {
+        return Err(MediaHostError::InvalidValue);
+    }
+    Ok(())
+}
+
+fn validate_unique_devices(devices: &[MediaHostDevice]) -> Result<(), MediaHostError> {
+    for (index, device) in devices.iter().enumerate() {
+        if devices[..index]
+            .iter()
+            .any(|prior| prior.device_id == device.device_id)
+        {
+            return Err(MediaHostError::InvalidValue);
+        }
+    }
+    Ok(())
+}
+
+fn encode_cast_start_outcome(
+    writer: &mut Writer,
+    outcome: MediaHostCastStartOutcome,
+) -> Result<(), MediaHostError> {
+    match outcome {
+        MediaHostCastStartOutcome::Casting {
+            session_generation,
+            route,
+        } => {
+            writer.u8(0);
+            writer.nonzero_u64(session_generation)?;
+            writer.u8(route as u8);
+        }
+        MediaHostCastStartOutcome::Handoff { reason } => {
+            writer.u8(1);
+            writer.u8(handoff_reason_code(reason));
+        }
+        MediaHostCastStartOutcome::Rejected { reason } => {
+            writer.u8(2);
+            writer.u8(core_error_code(reason));
+        }
+        MediaHostCastStartOutcome::Failed { code } => {
+            writer.u8(3);
+            writer.u8(code as u8);
+        }
+    }
+    Ok(())
+}
+
+fn decode_cast_start_outcome(
+    reader: &mut Reader<'_>,
+) -> Result<MediaHostCastStartOutcome, MediaHostError> {
+    match reader.u8()? {
+        0 => Ok(MediaHostCastStartOutcome::Casting {
+            session_generation: reader.nonzero_u64()?,
+            route: decode_delivery_route(reader.u8()?)?,
+        }),
+        1 => Ok(MediaHostCastStartOutcome::Handoff {
+            reason: decode_handoff_reason(reader.u8()?)?,
+        }),
+        2 => Ok(MediaHostCastStartOutcome::Rejected {
+            reason: decode_core_error(reader.u8()?)?,
+        }),
+        3 => Ok(MediaHostCastStartOutcome::Failed {
+            code: decode_cast_error(reader.u8()?)?,
+        }),
+        _ => Err(MediaHostError::InvalidValue),
+    }
+}
+
+fn encode_session_events(
+    writer: &mut Writer,
+    request_id: &str,
+    dropped_events: u64,
+    events: &[MediaHostSessionEvent],
+) -> Result<(), MediaHostError> {
+    if events.len() > MAX_MEDIA_HOST_SESSION_EVENTS {
+        return Err(MediaHostError::InvalidValue);
+    }
+    writer.id(request_id)?;
+    writer.u64(dropped_events);
+    writer.u16(events.len() as u16);
+    for event in events {
+        validate_session_event(event)?;
+        writer.nonzero_u64(event.session_generation)?;
+        writer.nonzero_u64(event.state_revision)?;
+        writer.u8(event.phase as u8);
+        writer.u8(event.playback as u8);
+        writer.u8(event.terminal_reason.map_or(u8::MAX, |reason| reason as u8));
+    }
+    Ok(())
+}
+
+fn decode_session_events(reader: &mut Reader<'_>) -> Result<MediaHostMessage, MediaHostError> {
+    let request_id = reader.id()?;
+    let dropped_events = reader.u64()?;
+    let count = reader.u16()? as usize;
+    if count > MAX_MEDIA_HOST_SESSION_EVENTS {
+        return Err(MediaHostError::InvalidValue);
+    }
+    let mut events = Vec::with_capacity(count);
+    for _ in 0..count {
+        let event = MediaHostSessionEvent {
+            session_generation: reader.nonzero_u64()?,
+            state_revision: reader.nonzero_u64()?,
+            phase: decode_session_phase(reader.u8()?)?,
+            playback: decode_session_playback(reader.u8()?)?,
+            terminal_reason: match reader.u8()? {
+                u8::MAX => None,
+                value => Some(decode_terminal_reason(value)?),
+            },
+        };
+        validate_session_event(&event)?;
+        events.push(event);
+    }
+    Ok(MediaHostMessage::SessionEventsReply {
+        request_id,
+        dropped_events,
+        events,
+    })
+}
+
+fn validate_session_event(event: &MediaHostSessionEvent) -> Result<(), MediaHostError> {
+    let terminated = event.phase == MediaHostSessionPhase::Terminated;
+    if event.session_generation == 0
+        || event.state_revision == 0
+        || terminated != event.terminal_reason.is_some()
+    {
+        return Err(MediaHostError::InvalidValue);
+    }
+    Ok(())
 }
 
 fn encode_url_fact(writer: &mut Writer, fact: &MediaHostUrlFact) -> Result<(), MediaHostError> {
@@ -586,6 +1065,13 @@ closed!(decode_protocol, ProtocolKind, {0=>ProtocolKind::Hls,1=>ProtocolKind::Da
 closed!(decode_ad_continuity, AdContinuity, {0=>AdContinuity::Preserved,1=>AdContinuity::NotApplicable,2=>AdContinuity::Unknown});
 closed!(decode_handoff_reason, HandoffReason, {0=>HandoffReason::KeyRequired,1=>HandoffReason::NoDirectUrl,2=>HandoffReason::ProbeInconclusive,3=>HandoffReason::CredentialBound,4=>HandoffReason::ReceiverIncompatible,5=>HandoffReason::AdContinuityUnknown,6=>HandoffReason::StartFailed,7=>HandoffReason::DashRelayUnsupported,8=>HandoffReason::LegacyMirror});
 closed!(decode_host_error, MediaHostErrorCode, {0=>MediaHostErrorCode::InvalidMessage,1=>MediaHostErrorCode::InvalidState,2=>MediaHostErrorCode::StaleContext,3=>MediaHostErrorCode::CapacityExceeded,4=>MediaHostErrorCode::Cancelled,5=>MediaHostErrorCode::CandidateUnavailable,6=>MediaHostErrorCode::HostUnavailable});
+closed!(decode_discovery_action, MediaHostDiscoveryAction, {0=>MediaHostDiscoveryAction::Start,1=>MediaHostDiscoveryAction::Stop,2=>MediaHostDiscoveryAction::Refresh});
+closed!(decode_device_state, MediaHostDeviceState, {0=>MediaHostDeviceState::Ready,1=>MediaHostDeviceState::Incomplete,2=>MediaHostDeviceState::RequiresAuthorization,3=>MediaHostDeviceState::Stale,4=>MediaHostDeviceState::Offline});
+closed!(decode_delivery_route, MediaHostDeliveryRoute, {0=>MediaHostDeliveryRoute::Direct,1=>MediaHostDeliveryRoute::Relay});
+closed!(decode_cast_error, MediaHostCastErrorCode, {0=>MediaHostCastErrorCode::DeviceNotFound,1=>MediaHostCastErrorCode::InvalidCastCode,2=>MediaHostCastErrorCode::InvalidInput,3=>MediaHostCastErrorCode::InvalidState,4=>MediaHostCastErrorCode::NoActiveSession,5=>MediaHostCastErrorCode::StaleSessionGeneration,6=>MediaHostCastErrorCode::CastStartFailed,7=>MediaHostCastErrorCode::UnsupportedByReceiver,8=>MediaHostCastErrorCode::RouteLost,9=>MediaHostCastErrorCode::NetworkUnavailable,10=>MediaHostCastErrorCode::ReceiverUnreachable,11=>MediaHostCastErrorCode::ReceiverProtocol,12=>MediaHostCastErrorCode::Internal});
+closed!(decode_session_phase, MediaHostSessionPhase, {0=>MediaHostSessionPhase::Starting,1=>MediaHostSessionPhase::Active,2=>MediaHostSessionPhase::Suspended,3=>MediaHostSessionPhase::Recovering,4=>MediaHostSessionPhase::Terminating,5=>MediaHostSessionPhase::Terminated});
+closed!(decode_session_playback, MediaHostSessionPlayback, {0=>MediaHostSessionPlayback::Unknown,1=>MediaHostSessionPlayback::Preparing,2=>MediaHostSessionPlayback::Buffering,3=>MediaHostSessionPlayback::Playing,4=>MediaHostSessionPlayback::Paused,5=>MediaHostSessionPlayback::Ended,6=>MediaHostSessionPlayback::Stopped,7=>MediaHostSessionPlayback::Failed});
+closed!(decode_terminal_reason, MediaHostTerminalReason, {0=>MediaHostTerminalReason::StoppedBySender,1=>MediaHostTerminalReason::StoppedByReceiver,2=>MediaHostTerminalReason::EndedNormally,3=>MediaHostTerminalReason::ReplacedByNewCast,4=>MediaHostTerminalReason::ReplacedByOtherController,5=>MediaHostTerminalReason::ReceiverShutdown,6=>MediaHostTerminalReason::ReceiverSessionLost,7=>MediaHostTerminalReason::ReceiverUnreachable,8=>MediaHostTerminalReason::PlaybackFailed,9=>MediaHostTerminalReason::SourceFailed,10=>MediaHostTerminalReason::ProtocolError});
 
 fn decode_core_error(raw: u8) -> Result<CoreError, MediaHostError> {
     CoreError::ALL
@@ -659,6 +1145,12 @@ impl Writer {
         self.string(value, MAX_ID_BYTES, false)
     }
     fn tab_id(&mut self, value: &str) -> Result<(), MediaHostError> {
+        if !valid_tab_id(value) {
+            return Err(MediaHostError::InvalidValue);
+        }
+        self.string(value, MAX_ID_BYTES, false)
+    }
+    fn device_id(&mut self, value: &str) -> Result<(), MediaHostError> {
         if !valid_tab_id(value) {
             return Err(MediaHostError::InvalidValue);
         }
@@ -767,6 +1259,14 @@ impl<'a> Reader<'a> {
         }
     }
     fn tab_id(&mut self) -> Result<String, MediaHostError> {
+        let value = self.string(MAX_ID_BYTES, false)?;
+        if valid_tab_id(&value) {
+            Ok(value)
+        } else {
+            Err(MediaHostError::InvalidValue)
+        }
+    }
+    fn device_id(&mut self) -> Result<String, MediaHostError> {
         let value = self.string(MAX_ID_BYTES, false)?;
         if valid_tab_id(&value) {
             Ok(value)

@@ -12,6 +12,10 @@
 namespace crayon::cef_shell::ipc::media_host {
 
 inline constexpr std::size_t kMaxFrameBytes = 16 * 1024;
+inline constexpr std::size_t kMaxDevices = 64;
+inline constexpr std::size_t kMaxDevicePage = 16;
+inline constexpr std::size_t kMaxDeviceNameBytes = 512;
+inline constexpr std::size_t kMaxSessionEvents = 64;
 
 enum class Source : std::uint8_t { kCurrentSrc = 0, kNetworkRequest = 1 };
 enum class HeadersClass : std::uint8_t {
@@ -67,6 +71,67 @@ enum class HostError : std::uint8_t {
   kCancelled,
   kCandidateUnavailable,
   kHostUnavailable,
+};
+enum class DiscoveryAction : std::uint8_t { kStart = 0, kStop, kRefresh };
+enum class DeviceState : std::uint8_t {
+  kReady = 0,
+  kIncomplete,
+  kRequiresAuthorization,
+  kStale,
+  kOffline,
+};
+enum class DeliveryRoute : std::uint8_t { kDirect = 0, kRelay };
+enum class CastError : std::uint8_t {
+  kDeviceNotFound = 0,
+  kInvalidCastCode,
+  kInvalidInput,
+  kInvalidState,
+  kNoActiveSession,
+  kStaleSessionGeneration,
+  kCastStartFailed,
+  kUnsupportedByReceiver,
+  kRouteLost,
+  kNetworkUnavailable,
+  kReceiverUnreachable,
+  kReceiverProtocol,
+  kInternal,
+};
+enum class CastStartKind : std::uint8_t {
+  kCasting = 0,
+  kHandoff,
+  kRejected,
+  kFailed,
+};
+enum class SessionPhase : std::uint8_t {
+  kStarting = 0,
+  kActive,
+  kSuspended,
+  kRecovering,
+  kTerminating,
+  kTerminated,
+};
+enum class SessionPlayback : std::uint8_t {
+  kUnknown = 0,
+  kPreparing,
+  kBuffering,
+  kPlaying,
+  kPaused,
+  kEnded,
+  kStopped,
+  kFailed,
+};
+enum class TerminalReason : std::uint8_t {
+  kStoppedBySender = 0,
+  kStoppedByReceiver,
+  kEndedNormally,
+  kReplacedByNewCast,
+  kReplacedByOtherController,
+  kReceiverShutdown,
+  kReceiverSessionLost,
+  kReceiverUnreachable,
+  kPlaybackFailed,
+  kSourceFailed,
+  kProtocolError,
 };
 enum class CodecError {
   kFrameTooLarge = 0,
@@ -229,10 +294,117 @@ struct ErrorReply final {
     return a.request_id == b.request_id && a.code == b.code;
   }
 };
+struct Discovery final {
+  std::string request_id;
+  DiscoveryAction action = DiscoveryAction::kStart;
+  friend bool operator==(const Discovery &a, const Discovery &b) {
+    return a.request_id == b.request_id && a.action == b.action;
+  }
+};
+struct ListDevices final {
+  std::string request_id;
+  std::optional<std::uint64_t> snapshot_revision;
+  std::uint16_t offset = 0;
+  friend bool operator==(const ListDevices &a, const ListDevices &b) {
+    return a.request_id == b.request_id &&
+           a.snapshot_revision == b.snapshot_revision && a.offset == b.offset;
+  }
+};
+struct Device final {
+  std::string device_id, display_name;
+  DeviceState state = DeviceState::kReady;
+  bool is_crayon_receiver = false;
+  friend bool operator==(const Device &a, const Device &b) {
+    return a.device_id == b.device_id && a.display_name == b.display_name &&
+           a.state == b.state && a.is_crayon_receiver == b.is_crayon_receiver;
+  }
+};
+struct DevicePageReply final {
+  std::string request_id;
+  std::uint64_t snapshot_revision = 0;
+  std::uint16_t offset = 0;
+  std::optional<std::uint16_t> next_offset;
+  std::vector<Device> devices;
+  friend bool operator==(const DevicePageReply &a, const DevicePageReply &b) {
+    return a.request_id == b.request_id &&
+           a.snapshot_revision == b.snapshot_revision && a.offset == b.offset &&
+           a.next_offset == b.next_offset && a.devices == b.devices;
+  }
+};
+struct StartCast final {
+  std::string request_id;
+  std::uint64_t candidate_id = 0;
+  std::string device_id;
+  bool handoff_available = false;
+  friend bool operator==(const StartCast &a, const StartCast &b) {
+    return a.request_id == b.request_id && a.candidate_id == b.candidate_id &&
+           a.device_id == b.device_id &&
+           a.handoff_available == b.handoff_available;
+  }
+};
+struct CastStartOutcome final {
+  CastStartKind kind = CastStartKind::kFailed;
+  std::optional<std::uint64_t> session_generation;
+  std::optional<DeliveryRoute> route;
+  std::optional<HandoffReason> handoff_reason;
+  std::optional<CoreError> reject_reason;
+  std::optional<CastError> error;
+  friend bool operator==(const CastStartOutcome &a, const CastStartOutcome &b) {
+    return a.kind == b.kind && a.session_generation == b.session_generation &&
+           a.route == b.route && a.handoff_reason == b.handoff_reason &&
+           a.reject_reason == b.reject_reason && a.error == b.error;
+  }
+};
+struct StartCastReply final {
+  std::string request_id;
+  CastStartOutcome outcome;
+  friend bool operator==(const StartCastReply &a, const StartCastReply &b) {
+    return a.request_id == b.request_id && a.outcome == b.outcome;
+  }
+};
+struct StopCast final {
+  std::string request_id;
+  std::uint64_t session_generation = 0;
+  friend bool operator==(const StopCast &a, const StopCast &b) {
+    return a.request_id == b.request_id &&
+           a.session_generation == b.session_generation;
+  }
+};
+struct PollSessionEvents final {
+  std::string request_id;
+  friend bool operator==(const PollSessionEvents &a,
+                         const PollSessionEvents &b) {
+    return a.request_id == b.request_id;
+  }
+};
+struct SessionEvent final {
+  std::uint64_t session_generation = 0, state_revision = 0;
+  SessionPhase phase = SessionPhase::kStarting;
+  SessionPlayback playback = SessionPlayback::kUnknown;
+  std::optional<TerminalReason> terminal_reason;
+  friend bool operator==(const SessionEvent &a, const SessionEvent &b) {
+    return a.session_generation == b.session_generation &&
+           a.state_revision == b.state_revision && a.phase == b.phase &&
+           a.playback == b.playback && a.terminal_reason == b.terminal_reason;
+  }
+};
+struct SessionEventsReply final {
+  std::string request_id;
+  std::uint64_t dropped_events = 0;
+  std::vector<SessionEvent> events;
+  friend bool operator==(const SessionEventsReply &a,
+                         const SessionEventsReply &b) {
+    return a.request_id == b.request_id &&
+           a.dropped_events == b.dropped_events && a.events == b.events;
+  }
+};
 
-using Message = std::variant<IngestUrl, MarkEme, Decide, DecideUrlLess, Cancel,
-                             Navigation, CloseTab, Shutdown, CandidateReply,
-                             DecisionReply, Ack, ErrorReply>;
+using Message =
+    std::variant<IngestUrl, MarkEme, Decide, DecideUrlLess, Cancel, Navigation,
+                 CloseTab, Shutdown, CandidateReply, DecisionReply, Ack,
+                 ErrorReply, Discovery, ListDevices, DevicePageReply, StartCast,
+                 StartCastReply, StopCast, PollSessionEvents,
+                 SessionEventsReply>;
 
 std::optional<std::vector<std::uint8_t>> Encode(const Message &message,
                                                 CodecError *error);
