@@ -7,9 +7,12 @@
 #include <vector>
 
 #include "crayon/browser_cast_view/cast_ui_coordinator.h"
-#include "macos/media_host_adapter_mac.h"
+#include "browser/media_host/media_host_adapter.h"
 
 namespace crayon::browser::cef_shell::macos {
+
+namespace media_host_ipc = ::crayon::cef_shell::ipc::media_host;
+using media_host::MediaPlanningEvent;
 
 // UI-thread command port. Every callback must only enqueue into the bounded
 // media-host adapter; implementations must not perform SDK or pipe I/O.

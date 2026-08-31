@@ -591,6 +591,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "crayon-media-host"
+version = "0.1.0"
+dependencies = [
+ "crayon-app-runtime",
+ "crayon-cast-adapter",
+ "crayon-ipc-schema",
+ "crayon-media-probe",
+ "crayon-platform-api",
+ "crayon-platform-windows",
+ "crayon-relay",
+ "getrandom 0.3.4",
+ "tokio",
+]
+
+[[package]]
 name = "crayon-media-observer"
 version = "0.1.0"
 dependencies = [

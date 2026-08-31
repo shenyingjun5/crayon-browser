@@ -1,6 +1,6 @@
 # PLT Windows/macOS 平台适配 Roadmap
 
-- 状态：`PLT-01/02/W04/M04 DONE`；macOS 共享装配 `PLT-M05 IN_PROGRESS`（M05a、M05b1/b2/b3 DONE，b4..b6/M05c 后置）；Windows 首发装配 `PLT-W05 READY`（W05a READY，后续严格串行）
+- 状态：`PLT-01/02/W04/M04 DONE`；macOS 共享装配 `PLT-M05 IN_PROGRESS`（M05a、M05b1/b2/b3 DONE，b4..b6/M05c 后置）；Windows 首发装配 `PLT-W05 IN_PROGRESS`（W05a DONE、W05b READY，后续严格串行）
 - 任务数：7
 - 平台：Windows、macOS
 - 非目标：Linux、屏幕/标签页/系统音频采集、编码器、WebRTC sender
@@ -12,7 +12,7 @@
 | PLT-01 | DONE | FND-09 | `crates/crayon-platform-api/**` | 定义安全存储、本地网络、生命周期、更新、当前用户本机 IPC 和外部客户端交接接口 | `CP-004`,`CP-W01`,`CP-M01`,`AG-012`; unit | V1 |
 | PLT-02 | DONE | PLT-01,FND-10 | `crates/crayon-platform-api/**`, `crates/crayon-platform-capabilities/**` | 定义 `secure_store`、`local_network`、`lifecycle`、`update`、`local_agent_ipc`、`external_client_handoff` 能力模型 | `CP-004`,`AG-012`; schema/golden | V1 |
 | PLT-W04 | DONE | PLT-02,CEF-12,SDK-08 | `platform/windows/**` | 实现 DPAPI、本地网络/防火墙、多网卡、睡眠唤醒、更新、当前用户 named pipe 与投屏客户端交接（切片 W04a..d，见原子范围） | `CP-W01`,`AG-012`; Windows integration | V4W |
-| PLT-W05 | READY | PLT-W04,PLT-M05b3,CEF-15,SDK-14,PRV-12 | `browser/cef-shell/**`, `crates/crayon-platform-windows/**` | Windows 产品装配与 Direct/Relay/外部客户端交接验收 | `E2E-001..005`,`CP-W01`; Windows + ADB receiver | R1 |
+| PLT-W05 | IN_PROGRESS | PLT-W04,PLT-M05b3,CEF-15,SDK-14,PRV-12 | `browser/cef-shell/**`, `crates/crayon-platform-windows/**` | Windows 产品装配与 Direct/Relay/外部客户端交接验收 | `E2E-001..005`,`CP-W01`; Windows + ADB receiver | R1 |
 | PLT-M04 | DONE | PLT-02,CEF-01E,CEF-12,SDK-08 | `platform/macos/**` | 实现 Keychain、本地网络权限、生命周期、更新、当前用户 UDS 与投屏客户端交接 | `CP-M01`,`AG-012`; macOS integration | V4M |
 | PLT-M05 | IN_PROGRESS | PLT-M04,CEF-15,SDK-14,PRV-12 | `apps/desktop-cef/**`, `platform/macos/**` | macOS 产品装配、签名/公证与 Direct/Relay/外部客户端交接验收 | `E2E-001..005`,`CP-M01`; macOS device | V4M |
 | PLT-19 | TODO | PLT-W05；macOS addendum 另等 PLT-M05 | `docs/current/**`, `docs/plans/**`, `tests/**` | Windows 首发平台边界/生命周期 Review（19W）；macOS 特有门禁后续补 19M | 平台矩阵；Review P0/P1=0 | R1 |
@@ -434,20 +434,29 @@
 
 ### PLT-W05 第一期对称装配边界
 
-- 状态：`READY`；依赖 `PLT-W04 DONE`、共享协议/状态机 `PLT-M05b3 DONE`、`CEF-15/SDK-14/PRV-12 DONE/VERIFIED`。macOS b4..b6/M05c 是平台验证而非 Windows 前置。
+- 状态：`IN_PROGRESS`；依赖 `PLT-W04 DONE`、共享协议/状态机 `PLT-M05b3 DONE`、`CEF-15/SDK-14/PRV-12 DONE/VERIFIED`。macOS b4..b6/M05c 是平台验证而非 Windows 前置。
 - 单一目标：在 Windows x64 CEF 产品壳消费同一共享观察、策略、UI、Cast-SDK 与 Relay owner，只增加 Windows process/IPC/UI/生命周期装配和 CP-W01 证据；不得复制或分叉 macOS 业务逻辑。
 - 真机条件：当前 ADB 设备 `VED7N18906000919`（Huawei EML-AL00、Android 10、Wi-Fi `192.168.3.166/24`）已安装 `com.zknowai.labi.cast.receiver`；每次测试仍须重新记录在线状态、receiver build、网络拓扑和真实上屏，不能把本条环境快照当作通过证据。
 
 | Slice | 状态 | 依赖 | 单一目标 | 允许路径与验收 |
 |---|---|---|---|---|
-| PLT-W05a | READY | PLT-M05b3 DONE | 用 Windows named pipe/Job/process owner 装配 bundled `crayon-media-host`，接通现有 CEF observation/planning 与有界 health/kill/reap | `browser/cef-shell/src/windows/**`、平台 CMake/package、相邻 process/adapter tests；Debug/Release build/CTest；不接 UI/SDK 真机 |
-| PLT-W05b | TODO | W05a | 接通共享 `CastUiCoordinator`、浏览器 chrome 按钮/receiver picker、Cast command/event worker 与 navigation/close/app-exit | Windows shell/chrome/locale、相邻 tests；无设备/刷新/取消/失败/旧 session/stop；UI 线程无阻塞 SDK |
+| PLT-W05a | DONE | PLT-M05b3 DONE | 用 Windows named pipe/Job/process owner 装配 bundled `crayon-media-host`，接通现有 CEF observation/planning 与有界 health/kill/reap | `browser/cef-shell/src/windows/**`、`browser/cef-shell/src/browser/media_host/**`（仅提取既有平台无关 adapter）、顶层组合 crate `crates/crayon-media-host/**`（从 runtime 提升 binary owner，仅补平台 health/启动）、平台 CMake/package、相邻 process/adapter tests；Debug/Release build/CTest；不接 UI/SDK 真机 |
+| PLT-W05b | READY | W05a DONE | 接通共享 `CastUiCoordinator`、浏览器 chrome 按钮/receiver picker、Cast command/event worker 与 navigation/close/app-exit | Windows shell/chrome/locale、相邻 tests；无设备/刷新/取消/失败/旧 session/stop；UI 线程无阻塞 SDK |
 | PLT-W05c | TODO | W05b | 使用 ADB 正式接收端完成 clear fixture Direct 发现、连接、投送、pause/resume/seek/stop | E2E-001/CS-010；真实 Desktop Host 与真实上屏；不以 SDK standalone/Fake/ADB 在线代替 |
 | PLT-W05d | TODO | W05c | 同一接收端完成 MP4 Range 与 HLS Relay 全链路 | E2E-002；opaque route、200/206/416、分片、撤销后拒绝、零 secret；不支持 DASH Relay/加密 HLS |
 | PLT-W05e | TODO | W05d | DRM/EME/加密/credential 拒绝与 ExternalClientHandoff 确认/取消/未安装/失败反馈 | E2E-003/004；交接不创建 SDK/Relay session、不显示投屏中 |
 | PLT-W05f | TODO | W05e | 100 次开始/停止/设备/网络切换及睡眠/唤醒/退出，关闭 CP-W01 | E2E-005；进程/线程/socket/RSS/UI delay/dropped、旧 generation、退出零残留 |
 
 共同禁止路径：不修改 Cast-SDK facade/接收端协议、MED/Relay 安全边界或公共 MHV1 schema；发现缺口时停止并建独立任务。每个 slice 单独 `IN_PROGRESS`、测试、v0.9 Review 和提交；`PLT-W05` 只有 W05a..f 全部完成才可 `DONE`。
+
+### PLT-W05a 完成记录（2026-08-31，Windows bundled media-host 产品装配）
+
+- 实现：把既有平台无关 `MediaHostAdapter` 原样提取到 `browser/media_host`，macOS 继续注入原有 transport；将 `crayon-media-host` binary owner 从领域 crate 提升为顶层组合 crate，Windows 使用既有 current-user ACL named-pipe endpoint 提供 health。Windows C++ process owner 以显式继承句柄白名单启动随包 child，以 Job Object `KILL_ON_JOB_CLOSE`、500ms graceful stop、进程 generation、1s health、5s admission、单 worker 和各 64 条有界收发队列完成 spawn/kill/reap/restart；只接受 MHV1 reply kind。CEF 产品在 content/media host 均健康后创建主窗口，接通真实 `TabController` observation/navigation/close 与可信当前页 URL，UI tick 只做有界 enqueue/drain；planning 暂丢弃，Cast UI/SDK command 留给 W05b。
+- 自动化验证：Windows x64 `cmake --build .cache/build/windows-cef-debug --config {Debug,Release} --target ALL_BUILD --parallel 1` 均通过；完整 `ctest --test-dir .cache/build/windows-cef-debug -C {Debug,Release} --output-on-failure` 在实质实现完成后均为 81/81。binary owner 机械迁移后再次完成双配置 `ALL_BUILD`，并以 `ctest ... -R '^(windows_cef_shell_package_contract|media_host_process_win|media_host_adapter_win|windows_cef_shell_source_contract)$'` 各 4/4。`cargo check/test -p crayon-media-host --all-targets`、`cargo test -p crayon-app-runtime --all-targets`、`cargo fmt --all -- --check`、`cargo clippy -p crayon-media-host -p crayon-app-runtime --all-targets --no-deps -- -D warnings`、最终 `scripts/check.ps1 fast` 与 `scripts/check.ps1 security` 串行退出码 0（65.5s），Google clang-format scoped check 和 `git diff --check` 通过。
+- 产品证据：Release `CrayonBrowser.exe` 真实启动得到非零主窗口，进程树中恰有一个 `crayon-media-host.exe`、一个 `crayon-content-host.exe` 及正常 CEF helpers；关闭主窗口后 Browser 与捕获的全部 descendants 正常退出，残留进程为空。process test 使用真实 bundled binary 验证 named-pipe PING/PONG、Navigation/Ingest/List/Poll MHV1、额外 inheritable sentinel 不泄漏、Shutdown 后 unhealthy→bounded restart、generation 增长及 Stop 后不健康。
+- 失败与修复：首次把 Windows 平台 crate 直接依赖加入 `crayon-app-runtime` 被 repo-guard `RG-005` 稳定拒绝，改为独立顶层组合 crate 后通过，未放松守卫；一次 package contract 使用未重建的旧 executable 报参数数量错误，重建对应 contract target 后 Debug/Release 均通过。两项均保留为可审计失败，不计入最终通过数。
+- Code Review：按 v0.9 依次审查需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试/证据、可维护性/供应链；P0 0、P1 0、P2 0、P3 0，`APPROVE`。未复制 Cast-SDK/MED/Relay/schema，句柄、队列、重启、generation、URL/secret 边界均有代码或行为测试。
+- 未覆盖与风险：按切片明确未接 Cast chrome UI、receiver picker 或 SDK command，未做 ADB/Direct/Relay 真机结论，由 `PLT-W05b..f` 严格串行闭合。macOS 特有构建、签名与行为验证按用户决策 `NOT_RUN` 并后置；共享 adapter/binary owner 的平台中立机械迁移保留原有 macOS 接口，但须在后续 macOS 矩阵复验。`PLT-W05a DONE`，`PLT-W05b READY`，顶层 `PLT-W05` 保持 `IN_PROGRESS`。
 
 ### PLT-19W/19M Review 边界
 

@@ -11,9 +11,11 @@
 #include <vector>
 
 #include "browser/observation_gateway/observation_gateway.h"
-#include "macos/media_host_process_mac.h"
+#include "browser/media_host/media_host_transport.h"
 
-namespace crayon::browser::cef_shell::macos {
+namespace crayon::browser::cef_shell::media_host {
+
+namespace media_host_ipc = ::crayon::cef_shell::ipc::media_host;
 
 // Browser-verified fact. Full URLs remain private to this adapter/host path and
 // are never present in the opaque result DTO exposed to Cast UI/session code.
@@ -38,7 +40,6 @@ struct MediaPlanningEvent final {
 // candidate correlation; ObservationGateway conversion belongs to M05b2c.
 class MediaHostAdapter final {
 public:
-  MediaHostAdapter();
   explicit MediaHostAdapter(std::unique_ptr<MediaHostTransport> transport);
   bool Start(std::string executable_path);
   void Stop();
@@ -118,4 +119,4 @@ private:
   std::uint64_t cast_state_epoch_ = 0;
 };
 
-} // namespace crayon::browser::cef_shell::macos
+}  // namespace crayon::browser::cef_shell::media_host

@@ -1,11 +1,13 @@
 #include "windows/app.h"
 
 #include <array>
+#include <chrono>
 #include <filesystem>
 #include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "browser/mdv/cef_mdv_editing.h"
 #include "browser/mdv/cef_mdv_entries.h"
@@ -130,7 +132,7 @@ browser_mdv::MdvPageStrings LoadMdvStrings(HINSTANCE resource_module) {
   };
 }
 
-std::string ContentHostExecutablePath() {
+std::string HelperExecutablePath(std::wstring_view name) {
   std::array<wchar_t, MAX_PATH> path{};
   const DWORD length =
       GetModuleFileNameW(nullptr, path.data(), static_cast<DWORD>(path.size()));
@@ -139,7 +141,7 @@ std::string ContentHostExecutablePath() {
       (std::filesystem::path(
            std::wstring(path.data(), static_cast<std::size_t>(length)))
            .parent_path() /
-       L"crayon-content-host.exe")
+       name)
           .wstring());
 }
 
@@ -200,6 +202,8 @@ BrowserApp::BrowserApp(HINSTANCE resource_module, std::wstring product_name)
           std::make_shared<mdv::MdvEditController>(mdv_runtime_, mdv_strings_)),
       permission_store_(std::make_unique<permission::PermissionStore>()),
       content_host_(std::make_unique<windows::ContentHostAdapter>()),
+      media_host_(std::make_unique<media_host::MediaHostAdapter>(
+          std::make_unique<windows::MediaHostProcess>())),
       tab_controller_(new window::TabController(
           browser_new_tab::kNewTabUrl,
           [window_icons = window_icons_](CefRefPtr<CefBrowser> browser) {
@@ -315,13 +319,30 @@ void BrowserApp::OnContextInitialized() {
   tab_controller_->SetPageSnapshotEventsReadyCallback([this] {
     content_host_->Consume(tab_controller_->DrainPageSnapshots(16));
   });
+  tab_controller_->SetMediaObservationLifecycleCallback(
+      [this, host = media_host_.get()](std::uint32_t tab_id,
+                                       std::uint64_t navigation_id,
+                                       std::uint32_t generation, bool closed) {
+        if (closed) {
+          static_cast<void>(host->CloseTab(tab_id, generation));
+        } else {
+          static_cast<void>(
+              host->AdvanceNavigation(tab_id, navigation_id, generation));
+        }
+      });
+  tab_controller_->SetMediaObservationEventsReadyCallback(
+      [this] { ConsumeMediaObservations(); });
   tab_controller_->SetBrowsersClosedCallback([this] {
     content_host_tick_active_ = false;
     page_markdown_preview_->Stop();
     content_host_->Stop();
+    media_host_->Stop();
     shell_runtime_->Shutdown();
   });
-  if (!content_host_->Start(ContentHostExecutablePath())) {
+  if (!content_host_->Start(HelperExecutablePath(L"crayon-content-host.exe")) ||
+      !media_host_->Start(HelperExecutablePath(L"crayon-media-host.exe"))) {
+    content_host_->Stop();
+    media_host_->Stop();
     shell_runtime_->Shutdown();
     CefQuitMessageLoop();
     return;
@@ -331,9 +352,10 @@ void BrowserApp::OnContextInitialized() {
 
 void BrowserApp::ContinueContentHostStartup() {
   CEF_REQUIRE_UI_THREAD();
-  if (content_host_->healthy()) {
+  if (content_host_->healthy() && media_host_->healthy()) {
     if (!tab_controller_->CreateMainWindow()) {
       content_host_->Stop();
+      media_host_->Stop();
       shell_runtime_->Shutdown();
       CefQuitMessageLoop();
       return;
@@ -344,6 +366,7 @@ void BrowserApp::ContinueContentHostStartup() {
   }
   if (++content_host_start_checks_ >= kContentHostStartupChecks) {
     content_host_->Stop();
+    media_host_->Stop();
     shell_runtime_->Shutdown();
     CefQuitMessageLoop();
     return;
@@ -367,10 +390,31 @@ void BrowserApp::ContentHostTick() {
   CEF_REQUIRE_UI_THREAD();
   if (!content_host_tick_active_) return;
   content_host_->Consume(tab_controller_->DrainPageSnapshots(16));
+  ConsumeMediaObservations();
   content_host_->Tick();
+  media_host_->Tick();
   page_markdown_preview_->Tick(content_host_->Drain(64),
                                content_host_->healthy());
+  static_cast<void>(media_host_->Drain(64));
+  static_cast<void>(media_host_->DrainPlanning(64));
   ScheduleContentHostTick();
+}
+
+void BrowserApp::ConsumeMediaObservations() {
+  CEF_REQUIRE_UI_THREAD();
+  std::vector<media_host::BrowserMediaFact> facts;
+  for (auto& event : tab_controller_->DrainMediaObservations(16)) {
+    auto page_url =
+        tab_controller_->TrustedPageUrl(event.tab_id, event.navigation_id);
+    if (!page_url) continue;
+    const auto observed_at = static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch())
+            .count());
+    facts.push_back(media_host::BrowserMediaFact{
+        std::move(event), std::move(*page_url), observed_at});
+  }
+  media_host_->Consume(std::move(facts));
 }
 
 bool BrowserApp::new_tab_strings_valid() const {

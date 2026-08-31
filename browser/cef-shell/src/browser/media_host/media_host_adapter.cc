@@ -1,4 +1,4 @@
-#include "macos/media_host_adapter_mac.h"
+#include "browser/media_host/media_host_adapter.h"
 
 #include <algorithm>
 #include <cmath>
@@ -7,7 +7,7 @@
 #include <utility>
 #include <variant>
 
-namespace crayon::browser::cef_shell::macos {
+namespace crayon::browser::cef_shell::media_host {
 namespace {
 
 constexpr std::size_t kMaxTrackedRequests = 256;
@@ -100,9 +100,6 @@ std::string NewRequestId(const media_host_ipc::Message &message) {
 }
 
 } // namespace
-
-MediaHostAdapter::MediaHostAdapter()
-    : MediaHostAdapter(std::make_unique<MediaHostProcess>()) {}
 
 MediaHostAdapter::MediaHostAdapter(
     std::unique_ptr<MediaHostTransport> transport)
@@ -665,4 +662,4 @@ std::string MediaHostAdapter::NextRequestId() {
   return "mhv-" + std::to_string(next_request_id_++);
 }
 
-} // namespace crayon::browser::cef_shell::macos
+}  // namespace crayon::browser::cef_shell::media_host

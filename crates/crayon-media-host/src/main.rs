@@ -1,5 +1,5 @@
-#[cfg(target_os = "macos")]
-mod macos {
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+mod desktop {
     use crayon_app_runtime::cast_usecase::RelayRevocation;
     use crayon_app_runtime::delivery::CoreSessionBackend;
     use crayon_app_runtime::media_host_cast_runtime::MediaHostCastRuntime;
@@ -18,20 +18,10 @@ mod macos {
     use crayon_media_probe::http::{ProbeHttpClient, ProbeHttpConfig};
     use crayon_media_probe::MediaInspector;
     use crayon_relay::runtime::{RelayRuntime, RelayRuntimeConfig};
-    use std::fs::{self, Permissions};
     use std::io::{self, Read, Write};
-    use std::os::unix::fs::{FileTypeExt, PermissionsExt};
-    use std::os::unix::net::{UnixListener, UnixStream};
-    use std::path::{Path, PathBuf};
-    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
     use std::thread::{self, JoinHandle};
-    use std::time::Duration;
     use tokio::sync::mpsc;
-
-    const HEALTH_REQUEST: &[u8; 4] = b"PING";
-    const HEALTH_REPLY: &[u8; 4] = b"PONG";
-    const HEALTH_IO_TIMEOUT: Duration = Duration::from_millis(250);
 
     enum ReaderEvent {
         Message(MediaHostMessage),
@@ -47,8 +37,7 @@ mod macos {
     }
 
     pub fn run() -> Result<(), HostProcessError> {
-        let socket_path = arguments()?;
-        let health = HealthServer::start(socket_path)?;
+        let health = platform::HealthServer::start()?;
         let (sender, receiver) =
             mpsc::channel(crayon_app_runtime::media_host_runtime::MAX_MEDIA_HOST_PENDING_MESSAGES);
         let _reader = spawn_reader(sender)?;
@@ -343,84 +332,205 @@ mod macos {
         Ok(Some(payload))
     }
 
-    fn arguments() -> Result<PathBuf, HostProcessError> {
-        let mut arguments = std::env::args_os().skip(1);
-        if arguments.next().as_deref() != Some(std::ffi::OsStr::new("--health-socket")) {
-            return Err(HostProcessError::InvalidArguments);
+    #[cfg(target_os = "macos")]
+    mod platform {
+        use super::HostProcessError;
+        use std::fs::{self, Permissions};
+        use std::io::{Read, Write};
+        use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+        use std::os::unix::net::{UnixListener, UnixStream};
+        use std::path::{Path, PathBuf};
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+        use std::thread::{self, JoinHandle};
+        use std::time::Duration;
+
+        const HEALTH_REQUEST: &[u8; 4] = b"PING";
+        const HEALTH_REPLY: &[u8; 4] = b"PONG";
+        const HEALTH_IO_TIMEOUT: Duration = Duration::from_millis(250);
+
+        pub struct HealthServer {
+            path: PathBuf,
+            stop: Arc<AtomicBool>,
+            worker: Option<JoinHandle<()>>,
         }
-        let path = PathBuf::from(arguments.next().ok_or(HostProcessError::InvalidArguments)?);
-        if arguments.next().is_some() || !path.is_absolute() || path.exists() {
-            return Err(HostProcessError::InvalidArguments);
+
+        impl HealthServer {
+            pub fn start() -> Result<Self, HostProcessError> {
+                let path = arguments()?;
+                let listener = UnixListener::bind(&path)?;
+                fs::set_permissions(&path, Permissions::from_mode(0o600))?;
+                let stop = Arc::new(AtomicBool::new(false));
+                let worker_stop = Arc::clone(&stop);
+                let worker = thread::Builder::new()
+                    .name("media-host-health".to_owned())
+                    .spawn(move || health_loop(listener, &worker_stop));
+                let worker = match worker {
+                    Ok(worker) => worker,
+                    Err(_) => {
+                        remove_owned_socket(&path);
+                        return Err(HostProcessError::Io);
+                    }
+                };
+                Ok(Self {
+                    path,
+                    stop,
+                    worker: Some(worker),
+                })
+            }
         }
-        let parent = path.parent().ok_or(HostProcessError::InvalidArguments)?;
-        let metadata = fs::metadata(parent).map_err(|_| HostProcessError::InvalidArguments)?;
-        if !metadata.is_dir() || metadata.permissions().mode() & 0o077 != 0 {
-            return Err(HostProcessError::InvalidArguments);
+
+        impl Drop for HealthServer {
+            fn drop(&mut self) {
+                self.stop.store(true, Ordering::Release);
+                let _ = UnixStream::connect(&self.path);
+                if let Some(worker) = self.worker.take() {
+                    let _ = worker.join();
+                }
+                remove_owned_socket(&self.path);
+            }
         }
-        Ok(path)
+
+        fn arguments() -> Result<PathBuf, HostProcessError> {
+            let mut arguments = std::env::args_os().skip(1);
+            if arguments.next().as_deref() != Some(std::ffi::OsStr::new("--health-socket")) {
+                return Err(HostProcessError::InvalidArguments);
+            }
+            let path = PathBuf::from(arguments.next().ok_or(HostProcessError::InvalidArguments)?);
+            if arguments.next().is_some() || !path.is_absolute() || path.exists() {
+                return Err(HostProcessError::InvalidArguments);
+            }
+            let parent = path.parent().ok_or(HostProcessError::InvalidArguments)?;
+            let metadata = fs::metadata(parent).map_err(|_| HostProcessError::InvalidArguments)?;
+            if !metadata.is_dir() || metadata.permissions().mode() & 0o077 != 0 {
+                return Err(HostProcessError::InvalidArguments);
+            }
+            Ok(path)
+        }
+
+        fn health_loop(listener: UnixListener, stop: &AtomicBool) {
+            while !stop.load(Ordering::Acquire) {
+                let Ok((mut stream, _)) = listener.accept() else {
+                    break;
+                };
+                if stop.load(Ordering::Acquire) {
+                    break;
+                }
+                let _ = stream.set_read_timeout(Some(HEALTH_IO_TIMEOUT));
+                let _ = stream.set_write_timeout(Some(HEALTH_IO_TIMEOUT));
+                let mut request = [0; 4];
+                if stream.read_exact(&mut request).is_ok() && request == *HEALTH_REQUEST {
+                    let _ = stream.write_all(HEALTH_REPLY);
+                }
+            }
+        }
+
+        fn remove_owned_socket(path: &Path) {
+            if fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_socket()) {
+                let _ = fs::remove_file(path);
+            }
+        }
     }
 
-    struct HealthServer {
-        path: PathBuf,
-        stop: Arc<AtomicBool>,
-        worker: Option<JoinHandle<()>>,
-    }
+    #[cfg(target_os = "windows")]
+    mod platform {
+        use super::HostProcessError;
+        use crayon_platform_api::local_agent_ipc::{LocalAgentIpcEndpoint, LocalAgentIpcError};
+        use crayon_platform_windows::local_agent_ipc::{
+            WindowsAgentIpcClient, WindowsAgentIpcEndpoint,
+        };
+        use std::io::{Read, Write};
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::{mpsc, Arc};
+        use std::thread::{self, JoinHandle};
 
-    impl HealthServer {
-        fn start(path: PathBuf) -> Result<Self, HostProcessError> {
-            let listener = UnixListener::bind(&path)?;
-            fs::set_permissions(&path, Permissions::from_mode(0o600))?;
-            let stop = Arc::new(AtomicBool::new(false));
-            let worker_stop = Arc::clone(&stop);
-            let worker = thread::Builder::new()
-                .name("media-host-health".to_owned())
-                .spawn(move || health_loop(listener, &worker_stop));
-            let worker = match worker {
-                Ok(worker) => worker,
+        const HEALTH_REQUEST: &[u8; 4] = b"PING";
+        const HEALTH_REPLY: &[u8; 4] = b"PONG";
+
+        pub struct HealthServer {
+            path: Vec<u16>,
+            stop: Arc<AtomicBool>,
+            worker: Option<JoinHandle<()>>,
+        }
+
+        impl HealthServer {
+            pub fn start() -> Result<Self, HostProcessError> {
+                let purpose = arguments()?;
+                let stop = Arc::new(AtomicBool::new(false));
+                let worker_stop = Arc::clone(&stop);
+                let (ready_tx, ready_rx) = mpsc::sync_channel(1);
+                let worker = thread::Builder::new()
+                    .name("media-host-health".to_owned())
+                    .spawn(move || health_loop(purpose, worker_stop, ready_tx))
+                    .map_err(|_| HostProcessError::Io)?;
+                let path = ready_rx
+                    .recv()
+                    .map_err(|_| HostProcessError::Io)?
+                    .map_err(|_| HostProcessError::Io)?;
+                Ok(Self {
+                    path,
+                    stop,
+                    worker: Some(worker),
+                })
+            }
+        }
+
+        impl Drop for HealthServer {
+            fn drop(&mut self) {
+                self.stop.store(true, Ordering::Release);
+                let _ = WindowsAgentIpcClient::connect(&self.path);
+                if let Some(worker) = self.worker.take() {
+                    let _ = worker.join();
+                }
+            }
+        }
+
+        fn arguments() -> Result<String, HostProcessError> {
+            let mut arguments = std::env::args().skip(1);
+            if arguments.next().as_deref() != Some("--health-pipe") {
+                return Err(HostProcessError::InvalidArguments);
+            }
+            let purpose = arguments.next().ok_or(HostProcessError::InvalidArguments)?;
+            if arguments.next().is_some() || purpose.is_empty() {
+                return Err(HostProcessError::InvalidArguments);
+            }
+            Ok(purpose)
+        }
+
+        fn health_loop(
+            purpose: String,
+            stop: Arc<AtomicBool>,
+            ready: mpsc::SyncSender<Result<Vec<u16>, LocalAgentIpcError>>,
+        ) {
+            let mut endpoint = match WindowsAgentIpcEndpoint::new(&purpose) {
+                Ok(endpoint) => endpoint,
                 Err(_) => {
-                    remove_owned_socket(&path);
-                    return Err(HostProcessError::Io);
+                    let _ = ready.send(Err(LocalAgentIpcError::NotRunning));
+                    return;
                 }
             };
-            Ok(Self {
-                path,
-                stop,
-                worker: Some(worker),
-            })
-        }
-    }
-
-    impl Drop for HealthServer {
-        fn drop(&mut self) {
-            self.stop.store(true, Ordering::Release);
-            let _ = UnixStream::connect(&self.path);
-            if let Some(worker) = self.worker.take() {
-                let _ = worker.join();
+            if let Err(error) = endpoint.start() {
+                let _ = ready.send(Err(error));
+                return;
             }
-            remove_owned_socket(&self.path);
-        }
-    }
-
-    fn health_loop(listener: UnixListener, stop: &AtomicBool) {
-        while !stop.load(Ordering::Acquire) {
-            let Ok((mut stream, _)) = listener.accept() else {
-                break;
-            };
-            if stop.load(Ordering::Acquire) {
-                break;
+            let path = endpoint.pipe_path_for_connect();
+            if ready.send(Ok(path)).is_err() {
+                let _ = endpoint.stop();
+                return;
             }
-            let _ = stream.set_read_timeout(Some(HEALTH_IO_TIMEOUT));
-            let _ = stream.set_write_timeout(Some(HEALTH_IO_TIMEOUT));
-            let mut request = [0; 4];
-            if stream.read_exact(&mut request).is_ok() && request == *HEALTH_REQUEST {
-                let _ = stream.write_all(HEALTH_REPLY);
+            while !stop.load(Ordering::Acquire) {
+                let Ok(mut client) = endpoint.accept_verified_client() else {
+                    break;
+                };
+                if stop.load(Ordering::Acquire) {
+                    break;
+                }
+                let mut request = [0; 4];
+                if client.read_exact(&mut request).is_ok() && request == *HEALTH_REQUEST {
+                    let _ = client.write_all(HEALTH_REPLY);
+                }
             }
-        }
-    }
-
-    fn remove_owned_socket(path: &Path) {
-        if fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_socket()) {
-            let _ = fs::remove_file(path);
+            let _ = endpoint.stop();
         }
     }
 
@@ -462,16 +572,16 @@ mod macos {
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn main() {
-    if let Err(error) = macos::run() {
+    if let Err(error) = desktop::run() {
         eprintln!("{error}");
         std::process::exit(1);
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn main() {
-    eprintln!("crayon-media-host is supported on macOS in PLT-M05b2b1");
+    eprintln!("crayon-media-host is supported on Windows and macOS");
     std::process::exit(78);
 }

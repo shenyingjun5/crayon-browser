@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "browser/window/tab_controller.h"
+#include "browser/media_host/media_host_adapter.h"
 #include "include/base/cef_callback.h"
 #include "include/cef_app.h"
 #include "include/cef_application_mac.h"
@@ -26,7 +27,6 @@
 #include "macos/cast_chrome_mac.h"
 #include "macos/cast_shell_controller.h"
 #include "macos/content_host_adapter_mac.h"
-#include "macos/media_host_adapter_mac.h"
 #include "macos/trusted_input_monitor_mac.h"
 
 #ifndef CRAYON_SNAPSHOT_TEST_HELPER_PATH
@@ -44,7 +44,7 @@
 namespace {
 
 namespace host = crayon::browser::cef_shell::macos::content_host_ipc;
-using crayon::browser::cef_shell::macos::BrowserMediaFact;
+using crayon::browser::cef_shell::media_host::BrowserMediaFact;
 using crayon::browser::cef_shell::macos::CastChromeCallbacks;
 using crayon::browser::cef_shell::macos::CastChromeMac;
 using crayon::browser::cef_shell::macos::CastChromeStrings;
@@ -53,9 +53,9 @@ using crayon::browser::cef_shell::macos::CastShellController;
 using crayon::browser::cef_shell::macos::ContentHostAdapter;
 using crayon::browser::cef_shell::macos::ContentHostProcess;
 using crayon::browser::cef_shell::macos::ContentHostTransport;
-using crayon::browser::cef_shell::macos::MediaHostAdapter;
+using crayon::browser::cef_shell::media_host::MediaHostAdapter;
 using crayon::browser::cef_shell::macos::MediaHostProcess;
-using crayon::browser::cef_shell::macos::MediaPlanningEventKind;
+using crayon::browser::cef_shell::media_host::MediaPlanningEventKind;
 using crayon::browser::cef_shell::macos::TrustedInputMonitor;
 using crayon::browser::cef_shell::window::TabController;
 using crayon::browser_engine::EngineErrorCode;

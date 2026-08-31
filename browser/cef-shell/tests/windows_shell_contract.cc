@@ -9,7 +9,7 @@
 
 namespace {
 
-constexpr int kExpectedArgumentCount = 5;
+constexpr int kExpectedArgumentCount = 6;
 constexpr int kMainIconSize = 32;
 constexpr int kSmallIconSize = 16;
 constexpr std::size_t kProductNameCapacity = 128;
@@ -58,7 +58,7 @@ bool HasIcon(HMODULE module, int resource_id, int size) {
 int wmain(int argument_count, wchar_t *arguments[]) {
   if (argument_count != kExpectedArgumentCount) {
     std::cerr << "Expected executable, resource module and runtime manifest "
-                 "and content-host arguments\n";
+                 "and content/media-host arguments\n";
     return 1;
   }
 
@@ -66,6 +66,7 @@ int wmain(int argument_count, wchar_t *arguments[]) {
   const std::filesystem::path resource_module(arguments[2]);
   const std::filesystem::path manifest(arguments[3]);
   const std::filesystem::path content_host(arguments[4]);
+  const std::filesystem::path media_host(arguments[5]);
   DWORD binary_type = 0;
   if (!std::filesystem::is_regular_file(executable) ||
       !GetBinaryTypeW(executable.c_str(), &binary_type) ||
@@ -81,6 +82,12 @@ int wmain(int argument_count, wchar_t *arguments[]) {
       binary_type != SCS_64BIT_BINARY) {
     std::cerr << "Bundled content host is missing or is not Windows x64\n";
     return 7;
+  }
+  if (!std::filesystem::is_regular_file(media_host) ||
+      !GetBinaryTypeW(media_host.c_str(), &binary_type) ||
+      binary_type != SCS_64BIT_BINARY) {
+    std::cerr << "Bundled media host is missing or is not Windows x64\n";
+    return 8;
   }
 
   HMODULE module =

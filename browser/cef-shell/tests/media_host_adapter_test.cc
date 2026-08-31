@@ -1,4 +1,4 @@
-#include "macos/media_host_adapter_mac.h"
+#include "browser/media_host/media_host_adapter.h"
 
 #include <algorithm>
 #include <memory>
@@ -9,11 +9,11 @@
 
 namespace {
 
-using crayon::browser::cef_shell::macos::BrowserMediaFact;
-using crayon::browser::cef_shell::macos::MediaHostAdapter;
-using crayon::browser::cef_shell::macos::MediaHostTransport;
-using crayon::browser::cef_shell::macos::MediaPlanningEventKind;
-namespace mh = crayon::browser::cef_shell::macos::media_host_ipc;
+using crayon::browser::cef_shell::media_host::BrowserMediaFact;
+using crayon::browser::cef_shell::media_host::MediaHostAdapter;
+using crayon::browser::cef_shell::media_host::MediaHostTransport;
+using crayon::browser::cef_shell::media_host::MediaPlanningEventKind;
+namespace mh = crayon::browser::cef_shell::media_host::media_host_ipc;
 
 class FakeTransport final : public MediaHostTransport {
 public:

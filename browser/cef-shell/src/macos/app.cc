@@ -183,7 +183,8 @@ BrowserApp::BrowserApp(std::string product_name)
           std::make_shared<mdv::MdvEditController>(mdv_runtime_, mdv_strings_)),
       permission_store_(std::make_unique<permission::PermissionStore>()),
       content_host_(std::make_unique<macos::ContentHostAdapter>()),
-      media_host_(std::make_unique<macos::MediaHostAdapter>()),
+      media_host_(std::make_unique<media_host::MediaHostAdapter>(
+          std::make_unique<macos::MediaHostProcess>())),
       cast_shell_(std::make_unique<
                   macos::CastShellController>(macos::CastCommandPort{
           [this](macos::media_host_ipc::DiscoveryAction action) {
@@ -451,7 +452,7 @@ void BrowserApp::ContentHostTick() {
 
 void BrowserApp::ConsumeMediaObservations() {
   CEF_REQUIRE_UI_THREAD();
-  std::vector<macos::BrowserMediaFact> facts;
+  std::vector<media_host::BrowserMediaFact> facts;
   for (auto& event : tab_controller_->DrainMediaObservations(16)) {
     auto page_url =
         tab_controller_->TrustedPageUrl(event.tab_id, event.navigation_id);
@@ -461,7 +462,7 @@ void BrowserApp::ConsumeMediaObservations() {
         tab_controller_->model().active_tab() == event.tab_id) {
       cast_shell_->OnBrowserVerifiedMedia();
     }
-    facts.push_back(macos::BrowserMediaFact{
+    facts.push_back(media_host::BrowserMediaFact{
         std::move(event), std::move(*page_url), MonotonicMilliseconds()});
   }
   media_host_->Consume(std::move(facts));

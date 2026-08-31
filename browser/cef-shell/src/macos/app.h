@@ -7,6 +7,7 @@
 
 #include "browser/mdv/cef_mdv_editing.h"
 #include "browser/mdv/cef_mdv_entries.h"
+#include "browser/media_host/media_host_adapter.h"
 #include "browser/page_markdown/cef_page_markdown_preview.h"
 #include "browser/permission/permission_store.h"
 #include "browser/window/tab_controller.h"
@@ -15,7 +16,6 @@
 #include "macos/cast_chrome_mac.h"
 #include "macos/cast_shell_controller.h"
 #include "macos/content_host_adapter_mac.h"
-#include "macos/media_host_adapter_mac.h"
 
 namespace crayon::browser::cef_shell {
 
@@ -64,7 +64,7 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   const std::shared_ptr<mdv::MdvEditController> mdv_editing_;
   std::unique_ptr<permission::PermissionStore> permission_store_;
   std::unique_ptr<macos::ContentHostAdapter> content_host_;
-  std::unique_ptr<macos::MediaHostAdapter> media_host_;
+  std::unique_ptr<media_host::MediaHostAdapter> media_host_;
   std::unique_ptr<macos::CastShellController> cast_shell_;
   std::unique_ptr<macos::CastChromeMac> cast_chrome_;
   std::unique_ptr<macos::TrustedInputMonitor> trusted_input_monitor_;

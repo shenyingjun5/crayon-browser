@@ -29,7 +29,7 @@
 | MDV | [markdown-viewer-roadmap.md](markdown-viewer-roadmap.md) | 本地 Markdown Runtime：查看/编辑/保存、图标工具栏、图片与 Mermaid Full 离线扩展 | 基线、工具栏与 Mermaid 已生产可达；`MDV-20/24/25 VERIFIED`，生产 fixture 已清除，待 Windows x64 总回归 |
 | MRT | [markdown-runtime-roadmap.md](markdown-runtime-roadmap.md) | Markdown Runtime Extension Framework：闭合扩展 API、Highlight/KaTeX 与后续图表/演示门禁 | `MRT-01..08 DONE`（MRT-06 Windows blocker 修复与真机复验已收口，2026-08-29 合并）；`MRT-09..19` 分波次推进或仅做 gap analysis |
 | SDK | [cast-sdk-integration-roadmap.md](cast-sdk-integration-roadmap.md) | 固定源码 Cast-SDK facade、发现、连接和控制；后续 Partner Cast facade | `SDK-01..14 DONE`；`SDK-15/16` 等 HUB/外部已批准 API |
-| PLT | [desktop-platform-adapters-roadmap.md](desktop-platform-adapters-roadmap.md) | Windows/macOS 存储、网络、生命周期、更新和客户端交接 | `PLT-01/02/W04/M04 DONE`；`PLT-M05 IN_PROGRESS`（macOS 后续切片暂缓），`PLT-W05 READY` |
+| PLT | [desktop-platform-adapters-roadmap.md](desktop-platform-adapters-roadmap.md) | Windows/macOS 存储、网络、生命周期、更新和客户端交接 | `PLT-01/02/W04/M04 DONE`；`PLT-M05 IN_PROGRESS`（macOS 后续切片暂缓），`PLT-W05a DONE/W05b READY` |
 | PRV | [privacy-security-roadmap.md](privacy-security-roadmap.md) | Profile、隐私、安全、日志和删除语义 | `PRV-01..12` 已完成或 VERIFIED；一期核心 `PRV-13A`、第二期扩展 `PRV-13B` |
 | CNT | [content-intelligence-roadmap.md](content-intelligence-roadmap.md) | 页面数据/Markdown 与第二阶段模型总结 | C1 数据面 `CNT-01..10 DONE/VERIFIED`；一期产品装配 `CNT-17..20 DONE`，`CNT-21W` 等 `PRV-13AW` 后总 Review；`CNT-11..16` 第二期 |
 | AGT | [agent-access-roadmap.md](agent-access-roadmap.md) | CAAP、tool registry、CLI/MCP、高性能读页和授权操作 | A0 完成；`AGT-07/15 VERIFIED`，`AGT-12C/13/14` 按装配依赖后续推进 |
@@ -48,7 +48,7 @@
 
 | 顺序 | 任务 | 状态 | 说明 |
 |---:|---|---|---|
-| 1 | `PLT-W05a` | READY | Windows bundled media-host named-pipe/Job/process owner 产品装配；不接 UI/SDK 真机 |
+| 1 | `PLT-W05b` | READY | Windows 共享 Cast UI、chrome 按钮/receiver picker、command/event worker 与生命周期装配；不做 ADB Direct/Relay 结论 |
 
 ### 平台收口与待拆装配
 
@@ -57,7 +57,7 @@
 | `MDV-20` | VERIFIED | 仅缺 Windows x64 Mermaid Full 发布回归；不得改写 macOS 已有证据 |
 | `MDV-24` | VERIFIED | 主矩阵已闭合；Narrator、中文 IME、原生 200% DPI、原生 macOS x64 仍待补 |
 | `MRT-09` | TODO | 等 `MDV-25` 清除生产 fixture 后执行 P0 Runtime 总 Review |
-| `PLT-W05a..f` | READY/TODO | Windows media-host/Cast UI→ADB Direct→Relay→拒绝/交接→100 次稳定性，严格串行 |
+| `PLT-W05a..f` | DONE/READY/TODO | W05a media-host 已装配；W05b Cast UI READY，随后 ADB Direct→Relay→拒绝/交接→100 次稳定性，严格串行 |
 | `PLT-M05b4..b6/M05c` | TODO | macOS 特有真机与生命周期验证后置；不阻塞 Windows 候选，不改写已有 macOS 证据 |
 
 ### 第二期与依赖阻塞

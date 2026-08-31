@@ -35,6 +35,9 @@ if(OS_WINDOWS)
       src/browser/mdv/cef_mdv_entries.h
       src/browser/mdv/cef_mdv_handler.cc
       src/browser/mdv/cef_mdv_handler.h
+      src/browser/media_host/media_host_adapter.cc
+      src/browser/media_host/media_host_adapter.h
+      src/browser/media_host/media_host_transport.h
       src/browser/page_markdown/cef_page_markdown_preview.cc
       src/browser/page_markdown/cef_page_markdown_preview.h
       src/browser/page_markdown/page_markdown_preview.cc
@@ -76,6 +79,8 @@ if(OS_WINDOWS)
       src/windows/main_win.cc
       src/windows/markdown_file_dialog_win.cc
       src/windows/markdown_file_dialog_win.h
+      src/windows/media_host_process_win.cc
+      src/windows/media_host_process_win.h
       src/windows/page_markdown_platform_win.cc
       src/windows/page_markdown_platform_win.h
       src/windows/shell_command_adapter.cc
@@ -99,6 +104,8 @@ if(OS_WINDOWS)
       "${CMAKE_CURRENT_BINARY_DIR}/content-host-target")
   set(crayon_windows_content_host_binary
       "${crayon_windows_content_host_target_dir}/$<IF:$<CONFIG:Release>,release,debug>/crayon-content-host.exe")
+  set(crayon_windows_media_host_binary
+      "${crayon_windows_content_host_target_dir}/$<IF:$<CONFIG:Release>,release,debug>/crayon-media-host.exe")
   file(
     GLOB_RECURSE crayon_windows_content_host_rust_sources CONFIGURE_DEPENDS
     "${PROJECT_SOURCE_DIR}/crates/*.rs"
@@ -109,7 +116,7 @@ if(OS_WINDOWS)
       "${CMAKE_COMMAND}" -E env
       "CARGO_TARGET_DIR=${crayon_windows_content_host_target_dir}"
       "${CRAYON_CARGO_EXECUTABLE}" build -p crayon-content-host --bin
-      crayon-content-host --profile
+      crayon-content-host -p crayon-media-host --bin crayon-media-host --profile
       "$<IF:$<CONFIG:Release>,release,dev>"
     WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
     SOURCES ${crayon_windows_content_host_rust_sources}
@@ -151,6 +158,9 @@ if(OS_WINDOWS)
     COMMAND "${CMAKE_COMMAND}" -E copy_if_different
             "${crayon_windows_content_host_binary}"
             "$<TARGET_FILE_DIR:${CRAYON_BROWSER_TARGET}>/crayon-content-host.exe"
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "${crayon_windows_media_host_binary}"
+            "$<TARGET_FILE_DIR:${CRAYON_BROWSER_TARGET}>/crayon-media-host.exe"
     VERBATIM)
   SET_LPAC_ACLS("${CRAYON_BROWSER_TARGET}")
 
@@ -177,7 +187,8 @@ if(OS_WINDOWS)
               "$<TARGET_FILE_DIR:${CRAYON_BROWSER_TARGET}>/CrayonBrowser.exe"
               "$<TARGET_FILE:${CRAYON_BROWSER_TARGET}>"
               "$<TARGET_FILE_DIR:${CRAYON_BROWSER_TARGET}>/cef-runtime-files.txt"
-              "$<TARGET_FILE_DIR:${CRAYON_BROWSER_TARGET}>/crayon-content-host.exe")
+              "$<TARGET_FILE_DIR:${CRAYON_BROWSER_TARGET}>/crayon-content-host.exe"
+              "$<TARGET_FILE_DIR:${CRAYON_BROWSER_TARGET}>/crayon-media-host.exe")
     add_executable(
       crayon_content_host_process_win_test
       tests/content_host_process_win_test.cc
@@ -210,6 +221,38 @@ if(OS_WINDOWS)
                                   crayon::cef-shell-ipc)
     add_test(NAME content_host_adapter_win
              COMMAND crayon_content_host_adapter_win_test)
+
+    add_executable(
+      crayon_media_host_process_win_test
+      tests/media_host_process_win_test.cc
+      src/windows/media_host_process_win.cc)
+    target_compile_features(crayon_media_host_process_win_test PRIVATE cxx_std_17)
+    target_include_directories(crayon_media_host_process_win_test
+                               PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_definitions(
+      crayon_media_host_process_win_test
+      PRIVATE CRAYON_MEDIA_HOST_TEST_PATH="$<TARGET_FILE_DIR:${CRAYON_BROWSER_TARGET}>/crayon-media-host.exe")
+    target_link_libraries(crayon_media_host_process_win_test
+                          PRIVATE crayon::cef-shell-core-client
+                                  crayon::cef-shell-ipc)
+    add_dependencies(crayon_media_host_process_win_test
+                     ${CRAYON_BROWSER_TARGET})
+    add_test(NAME media_host_process_win COMMAND crayon_media_host_process_win_test)
+
+    add_executable(
+      crayon_media_host_adapter_win_test
+      tests/media_host_adapter_test.cc
+      src/browser/media_host/media_host_adapter.cc
+      src/windows/media_host_process_win.cc)
+    target_compile_features(crayon_media_host_adapter_win_test PRIVATE cxx_std_17)
+    target_include_directories(crayon_media_host_adapter_win_test
+                               PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(crayon_media_host_adapter_win_test
+                          PRIVATE crayon::cef-shell-core-client
+                                  crayon::cef-shell-ipc)
+    add_test(NAME media_host_adapter_win COMMAND crayon_media_host_adapter_win_test)
+    set_tests_properties(media_host_process_win media_host_adapter_win
+                         PROPERTIES LABELS "cef;shell;windows;cast")
 
     find_program(CRAYON_PYTHON3_EXECUTABLE NAMES python python3 REQUIRED)
     add_library(
@@ -394,8 +437,9 @@ if(OS_MAC)
       src/macos/content_host_adapter_mac.h
       src/macos/content_host_process_mac.cc
       src/macos/content_host_process_mac.h
-      src/macos/media_host_adapter_mac.cc
-      src/macos/media_host_adapter_mac.h
+      src/browser/media_host/media_host_adapter.cc
+      src/browser/media_host/media_host_adapter.h
+      src/browser/media_host/media_host_transport.h
       src/macos/media_host_process_mac.cc
       src/macos/media_host_process_mac.h
       src/macos/main_mac.mm)
@@ -459,7 +503,7 @@ if(OS_MAC)
       "${CMAKE_COMMAND}" -E env
       "CARGO_TARGET_DIR=${crayon_content_host_target_dir}"
       "${CRAYON_CARGO_EXECUTABLE}" build -p crayon-content-host -p
-      crayon-app-runtime --bins --target
+      crayon-media-host --bins --target
       "${crayon_content_host_triple}"
       ${crayon_content_host_profile_argument}
     COMMAND "${CMAKE_COMMAND}" -E make_directory
@@ -665,8 +709,8 @@ if(OS_MAC)
 
     add_executable(
       crayon_media_host_adapter_mac_test
-      tests/media_host_adapter_mac_test.cc
-      src/macos/media_host_adapter_mac.cc
+      tests/media_host_adapter_test.cc
+      src/browser/media_host/media_host_adapter.cc
       src/macos/media_host_process_mac.cc)
     target_compile_features(crayon_media_host_adapter_mac_test PRIVATE cxx_std_17)
     target_include_directories(crayon_media_host_adapter_mac_test
@@ -766,7 +810,7 @@ if(CRAYON_BUILD_TESTS)
       src/macos/cast_shell_controller.h
       src/macos/content_host_adapter_mac.cc
       src/macos/content_host_process_mac.cc
-      src/macos/media_host_adapter_mac.cc
+      src/browser/media_host/media_host_adapter.cc
       src/macos/media_host_process_mac.cc
       src/macos/trusted_input_monitor_mac.h
       src/macos/trusted_input_monitor_mac.mm)

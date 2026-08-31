@@ -6,10 +6,6 @@ rust-version.workspace = true
 description = "Platform-neutral Crayon product runtime composition"
 publish = false
 
-[[bin]]
-name = "crayon-media-host"
-path = "src/bin/crayon-media-host.rs"
-
 [lints]
 workspace = true
 

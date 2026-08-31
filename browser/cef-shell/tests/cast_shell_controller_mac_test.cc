@@ -11,6 +11,7 @@ namespace {
 namespace cast = crayon::browser_cast_view;
 namespace macos = crayon::browser::cef_shell::macos;
 namespace mh = crayon::browser::cef_shell::macos::media_host_ipc;
+namespace media_host = crayon::browser::cef_shell::media_host;
 
 #define CHECK_CAST(condition)                                                  \
   do {                                                                         \
@@ -51,13 +52,10 @@ struct CommandLog final {
   }
 };
 
-macos::MediaPlanningEvent Candidate(std::optional<std::uint64_t> id) {
-  return macos::MediaPlanningEvent{macos::MediaPlanningEventKind::kCandidate,
-                                   id,
-                                   "fixture.invalid",
-                                   std::nullopt,
-                                   std::nullopt,
-                                   std::nullopt};
+media_host::MediaPlanningEvent Candidate(std::optional<std::uint64_t> id) {
+  return media_host::MediaPlanningEvent{
+      media_host::MediaPlanningEventKind::kCandidate, id, "fixture.invalid",
+      std::nullopt, std::nullopt, std::nullopt};
 }
 
 mh::Device Device(std::string id, std::string name,

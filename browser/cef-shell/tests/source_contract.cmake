@@ -56,6 +56,9 @@ file(READ
      "${CRAYON_CEF_SHELL_SOURCE}/src/windows/content_host_process_win.cc"
      windows_content_host)
 file(READ
+     "${CRAYON_CEF_SHELL_SOURCE}/src/windows/media_host_process_win.cc"
+     windows_media_host)
+file(READ
      "${CRAYON_CEF_SHELL_SOURCE}/src/windows/page_markdown_platform_win.cc"
      windows_page_markdown)
 set(windows_markdown_dialog_path
@@ -108,6 +111,9 @@ foreach(required_cmake_token
         "bootstrap.exe"
         "crayon_content_host_windows"
         "crayon-content-host.exe"
+        "crayon-media-host.exe"
+        "src/browser/media_host/media_host_adapter.cc"
+        "src/windows/media_host_process_win.cc"
         "src/windows/content_host_adapter_win.cc"
         "src/browser/page_markdown/cef_page_markdown_preview.cc"
         "src/windows/markdown_file_dialog_win.cc"
@@ -118,7 +124,7 @@ foreach(required_cmake_token
   endif()
 endforeach()
 foreach(required_app_token
-        "ContentHostExecutablePath"
+        "HelperExecutablePath"
         "SetPageSnapshotObserver"
         "SetPageSnapshotAdmission"
         "SetFileDialogHandler"
@@ -128,6 +134,18 @@ foreach(required_app_token
   if(token_index EQUAL -1)
     message(FATAL_ERROR
             "Windows BrowserApp is missing CNT-20W1 token ${required_app_token}")
+  endif()
+endforeach()
+foreach(required_media_app_token
+        "SetMediaObservationLifecycleCallback"
+        "SetMediaObservationEventsReadyCallback"
+        "DrainMediaObservations"
+        "TrustedPageUrl"
+        "media_host_->Consume")
+  string(FIND "${windows_app}" "${required_media_app_token}" token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Windows BrowserApp is missing PLT-W05a token ${required_media_app_token}")
   endif()
 endforeach()
 foreach(required_host_token
@@ -143,6 +161,21 @@ foreach(required_host_token
   if(token_index EQUAL -1)
     message(FATAL_ERROR
             "Windows content host is missing lifecycle token ${required_host_token}")
+  endif()
+endforeach()
+foreach(required_host_token
+        "CoreClientSupervisor"
+        "JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE"
+        "CREATE_NO_WINDOW"
+        "PROC_THREAD_ATTRIBUTE_HANDLE_LIST"
+        "EXTENDED_STARTUPINFO_PRESENT"
+        "CancelSynchronousIo"
+        "media-health-"
+        "kMaxFrames")
+  string(FIND "${windows_media_host}" "${required_host_token}" token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Windows media host is missing lifecycle token ${required_host_token}")
   endif()
 endforeach()
 string(FIND "${windows_page_markdown}" "CF_UNICODETEXT" unicode_clipboard)

@@ -9,6 +9,7 @@
 
 #include "browser/mdv/cef_mdv_editing.h"
 #include "browser/mdv/cef_mdv_entries.h"
+#include "browser/media_host/media_host_adapter.h"
 #include "browser/page_markdown/cef_page_markdown_preview.h"
 #include "browser/permission/permission_store.h"
 #include "browser/window/tab_controller.h"
@@ -16,6 +17,7 @@
 #include "crayon/browser_new_tab/new_tab_page.h"
 #include "include/cef_app.h"
 #include "windows/content_host_adapter_win.h"
+#include "windows/media_host_process_win.h"
 #include "windows/shell_command_adapter.h"
 
 namespace crayon::browser::cef_shell {
@@ -57,6 +59,7 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   void ContinueContentHostStartup();
   void ScheduleContentHostTick();
   void ContentHostTick();
+  void ConsumeMediaObservations();
 
   const std::wstring product_name_;
   const std::shared_ptr<WindowsWindowIcons> window_icons_;
@@ -68,6 +71,7 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   const std::shared_ptr<mdv::MdvEditController> mdv_editing_;
   std::unique_ptr<permission::PermissionStore> permission_store_;
   std::unique_ptr<windows::ContentHostAdapter> content_host_;
+  std::unique_ptr<media_host::MediaHostAdapter> media_host_;
   CefRefPtr<window::TabController> tab_controller_;
   const std::shared_ptr<WindowsShellRuntime> shell_runtime_;
   std::unique_ptr<page_markdown::CefPageMarkdownPreviewController>
