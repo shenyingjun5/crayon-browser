@@ -48,7 +48,7 @@
 
 | 顺序 | 任务 | 状态 | 说明 |
 |---:|---|---|---|
-| 1 | `PLT-M05b3c` | READY | M05b3b DONE；下一步在 Rust media-host 装配唯一 CastUsecase/SenderCastFacade runtime 与有界 session drain，仍不接 CEF UI |
+| 1 | `PLT-M05b3d` | READY | M05b3c DONE；下一步在 macOS C++ media-host adapter 增加有界 command worker/session event pump，CEF UI 线程只 enqueue/drain |
 
 ### 平台收口与待拆装配
 

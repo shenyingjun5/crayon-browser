@@ -2,8 +2,8 @@
 
 use crayon_ipc_schema::{
     decode_media_host_message, encode_media_host_message, AdContinuity, CastPolicyDecision,
-    ExternalClientHandoff, HandoffReason, MediaHostErrorCode, MediaHostMessage, MediaHostPlayback,
-    MAX_MEDIA_HOST_FRAME_BYTES,
+    ExternalClientHandoff, HandoffReason, MediaHostDiscoveryAction, MediaHostErrorCode,
+    MediaHostMessage, MediaHostPlayback, MAX_MEDIA_HOST_FRAME_BYTES,
 };
 use std::fs::{self, Permissions};
 use std::io::{Read, Write};
@@ -178,6 +178,69 @@ fn real_process_health_url_less_cancel_and_shutdown() {
             if request_id == "unknown-request"
     ));
     harness.wait_healthy();
+    harness.send(&MediaHostMessage::Shutdown);
+    assert!(harness.wait().success());
+}
+
+#[test]
+fn real_process_cast_control_plane_roundtrip() {
+    let mut harness = Harness::start();
+    harness.send(&MediaHostMessage::Discovery {
+        request_id: "discovery-start".to_owned(),
+        action: MediaHostDiscoveryAction::Start,
+    });
+    assert!(matches!(
+        harness.receive(),
+        MediaHostMessage::Ack { request_id } if request_id == "discovery-start"
+    ));
+
+    harness.send(&MediaHostMessage::ListDevices {
+        request_id: "devices".to_owned(),
+        snapshot_revision: None,
+        offset: 0,
+    });
+    assert!(matches!(
+        harness.receive(),
+        MediaHostMessage::DevicePageReply {
+            request_id,
+            snapshot_revision,
+            offset: 0,
+            devices,
+            ..
+        } if request_id == "devices"
+            && snapshot_revision != 0
+            && devices.len() <= 16
+    ));
+
+    harness.send(&MediaHostMessage::PollSessionEvents {
+        request_id: "events".to_owned(),
+    });
+    assert!(matches!(
+        harness.receive(),
+        MediaHostMessage::SessionEventsReply {
+            request_id,
+            dropped_events: 0,
+            events,
+        } if request_id == "events" && events.is_empty()
+    ));
+
+    harness.send(&MediaHostMessage::StopCast {
+        request_id: "stop-idle".to_owned(),
+        session_generation: 1,
+    });
+    assert!(matches!(
+        harness.receive(),
+        MediaHostMessage::Ack { request_id } if request_id == "stop-idle"
+    ));
+
+    harness.send(&MediaHostMessage::Discovery {
+        request_id: "discovery-stop".to_owned(),
+        action: MediaHostDiscoveryAction::Stop,
+    });
+    assert!(matches!(
+        harness.receive(),
+        MediaHostMessage::Ack { request_id } if request_id == "discovery-stop"
+    ));
     harness.send(&MediaHostMessage::Shutdown);
     assert!(harness.wait().success());
 }

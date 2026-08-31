@@ -135,6 +135,17 @@ pub struct DrainStats {
     pub terminal_converged: usize,
 }
 
+/// One bounded event-drain result for the media-host protocol adapter.
+/// Snapshots are already generation/revision fenced and contain no media URL.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct DrainedSessionEvents {
+    pub stats: DrainStats,
+    pub snapshots: Vec<CastSessionSnapshot>,
+    /// Cumulative queue loss since this usecase was created. Consumers keep
+    /// their own last-seen value to derive a per-drain delta.
+    pub cumulative_queue_dropped: u64,
+}
+
 /// The session this usecase currently owns, plus the last applied snapshot.
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct ActiveCast {
@@ -208,7 +219,9 @@ pub struct CastUsecase {
     /// callers of those.
     attempt_lock: Mutex<()>,
     /// Keeps the supervision subscription alive; dropped with the usecase.
-    _subscription: Box<dyn CastSessionSubscription>,
+    // The handle itself is only `Send`; wrapping it makes the usecase `Sync`
+    // without ever calling through the handle (it is held purely for Drop).
+    _subscription: Mutex<Box<dyn CastSessionSubscription>>,
 }
 
 impl CastUsecase {
@@ -248,7 +261,7 @@ impl CastUsecase {
                 active: None,
                 last_applied: None,
             }),
-            _subscription: subscription,
+            _subscription: Mutex::new(subscription),
             attempt_lock: Mutex::new(()),
         }
     }
@@ -267,6 +280,12 @@ impl CastUsecase {
             .active
             .as_ref()
             .map(|active| active.session.clone())
+    }
+
+    /// Delivery route of the active session. Carries no URL or relay token.
+    #[must_use]
+    pub fn active_route(&self) -> Option<DeliveryRoute> {
+        lock(&self.state).active.as_ref().map(|active| active.route)
     }
 
     /// Last applied supervision snapshot of the active session, if any.
@@ -625,11 +644,25 @@ impl CastUsecase {
     /// retirement). Callable from any thread; never invoked by the listener
     /// itself.
     pub fn drain_session_events(&self) -> DrainStats {
-        let pending: Vec<CastSessionSnapshot> = {
+        self.drain_session_event_batch(MAX_PENDING_SESSION_EVENTS)
+            .stats
+    }
+
+    /// Drains at most `limit` already-recorded snapshots. The listener stays
+    /// record-only; cleanup and fencing happen here, off the SDK callback.
+    /// A zero limit is an explicit no-op.
+    pub fn drain_session_event_batch(&self, limit: usize) -> DrainedSessionEvents {
+        let (pending, cumulative_queue_dropped): (Vec<CastSessionSnapshot>, u64) = {
             let mut queue = lock(&self.events);
-            queue.events.drain(..).collect()
+            let count = limit.min(queue.events.len());
+            let pending = queue.events.drain(..count).collect();
+            let dropped = queue
+                .coalesced_non_terminal
+                .saturating_add(queue.dropped_terminal);
+            (pending, dropped)
         };
         let mut stats = DrainStats::default();
+        let mut snapshots = Vec::with_capacity(pending.len());
         let mut cleanups: Vec<(DeviceId, RevokeReason)> = Vec::new();
         {
             let mut state = lock(&self.state);
@@ -643,6 +676,7 @@ impl CastUsecase {
                     continue;
                 }
                 stats.applied += 1;
+                snapshots.push(snapshot.clone());
                 let is_terminal = snapshot.is_terminal();
                 let terminal_reason = snapshot.terminal_reason();
                 state.last_applied = Some(snapshot.clone());
@@ -672,7 +706,11 @@ impl CastUsecase {
             self.revocation.revoke(reason, Some(&device));
             self.capabilities.invalidate(&device);
         }
-        stats
+        DrainedSessionEvents {
+            stats,
+            snapshots,
+            cumulative_queue_dropped,
+        }
     }
 
     // -- Lifecycle triggers (RL-005) ----------------------------------------------

@@ -1,8 +1,15 @@
 #[cfg(target_os = "macos")]
 mod macos {
+    use crayon_app_runtime::cast_usecase::RelayRevocation;
+    use crayon_app_runtime::delivery::CoreSessionBackend;
+    use crayon_app_runtime::media_host_cast_runtime::MediaHostCastRuntime;
     use crayon_app_runtime::media_host_runtime::{
         error_reply, message_request_id, MediaHostInterruptAction, MediaHostPendingQueue,
         MediaHostRuntime, MediaHostRuntimeError, PreparedMediaHostDecision,
+    };
+    use crayon_cast_adapter::{
+        CapabilityCacheConfig, CastFacade, ReceiverCapabilityCache, SenderCastFacade,
+        SenderCastFacadeConfig,
     };
     use crayon_ipc_schema::{
         decode_media_host_message, encode_media_host_message, MediaHostMessage,
@@ -10,6 +17,7 @@ mod macos {
     };
     use crayon_media_probe::http::{ProbeHttpClient, ProbeHttpConfig};
     use crayon_media_probe::MediaInspector;
+    use crayon_relay::runtime::{RelayRuntime, RelayRuntimeConfig};
     use std::fs::{self, Permissions};
     use std::io::{self, Read, Write};
     use std::os::unix::fs::{FileTypeExt, PermissionsExt};
@@ -54,11 +62,22 @@ mod macos {
     }
 
     async fn run_loop(mut receiver: mpsc::Receiver<ReaderEvent>) -> Result<(), HostProcessError> {
+        let services = CastServices::start().await?;
+        let result = run_loop_with_services(&mut receiver, &services).await;
+        services.stop().await;
+        result
+    }
+
+    async fn run_loop_with_services(
+        receiver: &mut mpsc::Receiver<ReaderEvent>,
+        services: &CastServices,
+    ) -> Result<(), HostProcessError> {
         let stdout = io::stdout();
         let mut output = stdout.lock();
-        let mut host = MediaHostRuntime::new(MediaInspector::new(ProbeHttpClient::new(
-            ProbeHttpConfig::default(),
-        )));
+        let mut host = MediaHostRuntime::with_cast(
+            MediaInspector::new(ProbeHttpClient::new(ProbeHttpConfig::default())),
+            Arc::clone(&services.runtime),
+        );
         let mut pending = MediaHostPendingQueue::default();
         loop {
             let event = match pending.pop_front() {
@@ -71,6 +90,9 @@ mod macos {
                 ReaderEvent::Failed => return Err(HostProcessError::InvalidFrame),
             };
             if matches!(message, MediaHostMessage::Shutdown) {
+                host.shutdown_cast()
+                    .await
+                    .map_err(|_| HostProcessError::InvalidState)?;
                 host.handle_immediate(message)
                     .map_err(|_| HostProcessError::InvalidState)?;
                 return Ok(());
@@ -89,9 +111,7 @@ mod macos {
                         continue;
                     }
                 };
-                match drive_decision(&host, prepared, &mut receiver, &mut pending, &mut output)
-                    .await?
-                {
+                match drive_decision(&host, prepared, receiver, &mut pending, &mut output).await? {
                     DecisionOutcome::Completed(result) => {
                         write_runtime_result(&mut output, request_id, result)?;
                     }
@@ -112,6 +132,28 @@ mod macos {
                 }
                 continue;
             }
+            if matches!(
+                message,
+                MediaHostMessage::Discovery { .. }
+                    | MediaHostMessage::ListDevices { .. }
+                    | MediaHostMessage::StartCast { .. }
+                    | MediaHostMessage::StopCast { .. }
+                    | MediaHostMessage::PollSessionEvents { .. }
+            ) {
+                let request_id = message_request_id(&message)
+                    .ok_or(HostProcessError::InvalidMessage)?
+                    .to_owned();
+                let prepared = match host.prepare_cast_command(message) {
+                    Ok(prepared) => prepared,
+                    Err(error) => {
+                        write_message(&mut output, &error_reply(request_id, error))?;
+                        continue;
+                    }
+                };
+                let result = host.execute_cast_command(prepared).await;
+                write_runtime_result(&mut output, request_id, result)?;
+                continue;
+            }
             let request_id = message_request_id(&message).map(str::to_owned);
             match host.handle_immediate(message) {
                 Ok(Some(reply)) => write_message(&mut output, &reply)?,
@@ -122,6 +164,63 @@ mod macos {
                 }
             }
         }
+    }
+
+    struct CastServices {
+        runtime: Arc<MediaHostCastRuntime>,
+        facade: Arc<SenderCastFacade>,
+        relay: Arc<RelayRuntime>,
+    }
+
+    impl CastServices {
+        async fn start() -> Result<Self, HostProcessError> {
+            let relay = RelayRuntime::start(RelayRuntimeConfig {
+                control_secret: process_secret()?,
+                ..RelayRuntimeConfig::default()
+            })
+            .await
+            .map_err(|_| HostProcessError::Runtime)?;
+            let facade = Arc::new(SenderCastFacade::new(SenderCastFacadeConfig::default()));
+            let facade_port: Arc<dyn CastFacade> = facade.clone();
+            let capabilities = Arc::new(ReceiverCapabilityCache::new(
+                Arc::clone(&facade_port),
+                CapabilityCacheConfig::default(),
+            ));
+            let backend = Box::new(CoreSessionBackend::new(
+                relay.core().clone(),
+                relay.media_base_url(),
+            ));
+            let revocation: Arc<dyn RelayRevocation> = relay.clone();
+            let runtime = Arc::new(MediaHostCastRuntime::new(
+                facade_port,
+                capabilities,
+                backend,
+                revocation,
+            ));
+            Ok(Self {
+                runtime,
+                facade,
+                relay,
+            })
+        }
+
+        async fn stop(&self) {
+            self.runtime.on_app_exit();
+            self.facade.shutdown();
+            self.relay.stop().await;
+        }
+    }
+
+    fn process_secret() -> Result<String, HostProcessError> {
+        let mut bytes = [0u8; 32];
+        getrandom::fill(&mut bytes).map_err(|_| HostProcessError::Runtime)?;
+        let mut value = String::with_capacity(bytes.len() * 2);
+        const HEX: &[u8; 16] = b"0123456789abcdef";
+        for byte in bytes {
+            value.push(HEX[(byte >> 4) as usize] as char);
+            value.push(HEX[(byte & 0x0f) as usize] as char);
+        }
+        Ok(value)
     }
 
     async fn drive_decision(

@@ -1,18 +1,20 @@
 //! Bounded MHV1 request owner around the single media planning runtime.
 
+use crate::media_host_cast_runtime::MediaHostCastRuntime;
 use crate::media_planning_runtime::{
     MediaPlanningError, MediaPlanningRuntime, VerifiedPlayback, VerifiedUrlFact,
 };
 use crayon_cast_policy::HandoffAvailability;
-use crayon_domain::TabId;
+use crayon_domain::{DeviceId, TabId};
 use crayon_ipc_schema::{
-    MediaHostErrorCode, MediaHostMessage, MediaHostPlayback, MediaHostSource, MediaHostUrlFact,
-    PlaybackState,
+    MediaHostDiscoveryAction, MediaHostErrorCode, MediaHostMessage, MediaHostPlayback,
+    MediaHostSource, MediaHostUrlFact, PlaybackState,
 };
 use crayon_media_observer::candidate::{CandidateId, LifecyclePolicy, RankingSignals};
 use crayon_media_observer::ObservationSource;
 use crayon_media_probe::MediaInspector;
 use std::collections::VecDeque;
+use std::sync::Arc;
 
 pub const MAX_MEDIA_HOST_TABS: usize = 64;
 pub const MAX_MEDIA_HOST_RECENT_REQUESTS: usize = 256;
@@ -171,6 +173,36 @@ pub struct PreparedMediaHostDecision {
     kind: PreparedDecisionKind,
 }
 
+enum PreparedCastKind {
+    Discovery(MediaHostDiscoveryAction),
+    ListDevices {
+        snapshot_revision: Option<u64>,
+        offset: u16,
+    },
+    StartCast {
+        candidate_id: CandidateId,
+        device: DeviceId,
+        handoff: HandoffAvailability,
+    },
+    StopCast {
+        session_generation: u64,
+    },
+    PollSessionEvents,
+}
+
+/// Claimed and context-validated Cast command. It carries no URL or locator.
+pub struct PreparedMediaHostCastCommand {
+    request_id: String,
+    kind: PreparedCastKind,
+}
+
+impl PreparedMediaHostCastCommand {
+    #[must_use]
+    pub fn request_id(&self) -> &str {
+        &self.request_id
+    }
+}
+
 impl PreparedMediaHostDecision {
     #[must_use]
     pub fn request_id(&self) -> &str {
@@ -183,6 +215,7 @@ pub struct MediaHostRuntime {
     tabs: Vec<TabContext>,
     candidates: Vec<WireCandidate>,
     recent_requests: Vec<String>,
+    cast: Option<Arc<MediaHostCastRuntime>>,
     shutdown: bool,
 }
 
@@ -194,8 +227,16 @@ impl MediaHostRuntime {
             tabs: Vec::new(),
             candidates: Vec::new(),
             recent_requests: Vec::new(),
+            cast: None,
             shutdown: false,
         }
+    }
+
+    #[must_use]
+    pub fn with_cast(inspector: MediaInspector, cast: Arc<MediaHostCastRuntime>) -> Self {
+        let mut runtime = Self::new(inspector);
+        runtime.cast = Some(cast);
+        runtime
     }
 
     #[must_use]
@@ -382,6 +423,143 @@ impl MediaHostRuntime {
                 .map_err(map_planning_error)?,
             }),
         }
+    }
+
+    pub fn prepare_cast_command(
+        &mut self,
+        message: MediaHostMessage,
+    ) -> Result<PreparedMediaHostCastCommand, MediaHostRuntimeError> {
+        if self.shutdown {
+            return Err(MediaHostRuntimeError::HostUnavailable);
+        }
+        let cast = self
+            .cast
+            .as_ref()
+            .ok_or(MediaHostRuntimeError::InvalidState)?
+            .clone();
+        let (request_id, kind) = match message {
+            MediaHostMessage::Discovery { request_id, action } => {
+                self.claim(&request_id)?;
+                (request_id, PreparedCastKind::Discovery(action))
+            }
+            MediaHostMessage::ListDevices {
+                request_id,
+                snapshot_revision,
+                offset,
+            } => {
+                self.claim(&request_id)?;
+                (
+                    request_id,
+                    PreparedCastKind::ListDevices {
+                        snapshot_revision,
+                        offset,
+                    },
+                )
+            }
+            MediaHostMessage::StartCast {
+                request_id,
+                candidate_id,
+                device_id,
+                handoff_available,
+            } => {
+                self.claim(&request_id)?;
+                self.retain_live_candidates();
+                let candidate = self
+                    .candidates
+                    .iter()
+                    .find(|candidate| candidate.wire_id == candidate_id)
+                    .ok_or(MediaHostRuntimeError::CandidateUnavailable)?;
+                self.require_context(
+                    &candidate.tab_id,
+                    candidate.navigation_id,
+                    candidate.generation,
+                )?;
+                let device =
+                    DeviceId::new(&device_id).map_err(|_| MediaHostRuntimeError::InvalidMessage)?;
+                if !cast.has_device(&device) {
+                    return Err(MediaHostRuntimeError::CandidateUnavailable);
+                }
+                (
+                    request_id,
+                    PreparedCastKind::StartCast {
+                        candidate_id: candidate.candidate_id,
+                        device,
+                        handoff: handoff(handoff_available),
+                    },
+                )
+            }
+            MediaHostMessage::StopCast {
+                request_id,
+                session_generation,
+            } => {
+                self.claim(&request_id)?;
+                (
+                    request_id,
+                    PreparedCastKind::StopCast { session_generation },
+                )
+            }
+            MediaHostMessage::PollSessionEvents { request_id } => {
+                self.claim(&request_id)?;
+                (request_id, PreparedCastKind::PollSessionEvents)
+            }
+            _ => return Err(MediaHostRuntimeError::InvalidState),
+        };
+        Ok(PreparedMediaHostCastCommand { request_id, kind })
+    }
+
+    pub async fn execute_cast_command(
+        &self,
+        prepared: PreparedMediaHostCastCommand,
+    ) -> Result<MediaHostMessage, MediaHostRuntimeError> {
+        let cast = self
+            .cast
+            .as_ref()
+            .ok_or(MediaHostRuntimeError::InvalidState)?;
+        let request_id = prepared.request_id;
+        match prepared.kind {
+            PreparedCastKind::Discovery(action) => {
+                let cast = Arc::clone(cast);
+                tokio::task::spawn_blocking(move || cast.discovery(request_id, action))
+                    .await
+                    .map_err(|_| MediaHostRuntimeError::HostUnavailable)?
+            }
+            PreparedCastKind::ListDevices {
+                snapshot_revision,
+                offset,
+            } => {
+                let cast = Arc::clone(cast);
+                tokio::task::spawn_blocking(move || {
+                    cast.list_devices(request_id, snapshot_revision, offset)
+                })
+                .await
+                .map_err(|_| MediaHostRuntimeError::HostUnavailable)?
+            }
+            PreparedCastKind::StartCast {
+                candidate_id,
+                device,
+                handoff,
+            } => {
+                let request = self
+                    .planner
+                    .prepare_delivery_request(candidate_id, device, handoff)
+                    .await
+                    .map_err(map_planning_error)?;
+                cast.start_cast(request_id, request).await
+            }
+            PreparedCastKind::StopCast { session_generation } => {
+                cast.stop_cast(request_id, session_generation).await
+            }
+            PreparedCastKind::PollSessionEvents => cast.poll_session_events(request_id),
+        }
+    }
+
+    pub async fn shutdown_cast(&self) -> Result<(), MediaHostRuntimeError> {
+        let Some(cast) = self.cast.as_ref().cloned() else {
+            return Ok(());
+        };
+        tokio::task::spawn_blocking(move || cast.on_app_exit())
+            .await
+            .map_err(|_| MediaHostRuntimeError::HostUnavailable)
     }
 
     fn ingest(

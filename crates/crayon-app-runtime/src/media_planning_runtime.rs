@@ -3,8 +3,9 @@
 //! Full page/media URLs stay in this trusted in-memory owner. Public results
 //! contain only opaque candidate ids, redacted origins and closed decisions.
 
+use crate::delivery::DeliveryRequest;
 use crayon_cast_policy::{decide, HandoffAvailability, PolicyContext};
-use crayon_domain::{ReceiverCapabilities, TabId};
+use crayon_domain::{DeviceId, ReceiverCapabilities, TabId};
 use crayon_ipc_schema::{
     AdContinuity, AudioCodecKind, CastPolicyDecision, CastPolicyInput, HeadersClass,
     MediaCandidate, PageContext, PlaybackState, ProtocolKind, VideoCodecKind,
@@ -212,6 +213,57 @@ impl MediaPlanningRuntime {
         receiver: ReceiverCapabilities,
         handoff: HandoffAvailability,
     ) -> Result<PlanningDecision, MediaPlanningError> {
+        let (input, protection) = self.build_delivery_input(candidate_id, receiver).await?;
+        let protocol = input.candidate().protocol();
+        let decision = decide(
+            &input,
+            &PolicyContext {
+                observation: verified_playback_observation(),
+                protection,
+                external_client_handoff: handoff,
+            },
+        );
+        Ok(PlanningDecision {
+            candidate_id,
+            protocol,
+            decision,
+        })
+    }
+
+    /// Builds the private delivery request consumed by `CastUsecase`.
+    /// Receiver capabilities are deliberately empty here: the usecase reads
+    /// the current device assessment through `ReceiverCapabilityCache` and
+    /// replaces them immediately before policy evaluation.
+    pub async fn prepare_delivery_request(
+        &self,
+        candidate_id: CandidateId,
+        receiver: DeviceId,
+        handoff: HandoffAvailability,
+    ) -> Result<DeliveryRequest, MediaPlanningError> {
+        let (input, protection) = self
+            .build_delivery_input(
+                candidate_id,
+                ReceiverCapabilities::new(false, false, false, false, false, false, 0),
+            )
+            .await?;
+        Ok(DeliveryRequest {
+            input,
+            observation: verified_playback_observation(),
+            protection,
+            external_client_handoff: handoff,
+            receiver,
+            // The private protocol never carries receiver locators. The
+            // facade owns them; relay IP binding is finalized with the
+            // real receiver handoff in b4/b5.
+            receiver_ip: None,
+        })
+    }
+
+    async fn build_delivery_input(
+        &self,
+        candidate_id: CandidateId,
+        receiver: ReceiverCapabilities,
+    ) -> Result<(CastPolicyInput, Protection), MediaPlanningError> {
         let entry = self
             .candidates
             .get(candidate_id)
@@ -263,19 +315,7 @@ impl MediaPlanningRuntime {
             candidate,
             receiver,
         );
-        let decision = decide(
-            &input,
-            &PolicyContext {
-                observation: verified_playback_observation(),
-                protection: assessment.protection,
-                external_client_handoff: handoff,
-            },
-        );
-        Ok(PlanningDecision {
-            candidate_id,
-            protocol,
-            decision,
-        })
+        Ok((input, assessment.protection))
     }
 
     /// URL-less blob/MediaStream evidence cannot enter `CandidateStore` and
