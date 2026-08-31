@@ -47,6 +47,14 @@ RECOVERY_FIXTURE = """<!doctype html><meta charset=utf-8><title>Recovery fixture
 <main><h1>Recovery fixture heading</h1><p>Recovered after lifecycle fence.</p></main>"""
 MEDIA_FIXTURE = """<!doctype html><meta charset=utf-8><title>Media fixture</title>
 <main><h1>Media fixture</h1><audio controls src=/tone.wav></audio></main>"""
+MEDIA_CAST_UI_WIN_FIXTURE = """<!doctype html><meta charset=utf-8><title>Media fixture</title>
+<main><h1>Media fixture</h1><audio controls src=/tone.wav></audio>
+<button id=start-playback style='position:fixed;inset:0;z-index:10'>Start playback</button></main>
+<script>const startPlayback=document.querySelector('#start-playback');
+startPlayback.addEventListener('click', () => {
+  const media=document.querySelector('audio'); media.muted=true; media.play();
+  startPlayback.remove();
+}, {once:true});</script>"""
 MEDIA_MP4_FIXTURE = """<!doctype html><meta charset=utf-8><title>MP4 fixture</title>
 <main><h1>MP4 fixture</h1><audio controls src=/clear.mp4></audio></main>"""
 MEDIA_HLS_FIXTURE = """<!doctype html><meta charset=utf-8><title>HLS fixture</title>
@@ -362,6 +370,9 @@ def main() -> int:
         )
         root_path.joinpath("perf.html").write_text(PERF_FIXTURE, encoding="utf-8")
         root_path.joinpath("media.html").write_text(MEDIA_FIXTURE, encoding="utf-8")
+        root_path.joinpath("media-cast-ui-win.html").write_text(
+            MEDIA_CAST_UI_WIN_FIXTURE, encoding="utf-8"
+        )
         root_path.joinpath("media-mp4.html").write_text(MEDIA_MP4_FIXTURE, encoding="utf-8")
         root_path.joinpath("media-hls.html").write_text(MEDIA_HLS_FIXTURE, encoding="utf-8")
         root_path.joinpath("media-dash.html").write_text(MEDIA_DASH_FIXTURE, encoding="utf-8")
@@ -439,7 +450,7 @@ def main() -> int:
                     "media-manual": "media.html",
                     "media-clear-mp4": "media-mp4.html",
                     "media-cast-ui": "media-mp4.html",
-                    "media-cast-ui-win": "media.html",
+                    "media-cast-ui-win": "media-cast-ui-win.html",
                     "media-hls": "media-hls.html",
                     "media-dash": "media-dash.html",
                     "media-credential": "media-credential.html",

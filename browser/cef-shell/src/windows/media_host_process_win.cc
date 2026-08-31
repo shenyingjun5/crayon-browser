@@ -271,6 +271,9 @@ bool IsReply(const Message& message) {
          std::holds_alternative<media_host_ipc::ErrorReply>(message) ||
          std::holds_alternative<media_host_ipc::DevicePageReply>(message) ||
          std::holds_alternative<media_host_ipc::StartCastReply>(message) ||
+         std::holds_alternative<media_host_ipc::ResolveCastCodeReply>(
+             message) ||
+         std::holds_alternative<media_host_ipc::ControlCastReply>(message) ||
          std::holds_alternative<media_host_ipc::SessionEventsReply>(message);
 }
 

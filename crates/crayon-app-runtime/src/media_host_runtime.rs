@@ -7,8 +7,8 @@ use crate::media_planning_runtime::{
 use crayon_cast_policy::HandoffAvailability;
 use crayon_domain::{DeviceId, TabId};
 use crayon_ipc_schema::{
-    MediaHostDiscoveryAction, MediaHostErrorCode, MediaHostMessage, MediaHostPlayback,
-    MediaHostSource, MediaHostUrlFact, PlaybackState,
+    MediaHostCastControlAction, MediaHostDiscoveryAction, MediaHostErrorCode, MediaHostMessage,
+    MediaHostPlayback, MediaHostSource, MediaHostUrlFact, PlaybackState,
 };
 use crayon_media_observer::candidate::{CandidateId, LifecyclePolicy, RankingSignals};
 use crayon_media_observer::ObservationSource;
@@ -187,6 +187,14 @@ enum PreparedCastKind {
     StopCast {
         session_generation: u64,
     },
+    ResolveCastCode {
+        cast_code: String,
+    },
+    ControlCast {
+        session_generation: u64,
+        action: MediaHostCastControlAction,
+        position_seconds: Option<u64>,
+    },
     PollSessionEvents,
 }
 
@@ -297,6 +305,8 @@ impl MediaHostRuntime {
             | MediaHostMessage::ListDevices { .. }
             | MediaHostMessage::StartCast { .. }
             | MediaHostMessage::StopCast { .. }
+            | MediaHostMessage::ResolveCastCode { .. }
+            | MediaHostMessage::ControlCast { .. }
             | MediaHostMessage::PollSessionEvents { .. } => {
                 Err(MediaHostRuntimeError::InvalidState)
             }
@@ -306,6 +316,8 @@ impl MediaHostRuntime {
             | MediaHostMessage::ErrorReply { .. }
             | MediaHostMessage::DevicePageReply { .. }
             | MediaHostMessage::StartCastReply { .. }
+            | MediaHostMessage::ResolveCastCodeReply { .. }
+            | MediaHostMessage::ControlCastReply { .. }
             | MediaHostMessage::SessionEventsReply { .. } => {
                 Err(MediaHostRuntimeError::InvalidMessage)
             }
@@ -498,6 +510,29 @@ impl MediaHostRuntime {
                     PreparedCastKind::StopCast { session_generation },
                 )
             }
+            MediaHostMessage::ResolveCastCode {
+                request_id,
+                cast_code,
+            } => {
+                self.claim(&request_id)?;
+                (request_id, PreparedCastKind::ResolveCastCode { cast_code })
+            }
+            MediaHostMessage::ControlCast {
+                request_id,
+                session_generation,
+                action,
+                position_seconds,
+            } => {
+                self.claim(&request_id)?;
+                (
+                    request_id,
+                    PreparedCastKind::ControlCast {
+                        session_generation,
+                        action,
+                        position_seconds,
+                    },
+                )
+            }
             MediaHostMessage::PollSessionEvents { request_id } => {
                 self.claim(&request_id)?;
                 (request_id, PreparedCastKind::PollSessionEvents)
@@ -548,6 +583,20 @@ impl MediaHostRuntime {
             }
             PreparedCastKind::StopCast { session_generation } => {
                 cast.stop_cast(request_id, session_generation).await
+            }
+            PreparedCastKind::ResolveCastCode { cast_code } => {
+                let cast = Arc::clone(cast);
+                tokio::task::spawn_blocking(move || cast.resolve_cast_code(request_id, cast_code))
+                    .await
+                    .map_err(|_| MediaHostRuntimeError::HostUnavailable)?
+            }
+            PreparedCastKind::ControlCast {
+                session_generation,
+                action,
+                position_seconds,
+            } => {
+                cast.control_cast(request_id, session_generation, action, position_seconds)
+                    .await
             }
             PreparedCastKind::PollSessionEvents => cast.poll_session_events(request_id),
         }
@@ -826,6 +875,10 @@ pub fn message_request_id(message: &MediaHostMessage) -> Option<&str> {
         | MediaHostMessage::StartCast { request_id, .. }
         | MediaHostMessage::StartCastReply { request_id, .. }
         | MediaHostMessage::StopCast { request_id, .. }
+        | MediaHostMessage::ResolveCastCode { request_id, .. }
+        | MediaHostMessage::ResolveCastCodeReply { request_id, .. }
+        | MediaHostMessage::ControlCast { request_id, .. }
+        | MediaHostMessage::ControlCastReply { request_id, .. }
         | MediaHostMessage::PollSessionEvents { request_id }
         | MediaHostMessage::SessionEventsReply { request_id, .. } => Some(request_id),
         MediaHostMessage::Shutdown => None,

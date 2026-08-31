@@ -99,6 +99,19 @@ std::vector<mh::Message> Messages() {
             std::nullopt},
            {11, 4, mh::SessionPhase::kTerminated, mh::SessionPlayback::kStopped,
             mh::TerminalReason::kStoppedBySender}}},
+      mh::ResolveCastCode{"code-1", "AB1 CD2"},
+      mh::ResolveCastCodeReply{
+          "code-1",
+          mh::Device{"receiver_1", "Living Room", mh::DeviceState::kReady,
+                     true},
+          std::nullopt},
+      mh::ResolveCastCodeReply{"code-failed", std::nullopt,
+                               mh::CastError::kDeviceNotFound},
+      mh::ControlCast{"pause-1", 11, mh::CastControlAction::kPause,
+                      std::nullopt},
+      mh::ControlCast{"seek-1", 11, mh::CastControlAction::kSeek, 30},
+      mh::ControlCastReply{"pause-1", 11, std::nullopt},
+      mh::ControlCastReply{"seek-failed", 11, mh::CastError::kRouteLost},
   };
 }
 
@@ -134,6 +147,32 @@ bool RoundTripAndRustGolden() {
       "00010000000a72656365697665725f310000000b4c6976696e6720526f6f6d0001";
   encoded = mh::Encode(mh::Message(DevicePage()), &error);
   CHECK_MH(encoded && Hex(*encoded) == kRustCastGolden);
+  constexpr char kRustResolveCastCodeGolden[] =
+      "4d4856310001150000000006636f64652d310000000741423120434432";
+  encoded =
+      mh::Encode(mh::Message(mh::ResolveCastCode{"code-1", "AB1 CD2"}), &error);
+  CHECK_MH(encoded && Hex(*encoded) == kRustResolveCastCodeGolden);
+  constexpr char kRustResolveCastCodeReplyGolden[] =
+      "4d485631000116000000000b636f64652d6661696c65640100";
+  encoded = mh::Encode(mh::Message(mh::ResolveCastCodeReply{
+                           "code-failed", std::nullopt,
+                           mh::CastError::kDeviceNotFound}),
+                       &error);
+  CHECK_MH(encoded && Hex(*encoded) == kRustResolveCastCodeReplyGolden);
+  constexpr char kRustControlCastGolden[] =
+      "4d48563100011700000000067365656b2d31000000000000000b0201000000000000"
+      "001e";
+  encoded = mh::Encode(mh::Message(mh::ControlCast{
+                           "seek-1", 11, mh::CastControlAction::kSeek, 30}),
+                       &error);
+  CHECK_MH(encoded && Hex(*encoded) == kRustControlCastGolden);
+  constexpr char kRustControlReplyGolden[] =
+      "4d485631000118000000000b7365656b2d6661696c6564"
+      "000000000000000b0108";
+  encoded = mh::Encode(mh::Message(mh::ControlCastReply{
+                           "seek-failed", 11, mh::CastError::kRouteLost}),
+                       &error);
+  CHECK_MH(encoded && Hex(*encoded) == kRustControlReplyGolden);
   return true;
 }
 
@@ -214,6 +253,35 @@ bool HostileAndBounds() {
                            {{1, 1, mh::SessionPhase::kTerminated,
                              mh::SessionPlayback::kStopped, std::nullopt}}}),
                        &error));
+  CHECK_MH(!mh::Encode(mh::Message(mh::ResolveCastCode{"bad-code", "ABC/123"}),
+                       &error));
+  CHECK_MH(!mh::Encode(mh::Message(mh::ResolveCastCodeReply{
+                           "bad-code", std::nullopt, std::nullopt}),
+                       &error));
+  CHECK_MH(!mh::Encode(mh::Message(mh::ResolveCastCodeReply{
+                           "bad-code",
+                           mh::Device{"receiver_1", "Living Room",
+                                      mh::DeviceState::kReady, true},
+                           mh::CastError::kDeviceNotFound}),
+                       &error));
+  CHECK_MH(!mh::Encode(
+      mh::Message(mh::ControlCast{"bad-control", 0,
+                                  mh::CastControlAction::kPlay, std::nullopt}),
+      &error));
+  CHECK_MH(!mh::Encode(mh::Message(mh::ControlCast{
+                           "bad-control", 1, mh::CastControlAction::kPause, 1}),
+                       &error));
+  CHECK_MH(!mh::Encode(mh::Message(mh::ControlCast{"bad-control", 1,
+                                                   mh::CastControlAction::kSeek,
+                                                   mh::kMaxSeekSeconds + 1}),
+                       &error));
+  auto bad_control_reply =
+      mh::Encode(mh::Message(
+                     mh::ControlCastReply{"bad-control", 1, std::nullopt}),
+                 &error)
+          .value();
+  bad_control_reply.back() = 2;
+  CHECK_MH(!mh::Decode(bad_control_reply, &error));
   auto cast = mh::Encode(mh::Message(DevicePage()), &error).value();
   auto oversized_count = cast;
   oversized_count[33] = 0;

@@ -37,7 +37,32 @@ enum class Kind : std::uint8_t {
   kStopCast,
   kPollSessionEvents,
   kSessionEventsReply,
+  kResolveCastCode,
+  kResolveCastCodeReply,
+  kControlCast,
+  kControlCastReply,
 };
+
+bool ValidCastCodeInput(const std::string &value) {
+  if (value.empty() || value.size() > kMaxCastCodeBytes)
+    return false;
+  for (std::size_t index = 0; index < value.size();) {
+    const auto byte = static_cast<unsigned char>(value[index]);
+    if ((byte >= '0' && byte <= '9') || (byte >= 'A' && byte <= 'Z') ||
+        (byte >= 'a' && byte <= 'z') || byte == '-' || byte == ' ') {
+      ++index;
+      continue;
+    }
+    if (index + 2 < value.size() && byte == 0xe3 &&
+        static_cast<unsigned char>(value[index + 1]) == 0x80 &&
+        static_cast<unsigned char>(value[index + 2]) == 0x80) {
+      index += 3;
+      continue;
+    }
+    return false;
+  }
+  return true;
+}
 
 void SetError(CodecError value, CodecError *error) {
   if (error)
@@ -176,6 +201,15 @@ template <typename E> bool EnumAtMost(E value, std::uint8_t maximum) {
   return static_cast<std::uint8_t>(value) <= maximum;
 }
 
+bool ValidControl(const ControlCast &value) {
+  if (!value.session_generation || !EnumAtMost(value.action, 2))
+    return false;
+  if (value.action == CastControlAction::kSeek)
+    return value.position_seconds.has_value() &&
+           *value.position_seconds <= kMaxSeekSeconds;
+  return !value.position_seconds.has_value();
+}
+
 bool ValidPlayback(const Playback &value) {
   return value.position_ms <= kMaxExactF64Integer &&
          (!value.duration_ms || *value.duration_ms <= kMaxExactF64Integer) &&
@@ -271,6 +305,11 @@ public:
   void OptionalNonzero(std::optional<std::uint64_t> value) {
     U64(value.value_or(0));
   }
+  void OptionalU64(std::optional<std::uint64_t> value) {
+    Bool(value.has_value());
+    if (value)
+      U64(*value);
+  }
   void Bool(bool value) { U8(value ? 1 : 0); }
   bool String(const std::string &value, std::size_t max, bool empty) {
     if (value.size() > max)
@@ -286,6 +325,10 @@ public:
                                : Fail(CodecError::kInvalidValue);
   }
   bool DeviceId(const std::string &value) { return Id(value, true); }
+  bool CastCode(const std::string &value) {
+    return ValidCastCodeInput(value) ? String(value, kMaxCastCodeBytes, false)
+                                     : Fail(CodecError::kInvalidValue);
+  }
   bool Text(const std::string &value, std::size_t max) {
     return String(value, max, false);
   }
@@ -370,6 +413,20 @@ public:
     *out = value ? std::optional<std::uint64_t>(value) : std::nullopt;
     return true;
   }
+  bool OptionalU64(std::optional<std::uint64_t> *out) {
+    bool present = false;
+    std::uint64_t value = 0;
+    if (!Bool(&present))
+      return false;
+    if (!present) {
+      *out = std::nullopt;
+      return true;
+    }
+    if (!U64(&value))
+      return false;
+    *out = value;
+    return true;
+  }
   bool Bool(bool *out) {
     std::uint8_t value = 0;
     if (!U8(&value))
@@ -399,6 +456,10 @@ public:
            (ValidId(*out, tab) || Fail(CodecError::kInvalidValue));
   }
   bool DeviceId(std::string *out) { return Id(out, true); }
+  bool CastCode(std::string *out) {
+    return String(out, kMaxCastCodeBytes, false) &&
+           (ValidCastCodeInput(*out) || Fail(CodecError::kInvalidValue));
+  }
   bool Text(std::string *out, std::size_t max) {
     return String(out, max, false);
   }
@@ -514,6 +575,26 @@ bool DecodeDecision(Reader *reader, Decision *value) {
   return true;
 }
 
+void EncodeDevice(Writer *writer, const Device &device) {
+  writer->DeviceId(device.device_id);
+  writer->Text(device.display_name, kMaxDeviceNameBytes);
+  if (!EnumAtMost(device.state, 4))
+    writer->Fail(CodecError::kInvalidValue);
+  writer->U8(static_cast<std::uint8_t>(device.state));
+  writer->Bool(device.is_crayon_receiver);
+}
+
+bool DecodeDevice(Reader *reader, Device *device) {
+  std::uint8_t state = 0;
+  if (!reader->DeviceId(&device->device_id) ||
+      !reader->Text(&device->display_name, kMaxDeviceNameBytes) ||
+      !reader->U8(&state) || state > 4 ||
+      !reader->Bool(&device->is_crayon_receiver))
+    return reader->Fail(CodecError::kInvalidValue);
+  device->state = static_cast<DeviceState>(state);
+  return true;
+}
+
 void EncodeDevicePage(Writer *writer, const DevicePageReply &value) {
   if (!ValidDevicePage(value) || !HasUniqueDevices(value)) {
     writer->Fail(CodecError::kInvalidValue);
@@ -525,14 +606,8 @@ void EncodeDevicePage(Writer *writer, const DevicePageReply &value) {
   writer->U16(
       value.next_offset.value_or(std::numeric_limits<std::uint16_t>::max()));
   writer->U16(static_cast<std::uint16_t>(value.devices.size()));
-  for (const auto &device : value.devices) {
-    writer->DeviceId(device.device_id);
-    writer->Text(device.display_name, kMaxDeviceNameBytes);
-    if (!EnumAtMost(device.state, 4))
-      writer->Fail(CodecError::kInvalidValue);
-    writer->U8(static_cast<std::uint8_t>(device.state));
-    writer->Bool(device.is_crayon_receiver);
-  }
+  for (const auto &device : value.devices)
+    EncodeDevice(writer, device);
 }
 
 bool DecodeDevicePage(Reader *reader, DevicePageReply *value) {
@@ -550,15 +625,9 @@ bool DecodeDevicePage(Reader *reader, DevicePageReply *value) {
   value->devices.resize(count);
   if (!ValidDevicePage(*value))
     return reader->Fail(CodecError::kInvalidValue);
-  for (auto &device : value->devices) {
-    std::uint8_t state = 0;
-    if (!reader->DeviceId(&device.device_id) ||
-        !reader->Text(&device.display_name, kMaxDeviceNameBytes) ||
-        !reader->U8(&state) || state > 4 ||
-        !reader->Bool(&device.is_crayon_receiver))
-      return reader->Fail(CodecError::kInvalidValue);
-    device.state = static_cast<DeviceState>(state);
-  }
+  for (auto &device : value->devices)
+    if (!DecodeDevice(reader, &device))
+      return false;
   return HasUniqueDevices(*value) || reader->Fail(CodecError::kInvalidValue);
 }
 
@@ -656,6 +725,69 @@ bool DecodeSessionEvents(Reader *reader, SessionEventsReply *value) {
   return true;
 }
 
+bool ValidResolveCastCodeReply(const ResolveCastCodeReply &value) {
+  return value.device.has_value() != value.error.has_value();
+}
+
+void EncodeResolveCastCodeReply(Writer *writer,
+                                const ResolveCastCodeReply &value) {
+  if (!ValidResolveCastCodeReply(value)) {
+    writer->Fail(CodecError::kInvalidValue);
+    return;
+  }
+  if (value.device) {
+    writer->U8(0);
+    EncodeDevice(writer, *value.device);
+  } else {
+    writer->U8(1);
+    writer->U8(static_cast<std::uint8_t>(*value.error));
+  }
+}
+
+bool DecodeResolveCastCodeReply(Reader *reader,
+                                ResolveCastCodeReply *value) {
+  std::uint8_t kind = 0;
+  if (!reader->U8(&kind))
+    return false;
+  if (kind == 0) {
+    Device device;
+    if (!DecodeDevice(reader, &device))
+      return false;
+    value->device = std::move(device);
+  } else if (kind == 1) {
+    std::uint8_t error = 0;
+    if (!reader->U8(&error) || error > 12)
+      return reader->Fail(CodecError::kInvalidValue);
+    value->error = static_cast<CastError>(error);
+  } else {
+    return reader->Fail(CodecError::kInvalidValue);
+  }
+  return ValidResolveCastCodeReply(*value) ||
+         reader->Fail(CodecError::kInvalidValue);
+}
+
+void EncodeControlCastReply(Writer *writer, const ControlCastReply &value) {
+  if (value.error) {
+    writer->U8(1);
+    writer->U8(static_cast<std::uint8_t>(*value.error));
+  } else {
+    writer->U8(0);
+  }
+}
+
+bool DecodeControlCastReply(Reader *reader, ControlCastReply *value) {
+  std::uint8_t kind = 0;
+  if (!reader->U8(&kind))
+    return false;
+  if (kind == 0)
+    return true;
+  std::uint8_t error = 0;
+  if (kind != 1 || !reader->U8(&error) || error > 12)
+    return reader->Fail(CodecError::kInvalidValue);
+  value->error = static_cast<CastError>(error);
+  return true;
+}
+
 Kind KindOf(const Message &message) {
   return std::visit(
       [](const auto &value) {
@@ -698,8 +830,16 @@ Kind KindOf(const Message &message) {
           return Kind::kStopCast;
         else if constexpr (std::is_same_v<T, PollSessionEvents>)
           return Kind::kPollSessionEvents;
-        else
+        else if constexpr (std::is_same_v<T, SessionEventsReply>)
           return Kind::kSessionEventsReply;
+        else if constexpr (std::is_same_v<T, ResolveCastCode>)
+          return Kind::kResolveCastCode;
+        else if constexpr (std::is_same_v<T, ResolveCastCodeReply>)
+          return Kind::kResolveCastCodeReply;
+        else if constexpr (std::is_same_v<T, ControlCast>)
+          return Kind::kControlCast;
+        else
+          return Kind::kControlCastReply;
       },
       message);
 }
@@ -806,6 +946,23 @@ std::optional<std::vector<std::uint8_t>> Encode(const Message &message,
           writer.Id(value.request_id);
         } else if constexpr (std::is_same_v<T, SessionEventsReply>) {
           EncodeSessionEvents(&writer, value);
+        } else if constexpr (std::is_same_v<T, ResolveCastCode>) {
+          writer.Id(value.request_id);
+          writer.CastCode(value.cast_code);
+        } else if constexpr (std::is_same_v<T, ResolveCastCodeReply>) {
+          writer.Id(value.request_id);
+          EncodeResolveCastCodeReply(&writer, value);
+        } else if constexpr (std::is_same_v<T, ControlCast>) {
+          writer.Id(value.request_id);
+          writer.Nonzero(value.session_generation);
+          if (!ValidControl(value))
+            writer.Fail(CodecError::kInvalidValue);
+          writer.U8(static_cast<std::uint8_t>(value.action));
+          writer.OptionalU64(value.position_seconds);
+        } else if constexpr (std::is_same_v<T, ControlCastReply>) {
+          writer.Id(value.request_id);
+          writer.Nonzero(value.session_generation);
+          EncodeControlCastReply(&writer, value);
         }
       },
       message);
@@ -1007,6 +1164,41 @@ std::optional<Message> Decode(const std::vector<std::uint8_t> &bytes,
   case 20: {
     SessionEventsReply v;
     if (DecodeSessionEvents(&reader, &v))
+      message = std::move(v);
+    break;
+  }
+  case 21: {
+    ResolveCastCode v;
+    if (reader.Id(&v.request_id) && reader.CastCode(&v.cast_code))
+      message = std::move(v);
+    break;
+  }
+  case 22: {
+    ResolveCastCodeReply v;
+    if (reader.Id(&v.request_id) && DecodeResolveCastCodeReply(&reader, &v))
+      message = std::move(v);
+    break;
+  }
+  case 23: {
+    ControlCast v;
+    std::uint8_t action = 0;
+    if (reader.Id(&v.request_id) && reader.Nonzero(&v.session_generation) &&
+        reader.U8(&action) && action <= 2 &&
+        reader.OptionalU64(&v.position_seconds)) {
+      v.action = static_cast<CastControlAction>(action);
+      if (ValidControl(v))
+        message = std::move(v);
+      else
+        reader.Fail(CodecError::kInvalidValue);
+    } else {
+      reader.Fail(CodecError::kInvalidValue);
+    }
+    break;
+  }
+  case 24: {
+    ControlCastReply v;
+    if (reader.Id(&v.request_id) && reader.Nonzero(&v.session_generation) &&
+        DecodeControlCastReply(&reader, &v))
       message = std::move(v);
     break;
   }

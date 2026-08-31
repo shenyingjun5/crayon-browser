@@ -3,18 +3,18 @@ use super::delivery::{DeliveryRequest, SessionBackend};
 use super::media_host_cast_runtime::MediaHostCastRuntime;
 use super::media_host_runtime::{MediaHostRuntime, MediaHostRuntimeError};
 use crayon_cast_adapter::{
-    AssessmentStatus, CastError, CastFacade, CastMediaKind, CastPlaybackState, CastSessionPhase,
-    CastSessionSnapshot, DeviceState, DiscoveredDevice, ReceiverCapabilityCache, SenderCastFacade,
-    SenderCastFacadeConfig,
+    AssessmentStatus, CastCode, CastError, CastFacade, CastMediaKind, CastPlaybackState,
+    CastSessionPhase, CastSessionSnapshot, DeviceState, DiscoveredDevice, ReceiverCapabilityCache,
+    SenderCastFacade, SenderCastFacadeConfig,
 };
 use crayon_cast_policy::HandoffAvailability;
 use crayon_domain::{CoreError, DeviceId, ReceiverCapabilities, TabId};
 use crayon_ipc_schema::{
     AdContinuity, CastPolicyInput, HandoffReason, HeadersClass, MediaCandidate,
-    MediaHostCastErrorCode, MediaHostCastStartOutcome, MediaHostDeliveryRoute,
-    MediaHostDiscoveryAction, MediaHostMessage, MediaHostPlayback, MediaHostSessionPhase,
-    MediaHostSource, MediaHostTerminalReason, MediaHostUrlFact, PageContext, PlaybackState,
-    ProtocolKind,
+    MediaHostCastControlAction, MediaHostCastControlOutcome, MediaHostCastErrorCode,
+    MediaHostCastStartOutcome, MediaHostDeliveryRoute, MediaHostDiscoveryAction, MediaHostMessage,
+    MediaHostPlayback, MediaHostResolveCastCodeOutcome, MediaHostSessionPhase, MediaHostSource,
+    MediaHostTerminalReason, MediaHostUrlFact, PageContext, PlaybackState, ProtocolKind,
 };
 use crayon_media_observer::{
     ObservationOrigin, PlaybackObservation, PlaybackProgress, UserActivation,
@@ -23,7 +23,7 @@ use crayon_media_probe::Protection;
 use crayon_media_probe::{http::ProbeHttpClient, http::ProbeHttpConfig, MediaInspector};
 use crayon_relay::session::RevokeReason;
 use std::sync::Arc;
-use test_support::cast_facade::FakeCastFacade;
+use test_support::cast_facade::{FakeCall, FakeCastFacade};
 
 #[derive(Default)]
 struct RecordingBackend;
@@ -395,6 +395,113 @@ async fn direct_start_stop_and_terminal_events_are_wire_fenced() {
             .unwrap(),
         MediaHostMessage::Ack { .. }
     ));
+}
+
+#[tokio::test]
+async fn cast_code_and_controls_use_facade_and_wire_generation_fencing() {
+    let h = harness();
+    assert!(matches!(
+        h.runtime
+            .control_cast(
+                "no-session".to_owned(),
+                1,
+                MediaHostCastControlAction::Pause,
+                None,
+            )
+            .await
+            .unwrap(),
+        MediaHostMessage::ControlCastReply {
+            outcome: MediaHostCastControlOutcome::Failed(MediaHostCastErrorCode::NoActiveSession),
+            ..
+        }
+    ));
+    let code = CastCode::new("AB1-CD2").unwrap();
+    h.facade.bind_cast_code(&code, &h.device);
+    let resolved = h
+        .runtime
+        .resolve_cast_code("resolve".to_owned(), "AB1 CD2".to_owned())
+        .unwrap();
+    assert!(matches!(
+        resolved,
+        MediaHostMessage::ResolveCastCodeReply {
+            outcome: MediaHostResolveCastCodeOutcome::Resolved(device),
+            ..
+        }
+            if device.device_id == h.device.as_str()
+                && device.is_crayon_receiver
+    ));
+    assert!(matches!(
+        h.runtime
+            .resolve_cast_code("bad".to_owned(), "bad".to_owned())
+            .unwrap(),
+        MediaHostMessage::ResolveCastCodeReply {
+            outcome: MediaHostResolveCastCodeOutcome::Failed(
+                MediaHostCastErrorCode::InvalidCastCode
+            ),
+            ..
+        }
+    ));
+    assert!(matches!(
+        h.runtime
+            .resolve_cast_code("missing".to_owned(), "ZZZ999".to_owned())
+            .unwrap(),
+        MediaHostMessage::ResolveCastCodeReply {
+            outcome: MediaHostResolveCastCodeOutcome::Failed(
+                MediaHostCastErrorCode::DeviceNotFound
+            ),
+            ..
+        }
+    ));
+
+    h.runtime
+        .start_cast("cast".to_owned(), request(&h.device, Protection::Clear))
+        .await
+        .unwrap();
+    assert!(matches!(
+        h.runtime
+            .control_cast(
+                "stale".to_owned(),
+                2,
+                MediaHostCastControlAction::Pause,
+                None,
+            )
+            .await,
+        Ok(MediaHostMessage::ControlCastReply {
+            outcome: MediaHostCastControlOutcome::Failed(
+                MediaHostCastErrorCode::StaleSessionGeneration
+            ),
+            ..
+        })
+    ));
+    for (request_id, action, position_seconds) in [
+        ("pause", MediaHostCastControlAction::Pause, None),
+        ("play", MediaHostCastControlAction::Play, None),
+        ("seek", MediaHostCastControlAction::Seek, Some(30)),
+    ] {
+        assert!(matches!(
+            h.runtime
+                .control_cast(request_id.to_owned(), 1, action, position_seconds)
+                .await
+                .unwrap(),
+            MediaHostMessage::ControlCastReply {
+                outcome: MediaHostCastControlOutcome::Applied,
+                ..
+            }
+        ));
+    }
+    let calls = h.facade.calls();
+    assert!(calls
+        .iter()
+        .any(|call| matches!(call, FakeCall::ResolveCastCode(value) if value == "AB1CD2")));
+    assert!(calls.iter().any(|call| matches!(call, FakeCall::Pause(_))));
+    assert!(calls.iter().any(|call| matches!(call, FakeCall::Play(_))));
+    assert!(calls.iter().any(|call| matches!(
+        call,
+        FakeCall::Seek {
+            position_seconds: 30,
+            ..
+        }
+    )));
 }
 
 #[tokio::test]

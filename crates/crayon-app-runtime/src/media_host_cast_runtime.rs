@@ -7,16 +7,17 @@ use crate::cast_usecase::{CastPhase, CastStartOutcome, CastUsecase, RelayRevocat
 use crate::delivery::{DeliveryRequest, SessionBackend};
 use crate::media_host_runtime::MediaHostRuntimeError;
 use crayon_cast_adapter::{
-    CastError, CastFacade, CastPlaybackState, CastSessionPhase, CastTerminalReason, DeliveryRoute,
-    DeviceState, DiscoveredDevice, ReceiverCapabilityCache,
+    CastCode, CastError, CastFacade, CastPlaybackState, CastSessionPhase, CastTerminalReason,
+    DeliveryRoute, DeviceState, DiscoveredDevice, ReceiverCapabilityCache,
 };
 use crayon_domain::DeviceId;
 use crayon_ipc_schema::{
-    MediaHostCastErrorCode, MediaHostCastStartOutcome, MediaHostDeliveryRoute, MediaHostDevice,
-    MediaHostDeviceState, MediaHostDiscoveryAction, MediaHostMessage, MediaHostSessionEvent,
-    MediaHostSessionPhase, MediaHostSessionPlayback, MediaHostTerminalReason,
-    MAX_MEDIA_HOST_DEVICES, MAX_MEDIA_HOST_DEVICE_NAME_BYTES, MAX_MEDIA_HOST_DEVICE_PAGE,
-    MAX_MEDIA_HOST_SESSION_EVENTS,
+    MediaHostCastControlAction, MediaHostCastControlOutcome, MediaHostCastErrorCode,
+    MediaHostCastStartOutcome, MediaHostDeliveryRoute, MediaHostDevice, MediaHostDeviceState,
+    MediaHostDiscoveryAction, MediaHostMessage, MediaHostResolveCastCodeOutcome,
+    MediaHostSessionEvent, MediaHostSessionPhase, MediaHostSessionPlayback,
+    MediaHostTerminalReason, MAX_MEDIA_HOST_DEVICES, MAX_MEDIA_HOST_DEVICE_NAME_BYTES,
+    MAX_MEDIA_HOST_DEVICE_PAGE, MAX_MEDIA_HOST_SESSION_EVENTS,
 };
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -181,6 +182,87 @@ impl MediaHostCastRuntime {
             .map_err(|_| MediaHostRuntimeError::HostUnavailable)?
             .map_err(map_command_error)?;
         Ok(MediaHostMessage::Ack { request_id })
+    }
+
+    pub fn resolve_cast_code(
+        &self,
+        request_id: String,
+        raw_code: String,
+    ) -> Result<MediaHostMessage, MediaHostRuntimeError> {
+        let code = match CastCode::new(&raw_code) {
+            Ok(code) => code,
+            Err(error) => {
+                return Ok(MediaHostMessage::ResolveCastCodeReply {
+                    request_id,
+                    outcome: MediaHostResolveCastCodeOutcome::Failed(wire_cast_error(error)),
+                });
+            }
+        };
+        let device = match self.facade.resolve_device_by_cast_code(&code) {
+            Ok(device) => device,
+            Err(error) => {
+                return Ok(MediaHostMessage::ResolveCastCodeReply {
+                    request_id,
+                    outcome: MediaHostResolveCastCodeOutcome::Failed(wire_cast_error(error)),
+                });
+            }
+        };
+        validate_devices(std::slice::from_ref(&device))?;
+        self.sync_devices()?;
+        if !self.has_device(device.device_id()) {
+            return Err(MediaHostRuntimeError::CandidateUnavailable);
+        }
+        Ok(MediaHostMessage::ResolveCastCodeReply {
+            request_id,
+            outcome: MediaHostResolveCastCodeOutcome::Resolved(wire_device(&device)),
+        })
+    }
+
+    pub async fn control_cast(
+        &self,
+        request_id: String,
+        session_generation: u64,
+        action: MediaHostCastControlAction,
+        position_seconds: Option<u64>,
+    ) -> Result<MediaHostMessage, MediaHostRuntimeError> {
+        let active = match self.usecase.active_session() {
+            Some(active) => active,
+            None => {
+                return Ok(MediaHostMessage::ControlCastReply {
+                    request_id,
+                    session_generation,
+                    outcome: MediaHostCastControlOutcome::Failed(
+                        MediaHostCastErrorCode::NoActiveSession,
+                    ),
+                });
+            }
+        };
+        if wire_counter(active.generation().get())? != session_generation {
+            return Ok(MediaHostMessage::ControlCastReply {
+                request_id,
+                session_generation,
+                outcome: MediaHostCastControlOutcome::Failed(
+                    MediaHostCastErrorCode::StaleSessionGeneration,
+                ),
+            });
+        }
+        let usecase = Arc::clone(&self.usecase);
+        let result = tokio::task::spawn_blocking(move || match (action, position_seconds) {
+            (MediaHostCastControlAction::Play, None) => usecase.play(),
+            (MediaHostCastControlAction::Pause, None) => usecase.pause(),
+            (MediaHostCastControlAction::Seek, Some(position)) => usecase.seek(position),
+            _ => Err(CastError::InvalidInput),
+        })
+        .await
+        .map_err(|_| MediaHostRuntimeError::HostUnavailable)?;
+        Ok(MediaHostMessage::ControlCastReply {
+            request_id,
+            session_generation,
+            outcome: match result {
+                Ok(()) => MediaHostCastControlOutcome::Applied,
+                Err(error) => MediaHostCastControlOutcome::Failed(wire_cast_error(error)),
+            },
+        })
     }
 
     pub fn poll_session_events(

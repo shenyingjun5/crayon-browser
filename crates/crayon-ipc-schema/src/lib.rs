@@ -19,12 +19,14 @@ pub use content_host::{
     MAX_CONTENT_HOST_FACTS, MAX_CONTENT_HOST_FRAME_BYTES, MAX_CONTENT_HOST_MARKDOWN_BYTES,
 };
 pub use media_host::{
-    decode_media_host_message, encode_media_host_message, MediaHostCastErrorCode,
-    MediaHostCastStartOutcome, MediaHostDeliveryRoute, MediaHostDevice, MediaHostDeviceState,
-    MediaHostDiscoveryAction, MediaHostError, MediaHostErrorCode, MediaHostMessage,
-    MediaHostPlayback, MediaHostSessionEvent, MediaHostSessionPhase, MediaHostSessionPlayback,
-    MediaHostSource, MediaHostTerminalReason, MediaHostUrlFact, MAX_MEDIA_HOST_DEVICES,
-    MAX_MEDIA_HOST_DEVICE_NAME_BYTES, MAX_MEDIA_HOST_DEVICE_PAGE, MAX_MEDIA_HOST_FRAME_BYTES,
+    decode_media_host_message, encode_media_host_message, MediaHostCastControlAction,
+    MediaHostCastControlOutcome, MediaHostCastErrorCode, MediaHostCastStartOutcome,
+    MediaHostDeliveryRoute, MediaHostDevice, MediaHostDeviceState, MediaHostDiscoveryAction,
+    MediaHostError, MediaHostErrorCode, MediaHostMessage, MediaHostPlayback,
+    MediaHostResolveCastCodeOutcome, MediaHostSessionEvent, MediaHostSessionPhase,
+    MediaHostSessionPlayback, MediaHostSource, MediaHostTerminalReason, MediaHostUrlFact,
+    MAX_MEDIA_HOST_CAST_CODE_BYTES, MAX_MEDIA_HOST_DEVICES, MAX_MEDIA_HOST_DEVICE_NAME_BYTES,
+    MAX_MEDIA_HOST_DEVICE_PAGE, MAX_MEDIA_HOST_FRAME_BYTES, MAX_MEDIA_HOST_SEEK_SECONDS,
     MAX_MEDIA_HOST_SESSION_EVENTS,
 };
 pub use messages::{

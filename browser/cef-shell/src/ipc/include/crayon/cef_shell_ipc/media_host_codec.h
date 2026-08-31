@@ -16,6 +16,8 @@ inline constexpr std::size_t kMaxDevices = 64;
 inline constexpr std::size_t kMaxDevicePage = 16;
 inline constexpr std::size_t kMaxDeviceNameBytes = 512;
 inline constexpr std::size_t kMaxSessionEvents = 64;
+inline constexpr std::size_t kMaxCastCodeBytes = 32;
+inline constexpr std::uint64_t kMaxSeekSeconds = 7 * 24 * 60 * 60;
 
 enum class Source : std::uint8_t { kCurrentSrc = 0, kNetworkRequest = 1 };
 enum class HeadersClass : std::uint8_t {
@@ -102,6 +104,7 @@ enum class CastStartKind : std::uint8_t {
   kRejected,
   kFailed,
 };
+enum class CastControlAction : std::uint8_t { kPlay = 0, kPause, kSeek };
 enum class SessionPhase : std::uint8_t {
   kStarting = 0,
   kActive,
@@ -398,13 +401,51 @@ struct SessionEventsReply final {
            a.dropped_events == b.dropped_events && a.events == b.events;
   }
 };
+struct ResolveCastCode final {
+  std::string request_id, cast_code;
+  friend bool operator==(const ResolveCastCode &a, const ResolveCastCode &b) {
+    return a.request_id == b.request_id && a.cast_code == b.cast_code;
+  }
+};
+struct ResolveCastCodeReply final {
+  std::string request_id;
+  std::optional<Device> device;
+  std::optional<CastError> error;
+  friend bool operator==(const ResolveCastCodeReply &a,
+                         const ResolveCastCodeReply &b) {
+    return a.request_id == b.request_id && a.device == b.device &&
+           a.error == b.error;
+  }
+};
+struct ControlCast final {
+  std::string request_id;
+  std::uint64_t session_generation = 0;
+  CastControlAction action = CastControlAction::kPlay;
+  std::optional<std::uint64_t> position_seconds;
+  friend bool operator==(const ControlCast &a, const ControlCast &b) {
+    return a.request_id == b.request_id &&
+           a.session_generation == b.session_generation &&
+           a.action == b.action && a.position_seconds == b.position_seconds;
+  }
+};
+struct ControlCastReply final {
+  std::string request_id;
+  std::uint64_t session_generation = 0;
+  std::optional<CastError> error;
+  friend bool operator==(const ControlCastReply &a,
+                         const ControlCastReply &b) {
+    return a.request_id == b.request_id &&
+           a.session_generation == b.session_generation && a.error == b.error;
+  }
+};
 
 using Message =
     std::variant<IngestUrl, MarkEme, Decide, DecideUrlLess, Cancel, Navigation,
                  CloseTab, Shutdown, CandidateReply, DecisionReply, Ack,
                  ErrorReply, Discovery, ListDevices, DevicePageReply, StartCast,
                  StartCastReply, StopCast, PollSessionEvents,
-                 SessionEventsReply>;
+                 SessionEventsReply, ResolveCastCode, ResolveCastCodeReply,
+                 ControlCast, ControlCastReply>;
 
 std::optional<std::vector<std::uint8_t>> Encode(const Message &message,
                                                 CodecError *error);

@@ -467,23 +467,28 @@ class SnapshotFixtureApp final : public CefApp,
     CefKeyEvent key_up = key_down;
     key_up.type = KEYEVENT_KEYUP;
     browser->GetHost()->SendKeyEvent(key_up);
-    CefPostDelayedTask(TID_UI,
-                       CefCreateClosureTask(base::BindOnce(
-                           &SnapshotFixtureApp::BeginCastMediaPlayback,
-                           CefRefPtr<SnapshotFixtureApp>(this), browser)),
-                       kTickMilliseconds);
+    BeginCastMediaPlayback(browser);
   }
 
   void BeginCastMediaPlayback(CefRefPtr<CefBrowser> browser) {
     CEF_REQUIRE_UI_THREAD();
     if (finished_ || !browser || !browser->GetMainFrame()) return;
-    const std::string loaded_url = browser->GetMainFrame()->GetURL();
-    browser->GetMainFrame()->ExecuteJavaScript(
-        "const media=document.querySelector('audio,video');"
-        "if(media){media.muted=true;media.play()"
-        ".then(()=>document.body.dataset.playback='playing')"
-        ".catch(()=>document.body.dataset.playback='error');}",
-        loaded_url, 1);
+    CefPostDelayedTask(
+        TID_UI,
+        CefCreateClosureTask(base::BindOnce(
+            &SnapshotFixtureApp::TriggerCastMediaPlayback,
+            CefRefPtr<SnapshotFixtureApp>(this), browser)),
+        kTickMilliseconds);
+  }
+
+  void TriggerCastMediaPlayback(CefRefPtr<CefBrowser> browser) {
+    CEF_REQUIRE_UI_THREAD();
+    if (finished_ || !browser || !browser->GetMainFrame()) return;
+    CefMouseEvent click{};
+    click.x = 400;
+    click.y = 300;
+    browser->GetHost()->SendMouseClickEvent(click, MBT_LEFT, false, 1);
+    browser->GetHost()->SendMouseClickEvent(click, MBT_LEFT, true, 1);
   }
 
   void StartSnapshot(CefRefPtr<CefBrowser> browser) {

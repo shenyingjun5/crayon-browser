@@ -442,12 +442,38 @@
 |---|---|---|---|---|
 | PLT-W05a | DONE | PLT-M05b3 DONE | 用 Windows named pipe/Job/process owner 装配 bundled `crayon-media-host`，接通现有 CEF observation/planning 与有界 health/kill/reap | `browser/cef-shell/src/windows/**`、`browser/cef-shell/src/browser/media_host/**`（仅提取既有平台无关 adapter）、顶层组合 crate `crates/crayon-media-host/**`（从 runtime 提升 binary owner，仅补平台 health/启动）、平台 CMake/package、相邻 process/adapter tests；Debug/Release build/CTest；不接 UI/SDK 真机 |
 | PLT-W05b | DONE | W05a DONE | 接通共享 `CastUiCoordinator`、浏览器 chrome 按钮/receiver picker、Cast command/event worker 与 navigation/close/app-exit | Windows shell/chrome/locale、相邻 tests；无设备/刷新/取消/失败/旧 session/stop；UI 线程无阻塞 SDK |
-| PLT-W05c | READY | W05b DONE | 使用 ADB 正式接收端完成 clear fixture Direct 发现、连接、投送、pause/resume/seek/stop | E2E-001/CS-010；真实 Desktop Host 与真实上屏；不以 SDK standalone/Fake/ADB 在线代替 |
+| PLT-W05c0 | DONE | W05b DONE | 补齐 bundled Browser/media-host 私有 MHV1 的投屏码解析与 generation-bound play/pause/seek 控制，使产品壳能消费既有 CastFacade 能力 | Rust/C++ 双 codec、current/previous golden、runtime/adapter/process contract；不改 Cast-SDK facade/接收端、不做 UI 或真机结论 |
+| PLT-W05c | READY | W05c0 DONE | 使用 ADB 正式接收端完成 clear fixture Direct 发现、连接、投送、pause/resume/seek/stop | E2E-001/CS-010；真实 Desktop Host 与真实上屏；不以 SDK standalone/Fake/ADB 在线代替 |
 | PLT-W05d | TODO | W05c | 同一接收端完成 MP4 Range 与 HLS Relay 全链路 | E2E-002；opaque route、200/206/416、分片、撤销后拒绝、零 secret；不支持 DASH Relay/加密 HLS |
 | PLT-W05e | TODO | W05d | DRM/EME/加密/credential 拒绝与 ExternalClientHandoff 确认/取消/未安装/失败反馈 | E2E-003/004；交接不创建 SDK/Relay session、不显示投屏中 |
 | PLT-W05f | TODO | W05e | 100 次开始/停止/设备/网络切换及睡眠/唤醒/退出，关闭 CP-W01 | E2E-005；进程/线程/socket/RSS/UI delay/dropped、旧 generation、退出零残留 |
 
 共同禁止路径：不修改 Cast-SDK facade/接收端协议、MED/Relay 安全边界或公共 MHV1 schema；发现缺口时停止并建独立任务。每个 slice 单独 `IN_PROGRESS`、测试、v0.9 Review 和提交；`PLT-W05` 只有 W05a..f 全部完成才可 `DONE`。
+
+### PLT-W05c0 原子范围（MHV1 投屏码与播控扩展）
+
+- 状态：`DONE`；依赖 `PLT-W05b DONE`。审计确认现有 MHV1 kind 13..20 和 `MediaHostCastRuntime` 只表达 discovery/list/start/stop/poll，而 W05c/CS-010 明确要求产品投屏码与 pause/resume/seek；此前 b3b/b3c 又把两者列为不做，故 W05c 不能在不扩协议的情况下验收。
+- 单一目标：保持 `MHV1` magic/version、16KiB frame 和 kind 1..20 原字节不变，追加投屏码解析请求/回复及 generation-bound play/pause/seek 请求；Rust media-host 只调用既有 `CastFacade::resolve_device_by_cast_code` 与 `CastUsecase::{play,pause,seek}`，Browser 侧 adapter 仅提供有界异步端口和稳定回复，不在 UI 线程执行 SDK/pipe/wait。
+- 输入/输出与允许路径：`crates/crayon-ipc-schema/**`、`crates/crayon-app-runtime/**`、`crates/crayon-media-host/**`、`browser/cef-shell/src/ipc/**`、`browser/cef-shell/src/browser/media_host/**`、Windows/macOS media-host process 的 reply allow-set、相邻 golden/codec/runtime/process/adapter tests、CMake/package contract 与本 Roadmap/索引。投屏码入界只允许有界规范化字符；回复只携带既有稳定 device presentation；控制绑定非零 session generation，seek 使用有界绝对秒数。
+- 禁止修改：Cast-SDK、`crayon-cast-adapter` 公共 facade、接收端、MED/Relay、CEF widget/平台 chrome、页面/Renderer、外部客户端交接；不得在 DTO、日志或诊断中加入 receiver IP/host/UDN/control URL、媒体/page URL、Cookie/Authorization、relay secret 或 SDK 自然语言。
+- 验收：Rust/C++ current/previous golden 双向读取；新增 kind 的 roundtrip、畸形/截断/超长/未知/重复 request、非法投屏码、旧/零 generation、seek 上界、无会话/终态/route lost、超时与 late reply fencing；Debug/Release `ALL_BUILD` 与相关/完整 CTest，`cargo fmt`、targeted clippy/tests、`scripts/check.ps1 fast/security`，v0.9 Review P0/P1=0。明确不做 Windows UI 和真机通过结论（回到 W05c）。
+
+### PLT-W05c0 完成记录（2026-08-31，MHV1 投屏码与播控扩展）
+
+- 实现：保持 `MHV1` magic/version、16KiB frame 与 kind 1..20 字节兼容，追加 kind 21/22 的有界投屏码解析和稳定 `Device/CastError` 回复，以及 kind 23/24 的 generation-bound play/pause/seek 与稳定 `Applied/CastError` 回复。Rust media-host 仅复用既有 `CastFacade::resolve_device_by_cast_code` 和 `CastUsecase`，Browser adapter 只做有界异步请求；控制回复携带 session generation，replacement session 后到达的旧回复由 adapter 丢弃。Windows/macOS process allow-set 仅登记新 reply kind，未改变 Cast-SDK facade、接收端或 Relay/MED 边界。
+- 协议与自动化：`cargo test -p crayon-ipc-schema`、`cargo test -p crayon-app-runtime --all-targets`（60 unit + 9 + 2 + 8 + 2）、`cargo test -p crayon-media-host --all-targets`、targeted `cargo clippy ... -- -D warnings` 全部退出码 0；Rust/C++ codec 使用固定跨语言 golden 覆盖 resolve/control 成功与稳定错误，并覆盖畸形 one-of、未知 tag、超长/非法 cast code、零/旧 generation、seek 上界、无会话、route lost 与 late reply fencing。`cargo fmt --all -- --check`、Python fixture `py_compile` 和 `git diff --check` 退出码 0。
+- Windows 构建与 CTest：Windows x64 multi-config tree 的 Debug/Release `ALL_BUILD` 均通过；`ctest --test-dir .cache/build/windows-cef-debug -C Debug --output-on-failure` 为 **85/85**（279.31s），Release 为 **85/85**（187.32s）。其中真实 CEF `cast_cef_integration_windows` 分别为 3.84s/2.71s，`page_snapshot_cef_integration_windows` 分别为 56.50s/35.48s。Windows CEF 测试先经产品 F24 trusted-input 路径，再以 CEF 鼠标事件点击仅限 fixture 的全屏播放按钮；修复了脚本 `media.play()` 在该 Windows CEF 环境不推进而造成的伪失败，未向产品命令行加入 autoplay 放宽。
+- Workspace 门禁：`RUST_TEST_THREADS=1 scripts/check.ps1 fast` 退出码 0（167.2s）；`scripts/check.ps1 security` 退出码 0（19.1s）。repo guard 的既有文件/函数规模与可配置字面量 warning 保持 warning，未出现阻断发现；RG-001/002/004A/004B/004C/005/007/008/009 通过，RG-006 因未指定发布 artifact 为 `not_applicable`，发布 artifact 扫描归后续打包任务。
+- Code Review：按 v0.9 依次审查需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试/证据、可维护性/供应链。审查中关闭三项 P1：投屏码错误不得扁平化为 HostError、控制错误必须使用稳定 reply、late control reply 必须绑定并校验 session generation。最终 P0 0、P1 0、P2 0、P3 0，`APPROVE`；Roadmap 最高状态 `DONE`。
+- 未覆盖与风险：本切片按范围不接 Windows UI、不声明 ADB/Direct 真机通过，均由 `PLT-W05c` 闭合。固定 SDK 的投屏码调用没有 cooperative cancel，当前以有界调用方丢弃、process generation 和 controller pending state 防止迟到结果污染；产品 UI 的取消行为仍须在 W05c 验证。macOS 仅通过 Windows 上的 source contract 检查 reply allow-set，macOS 构建、签名与行为均 `NOT_RUN` 并按用户决策后置。
+
+### PLT-W05c 预备记录（2026-09-01）
+
+- 状态：`READY`；依赖 `PLT-W05c0 DONE`。单一目标是由 Windows x64 真实 `CrayonBrowser.exe` 与 bundled Desktop Host 驱动 clear fixture，经产品 Cast chrome 完成蜡笔正式接收端的自动发现和投屏码连接，并闭合 Direct 首帧、pause/resume/seek/stop 与资源清理。
+- 输入与真机：离线 clear fixture；ADB 设备 `VED7N18906000919`（Huawei EML-AL00、Android 10），正式接收端 `com.zknowai.labi.cast.receiver` 1.1.1（versionCode 10101），本轮开始时 `wlan0=192.168.3.166/24` 且 `MainActivity` 前台。上述仅是开工快照，完成记录仍须包含测试时刻的 build/network/上屏/终态证据。
+- 允许路径：Windows CEF 产品装配与相邻 E2E/Harness、测试 fixture、平台 package/CMake、`browser/cef-shell/src/browser/media_host/**` 中现有共享 controller 的最小缺陷修复，以及本 Roadmap。禁止修改 Cast-SDK/接收端、复制协议、借用 standalone/Fake 结论，禁止把 ADB online、Activity 启动或页面截图单独冒充 Direct 成功。
+- 验收与命令：Windows x64 Debug/Release `ALL_BUILD` 与完整 CTest；`scripts/check.ps1 fast`、`scripts/check.ps1 security`；E2E-001 必须从页面点击播放进入产品自动发现并在手机真实首帧后完成 pause/resume/seek/stop；CS-010 还必须以产品投屏码入口连接同一接收端。记录产品/receiver 会话、播放位置变化、停止后 `MainActivity` 与 Browser/Host/SDK 资源归零。若发现 Windows 产品缺陷，先补稳定复现测试再做共同入口最小修复。
+- 不做：MP4 Range/HLS Relay（W05d）、DRM/credential/handoff（W05e）、100 次/电源网络长稳（W05f）、macOS 特有验证，以及 Cast-SDK/receiver 功能开发。
 
 ### PLT-W05a 完成记录（2026-08-31，Windows bundled media-host 产品装配）
 

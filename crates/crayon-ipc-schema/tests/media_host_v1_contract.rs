@@ -1,18 +1,25 @@
 use crayon_domain::{CoreError, ReceiverCapabilities};
 use crayon_ipc_schema::{
     decode_media_host_message, encode_media_host_message, AdContinuity, CastPolicyDecision,
-    ExternalClientHandoff, HandoffReason, HeadersClass, MediaHostCastErrorCode,
-    MediaHostCastStartOutcome, MediaHostDeliveryRoute, MediaHostDevice, MediaHostDeviceState,
-    MediaHostDiscoveryAction, MediaHostError, MediaHostErrorCode, MediaHostMessage,
-    MediaHostPlayback, MediaHostSessionEvent, MediaHostSessionPhase, MediaHostSessionPlayback,
-    MediaHostSource, MediaHostTerminalReason, MediaHostUrlFact, ProtocolKind,
-    MAX_MEDIA_HOST_FRAME_BYTES,
+    ExternalClientHandoff, HandoffReason, HeadersClass, MediaHostCastControlAction,
+    MediaHostCastControlOutcome, MediaHostCastErrorCode, MediaHostCastStartOutcome,
+    MediaHostDeliveryRoute, MediaHostDevice, MediaHostDeviceState, MediaHostDiscoveryAction,
+    MediaHostError, MediaHostErrorCode, MediaHostMessage, MediaHostPlayback,
+    MediaHostResolveCastCodeOutcome, MediaHostSessionEvent, MediaHostSessionPhase,
+    MediaHostSessionPlayback, MediaHostSource, MediaHostTerminalReason, MediaHostUrlFact,
+    ProtocolKind, MAX_MEDIA_HOST_FRAME_BYTES, MAX_MEDIA_HOST_SEEK_SECONDS,
 };
 
 const CURRENT_INGEST_GOLDEN: &str = "4d4856310001010000000009726571756573742d31000000057461622d3100000000000000070000000000000009000000000000007b0000001a68747470733a2f2f706167652e6578616d706c652f77617463680000003768747470733a2f2f6d656469612e6578616d706c652f766964656f2e6d70343f7369676e61747572653d666978747572652d76616c7565000001000000000000303901000000000000ea60000001010101000e100000";
 // MHV1 has not changed yet; the previous compatibility vector is deliberately
 // byte-identical until a v2 writer exists.
 const PREVIOUS_INGEST_GOLDEN: &str = CURRENT_INGEST_GOLDEN;
+const RESOLVE_CAST_CODE_GOLDEN: &str = "4d4856310001150000000006636f64652d310000000741423120434432";
+const RESOLVE_CAST_CODE_REPLY_GOLDEN: &str = "4d485631000116000000000b636f64652d6661696c65640100";
+const CONTROL_CAST_GOLDEN: &str =
+    "4d48563100011700000000067365656b2d31000000000000000b0201000000000000001e";
+const CONTROL_CAST_REPLY_GOLDEN: &str =
+    "4d485631000118000000000b7365656b2d6661696c6564000000000000000b0108";
 
 fn playback() -> MediaHostPlayback {
     MediaHostPlayback {
@@ -180,6 +187,47 @@ fn all_messages() -> Vec<MediaHostMessage> {
                 },
             ],
         },
+        MediaHostMessage::ResolveCastCode {
+            request_id: "code-1".to_owned(),
+            cast_code: "AB1 CD2".to_owned(),
+        },
+        MediaHostMessage::ResolveCastCodeReply {
+            request_id: "code-1".to_owned(),
+            outcome: MediaHostResolveCastCodeOutcome::Resolved(MediaHostDevice {
+                device_id: "receiver_1".to_owned(),
+                display_name: "Living Room".to_owned(),
+                state: MediaHostDeviceState::Ready,
+                is_crayon_receiver: true,
+            }),
+        },
+        MediaHostMessage::ResolveCastCodeReply {
+            request_id: "code-failed".to_owned(),
+            outcome: MediaHostResolveCastCodeOutcome::Failed(
+                MediaHostCastErrorCode::DeviceNotFound,
+            ),
+        },
+        MediaHostMessage::ControlCast {
+            request_id: "pause-1".to_owned(),
+            session_generation: 11,
+            action: MediaHostCastControlAction::Pause,
+            position_seconds: None,
+        },
+        MediaHostMessage::ControlCast {
+            request_id: "seek-1".to_owned(),
+            session_generation: 11,
+            action: MediaHostCastControlAction::Seek,
+            position_seconds: Some(30),
+        },
+        MediaHostMessage::ControlCastReply {
+            request_id: "pause-1".to_owned(),
+            session_generation: 11,
+            outcome: MediaHostCastControlOutcome::Applied,
+        },
+        MediaHostMessage::ControlCastReply {
+            request_id: "seek-failed".to_owned(),
+            session_generation: 11,
+            outcome: MediaHostCastControlOutcome::Failed(MediaHostCastErrorCode::RouteLost),
+        },
     ]
 }
 
@@ -216,6 +264,49 @@ fn current_and_previous_vectors_roundtrip() {
     assert_eq!(
         hex(&encode_media_host_message(&device_page()).unwrap()),
         CAST_GOLDEN
+    );
+    assert_eq!(
+        hex(
+            &encode_media_host_message(&MediaHostMessage::ResolveCastCode {
+                request_id: "code-1".to_owned(),
+                cast_code: "AB1 CD2".to_owned(),
+            })
+            .unwrap()
+        ),
+        RESOLVE_CAST_CODE_GOLDEN
+    );
+    assert_eq!(
+        hex(
+            &encode_media_host_message(&MediaHostMessage::ResolveCastCodeReply {
+                request_id: "code-failed".to_owned(),
+                outcome: MediaHostResolveCastCodeOutcome::Failed(
+                    MediaHostCastErrorCode::DeviceNotFound,
+                ),
+            })
+            .unwrap()
+        ),
+        RESOLVE_CAST_CODE_REPLY_GOLDEN
+    );
+    assert_eq!(
+        hex(&encode_media_host_message(&MediaHostMessage::ControlCast {
+            request_id: "seek-1".to_owned(),
+            session_generation: 11,
+            action: MediaHostCastControlAction::Seek,
+            position_seconds: Some(30),
+        })
+        .unwrap()),
+        CONTROL_CAST_GOLDEN
+    );
+    assert_eq!(
+        hex(
+            &encode_media_host_message(&MediaHostMessage::ControlCastReply {
+                request_id: "seek-failed".to_owned(),
+                session_generation: 11,
+                outcome: MediaHostCastControlOutcome::Failed(MediaHostCastErrorCode::RouteLost),
+            })
+            .unwrap()
+        ),
+        CONTROL_CAST_REPLY_GOLDEN
     );
 }
 
@@ -353,6 +444,43 @@ fn bounds_invalid_shapes_and_hostile_mutations_are_rejected() {
         })
         .is_err()
     );
+    assert!(
+        encode_media_host_message(&MediaHostMessage::ResolveCastCode {
+            request_id: "code-invalid".to_owned(),
+            cast_code: "ABC/123".to_owned(),
+        })
+        .is_err()
+    );
+    assert!(encode_media_host_message(&MediaHostMessage::ControlCast {
+        request_id: "control-invalid".to_owned(),
+        session_generation: 0,
+        action: MediaHostCastControlAction::Play,
+        position_seconds: None,
+    })
+    .is_err());
+    assert!(encode_media_host_message(&MediaHostMessage::ControlCast {
+        request_id: "control-invalid".to_owned(),
+        session_generation: 1,
+        action: MediaHostCastControlAction::Pause,
+        position_seconds: Some(1),
+    })
+    .is_err());
+    assert!(encode_media_host_message(&MediaHostMessage::ControlCast {
+        request_id: "control-invalid".to_owned(),
+        session_generation: 1,
+        action: MediaHostCastControlAction::Seek,
+        position_seconds: Some(MAX_MEDIA_HOST_SEEK_SECONDS + 1),
+    })
+    .is_err());
+    let mut invalid_control_reply =
+        encode_media_host_message(&MediaHostMessage::ControlCastReply {
+            request_id: "control-invalid".to_owned(),
+            session_generation: 1,
+            outcome: MediaHostCastControlOutcome::Applied,
+        })
+        .unwrap();
+    *invalid_control_reply.last_mut().unwrap() = 2;
+    assert!(decode_media_host_message(&invalid_control_reply).is_err());
 
     let seed = encode_media_host_message(&ingest()).unwrap();
     for index in 0..seed.len() {

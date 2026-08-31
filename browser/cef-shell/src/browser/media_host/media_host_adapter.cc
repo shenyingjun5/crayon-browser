@@ -71,6 +71,8 @@ std::string ReplyRequestId(const media_host_ipc::Message &message) {
                       std::is_same_v<T, media_host_ipc::ErrorReply> ||
                       std::is_same_v<T, media_host_ipc::DevicePageReply> ||
                       std::is_same_v<T, media_host_ipc::StartCastReply> ||
+                      std::is_same_v<T, media_host_ipc::ResolveCastCodeReply> ||
+                      std::is_same_v<T, media_host_ipc::ControlCastReply> ||
                       std::is_same_v<T, media_host_ipc::SessionEventsReply>)
           return value.request_id;
         return {};
@@ -92,6 +94,8 @@ std::string NewRequestId(const media_host_ipc::Message &message) {
                       std::is_same_v<T, media_host_ipc::ListDevices> ||
                       std::is_same_v<T, media_host_ipc::StartCast> ||
                       std::is_same_v<T, media_host_ipc::StopCast> ||
+                      std::is_same_v<T, media_host_ipc::ResolveCastCode> ||
+                      std::is_same_v<T, media_host_ipc::ControlCast> ||
                       std::is_same_v<T, media_host_ipc::PollSessionEvents>)
           return value.request_id;
         return {};
@@ -154,6 +158,10 @@ bool MediaHostAdapter::Submit(media_host_ipc::Message message) {
           return CastRequestKind::kStartCast;
         if constexpr (std::is_same_v<T, media_host_ipc::StopCast>)
           return CastRequestKind::kStopCast;
+        if constexpr (std::is_same_v<T, media_host_ipc::ResolveCastCode>)
+          return CastRequestKind::kResolveCastCode;
+        if constexpr (std::is_same_v<T, media_host_ipc::ControlCast>)
+          return CastRequestKind::kControlCast;
         if constexpr (std::is_same_v<T, media_host_ipc::PollSessionEvents>)
           return CastRequestKind::kPollSessionEvents;
         return std::nullopt;
@@ -297,6 +305,22 @@ bool MediaHostAdapter::RequestStopCast(std::uint64_t session_generation) {
   return Submit(media_host_ipc::StopCast{NextRequestId(), session_generation});
 }
 
+bool MediaHostAdapter::RequestResolveCastCode(std::string cast_code) {
+  return Submit(
+      media_host_ipc::ResolveCastCode{NextRequestId(), std::move(cast_code)});
+}
+
+bool MediaHostAdapter::RequestControlCast(
+    std::uint64_t session_generation, media_host_ipc::CastControlAction action,
+    std::optional<std::uint64_t> position_seconds) {
+  if (!active_session_generation_ || session_generation == 0 ||
+      session_generation != *active_session_generation_) {
+    return false;
+  }
+  return Submit(media_host_ipc::ControlCast{NextRequestId(), session_generation,
+                                            action, position_seconds});
+}
+
 std::vector<media_host_ipc::Message>
 MediaHostAdapter::DrainCast(std::size_t maximum) {
   PollReplies();
@@ -385,6 +409,19 @@ bool MediaHostAdapter::Admit(const media_host_ipc::Message &message,
     return true;
   }
   if (const auto *value = std::get_if<media_host_ipc::StopCast>(&message)) {
+    if (!active_session_generation_ || value->session_generation == 0 ||
+        value->session_generation != *active_session_generation_) {
+      return false;
+    }
+    *request_id = value->request_id;
+    return true;
+  }
+  if (const auto *value =
+          std::get_if<media_host_ipc::ResolveCastCode>(&message)) {
+    *request_id = value->request_id;
+    return true;
+  }
+  if (const auto *value = std::get_if<media_host_ipc::ControlCast>(&message)) {
     if (!active_session_generation_ || value->session_generation == 0 ||
         value->session_generation != *active_session_generation_) {
       return false;
@@ -521,6 +558,10 @@ bool MediaHostAdapter::HandleCastReply(media_host_ipc::Message message,
        std::holds_alternative<media_host_ipc::DevicePageReply>(message)) ||
       (kind == CastRequestKind::kStartCast &&
        std::holds_alternative<media_host_ipc::StartCastReply>(message)) ||
+      (kind == CastRequestKind::kResolveCastCode &&
+       std::holds_alternative<media_host_ipc::ResolveCastCodeReply>(message)) ||
+      (kind == CastRequestKind::kControlCast &&
+       std::holds_alternative<media_host_ipc::ControlCastReply>(message)) ||
       (kind == CastRequestKind::kPollSessionEvents &&
        std::holds_alternative<media_host_ipc::SessionEventsReply>(message)) ||
       std::holds_alternative<media_host_ipc::ErrorReply>(message);
@@ -569,6 +610,12 @@ bool MediaHostAdapter::HandleCastReply(media_host_ipc::Message message,
     message = std::move(filtered);
     next_session_poll_ =
         std::chrono::steady_clock::now() + kSessionPollInterval;
+  } else if (const auto *control =
+                 std::get_if<media_host_ipc::ControlCastReply>(&message)) {
+    if (!active_session_generation_ ||
+        control->session_generation != *active_session_generation_) {
+      return true;
+    }
   }
   return PushCastReply(std::move(message));
 }

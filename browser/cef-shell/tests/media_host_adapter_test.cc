@@ -175,6 +175,19 @@ bool RunCastCommandPump() {
       !std::holds_alternative<mh::DevicePageReply>(cast.front()))
     return false;
 
+  if (!adapter.RequestResolveCastCode("AB1 CD2"))
+    return false;
+  const auto resolve = std::get<mh::ResolveCastCode>(fake->sent.back());
+  fake->inbound.push_back(mh::ResolveCastCodeReply{
+      resolve.request_id,
+      mh::Device{"receiver-1", "Living Room", mh::DeviceState::kReady, true},
+      std::nullopt});
+  adapter.Tick();
+  cast = adapter.DrainCast(4);
+  if (cast.size() != 1 ||
+      !std::holds_alternative<mh::ResolveCastCodeReply>(cast.front()))
+    return false;
+
   if (!adapter.RequestStartCast(77, "receiver-1", true))
     return false;
   const auto start = std::get<mh::StartCast>(fake->sent.back());
@@ -200,6 +213,39 @@ bool RunCastCommandPump() {
   if (!empty_events || !empty_events->events.empty())
     return false;
 
+  if (adapter.RequestControlCast(4, mh::CastControlAction::kPause,
+                                 std::nullopt) ||
+      adapter.RequestControlCast(5, mh::CastControlAction::kPause, 1) ||
+      adapter.RequestControlCast(5, mh::CastControlAction::kSeek,
+                                 mh::kMaxSeekSeconds + 1) ||
+      !adapter.RequestControlCast(5, mh::CastControlAction::kPause,
+                                  std::nullopt))
+    return false;
+  const auto pause = std::get<mh::ControlCast>(fake->sent.back());
+  fake->inbound.push_back(
+      mh::ControlCastReply{pause.request_id, 5, std::nullopt});
+  adapter.Tick();
+  cast = adapter.DrainCast(2);
+  if (cast.size() != 1 ||
+      !std::holds_alternative<mh::ControlCastReply>(cast.front()) ||
+      !adapter.RequestControlCast(5, mh::CastControlAction::kSeek, 30))
+    return false;
+  const auto seek = std::get<mh::ControlCast>(fake->sent.back());
+  fake->inbound.push_back(
+      mh::ControlCastReply{seek.request_id, 5, mh::CastError::kRouteLost});
+  adapter.Tick();
+  cast = adapter.DrainCast(2);
+  const auto *control_reply =
+      cast.size() == 1 ? std::get_if<mh::ControlCastReply>(&cast.front())
+                       : nullptr;
+  if (!control_reply || control_reply->error != mh::CastError::kRouteLost)
+    return false;
+
+  if (!adapter.RequestControlCast(5, mh::CastControlAction::kPause,
+                                  std::nullopt))
+    return false;
+  const auto late_control = std::get<mh::ControlCast>(fake->sent.back());
+
   if (!adapter.RequestStartCast(77, "receiver-1", true))
     return false;
   const auto replacement = std::get<mh::StartCast>(fake->sent.back());
@@ -213,6 +259,11 @@ bool RunCastCommandPump() {
       !std::holds_alternative<mh::StartCastReply>(cast.front()) ||
       adapter.RequestStopCast(5) ||
       !std::holds_alternative<mh::PollSessionEvents>(fake->sent.back()))
+    return false;
+  fake->inbound.push_back(
+      mh::ControlCastReply{late_control.request_id, 5, std::nullopt});
+  adapter.Tick();
+  if (!adapter.DrainCast(2).empty())
     return false;
 
   const auto poll = std::get<mh::PollSessionEvents>(fake->sent.back());

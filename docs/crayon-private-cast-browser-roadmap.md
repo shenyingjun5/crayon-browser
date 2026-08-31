@@ -238,7 +238,7 @@ flowchart LR
 
 ## 7. 当前领取顺序
 
-1. `PLT-W05a/b DONE -> W05c READY -> W05d..f`：Windows media-host 与 Cast UI 已装配；继续 ADB 正式接收端 Direct/Relay、拒绝/交接与 100 次资源稳定性。
+1. `PLT-W05a/b/c0 DONE -> W05c READY -> W05d..f`：Windows media-host、Cast UI 与私有 MHV1 投屏码/播控已装配；继续 ADB 正式接收端 Direct/Relay、拒绝/交接与 100 次资源稳定性。
 2. `MDV-25W/20W -> MRT-09W`：Windows 本地 Markdown 生产隔离、P0 Runtime、包体与真机回归。
 3. `PRV-13AW -> CNT-21W -> PLT-19W -> QAR Windows slices -> REL-03/04 -> QAR-16W`：三闭环数据流与网页 Markdown 总 Review后，执行安全、性能、长稳、安装/升级/回滚、SBOM 与候选 Go/NoGo。
 

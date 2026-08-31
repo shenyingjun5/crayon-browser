@@ -48,7 +48,7 @@
 
 | 顺序 | 任务 | 状态 | 说明 |
 |---:|---|---|---|
-| 1 | `PLT-W05c` | READY | 使用 ADB 正式接收端闭合 Windows clear fixture Direct 发现、连接、真实上屏与 pause/resume/seek/stop |
+| 1 | `PLT-W05c` | READY | 私有 MHV1 投屏码与 generation-bound play/pause/seek 已由 `PLT-W05c0 DONE` 补齐；使用 ADB 正式接收端闭合 Direct 真机链路 |
 
 ### 平台收口与待拆装配
 
@@ -57,7 +57,7 @@
 | `MDV-20` | VERIFIED | 仅缺 Windows x64 Mermaid Full 发布回归；不得改写 macOS 已有证据 |
 | `MDV-24` | VERIFIED | 主矩阵已闭合；Narrator、中文 IME、原生 200% DPI、原生 macOS x64 仍待补 |
 | `MRT-09` | TODO | 等 `MDV-25` 清除生产 fixture 后执行 P0 Runtime 总 Review |
-| `PLT-W05a..f` | DONE/READY/TODO | W05a media-host 已装配；W05b Cast UI READY，随后 ADB Direct→Relay→拒绝/交接→100 次稳定性，严格串行 |
+| `PLT-W05a..f` | DONE/READY/TODO | W05a/b 已装配；W05c0 补产品投屏码/播控内部协议，随后 ADB Direct→Relay→拒绝/交接→100 次稳定性，严格串行 |
 | `PLT-M05b4..b6/M05c` | TODO | macOS 特有真机与生命周期验证后置；不阻塞 Windows 候选，不改写已有 macOS 证据 |
 
 ### 第二期与依赖阻塞

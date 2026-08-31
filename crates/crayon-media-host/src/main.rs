@@ -127,6 +127,8 @@ mod desktop {
                     | MediaHostMessage::ListDevices { .. }
                     | MediaHostMessage::StartCast { .. }
                     | MediaHostMessage::StopCast { .. }
+                    | MediaHostMessage::ResolveCastCode { .. }
+                    | MediaHostMessage::ControlCast { .. }
                     | MediaHostMessage::PollSessionEvents { .. }
             ) {
                 let request_id = message_request_id(&message)
