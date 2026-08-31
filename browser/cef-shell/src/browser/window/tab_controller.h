@@ -126,6 +126,8 @@ class WindowClient final : public CefClient,
       const;
   void SetMediaObservationEventsReadyCallback(
       observation::CefObservationBridge::EventsReadyCallback callback);
+  void SetMediaObservationLifecycleCallback(
+      observation::CefObservationBridge::LifecycleCallback callback);
 
   // Permission handlers: default-deny unless explicitly allowed by the store.
   CefRefPtr<CefPermissionHandler> GetPermissionHandler() override {
@@ -166,6 +168,8 @@ class TabController final : public CefBaseRefCounted {
       std::function<void(CefRefPtr<CefBrowser> browser)>;
   using PageSnapshotEventsReadyCallback = std::function<void()>;
   using MediaObservationEventsReadyCallback = std::function<void()>;
+  using MediaObservationLifecycleCallback =
+      observation::CefObservationBridge::LifecycleCallback;
 
   explicit TabController(
       std::string initial_url,
@@ -264,8 +268,12 @@ class TabController final : public CefBaseRefCounted {
   void OnPageSnapshotEventsReady();
   void SetMediaObservationEventsReadyCallback(
       MediaObservationEventsReadyCallback callback);
+  void SetMediaObservationLifecycleCallback(
+      MediaObservationLifecycleCallback callback);
   std::vector<::crayon::cef_shell::gateway::GatewayEvent>
   DrainMediaObservations(std::size_t max_events);
+  std::optional<std::string> TrustedPageUrl(
+      std::uint32_t tab_id, std::uint64_t navigation_id) const;
   observation::MediaObservationDiagnostics media_observation_diagnostics()
       const;
   void NoteTrustedUserInputForActiveTab();

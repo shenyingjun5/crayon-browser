@@ -221,6 +221,11 @@ void WindowClient::SetMediaObservationEventsReadyCallback(
   media_observation_bridge_.SetEventsReadyCallback(std::move(callback));
 }
 
+void WindowClient::SetMediaObservationLifecycleCallback(
+    observation::CefObservationBridge::LifecycleCallback callback) {
+  media_observation_bridge_.SetLifecycleCallback(std::move(callback));
+}
+
 CefMessageRouterBrowserSide* WindowClient::EnsurePageRouter() {
   CEF_REQUIRE_UI_THREAD();
   if (!page_router_) {
@@ -480,10 +485,27 @@ void TabController::SetMediaObservationEventsReadyCallback(
   });
 }
 
+void TabController::SetMediaObservationLifecycleCallback(
+    MediaObservationLifecycleCallback callback) {
+  CEF_REQUIRE_UI_THREAD();
+  client_->SetMediaObservationLifecycleCallback(std::move(callback));
+}
+
 std::vector<::crayon::cef_shell::gateway::GatewayEvent>
 TabController::DrainMediaObservations(std::size_t max_events) {
   CEF_REQUIRE_UI_THREAD();
   return client_->DrainMediaObservations(max_events);
+}
+
+std::optional<std::string> TabController::TrustedPageUrl(
+    std::uint32_t tab_id, std::uint64_t navigation_id) const {
+  CEF_REQUIRE_UI_THREAD();
+  const TabSnapshot* tab = model_.Find(tab_id);
+  if (!tab || tab->navigation_generation != navigation_id ||
+      tab->lifecycle != TabLifecycle::kReady) {
+    return std::nullopt;
+  }
+  return tab->url;
 }
 
 observation::MediaObservationDiagnostics

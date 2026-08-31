@@ -31,6 +31,9 @@ struct MediaObservationDiagnostics {
 class CefObservationBridge final {
  public:
   using EventsReadyCallback = std::function<void()>;
+  using LifecycleCallback = std::function<void(
+      std::uint32_t tab_id, std::uint64_t navigation_id,
+      std::uint32_t generation, bool closed)>;
 
   CefObservationBridge();
 
@@ -55,11 +58,13 @@ class CefObservationBridge final {
   ::crayon::cef_shell::gateway::GatewayStats stats() const;
   MediaObservationDiagnostics diagnostics() const;
   void SetEventsReadyCallback(EventsReadyCallback callback);
+  void SetLifecycleCallback(LifecycleCallback callback);
 
  private:
   struct Binding {
     std::uint32_t tab_id = 0;
     std::uint64_t navigation_id = 0;
+    bool eme_encrypted = false;
     ::crayon::cef_shell::network::NetworkObserver network_observer;
   };
 
@@ -77,6 +82,7 @@ class CefObservationBridge final {
   ::crayon::cef_shell::input_proof::InputProofGate input_proof_{0};
   ::crayon::cef_shell::gateway::ObservationGateway gateway_;
   EventsReadyCallback events_ready_callback_;
+  LifecycleCallback lifecycle_callback_;
   MediaObservationDiagnostics diagnostics_;
 };
 

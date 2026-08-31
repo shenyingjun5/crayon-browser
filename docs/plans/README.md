@@ -48,9 +48,9 @@
 
 | 顺序 | 任务 | 状态 | 说明 |
 |---:|---|---|---|
-| 1 | `PLT-M05b2c` | READY | `b2a/b2b VERIFIED`；把真实 CEF ObservationGateway 事实接入 media-host 并闭合 fixture |
-| 2 | `MDV-25` | READY | 移除 `BuildFixtureSnapshot()` 生产初始化；同样触及 CEF App/CMake，串行领取 |
-| 3 | `CNT-20` | READY | 网页→Markdown 双平台 E2E/security/perf；macOS 先行，Windows x64 最后回归 |
+| 1 | `MDV-25` | READY | 移除 `BuildFixtureSnapshot()` 生产初始化；同样触及 CEF App/CMake，串行领取 |
+| 2 | `CNT-20` | READY | 网页→Markdown 双平台 E2E/security/perf；macOS 先行，Windows x64 最后回归 |
+| 3 | `PLT-M05b3` | READY | M05b2 DONE；接通 Cast UI、设备选择、Cast-SDK facade 与 session event pump，不做真机结论 |
 
 ### 平台收口与待拆装配
 
@@ -59,7 +59,7 @@
 | `MDV-20` | VERIFIED | 仅缺 Windows x64 Mermaid Full 发布回归；不得改写 macOS 已有证据 |
 | `MDV-24` | VERIFIED | 主矩阵已闭合；Narrator、中文 IME、原生 200% DPI、原生 macOS x64 仍待补 |
 | `MRT-09` | TODO | 等 `MDV-25` 清除生产 fixture 后执行 P0 Runtime 总 Review |
-| `PLT-M05b2..b6/M05c` | READY/TODO | `M05b1 DONE`；macOS 策略→SDK→Direct→Relay→拒绝/交接→资源稳定性，严格串行 |
+| `PLT-M05b3..b6/M05c` | READY/TODO | `M05b1/M05b2 DONE`；macOS SDK→Direct→Relay→拒绝/交接→资源稳定性，严格串行 |
 | `PLT-W05` | TODO | macOS 闭环缺陷关闭后做 Windows 对称装配；领取前按切片补齐原子范围与设备条件 |
 
 ### 第二期与依赖阻塞

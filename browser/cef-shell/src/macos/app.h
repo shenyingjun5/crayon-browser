@@ -12,6 +12,7 @@
 #include "crayon/browser_mdv/mdv_page.h"
 #include "include/cef_app.h"
 #include "macos/content_host_adapter_mac.h"
+#include "macos/media_host_adapter_mac.h"
 
 namespace crayon::browser::cef_shell {
 
@@ -51,6 +52,7 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   void ContinueContentHostStartup();
   void ScheduleContentHostTick();
   void ContentHostTick();
+  void ConsumeMediaObservations();
 
   const std::string product_name_;
   const browser_mdv::MdvPageStrings mdv_strings_;
@@ -59,6 +61,7 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   const std::shared_ptr<mdv::MdvEditController> mdv_editing_;
   std::unique_ptr<permission::PermissionStore> permission_store_;
   std::unique_ptr<macos::ContentHostAdapter> content_host_;
+  std::unique_ptr<macos::MediaHostAdapter> media_host_;
   std::unique_ptr<macos::TrustedInputMonitor> trusted_input_monitor_;
   CefRefPtr<window::TabController> tab_controller_;
   std::unique_ptr<page_markdown::CefPageMarkdownPreviewController>

@@ -34,6 +34,7 @@ struct GatewayEvent {
   std::uint32_t generation = 0;
   renderer::MediaObservation media;
   network::NetworkObservation network;
+  bool eme_encrypted = false;
 };
 
 /// Ingest outcome.
@@ -64,7 +65,8 @@ class ObservationGateway final {
 
   /// Ingests a media observation for the tab's current generation.
   GatewayResult SubmitMedia(std::uint32_t tab_id, std::uint64_t navigation_id,
-                            const renderer::MediaObservation& observation);
+                            const renderer::MediaObservation& observation,
+                            bool eme_encrypted = false);
 
   /// Ingests a network observation for the tab's current generation.
   GatewayResult SubmitNetwork(std::uint32_t tab_id, std::uint64_t navigation_id,

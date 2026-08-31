@@ -35,6 +35,12 @@ MEDIA_MP4_FIXTURE = """<!doctype html><meta charset=utf-8><title>MP4 fixture</ti
 MEDIA_HLS_FIXTURE = """<!doctype html><meta charset=utf-8><title>HLS fixture</title>
 <main><h1>HLS fixture</h1><video width=320 height=180 controls src=/clear.mp4></video></main>
 <script>fetch('/clear.m3u8');</script>"""
+MEDIA_DASH_FIXTURE = """<!doctype html><meta charset=utf-8><title>DASH fixture</title>
+<main><h1>DASH fixture</h1><video width=320 height=180 controls src=/clear.mp4></video></main>
+<script>fetch('/clear.mpd');</script>"""
+MEDIA_CREDENTIAL_FIXTURE = """<!doctype html><meta charset=utf-8><title>Credential fixture</title>
+<main><h1>Credential fixture</h1><video width=320 height=180 controls src=/clear.mp4></video></main>
+<script>fetch('/clear.mp4', {headers: {Authorization: 'Bearer fixture-only'}});</script>"""
 MEDIA_EMPTY_FIXTURE = """<!doctype html><meta charset=utf-8><title>Media fixture</title>
 <main><h1>Media fixture</h1><video width=320 height=180 controls></video></main>"""
 MEDIA_HIDDEN_FIXTURE = """<!doctype html><meta charset=utf-8><title>Hidden fixture</title>
@@ -58,6 +64,9 @@ AUTOMATED_SCENARIOS = (
     "media",
     "media-clear-mp4",
     "media-hls",
+    "media-dash",
+    "media-credential",
+    "media-host-crash",
     "media-blob",
     "media-mse",
     "media-eme",
@@ -99,6 +108,10 @@ def main() -> int:
         root_path.joinpath("media.html").write_text(MEDIA_FIXTURE, encoding="utf-8")
         root_path.joinpath("media-mp4.html").write_text(MEDIA_MP4_FIXTURE, encoding="utf-8")
         root_path.joinpath("media-hls.html").write_text(MEDIA_HLS_FIXTURE, encoding="utf-8")
+        root_path.joinpath("media-dash.html").write_text(MEDIA_DASH_FIXTURE, encoding="utf-8")
+        root_path.joinpath("media-credential.html").write_text(
+            MEDIA_CREDENTIAL_FIXTURE, encoding="utf-8"
+        )
         root_path.joinpath("media-empty.html").write_text(MEDIA_EMPTY_FIXTURE, encoding="utf-8")
         root_path.joinpath("media-hidden.html").write_text(MEDIA_HIDDEN_FIXTURE, encoding="utf-8")
         root_path.joinpath("media-cross-frame.html").write_text(
@@ -126,6 +139,12 @@ def main() -> int:
             "#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-PLAYLIST-TYPE:VOD\n"
             "#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:2.0,\nclear0.m4s\n"
             "#EXT-X-ENDLIST\n",
+            encoding="utf-8",
+        )
+        root_path.joinpath("clear.mpd").write_text(
+            "<?xml version='1.0'?><MPD type='static' "
+            "mediaPresentationDuration='PT2S' "
+            "xmlns='urn:mpeg:dash:schema:mpd:2011'><Period/></MPD>",
             encoding="utf-8",
         )
         root_path.joinpath("init.mp4").write_bytes(
@@ -158,6 +177,9 @@ def main() -> int:
                     "media-manual": "media.html",
                     "media-clear-mp4": "media-mp4.html",
                     "media-hls": "media-hls.html",
+                    "media-dash": "media-dash.html",
+                    "media-credential": "media-credential.html",
+                    "media-host-crash": "media-mp4.html",
                     "media-blob": "media-empty.html",
                     "media-mse": "media-empty.html",
                     "media-eme": "media-mp4.html",

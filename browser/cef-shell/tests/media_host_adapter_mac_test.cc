@@ -9,8 +9,10 @@
 
 namespace {
 
+using crayon::browser::cef_shell::macos::BrowserMediaFact;
 using crayon::browser::cef_shell::macos::MediaHostAdapter;
 using crayon::browser::cef_shell::macos::MediaHostTransport;
+using crayon::browser::cef_shell::macos::MediaPlanningEventKind;
 namespace mh = crayon::browser::cef_shell::macos::media_host_ipc;
 
 class FakeTransport final : public MediaHostTransport {
@@ -43,7 +45,92 @@ public:
   std::vector<mh::Message> sent, inbound;
 };
 
+bool RunObservationMapping() {
+  auto transport = std::make_unique<FakeTransport>();
+  FakeTransport *fake = transport.get();
+  MediaHostAdapter adapter(std::move(transport));
+  if (!adapter.Start("/test/media-host"))
+    return false;
+  adapter.Tick();
+
+  crayon::cef_shell::gateway::GatewayEvent media;
+  media.source = crayon::cef_shell::gateway::EventSource::kMedia;
+  media.tab_id = 42;
+  media.navigation_id = 7;
+  media.generation = 3;
+  media.media.navigation_id = 7;
+  media.media.source_kind =
+      crayon::cef_shell::renderer::MediaSourceKind::kHttpUrl;
+  media.media.source_url = "https://media.example/video.mp4";
+  media.media.current_time_seconds = 1.25;
+  media.media.visible_fraction = 0.5;
+  adapter.Consume({BrowserMediaFact{media, "https://page.example/watch", 123}});
+  if (fake->sent.size() != 2 ||
+      !std::holds_alternative<mh::Navigation>(fake->sent[0]))
+    return false;
+  const auto *ingest = std::get_if<mh::IngestUrl>(&fake->sent[1]);
+  if (!ingest || ingest->tab_id != "cef-42" || ingest->generation != 3 ||
+      ingest->page_url != "https://page.example/watch" ||
+      ingest->media_url != "https://media.example/video.mp4" ||
+      !ingest->playback || ingest->playback->position_ms != 1250 ||
+      ingest->playback->visible_area_px != 500000)
+    return false;
+  fake->inbound.push_back(
+      mh::CandidateReply{ingest->request_id, 9, "https://media.example"});
+  adapter.Tick();
+  const auto planning = adapter.DrainPlanning(2);
+  if (planning.size() != 1 ||
+      planning.front().kind != MediaPlanningEventKind::kCandidate ||
+      planning.front().candidate_id != 9 ||
+      planning.front().redacted_origin != "https://media.example")
+    return false;
+
+  crayon::cef_shell::gateway::GatewayEvent protected_fact = media;
+  protected_fact.source = crayon::cef_shell::gateway::EventSource::kNetwork;
+  protected_fact.network.navigation_id = 7;
+  protected_fact.network.eme_encrypted = true;
+  adapter.Consume(
+      {BrowserMediaFact{protected_fact, "https://page.example/watch", 124}});
+  if (!std::holds_alternative<mh::MarkEme>(fake->sent.back()))
+    return false;
+
+  crayon::cef_shell::gateway::GatewayEvent credential = media;
+  credential.source = crayon::cef_shell::gateway::EventSource::kNetwork;
+  credential.network.navigation_id = 7;
+  credential.network.url = "https://media.example/video.mp4";
+  credential.network.kind = crayon::cef_shell::network::ResourceKind::kMedia;
+  credential.network.header_class =
+      crayon::cef_shell::network::HeaderClass::kAuthorization;
+  adapter.Consume(
+      {BrowserMediaFact{credential, "https://page.example/watch", 124}});
+  const auto *credential_ingest =
+      std::get_if<mh::IngestUrl>(&fake->sent.back());
+  if (!credential_ingest ||
+      credential_ingest->headers_class != mh::HeadersClass::kCredentialBound ||
+      credential_ingest->playback)
+    return false;
+
+  crayon::cef_shell::gateway::GatewayEvent blob = media;
+  blob.media.source_kind =
+      crayon::cef_shell::renderer::MediaSourceKind::kBlobUrl;
+  blob.media.source_url.clear();
+  adapter.Consume({BrowserMediaFact{blob, "https://page.example/watch", 125}});
+  if (!std::holds_alternative<mh::DecideUrlLess>(fake->sent.back()))
+    return false;
+
+  if (!adapter.AdvanceNavigation(42, 8, 4))
+    return false;
+  const std::size_t sent_before_stale = fake->sent.size();
+  adapter.Consume({BrowserMediaFact{media, "https://page.example/watch", 126}});
+  if (fake->sent.size() != sent_before_stale)
+    return false;
+  adapter.Stop();
+  return true;
+}
+
 bool Run() {
+  if (!RunObservationMapping())
+    return false;
   auto transport = std::make_unique<FakeTransport>();
   FakeTransport *fake = transport.get();
   MediaHostAdapter adapter(std::move(transport));

@@ -3,6 +3,7 @@
 #include <CoreFoundation/CoreFoundation.h>
 
 #include <cstdint>
+#include <chrono>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -81,7 +82,7 @@ std::string PreferredLanguage() {
   return language;
 }
 
-std::string ContentHostExecutablePath() {
+std::string HelperExecutablePath(const char* helper_name) {
   CFURLRef bundle_url = CFBundleCopyBundleURL(CFBundleGetMainBundle());
   if (!bundle_url) return {};
   CFStringRef bundle_path =
@@ -91,8 +92,15 @@ std::string ContentHostExecutablePath() {
   if (bundle_path) CFRelease(bundle_path);
   if (path.empty()) return {};
   return (std::filesystem::path(path) / "Contents" / "Helpers" /
-          "crayon-content-host")
+          helper_name)
       .string();
+}
+
+std::uint64_t MonotonicMilliseconds() {
+  return static_cast<std::uint64_t>(
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::steady_clock::now().time_since_epoch())
+          .count());
 }
 
 browser_mdv::MdvPageStrings DefaultMdvStrings() {
@@ -161,6 +169,7 @@ BrowserApp::BrowserApp(std::string product_name)
           std::make_shared<mdv::MdvEditController>(mdv_runtime_, mdv_strings_)),
       permission_store_(std::make_unique<permission::PermissionStore>()),
       content_host_(std::make_unique<macos::ContentHostAdapter>()),
+      media_host_(std::make_unique<macos::MediaHostAdapter>()),
       trusted_input_monitor_(std::make_unique<macos::TrustedInputMonitor>()),
       tab_controller_(new window::TabController(
           kInitialUrl, window::TabController::BrowserCreatedCallback{},
@@ -269,13 +278,30 @@ void BrowserApp::OnContextInitialized() {
   tab_controller_->SetPageSnapshotEventsReadyCallback([this] {
     content_host_->Consume(tab_controller_->DrainPageSnapshots(16));
   });
+  tab_controller_->SetMediaObservationLifecycleCallback(
+      [host = media_host_.get()](std::uint32_t tab_id,
+                                 std::uint64_t navigation_id,
+                                 std::uint32_t generation, bool closed) {
+        if (closed) {
+          static_cast<void>(host->CloseTab(tab_id, generation));
+        } else {
+          static_cast<void>(
+              host->AdvanceNavigation(tab_id, navigation_id, generation));
+        }
+      });
+  tab_controller_->SetMediaObservationEventsReadyCallback(
+      [this] { ConsumeMediaObservations(); });
   tab_controller_->SetBrowsersClosedCallback([this] {
     content_host_tick_active_ = false;
     trusted_input_monitor_->Stop();
     page_markdown_preview_->Stop();
     content_host_->Stop();
+    media_host_->Stop();
   });
-  if (!content_host_->Start(ContentHostExecutablePath())) {
+  if (!content_host_->Start(HelperExecutablePath("crayon-content-host")) ||
+      !media_host_->Start(HelperExecutablePath("crayon-media-host"))) {
+    content_host_->Stop();
+    media_host_->Stop();
     CefQuitMessageLoop();
     return;
   }
@@ -284,9 +310,10 @@ void BrowserApp::OnContextInitialized() {
 
 void BrowserApp::ContinueContentHostStartup() {
   CEF_REQUIRE_UI_THREAD();
-  if (content_host_->healthy()) {
+  if (content_host_->healthy() && media_host_->healthy()) {
     if (!tab_controller_->CreateMainWindow()) {
       content_host_->Stop();
+      media_host_->Stop();
       CefQuitMessageLoop();
       return;
     }
@@ -296,6 +323,7 @@ void BrowserApp::ContinueContentHostStartup() {
   }
   if (++content_host_start_checks_ >= kContentHostStartupChecks) {
     content_host_->Stop();
+    media_host_->Stop();
     CefQuitMessageLoop();
     return;
   }
@@ -318,10 +346,30 @@ void BrowserApp::ContentHostTick() {
   CEF_REQUIRE_UI_THREAD();
   if (!content_host_tick_active_) return;
   content_host_->Consume(tab_controller_->DrainPageSnapshots(16));
+  ConsumeMediaObservations();
   content_host_->Tick();
+  media_host_->Tick();
   page_markdown_preview_->Tick(content_host_->Drain(64),
                                content_host_->healthy());
+  // M05b3 will consume this closed DTO stream. Until its UI owner exists,
+  // drain it so repeated page observations cannot create backpressure.
+  static_cast<void>(media_host_->Drain(64));
+  static_cast<void>(media_host_->DrainPlanning(64));
   ScheduleContentHostTick();
+}
+
+void BrowserApp::ConsumeMediaObservations() {
+  CEF_REQUIRE_UI_THREAD();
+  std::vector<macos::BrowserMediaFact> facts;
+  for (auto& event : tab_controller_->DrainMediaObservations(16)) {
+    auto page_url =
+        tab_controller_->TrustedPageUrl(event.tab_id, event.navigation_id);
+    if (!page_url) continue;
+    facts.push_back(
+        macos::BrowserMediaFact{std::move(event), std::move(*page_url),
+                                MonotonicMilliseconds()});
+  }
+  media_host_->Consume(std::move(facts));
 }
 
 CefRefPtr<CefClient> BrowserApp::GetDefaultClient() {

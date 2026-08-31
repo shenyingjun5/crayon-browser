@@ -2,6 +2,7 @@
 
 #include <unistd.h>
 
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <iostream>
@@ -22,6 +23,7 @@
 #include "include/wrapper/cef_library_loader.h"
 #include "ipc/media_observation_cef_message.h"
 #include "macos/content_host_adapter_mac.h"
+#include "macos/media_host_adapter_mac.h"
 #include "macos/trusted_input_monitor_mac.h"
 
 #ifndef CRAYON_SNAPSHOT_TEST_HELPER_PATH
@@ -32,12 +34,20 @@
 #error "CRAYON_CONTENT_HOST_TEST_PATH must be defined"
 #endif
 
+#ifndef CRAYON_MEDIA_HOST_TEST_PATH
+#error "CRAYON_MEDIA_HOST_TEST_PATH must be defined"
+#endif
+
 namespace {
 
 namespace host = crayon::browser::cef_shell::macos::content_host_ipc;
 using crayon::browser::cef_shell::macos::ContentHostAdapter;
 using crayon::browser::cef_shell::macos::ContentHostProcess;
 using crayon::browser::cef_shell::macos::ContentHostTransport;
+using crayon::browser::cef_shell::macos::BrowserMediaFact;
+using crayon::browser::cef_shell::macos::MediaHostAdapter;
+using crayon::browser::cef_shell::macos::MediaHostProcess;
+using crayon::browser::cef_shell::macos::MediaPlanningEventKind;
 using crayon::browser::cef_shell::macos::TrustedInputMonitor;
 using crayon::browser::cef_shell::window::TabController;
 using crayon::browser_engine::EngineErrorCode;
@@ -51,6 +61,13 @@ using crayon::cef_shell::gateway::SnapshotGatewayEvent;
 constexpr std::int64_t kTickMilliseconds = 20;
 constexpr std::size_t kStartupChecks = 500;
 constexpr std::size_t kNoReplyChecks = 25;
+
+std::uint64_t MonotonicMilliseconds() {
+  return static_cast<std::uint64_t>(
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::steady_clock::now().time_since_epoch())
+          .count());
+}
 
 std::string SiblingUrl(const std::string &url, const char *filename) {
   const std::size_t slash = url.rfind('/');
@@ -129,6 +146,9 @@ class SnapshotFixtureApp final : public CefApp, public CefBrowserProcessHandler 
     auto process = std::make_unique<ContentHostProcess>();
     process_ = process.get();
     content_host_ = std::make_unique<ContentHostAdapter>(std::move(process));
+    auto media_process = std::make_unique<MediaHostProcess>();
+    media_process_ = media_process.get();
+    media_host_ = std::make_unique<MediaHostAdapter>(std::move(media_process));
     controller_ = new TabController(fixture_url_,
                                     [this](CefRefPtr<CefBrowser> browser) { browser_ = browser; });
     if (scenario_ == "media-manual") {
@@ -143,6 +163,16 @@ class SnapshotFixtureApp final : public CefApp, public CefBrowserProcessHandler 
     controller_->SetPageSnapshotAdmission([this] { return content_host_->healthy(); });
     controller_->SetPageSnapshotEventsReadyCallback([this] { OnSnapshotEventsReady(); });
     controller_->SetMediaObservationEventsReadyCallback([this] { ConsumeMediaEvents(); });
+    controller_->SetMediaObservationLifecycleCallback(
+        [this](std::uint32_t tab_id, std::uint64_t navigation_id,
+               std::uint32_t generation, bool closed) {
+          if (closed) {
+            static_cast<void>(media_host_->CloseTab(tab_id, generation));
+          } else {
+            static_cast<void>(media_host_->AdvanceNavigation(
+                tab_id, navigation_id, generation));
+          }
+        });
     controller_->SetPageLoadCompletedCallback(
         [this](CefRefPtr<CefBrowser> browser) { OnPageLoaded(browser); });
     controller_->SetBrowsersClosedCallback([this] {
@@ -150,6 +180,7 @@ class SnapshotFixtureApp final : public CefApp, public CefBrowserProcessHandler 
       browser_ = nullptr;
       if (trusted_input_monitor_) trusted_input_monitor_->Stop();
       content_host_->Stop();
+      media_host_->Stop();
       if (scenario_ == "close" && close_requested_) {
         passed_ = true;
         std::cout << "snapshot_fixture scenario=close terminal=completed"
@@ -158,8 +189,9 @@ class SnapshotFixtureApp final : public CefApp, public CefBrowserProcessHandler 
                   << std::endl;
       }
     });
-    if (!content_host_->Start(CRAYON_CONTENT_HOST_TEST_PATH)) {
-      Finish(false, "content-host start rejected");
+    if (!content_host_->Start(CRAYON_CONTENT_HOST_TEST_PATH) ||
+        !media_host_->Start(CRAYON_MEDIA_HOST_TEST_PATH)) {
+      Finish(false, "content/media host start rejected");
       return;
     }
     ScheduleStartupCheck();
@@ -177,7 +209,7 @@ class SnapshotFixtureApp final : public CefApp, public CefBrowserProcessHandler 
 
   void ContinueStartup() {
     CEF_REQUIRE_UI_THREAD();
-    if (content_host_->healthy()) {
+    if (content_host_->healthy() && media_host_->healthy()) {
       if (!controller_->CreateMainWindow()) {
         Finish(false, "browser creation rejected");
         return;
@@ -207,22 +239,49 @@ class SnapshotFixtureApp final : public CefApp, public CefBrowserProcessHandler 
       ConsumeGatewayEvents();
     }
     content_host_->Tick();
+    media_host_->Tick();
+    if (media_host_crash_triggered_ &&
+        media_process_->generation() > media_host_generation_before_crash_) {
+      saw_media_host_recovery_ = true;
+    }
     ConsumeMediaEvents();
+    ConsumeMediaPlanningEvents();
     ConsumeReplies();
     AdvanceCrashRecovery();
     if (media_checks_ > 0 && --media_checks_ == 0) {
       if (scenario_ == "media" || scenario_ == "media-manual" || scenario_ == "media-clear-mp4") {
-        Finish(saw_actual_media_ && saw_media_network_ && saw_http_media_,
+        Finish(saw_actual_media_ && saw_media_network_ && saw_http_media_ &&
+                   saw_media_candidate_ && saw_media_decision_,
                "CEF clear media observation and trusted playback proof");
       } else if (scenario_ == "media-hls") {
-        Finish(saw_actual_media_ && saw_manifest_network_,
+        Finish(saw_actual_media_ && saw_manifest_network_ &&
+                   saw_media_candidate_ && saw_media_decision_,
                "CEF HLS media and manifest observation");
+      } else if (scenario_ == "media-dash") {
+        Finish(saw_actual_media_ && saw_dash_network_ &&
+                   saw_media_candidate_ && saw_media_decision_,
+               "CEF DASH manifest reached media planning path");
+      } else if (scenario_ == "media-credential") {
+        Finish(saw_actual_media_ && saw_credential_network_ &&
+                   saw_media_candidate_ && saw_media_decision_,
+               "CEF credential class reached fail-closed planning path");
+      } else if (scenario_ == "media-host-crash") {
+        Finish(saw_media_candidate_before_crash_ &&
+                   saw_media_candidate_after_crash_ &&
+                   saw_media_host_recovery_ && saw_media_decision_,
+               "media-host crash generation recovered without stale state");
       } else if (scenario_ == "media-blob" || scenario_ == "media-mse") {
-        Finish(saw_actual_media_ && saw_blob_media_, "CEF URL-less blob/MSE media observation");
+        Finish(saw_actual_media_ && saw_blob_media_ && saw_media_decision_,
+               "CEF URL-less blob/MSE media observation");
       } else if (scenario_ == "media-eme") {
-        Finish(saw_actual_media_ && saw_protected_media_, "CEF EME protection marker observation");
+        Finish(saw_actual_media_ && saw_protected_media_ &&
+                   saw_media_candidate_ && saw_media_decision_ &&
+                   saw_drm_reject_,
+               "CEF EME protection marker observation");
       } else if (scenario_ == "media-ad") {
-        Finish(saw_actual_media_ && saw_ad_media_, "CEF ad-labelled media remained observable");
+        Finish(saw_actual_media_ && saw_ad_media_ && saw_media_candidate_ &&
+                   saw_media_decision_,
+               "CEF ad-labelled media remained observable");
       } else if (scenario_ == "media-hidden" || scenario_ == "media-cross-frame") {
         Finish(!saw_media_, "hidden/cross-frame media remained ineligible");
       } else if (scenario_ == "media-forged") {
@@ -363,7 +422,8 @@ class SnapshotFixtureApp final : public CefApp, public CefBrowserProcessHandler 
 
   void ConsumeMediaEvents() {
     if (!controller_) return;
-    for (const GatewayEvent &event : controller_->DrainMediaObservations(64)) {
+    std::vector<BrowserMediaFact> facts;
+    for (GatewayEvent &event : controller_->DrainMediaObservations(64)) {
       if (event.source == EventSource::kMedia) {
         saw_media_ = true;
         saw_actual_media_ = true;
@@ -382,7 +442,59 @@ class SnapshotFixtureApp final : public CefApp, public CefBrowserProcessHandler 
         saw_manifest_network_ =
             saw_manifest_network_ ||
             event.network.kind == crayon::cef_shell::network::ResourceKind::kManifest;
+        saw_dash_network_ =
+            saw_dash_network_ ||
+            event.network.url.find("clear.mpd") != std::string::npos;
+        saw_credential_network_ =
+            saw_credential_network_ ||
+            event.network.header_class ==
+                crayon::cef_shell::network::HeaderClass::kAuthorization;
         saw_protected_media_ = saw_protected_media_ || event.network.eme_encrypted;
+      }
+      auto page_url =
+          controller_->TrustedPageUrl(event.tab_id, event.navigation_id);
+      if (page_url) {
+        facts.push_back(BrowserMediaFact{std::move(event),
+                                         std::move(*page_url),
+                                         MonotonicMilliseconds()});
+      }
+    }
+    media_host_->Consume(std::move(facts));
+  }
+
+  void ConsumeMediaPlanningEvents() {
+    static_cast<void>(media_host_->Drain(64));
+    for (auto &event : media_host_->DrainPlanning(64)) {
+      if (event.kind == MediaPlanningEventKind::kCandidate &&
+          event.candidate_id) {
+        saw_media_candidate_ = true;
+        if (scenario_ == "media-host-crash" &&
+            !media_host_crash_triggered_) {
+          saw_media_candidate_before_crash_ = true;
+          media_host_generation_before_crash_ = media_process_->generation();
+          media_host_crash_triggered_ = media_process_->Enqueue(
+              crayon::browser::cef_shell::macos::media_host_ipc::Shutdown{});
+          continue;
+        }
+        if (scenario_ == "media-host-crash" && saw_media_host_recovery_) {
+          saw_media_candidate_after_crash_ = true;
+        }
+        if (scenario_ == "media-eme" && !saw_protected_media_) continue;
+        if (!decision_requested_) {
+          decision_requested_ = media_host_->Submit(
+              crayon::browser::cef_shell::macos::media_host_ipc::Decide{
+                  "fixture-decision", *event.candidate_id,
+                  MonotonicMilliseconds(),
+                  {true, true, true, true, true, true, 4320}, false});
+        }
+      } else if (event.kind == MediaPlanningEventKind::kDecision) {
+        saw_media_decision_ = true;
+        saw_drm_reject_ =
+            saw_drm_reject_ ||
+            (event.decision &&
+             event.decision->reject_reason ==
+                 crayon::browser::cef_shell::macos::media_host_ipc::CoreError::
+                     kDrmProtected);
       }
     }
   }
@@ -465,6 +577,7 @@ class SnapshotFixtureApp final : public CefApp, public CefBrowserProcessHandler 
       controller_->CloseAllBrowsers(true);
     } else {
       if (content_host_) content_host_->Stop();
+      if (media_host_) media_host_->Stop();
       CefQuitMessageLoop();
     }
   }
@@ -475,8 +588,10 @@ class SnapshotFixtureApp final : public CefApp, public CefBrowserProcessHandler 
   CefRefPtr<TabController> controller_;
   CefRefPtr<CefBrowser> browser_;
   std::unique_ptr<ContentHostAdapter> content_host_;
+  std::unique_ptr<MediaHostAdapter> media_host_;
   std::unique_ptr<TrustedInputMonitor> trusted_input_monitor_;
   ContentHostTransport *process_ = nullptr;
+  MediaHostProcess *media_process_ = nullptr;
   std::optional<SnapshotRequestId> active_request_;
   std::string abandoned_request_;
   std::string markdown_;
@@ -500,8 +615,19 @@ class SnapshotFixtureApp final : public CefApp, public CefBrowserProcessHandler 
   bool saw_http_media_ = false;
   bool saw_blob_media_ = false;
   bool saw_manifest_network_ = false;
+  bool saw_dash_network_ = false;
+  bool saw_credential_network_ = false;
   bool saw_protected_media_ = false;
   bool saw_ad_media_ = false;
+  bool saw_media_candidate_ = false;
+  bool saw_media_decision_ = false;
+  bool decision_requested_ = false;
+  bool saw_drm_reject_ = false;
+  bool media_host_crash_triggered_ = false;
+  bool saw_media_host_recovery_ = false;
+  bool saw_media_candidate_before_crash_ = false;
+  bool saw_media_candidate_after_crash_ = false;
+  std::uint64_t media_host_generation_before_crash_ = 0;
   bool close_requested_ = false;
   bool finished_ = false;
   bool passed_ = false;

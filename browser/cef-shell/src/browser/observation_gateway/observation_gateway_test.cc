@@ -50,12 +50,14 @@ NetworkObservation Net(std::uint64_t nav) {
 bool MergeAndDrain() {
   ObservationGateway gateway;
   gateway.AdvanceGeneration(/*tab_id=*/1, /*navigation_id=*/10);
-  CHECK(gateway.SubmitMedia(1, 10, Media(10)) == GatewayResult::kAccepted);
+  CHECK(gateway.SubmitMedia(1, 10, Media(10), true) ==
+        GatewayResult::kAccepted);
   CHECK(gateway.SubmitNetwork(1, 10, Net(10)) == GatewayResult::kAccepted);
   const auto batch = gateway.Drain(10);
   CHECK(batch.size() == 2);
   CHECK(batch[0].source == EventSource::kMedia && batch[0].tab_id == 1);
   CHECK(batch[0].generation == 1);
+  CHECK(batch[0].eme_encrypted);
   CHECK(batch[1].source == EventSource::kNetwork && batch[1].media.element_id == 0);
   CHECK(gateway.Drain(10).empty());
   return true;

@@ -555,6 +555,8 @@ if(CRAYON_BUILD_TESTS)
       src/ipc/page_snapshot_cef_message.cc
       src/macos/content_host_adapter_mac.cc
       src/macos/content_host_process_mac.cc
+      src/macos/media_host_adapter_mac.cc
+      src/macos/media_host_process_mac.cc
       src/macos/trusted_input_monitor_mac.h
       src/macos/trusted_input_monitor_mac.mm)
     SET_EXECUTABLE_TARGET_PROPERTIES(crayon_page_snapshot_cef_integration_test)
@@ -579,7 +581,8 @@ if(CRAYON_BUILD_TESTS)
       crayon_page_snapshot_cef_integration_test
       PRIVATE
         CRAYON_SNAPSHOT_TEST_HELPER_PATH="${CRAYON_MACOS_APP}/Contents/Frameworks/CrayonBrowser Helper.app/Contents/MacOS/CrayonBrowser Helper"
-        CRAYON_CONTENT_HOST_TEST_PATH="${crayon_content_host_binary}")
+        CRAYON_CONTENT_HOST_TEST_PATH="${crayon_content_host_binary}"
+        CRAYON_MEDIA_HOST_TEST_PATH="${crayon_media_host_binary}")
     target_link_libraries(
       crayon_page_snapshot_cef_integration_test
       PRIVATE libcef_dll_wrapper ${CEF_STANDARD_LIBS}
@@ -590,7 +593,8 @@ if(CRAYON_BUILD_TESTS)
               crayon::cef-shell-observation-gateway
               crayon::cef-shell-core-client crayon::cef-shell-ipc)
     add_dependencies(crayon_page_snapshot_cef_integration_test
-                     ${CRAYON_BROWSER_TARGET} crayon_content_host)
+                     ${CRAYON_BROWSER_TARGET} crayon_content_host
+                     crayon_media_host)
     COPY_MAC_FRAMEWORK(
       "crayon_page_snapshot_cef_integration_test" "${CEF_BINARY_DIR}"
       "${CEF_TARGET_OUT_DIR}/crayon_page_snapshot_cef_integration_test.app")

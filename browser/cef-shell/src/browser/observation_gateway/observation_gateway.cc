@@ -74,12 +74,13 @@ GatewayResult ObservationGateway::Submit(GatewayEvent event) {
 
 GatewayResult ObservationGateway::SubmitMedia(
     std::uint32_t tab_id, std::uint64_t navigation_id,
-    const renderer::MediaObservation& observation) {
+    const renderer::MediaObservation& observation, bool eme_encrypted) {
   GatewayEvent event;
   event.source = EventSource::kMedia;
   event.tab_id = tab_id;
   event.navigation_id = navigation_id;
   event.media = observation;
+  event.eme_encrypted = eme_encrypted;
   return Submit(event);
 }
 

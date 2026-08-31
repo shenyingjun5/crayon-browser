@@ -57,7 +57,9 @@ void CefObservationBridge::AdvanceNavigation(CefRefPtr<CefBrowser> browser,
   static_cast<void>(iterator->second.network_observer.Drain());
   iterator->second.tab_id = tab_id;
   iterator->second.navigation_id = navigation_id;
+  iterator->second.eme_encrypted = false;
   gateway_.AdvanceGeneration(tab_id, navigation_id);
+  const std::uint32_t generation = gateway_.GenerationOf(tab_id);
   {
     std::lock_guard<std::mutex> lock(io_bindings_mutex_);
     io_bindings_[browser->GetIdentifier()] = {tab_id, navigation_id};
@@ -66,6 +68,9 @@ void CefObservationBridge::AdvanceNavigation(CefRefPtr<CefBrowser> browser,
   if (frame) {
     frame->SendProcessMessage(PID_RENDERER,
                               media_ipc::CreateAdvanceMessage(navigation_id));
+  }
+  if (lifecycle_callback_) {
+    lifecycle_callback_(tab_id, navigation_id, generation, false);
   }
 }
 
@@ -76,8 +81,13 @@ void CefObservationBridge::CloseBrowser(CefRefPtr<CefBrowser> browser,
   static_cast<void>(tab_id);
   const auto found = bindings_.find(browser->GetIdentifier());
   if (found != bindings_.end()) {
-    gateway_.AdvanceGeneration(found->second.tab_id, 0);
+    const std::uint32_t bound_tab_id = found->second.tab_id;
+    gateway_.AdvanceGeneration(bound_tab_id, 0);
+    const std::uint32_t generation = gateway_.GenerationOf(bound_tab_id);
     bindings_.erase(found);
+    if (lifecycle_callback_) {
+      lifecycle_callback_(bound_tab_id, 0, generation, true);
+    }
   }
   {
     std::lock_guard<std::mutex> lock(io_bindings_mutex_);
@@ -130,6 +140,7 @@ bool CefObservationBridge::OnProcessMessageReceived(
   input_proof_.NotePlaybackProgress(tab_id, navigation_id,
                                     observation.current_time_seconds);
   if (envelope->eme_encrypted) {
+    found->second.eme_encrypted = true;
     found->second.network_observer.AssociateEmeEncrypted(navigation_id);
     NetworkObservation protection_marker;
     protection_marker.navigation_id = navigation_id;
@@ -145,7 +156,8 @@ bool CefObservationBridge::OnProcessMessageReceived(
     ++diagnostics_.proof_denied_total;
     return true;
   }
-  if (gateway_.SubmitMedia(tab_id, navigation_id, observation) ==
+  if (gateway_.SubmitMedia(tab_id, navigation_id, observation,
+                           found->second.eme_encrypted) ==
       GatewayResult::kAccepted) {
     ++diagnostics_.eligible_total;
     NotifyEventsReady();
@@ -207,6 +219,11 @@ void CefObservationBridge::SetEventsReadyCallback(
     EventsReadyCallback callback) {
   CEF_REQUIRE_UI_THREAD();
   events_ready_callback_ = std::move(callback);
+}
+
+void CefObservationBridge::SetLifecycleCallback(LifecycleCallback callback) {
+  CEF_REQUIRE_UI_THREAD();
+  lifecycle_callback_ = std::move(callback);
 }
 
 std::optional<CefObservationBridge::IoBinding>
