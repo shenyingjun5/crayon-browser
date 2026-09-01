@@ -52,3 +52,15 @@
 - 原 `QAR-05` 混合核心性能与 CAAP/后续 feature，拆为 `05A/05B`；一期只冻结浏览、投屏、网页 Markdown 和本地 MDV 预算。
 - 原 `QAR-08` 混合核心与 Agent/Workflow/Partner 安全，拆为 `08A/08B`；核心 Review 消费 PRV-13A，第二期消费 PRV-13B。
 - 分拆不降低任何已选择 feature 的门禁：第二期 feature 只有完成对应 B 任务并经 QAR-16 单独 Go 后才能开启。
+
+## 5. 原子范围
+
+### QAR-01W 原子范围（Windows CI 分层门禁）
+
+- 状态：`IN_PROGRESS`；依赖 `FND-03`、`FND-09`（均 DONE）。
+- 单一目标：新增 Windows 原生 runner 的 CI workflow，把既有本地门禁分层为 CI 可消费的 fast（guard/format/brand-assets/formal-workspace/legacy-unit）、security（guard/relay-unit/relay-security）与 desktop（CEF Debug/Release 构建 + 全量 ctest + vendor/adapter/locale 检查）三层，带 CEF 压缩包与 cargo/node 缓存、产物上传（构建日志、CTest 输出、Release staging 清单）与失败定位（分层 job 独立、日志 artifact）。
+- 输出与允许路径：`.github/workflows/**`（新增 Windows workflow）、`docs/plans/quality-release-roadmap.md`、`docs/plans/README.md` 索引状态。
+- 禁止修改：生产代码、测试断言、scripts/check.ps1 门禁语义、macOS workflow 行为；不得降低任何本地下层门禁或通过条件编译/筛选测试冒充通过。
+- 边界：GitHub-hosted `windows-latest` runner；CEF 固定版本归档用 actions/cache 按版本 key 缓存；desktop 层的真实 CEF 集成测试若因 runner 窗口站限制失败，如实记录并对该层单独标注，不静默跳过；不配置发布/部署/Tag 触发。
+- 验收：workflow YAML 解析有效；分层 job 在 GitHub 真实运行至少一次，记录冷/热时长、失败定位路径与产物上传结果；本地 `git diff --check`；Review P0/P1=0。
+- 明确不做：macOS runner（01M 后续）、覆盖率门禁（QAR-04W）、每日定时 E2E 调度（QAR-02AW）、发布/部署动作。

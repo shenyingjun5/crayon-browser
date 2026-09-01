@@ -1,0 +1,213 @@
+name: Windows gates
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/windows-gates.yml"
+      - ".gitattributes"
+      - "browser/**"
+      - "cmake/**"
+      - "crates/**"
+      - "schemas/**"
+      - "scripts/**"
+      - "tests/**"
+      - "third_party/**"
+      - "tools/**"
+      - "CMakeLists.txt"
+      - "CMakePresets.json"
+      - "Cargo.toml"
+      - "Cargo.lock"
+  pull_request:
+    paths:
+      - ".github/workflows/windows-gates.yml"
+      - ".gitattributes"
+      - "browser/**"
+      - "cmake/**"
+      - "crates/**"
+      - "schemas/**"
+      - "scripts/**"
+      - "tests/**"
+      - "third_party/**"
+      - "tools/**"
+      - "CMakeLists.txt"
+      - "CMakePresets.json"
+      - "Cargo.toml"
+      - "Cargo.lock"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-gates-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CEF_PLATFORM: windows64
+  CEF_VERSION_KEY: cef-150.0.10-windows64
+
+jobs:
+  fast:
+    name: fast gate (guard/format/workspace/legacy)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      # PLT-W05b 记录：并行下两处既有 Win32 pipe/探针时序抖动，CI 层先以
+      # 单线程消除已知噪声；治理归发布总门禁前置任务。
+      RUST_TEST_THREADS: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-fast-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-fast-
+
+      - name: Fast gate
+        shell: pwsh
+        run: scripts/check.ps1 -Mode fast
+
+      - name: Upload fast gate log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fast-gate-failure
+          path: |
+            target/*.log
+          if-no-files-found: ignore
+
+  security:
+    name: security gate (guard/relay)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-security-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-security-
+
+      - name: Security gate
+        shell: pwsh
+        run: scripts/check.ps1 -Mode security
+
+  desktop:
+    name: desktop CEF ${{ matrix.configuration }} build + ctest
+    runs-on: windows-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [Debug, Release]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache fixed CEF archive
+        uses: actions/cache@v4
+        with:
+          path: .cache/cef/*.tar.bz2
+          key: ${{ env.CEF_VERSION_KEY }}
+
+      - name: Download and verify fixed CEF archive
+        shell: pwsh
+        run: >-
+          cmake
+          -DCRAYON_CEF_PLATFORM=$env:CEF_PLATFORM
+          "-DCRAYON_CEF_CACHE_DIR=$env:GITHUB_WORKSPACE/.cache/cef"
+          -P cmake/cef/DownloadCef.cmake
+
+      - name: Extract CEF archive
+        shell: pwsh
+        run: |
+          $archives = Get-ChildItem ".cache/cef/*_$env:CEF_PLATFORM.tar.bz2"
+          if ($archives.Count -ne 1) { throw "expected exactly one CEF archive" }
+          $extractRoot = ".cache/cef/$env:CEF_PLATFORM-root"
+          New-Item -ItemType Directory -Force -Path $extractRoot | Out-Null
+          cmake -E chdir $extractRoot cmake -E tar xjf $archives[0].FullName
+          $roots = Get-ChildItem $extractRoot -Directory
+          if ($roots.Count -ne 1) { throw "expected exactly one extracted CEF root" }
+          Add-Content $env:GITHUB_ENV "CRAYON_CEF_ROOT=$($roots[0].FullName)"
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-desktop-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-desktop-
+
+      - name: Configure
+        shell: pwsh
+        run: cmake --preset windows-cef-debug
+
+      - name: Build ${{ matrix.configuration }}
+        shell: pwsh
+        run: >-
+          cmake --build --preset windows-cef-debug
+          --config ${{ matrix.configuration }}
+
+      - name: CTest ${{ matrix.configuration }}
+        shell: pwsh
+        run: >-
+          ctest --preset windows-cef-debug
+          -C ${{ matrix.configuration }}
+          --output-on-failure
+          --no-tests=error
+          --output-log ctest-${{ matrix.configuration }}.log
+
+      - name: Vendor closure checks
+        shell: pwsh
+        run: |
+          node tools/mermaid/vendor.mjs --check
+          node tools/highlight/vendor.mjs --check
+          node tools/katex/vendor.mjs --check
+          node --test browser/shared-ui/markdown-runtime/tests/mermaid_adapter.test.mjs
+          node --test browser/shared-ui/markdown-runtime/tests/highlight_adapter.test.mjs
+          node --test browser/shared-ui/markdown-runtime/tests/katex_adapter.test.mjs
+
+      - name: Mermaid release metadata dry run
+        shell: pwsh
+        run: >-
+          cargo run -q -p repo-guard -- mermaid-metadata
+          --output-dir .cache/ci-mermaid-metadata
+
+      - name: Validate generated files
+        shell: bash
+        run: git diff --check
+
+      - name: Upload desktop logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.configuration }}-logs
+          path: |
+            ctest-*.log
+          if-no-files-found: ignore
