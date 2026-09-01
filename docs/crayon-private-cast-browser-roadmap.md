@@ -11,7 +11,7 @@
 - 已收口：`BRD-01..04`、Foundation、`MED-01..19`、`BUX-01..18`、`SDK-01..14`、`RNM-01..08`；CEF 为 `CEF-01..05/15 DONE`、`CEF-06..14 VERIFIED`，`ACT-01..12` 已完成契约/模型层总 Review，`MRT-01..08 DONE`。
 - 页面数据 C1 算法与数据面 `CNT-01..10` 已收口；一期产品链 `CNT-17..20 DONE`，其中 Windows `CNT-20W1/W2` 已用真实 CEF 对称闭合。`CNT-21W` 等三大闭环平台切片完成后的 `PRV-13AW` 再做总 Review。
 - 第一期范围由 `REL-01 DONE` 冻结为网页 Markdown、LAN Direct/Relay 投屏、本地 Markdown 编辑三大闭环；远程后续已在 macOS arm64 闭合共享协议与大部分产品链。`REL-05 DONE` 按 2026-08-31 用户决策改为 Windows 10/11 x64 先形成发布候选，macOS 特有验证后置且不阻塞 Windows。Agent/CLI/MCP、Workflow、Hub、Partner、模型与 HarmonyOS 默认关闭并进入第二期。
-- 平台剩余重点：网页 Markdown 的 `CNT-20W1/W2` 已闭合；`PLT-W05a/W05b/W05c0 DONE`，`PLT-W05c` 的产品投屏码/播控装配与双配置自动化已闭合，但当前远程桌面点击被标记为 `LLMHF_INJECTED`，须在可信物理输入控制台补 ADB 正式接收端 Direct 真机证据后才能继续 W05d..f；随后完成 `MDV-20W/25W -> MRT-09W`、`PRV-13AW -> CNT-21W` 与 QAR Windows 核心矩阵。macOS `PLT-M05b4..b6/M05c`、QAR-10 和其他 macOS 特有门禁保留后续，不得改写已有证据或冒充 Windows 结果。
+- 平台剩余重点：网页 Markdown 的 `CNT-20W1/W2` 与本地 Markdown 生产隔离 `MDV-25W` 已闭合；`PLT-W05a/W05b/W05c0 DONE`，`PLT-W05c` 的产品投屏码/播控装配与双配置自动化已闭合，但当前远程桌面点击被标记为 `LLMHF_INJECTED`，须在可信物理输入控制台补 ADB 正式接收端 Direct 真机证据后才能继续 W05d..f；独立主线继续 `MDV-20W -> MRT-09W`、`PRV-13AW -> CNT-21W` 与 QAR Windows 核心矩阵。macOS `PLT-M05b4..b6/M05c`、QAR-10 和其他 macOS 特有门禁保留后续，不得改写已有证据或冒充 Windows 结果。
 - 产品依赖顺序不变，但发布拆为两期：第一期先完成浏览器/LAN 投屏/网页 Markdown/本地 MDV；第二期再开放 Agent 协议与语义动作、Workflow/Challenge、Capability Hub/合作方和模型。
 - CAAP、CLI/入站 MCP、高性能读页和授权操作仍是产品核心方向，但不进入第一期发布包启用范围；具体模型/provider 与视频/文档总结同属第二期。
 - Windows/macOS 为当前桌面；HarmonyOS 只做鸿蒙电脑 PC 形态技术预览；Linux 无活跃任务。
@@ -239,7 +239,7 @@ flowchart LR
 ## 7. 当前领取顺序
 
 1. `PLT-W05a/b/c0 DONE -> W05c BLOCKED -> W05d..f`：Windows media-host、Cast UI、投屏码/播控入口与自动化已装配；W05c 等待可产生非 injected 点击的 Windows 控制台闭合 ADB 正式接收端 Direct，之后才能继续 Relay、拒绝/交接与 100 次资源稳定性。
-2. `MDV-25W/20W -> MRT-09W`：Windows 本地 Markdown 生产隔离、P0 Runtime、包体与真机回归。
+2. `MDV-25W DONE -> MDV-20W -> MRT-09W`：Windows 本地 Markdown 生产隔离已闭合，继续 P0 Runtime、包体与真机回归。
 3. `PRV-13AW -> CNT-21W -> PLT-19W -> QAR Windows slices -> REL-03/04 -> QAR-16W`：三闭环数据流与网页 Markdown 总 Review后，执行安全、性能、长稳、安装/升级/回滚、SBOM 与候选 Go/NoGo。
 
 第二期保持排队：`AGT-12C/13/14/16`、`WFL`、`HUB`、`CNT-11..16`、`MRT-10..19`、`SDK-15/16`、`HM`。其中 `CNT-11` 等 `CNT-21 + AGT-16 + PRV-13B + provider ADR`；不得在 R1 完成前抢占 CEF 装配和真机矩阵。

@@ -1,9 +1,12 @@
 #include <windows.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <string_view>
+#include <vector>
 
 #include "resource_ids.h"
 
@@ -13,6 +16,46 @@ constexpr int kExpectedArgumentCount = 6;
 constexpr int kMainIconSize = 32;
 constexpr int kSmallIconSize = 16;
 constexpr std::size_t kProductNameCapacity = 128;
+constexpr std::string_view kForbiddenFixtureFactory = "BuildFixtureSnapshot";
+constexpr std::string_view kForbiddenFixtureBody =
+    u8"这是内置 Markdown 查看器的**只读**示例文档。";
+constexpr std::wstring_view kForbiddenWideFixtureBody =
+    L"这是内置 Markdown 查看器的**只读**示例文档。";
+
+template <typename Character>
+bool ContainsBytes(const std::vector<char> &binary,
+                   std::basic_string_view<Character> value) {
+  const auto *begin = reinterpret_cast<const char *>(value.data());
+  const std::size_t size = value.size() * sizeof(Character);
+  return std::search(binary.begin(), binary.end(), begin, begin + size) !=
+         binary.end();
+}
+
+bool ExcludesMdvFixture(const std::filesystem::path &executable) {
+  std::ifstream input(executable, std::ios::binary | std::ios::ate);
+  if (!input) {
+    std::cerr << "Browser executable cannot be scanned\n";
+    return false;
+  }
+  const auto end = input.tellg();
+  if (end <= 0) {
+    std::cerr << "Browser executable is empty\n";
+    return false;
+  }
+  std::vector<char> binary(static_cast<std::size_t>(end));
+  input.seekg(0);
+  if (!input.read(binary.data(), static_cast<std::streamsize>(binary.size()))) {
+    std::cerr << "Browser executable scan was incomplete\n";
+    return false;
+  }
+  if (ContainsBytes(binary, kForbiddenFixtureFactory) ||
+      ContainsBytes(binary, kForbiddenFixtureBody) ||
+      ContainsBytes(binary, kForbiddenWideFixtureBody)) {
+    std::cerr << "Browser executable contains a forbidden MDV fixture\n";
+    return false;
+  }
+  return true;
+}
 
 bool RuntimeFilesExist(const std::filesystem::path &executable,
                        const std::filesystem::path &manifest) {
@@ -76,6 +119,9 @@ int wmain(int argument_count, wchar_t *arguments[]) {
   }
   if (!RuntimeFilesExist(executable, manifest)) {
     return 3;
+  }
+  if (!ExcludesMdvFixture(executable)) {
+    return 9;
   }
   if (!std::filesystem::is_regular_file(content_host) ||
       !GetBinaryTypeW(content_host.c_str(), &binary_type) ||

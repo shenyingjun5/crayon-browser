@@ -43,7 +43,7 @@
 | MDV-22 | DONE | MDV-21 | `browser/shared-ui/mdv` | 可测试编辑变换层：修复行前缀重复正文，统一包裹/标题/多行列表/骨架/缩进/表格列对齐与选区保持 | MD-012；独立 ctest + 回归矩阵 |
 | MDV-23 | DONE | MDV-22 | `browser/shared-ui/mdv`,`browser/shared-ui/locales`,`browser/cef-shell/resources/windows` | 图标工具栏接线：tooltip、平台快捷键、overflow、roving tabindex、IME 门禁与既有 `mdvQuery` 集成；零新 Browser binding | MD-004、MD-011..013；页面/快捷键/a11y contract |
 | MDV-24 | VERIFIED | MDV-23 | `browser/cef-shell`,`tests/e2e/desktop`,`docs/current`,`docs/plans` | 工具栏平台收口：macOS arm64 Helper/签名/默认页/公网/MDV/AX 已闭合；Windows、原生 macOS x64 与剩余交互真机待补 | MD-007、MD-013；Debug/Release + 实机 + Review P0/P1=0 |
-| MDV-25 | VERIFIED | REL-02,MDV-24,MRT-08 | `browser/cef-shell/src/browser/mdv`,`browser/cef-shell/src/{macos,windows}`,CEF shell contracts | 已移除生产 fixture 初始化；macOS 空态/本地文件闭合，Windows x64 待对称回归 | RG-002、MD-003/004；macOS arm64 CEF + Release scan |
+| MDV-25 | DONE | REL-02,MDV-24,MRT-08 | `browser/cef-shell/src/browser/mdv`,`browser/cef-shell/src/{macos,windows}`,CEF shell contracts | 已移除生产 fixture 初始化；macOS arm64 与 Windows x64 空态、本地文件和发布二进制扫描闭合 | RG-002、MD-003/004；双平台 CEF + Release scan |
 
 ## 接线切片说明（MDV-08..10）
 
@@ -509,7 +509,7 @@ MDV-02..06 按"模型层零 IO / 零 CEF 类型"交付后，产品仍不可见�
 
 ### MDV-25 原子范围（移除生产 fixture 初始化）
 
-- 状态：`VERIFIED`；依赖 `REL-02 DONE`、`MDV-24 VERIFIED`、`MRT-08 DONE`。
+- 状态：`DONE`；依赖 `REL-02 DONE`、`MDV-24 VERIFIED`、`MRT-08 DONE`；macOS arm64 与 Windows x64 对称生产隔离和真实产品空态/本地文件证据已闭合。
 - 单一目标：删除 `BrowserApp -> BuildFixtureSnapshot()` 的生产初始化路径，使未由用户打开文档的 `crayon://mdv` 只呈现本地化安全空态；示例 Markdown 只能存在于独立测试/fixture target，不能进入 Release 生产源或 App bundle。
 - 输入：REL-02 [生产装配审计](../current/release-v1-assembly.md) 的 MDV 断点、RG-002、MD-003/004、既有 `MdvRuntimeState`/empty-state 契约。
 - 允许修改：`browser/cef-shell/src/browser/mdv/**`、macOS/Windows BrowserApp 的 MDV 初始化、相邻 CEF shell contract/MDV 测试与本 Roadmap；不改变 Markdown parser、extension manifest、文件入口、保存 schema 或用户动作。
@@ -526,9 +526,18 @@ MDV-02..06 按"模型层零 IO / 零 CEF 类型"交付后，产品仍不可见�
 - 格式与 Review：Xcode `clang-format --dry-run --Werror` 已实际运行；工具对相关文件大量 HEAD 存量风格报错，无法作为本次净增行的 clean gate，本次新增 C++ 行沿用邻接风格且 Debug/Release 均以 warning-as-error 构建。按 `code-review-standard.md` v0.8 复核需求边界、默认态、生命周期、安全/隐私、发布隔离、性能与测试，P0/P1/P2=`0/0/0`。
 - 未覆盖与风险：Windows App 已完成对称源码替换并受 source contract 约束，但 Windows x64 Debug/Release、二进制扫描和真实空态/本地文件回归未在 macOS 主机运行；因此任务为 `VERIFIED`，待 Windows 终端补证后转 `DONE`。真实 Keychain 未使用，也不是本任务门禁。
 
+### MDV-25 Windows 完成记录（2026-09-01，Windows x64）
+
+- 实现：Windows `crayon_windows_shell_contract` 镜像 macOS 发布隔离口径，直接读取主程序二进制并同时拒绝旧 `BuildFixtureSnapshot` 符号、UTF-8 与 UTF-16 示例正文；读取失败、空文件或不完整读取均 fail closed。扫描仅属于 package contract target，不进入 `CrayonBrowser.exe`，未改变 parser、文件入口、保存或 Runtime 行为。
+- 构建与自动化：Windows 11 x64 multi-config tree 的 Debug/Release `ALL_BUILD` 在当前代码上均退出 0（45.0s/42.0s）。`ctest --test-dir .cache/build/windows-cef-debug -C {Debug,Release} -R '^(markdown_.*|mdv_.*|windows_cef_shell_(source|package)_contract)$' --output-on-failure` 分别 **18/18**（60.63s）与 **18/18**（5.91s）；其中 source/handler/package 三项先行复验亦各 3/3。主程序 x64/package/runtime/Host 与新增 fixture byte scan 同一测试闭合。`RUST_TEST_THREADS=1 scripts/check.ps1 fast` 退出码 0（86.7s），`scripts/check.ps1 security` 退出码 0（7.2s；guard、relay-unit、relay-security 全通过），`git diff --check` 通过；repo guard 仅保留既有 warning，RG-006 因本切片未生成独立 staging 目录为 `not_applicable`。
+- 真实 CEF：Debug 与 Release 产品 `CrayonBrowser.exe` 均手动直达 `crayon://mdv/app.html`，只显示本地化“尚未打开文档”，旧示例正文为 0；再由产品地址栏打开真实 `docs/current/README.md`，窗口标题为 `README.md - 蜡笔文档`，渲染标题“当前权威契约索引”，Preview/Source/Split 均可达，且页面地址保持 `crayon://mdv/app.html`、未暴露本地路径。Debug 分栏等待 500ms 后稳定显示左右源码/预览；Release 同样确认标题、三视图入口与旧 fixture 不存在。两配置关闭后 `CrayonBrowser`、`crayon-content-host`、`crayon-media-host` 进程残留均为 0。
+- 过程披露：首次输入缩写 `crayon://mdv/` 被 Omnibox 作为搜索词，未计为 MDV 通过；改用契约规定的精确 `crayon://mdv/app.html` 后取得上述证据。Release 首次关闭动作因 Computer Use 要求刷新窗口 state 而未执行，重新观察同一窗口后正常关闭；没有强杀或把未执行动作写成通过。
+- Code Review：按 v0.9 审查需求/边界、正确性、架构/API、生命周期、安全/隐私、性能、测试/证据、可维护性/供应链；P0 0、P1 0、P2 0、P3 0，`APPROVE`。二进制扫描有界于测试进程和既有发布主程序，不引入产品 IO；UTF-8/UTF-16 双形态避免 MSVC 字面量编码差异造成漏检。
+- 未覆盖与风险：Mermaid Full/Highlight/KaTeX/50-block、主题/DPI 与 Release staging 的 Windows 总回归归 `MDV-20W`；Narrator/IME 属 `MDV-24W`。本切片只关闭生产 fixture 隔离缺口，macOS x64 特有门禁继续后置。`MDV-25 DONE`，解锁 `MDV-20W READY`。
+
 ### Windows 首发收口 slices（REL-05）
 
-- `MDV-25W READY`：在 Windows x64 Debug/Release 重建后运行 source/handler/package contract 和主二进制扫描，真实 CEF 验证手动 `crayon://mdv` 为空态、用户打开真实本地 `.md` 后功能恢复；通过后只关闭 MDV-25 的 Windows 缺口。
+- `MDV-25W DONE`：Windows x64 Debug/Release 重建、source/handler/package contract、主二进制扫描与真实 CEF 空态/本地文件恢复均已闭合；未扩张到 MDV-20W/24W。
 - `MDV-20W READY`：依赖 MDV-25W；执行 Mermaid Full 七类重点图、50-block lazy/cache、Highlight、KaTeX、离线/零公网、亮暗主题、窄宽窗、100%/200% device scale、保存/退出资源回落与 Windows Release package/NOTICE/SPDX 门禁。
 - `MDV-24W TODO`：只补 Windows 首发实际支持矩阵需要的键盘/tooltip/英文与中文文本、原生系统 DPI 和可用的 Narrator/IME 证据；环境不可用项如实记 `NOT_RUN`，不阻塞不宣称的辅助能力，但必须进入候选已知限制。
 - 三个 slice 均不得等待或冒充原生 macOS x64、VoiceOver/Keychain、公证或 macOS 安装包；Windows 首发后再补 macOS 特有 addendum，不改写既有证据。
