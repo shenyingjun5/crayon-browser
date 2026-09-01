@@ -9,7 +9,7 @@ $results = [System.Collections.Generic.List[object]]::new()
 $overallPassed = $true
 $failure = $null
 
-if ($Mode -notin @('fast', 'core', 'security', 'brand-assets', 'all')) {
+if ($Mode -notin @('fast', 'core', 'security', 'brand-assets', 'all', 'coverage')) {
     [pscustomobject]@{
         schema_version = 1
         mode = $Mode
@@ -17,7 +17,7 @@ if ($Mode -notin @('fast', 'core', 'security', 'brand-assets', 'all')) {
         failure = 'unsupported mode'
         steps = @()
     } | ConvertTo-Json -Depth 4 -Compress
-    throw "unsupported mode '$Mode'; expected fast, core, security, brand-assets, or all"
+    throw "unsupported mode '$Mode'; expected fast, core, security, brand-assets, all, or coverage"
 }
 
 function Invoke-CheckStep {
@@ -48,6 +48,7 @@ try {
         'security' { @('guard', 'relay-unit', 'relay-security') }
         'brand-assets' { @('brand-assets-unit', 'brand-assets') }
         'all' { @('guard', 'format', 'brand-assets-unit', 'brand-assets', 'formal-workspace', 'legacy-package') }
+        'coverage' { @('coverage-gate') }
     }
     foreach ($step in $steps) {
         switch ($step) {
@@ -60,6 +61,7 @@ try {
             'legacy-package' { Invoke-CheckStep $step { cargo test -p crayon-browser-core --no-default-features --features legacy-dev } }
             'relay-unit' { Invoke-CheckStep $step { cargo test -p crayon-browser-core --no-default-features --features legacy-dev relay:: } }
             'relay-security' { Invoke-CheckStep $step { cargo test --no-default-features --features legacy-dev --test fixtures security:: } }
+            'coverage-gate' { Invoke-CheckStep $step { & "$PSScriptRoot/coverage_gate.ps1" -Require } }
         }
     }
 }

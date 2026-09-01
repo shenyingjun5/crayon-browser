@@ -72,3 +72,21 @@
 - 阻塞（需用户决策）：`third_party/cast-sdk` 指向私有仓库 `shenyingjun5/Cast-SDK`，GITHUB_TOKEN 无权跨私有仓库克隆；仓库无任何已配置 secret。绿运行需要二者之一：配置具有 Cast-SDK 读权限的 PAT secret（如 `CAST_SDK_PAT`）供 checkout 使用，或将 Cast-SDK 转为公开仓库。两者均涉凭证/可见性决策，按 AGENTS.md §9 需明确授权，本任务不擅自处理。顺带发现 macOS workflow 在 main 上最近三轮亦失败（疑似同源依赖/其他既有问题），归 01M 排查。
 - Code Review：workflow 只读权限（contents: read）、concurrency 取消冗余、无凭证硬编码、无测试筛选/条件编译放松；P0/P1=0。
 - 未覆盖与风险：冷/热绿时长、产物上传验证须待凭证决策后首轮绿运行补记；desktop 层真实 CEF 集成测试在 GitHub runner 窗口站下的可行性未验证（若受限将如实单列）。`QAR-01W` 转 `IMPLEMENTED`，凭证就绪后跑绿即补 VERIFIED/DONE。
+
+### QAR-04W 原子范围（覆盖率/变更门禁）
+
+- 状态：`VERIFIED`（CI coverage job 随 QAR-01W 同一 Cast-SDK 凭证阻塞待绿）；依赖 `QAR-01W IMPLEMENTED`、`FND-12 DONE`。
+- 单一目标：建立可审计的 Rust 覆盖率门禁——`cargo llvm-cov` 聚合 workspace 行覆盖率，关键 crate 独立阈值（ipc-schema/app-runtime/media-host/platform-windows/repo-guard 等），豁免清单逐条带理由；门禁脚本纳入 `scripts/check.ps1` 独立 `coverage` mode 与 CI 分层（不阻塞 fast/security/desktop 既有层，先作为独立 job 记录基线）。
+- 输出与允许路径：`scripts/coverage_gate.ps1`、`tools/coverage-gate.json`、`scripts/check.ps1`（仅追加 mode 分发）、`.github/workflows/windows-gates.yml`（追加 coverage job）、`docs/plans/quality-release-roadmap.md`。
+- 禁止修改：生产代码、既有门禁阈值/语义、测试断言；不得为达标删除测试或放松既有 fast/security。
+- 边界：覆盖率只作门禁信号，不冒充正确性证明；阈值以当前实测基线为起点（只能上调）；llvm-cov 缺失时如实 NOT_RUN 而不跳过。
+- 验收：本地门禁脚本真实运行产出基线报告并 exit 0；阈值被人工压到基线以上时稳定 exit 非零（负向验证）；CI coverage job 绿或如实记录阻塞；`git diff --check`；Review P0/P1=0。
+- 明确不做：C++/CEF 覆盖率（windows clang coverage 另行立项）、changed-lines diff 覆盖映射（需要 diff 行↔覆盖行关联工具，记录为后续任务）、macOS runner。
+
+### QAR-04W 完成记录（2026-09-01，覆盖率门禁基线）
+
+- 实现：`scripts/coverage_gate.ps1`（cargo-llvm-cov workspace 运行 → LLVM export 按 crate 聚合行覆盖 → 比对 `tools/coverage-gate.json` 阈值/豁免 → `report.json` + 非零退出）；`tools/coverage-gate.json` 冻结 15 个关键 crate 基线阈值（只升不降）与 1 条带理由豁免（`crayon-media-host` 为 binary owner，由进程级 CEF 测试覆盖，llvm-cov 插桩 0 行）；`scripts/check.ps1` 追加 `coverage` mode（既有 mode 语义不变）；CI `windows-gates.yml` 追加独立 coverage job（llvm-tools + install-action 安装 cargo-llvm-cov、报告 artifact 上传），不阻塞既有三层。
+- 验证：本地 `coverage_gate.ps1` 全量真实运行 exit 0（基线：app-runtime 86.2%、ipc-schema 90.6%、relay 90.4%、cast-adapter 94.2%、platform-windows 80.8%、repo-guard 80.2% 等 15 项全部达标）；负向验证 `-Multiplier 1.1` 稳定 exit 1；`check.ps1 -Mode coverage` 全链路 PASS（196.7s）；`-Mode fast` 回归 PASS；`git diff --check` 通过。
+- 排障记录（可审计）：PS 5.1 下 `>` 重定向把 llvm-cov JSON 写成 UTF-16、param `[string]$Config` 与局部 `$config` 同名大小写不敏感导致 ConvertFrom-Json 结果被强转回 String——分别改用 .NET 读取 + Trim 与独立变量名闭合；stderr NativeCommandError 以 Continue + 退出码处理。
+- Code Review：P0 0、P1 0、P2 0；P3 1——changed-lines diff 覆盖映射（diff 行 ↔ 覆盖行关联）未实现，按原子范围记录为后续任务。
+- 未覆盖与风险：CI coverage job 与 desktop/fast/security 一样被 Cast-SDK 私有子模块阻塞（同 QAR-01W 凭证决策）；C++/CEF 覆盖率与 macOS runner 明确不做。`QAR-04W` 转 `VERIFIED`，CI 绿运行后补 `DONE`。

@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "note": "QAR-04W baseline thresholds (2026-09-01, workspace llvm-cov); only raised, never lowered without a recorded reason",
+  "crates": {
+    "crates/crayon-app-runtime": 85.0,
+    "crates/crayon-agent-gateway": 85.0,
+    "crates/crayon-ipc-schema": 90.0,
+    "tools/repo-guard": 80.0,
+    "crates/crayon-relay": 90.0,
+    "crates/crayon-domain": 85.0,
+    "crates/crayon-platform-windows": 80.0,
+    "crates/crayon-semantic-action": 90.0,
+    "crates/crayon-page-data": 90.0,
+    "crates/crayon-cast-adapter": 90.0,
+    "crates/crayon-media-probe": 85.0,
+    "crates/crayon-profile": 80.0,
+    "crates/crayon-capability-hub": 90.0,
+    "crates/crayon-workflow": 85.0,
+    "crates/crayon-media-observer": 90.0
+  },
+  "exemptions": [
+    {
+      "crate": "crates/crayon-media-host",
+      "reason": "binary owner crate; its behavior is exercised by process-level CEF tests (media_host_process_win), and the llvm-cov workspace run instruments 0 of its lines"
+    }
+  ]
+}

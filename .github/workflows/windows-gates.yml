@@ -217,3 +217,49 @@ jobs:
           path: |
             ctest-*.log
           if-no-files-found: ignore
+
+  coverage:
+    name: coverage gate (llvm-cov workspace)
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      RUST_TEST_THREADS: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-coverage-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-coverage-
+
+      - name: Coverage gate
+        shell: pwsh
+        run: scripts/check.ps1 -Mode coverage
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            target/coverage-gate/report.json
+            target/coverage-gate/llvm-cov.log
+          if-no-files-found: ignore
