@@ -481,4 +481,11 @@
 - 自动化：`window_state_model_test` 新增 4 组（手势 http/https 开 tab、程序化拒绝、scheme/形状矩阵拒绝含空格与控制字符、待开队列/标签条容量拒绝）；Windows x64 Debug/Release 全量构建 + `ctest` 双配置各 **85/85**；`RUST_TEST_THREADS=1 scripts/check.ps1 fast` passed（并行模式再现 PLT-W05b 已登记的 formal-workspace 时序抖动一次，单线程复跑通过，非本任务引入）；`git diff --check` 通过。
 - 真实 CEF 实机（Windows 11 x64 Debug，CDP 输入管线点击）：`target=_blank` 链接点击后在**同一窗口新建 tab** 加载 example.com（进程 MainWindowHandle 恰 1 个，活动标题切为 Example Domain）；控制台直接 `window.open`（无手势）不产生新 tab 也不产生新窗口。修复过程记录：初版 `WindowOpenDisposition` 在双基类下歧义（C2385，限定 `CefLifeSpanHandler::`）；空格未被控制字符检查拦截导致矩阵用例失败，收紧为 `byte <= 0x20`。
 - Code Review：P0 0、P1 0、P2 0；popup 路径不触碰 MDV 本地入口手势门禁与可信输入门禁；待开 URL 队列有界且不持久化。
-- 未覆盖与风险：macOS 壳同样缺 `OnBeforePopup` 接线（对称切片后续，本任务未改 macOS）；`browser_created_callback_`/缩放等对新 tab 沿用既有路径。`CEF-16` 转 `DONE`。
+- 复审增补（2026-09-01）：独立 Review 发现并关闭 P2-a——`target_disposition` 被丢弃会把"链接另存为"（`CEF_WOD_SAVE_TO_DISK`）误路由为新 tab，已在 `OnBeforePopup` 放行默认下载路径（双配置重建 + window/cast 测试复跑通过）。登记 P2-b 后续任务 `CEF-17`：`pending_popup_urls_` 与 Chrome 新建 tab 无配对/generation 绑定，命令分发失败或与用户 Ctrl+T 交错时残留 URL 可能被无关新 tab 消费，需加一次性令牌或超时清理。
+- 未覆盖与风险：macOS 壳同样缺 `OnBeforePopup` 接线（对称切片后续，本任务未改 macOS）；`browser_created_callback_`/缩放等对新 tab 沿用既有路径；P2-b 见上。`CEF-16` 转 `DONE`。
+
+### CEF-17 原子范围（popup 队列配对加固）
+
+- 状态：`TODO`；依赖 `CEF-16 DONE`。
+- 单一目标：`pending_popup_urls_` 增加一次性配对令牌/超时清理，保证队列项只被同一次 `ExecuteChromeCommand(IDC_NEW_TAB)` 创建出的 tab 消费；分发失败、窗口关闭、与用户 Ctrl+T 交错时残留项不得污染后续无关 tab。
+- 验收：交错/失败/关闭三类负向用例（单元或可控 harness）；Review P0/P1=0。

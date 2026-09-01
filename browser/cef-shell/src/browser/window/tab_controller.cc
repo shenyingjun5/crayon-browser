@@ -96,13 +96,18 @@ bool WindowClient::OnBeforePopup(CefRefPtr<CefBrowser> browser,
   static_cast<void>(frame);
   static_cast<void>(popup_id);
   static_cast<void>(target_frame_name);
-  static_cast<void>(target_disposition);
   static_cast<void>(popupFeatures);
   static_cast<void>(windowInfo);
   static_cast<void>(client);
   static_cast<void>(settings);
   static_cast<void>(extra_info);
   static_cast<void>(no_javascript_access);
+  // "Save link as" rides the popup callback with a download disposition; the
+  // tab router must not intercept it — the default download path applies.
+  if (target_disposition == CEF_WOD_SAVE_TO_DISK) {
+    return false;
+  }
+  static_cast<void>(target_disposition);
   // The single-window shell never spawns a standalone popup window; the
   // controller decides between a new tab and silent denial.
   return controller_->HandlePopupRequest(browser, target_url.ToString(),
