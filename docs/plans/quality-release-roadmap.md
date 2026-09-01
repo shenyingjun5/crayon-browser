@@ -57,10 +57,18 @@
 
 ### QAR-01W 原子范围（Windows CI 分层门禁）
 
-- 状态：`IN_PROGRESS`；依赖 `FND-03`、`FND-09`（均 DONE）。
+- 状态：`IMPLEMENTED`（CI 绿运行被 Cast-SDK 私有仓库访问阻塞，见完成记录）；依赖 `FND-03`、`FND-09`（均 DONE）。
 - 单一目标：新增 Windows 原生 runner 的 CI workflow，把既有本地门禁分层为 CI 可消费的 fast（guard/format/brand-assets/formal-workspace/legacy-unit）、security（guard/relay-unit/relay-security）与 desktop（CEF Debug/Release 构建 + 全量 ctest + vendor/adapter/locale 检查）三层，带 CEF 压缩包与 cargo/node 缓存、产物上传（构建日志、CTest 输出、Release staging 清单）与失败定位（分层 job 独立、日志 artifact）。
 - 输出与允许路径：`.github/workflows/**`（新增 Windows workflow）、`docs/plans/quality-release-roadmap.md`、`docs/plans/README.md` 索引状态。
 - 禁止修改：生产代码、测试断言、scripts/check.ps1 门禁语义、macOS workflow 行为；不得降低任何本地下层门禁或通过条件编译/筛选测试冒充通过。
 - 边界：GitHub-hosted `windows-latest` runner；CEF 固定版本归档用 actions/cache 按版本 key 缓存；desktop 层的真实 CEF 集成测试若因 runner 窗口站限制失败，如实记录并对该层单独标注，不静默跳过；不配置发布/部署/Tag 触发。
 - 验收：workflow YAML 解析有效；分层 job 在 GitHub 真实运行至少一次，记录冷/热时长、失败定位路径与产物上传结果；本地 `git diff --check`；Review P0/P1=0。
 - 明确不做：macOS runner（01M 后续）、覆盖率门禁（QAR-04W）、每日定时 E2E 调度（QAR-02AW）、发布/部署动作。
+
+### QAR-01W 完成记录（2026-09-01，首轮）
+
+- 实现：新增 `.github/workflows/windows-gates.yml`——三层分层 job：`fast`（check.ps1 fast：guard/format/brand-assets/formal-workspace/legacy-unit，RUST_TEST_THREADS=1 规避 PLT-W05b 记录的既有并行抖动）、`security`（check.ps1 security）、`desktop`（Debug/Release 矩阵：固定版本 CEF 归档下载+缓存、extract、configure/build、全量 ctest 带 `--output-log`、mermaid/highlight/katex vendor check + adapter node 测试、RG mermaid-metadata dry run、`git diff --check`）。cargo 与 CEF 归档缓存、CTest 日志 artifact 上传、无发布/部署/Tag 触发。原子范围见上文；`submodules: true` 与 pwsh 变量引用加引号两轮修复已提交（3778809、45f4a30）。
+- 真实运行证据：run 33480818772 与 33481116904（push 触发）——分层失败定位有效：首轮 4 job 分别在 guard（cast-sdk 路径依赖缺失）与 CEF 下载（pwsh `$env:` 未展开）步骤快速失败；第二轮准确定位为 checkout 阶段 Cast-SDK 私有子模块 `repository not found`。冷启动到失败定位约 20-90 秒/层。
+- 阻塞（需用户决策）：`third_party/cast-sdk` 指向私有仓库 `shenyingjun5/Cast-SDK`，GITHUB_TOKEN 无权跨私有仓库克隆；仓库无任何已配置 secret。绿运行需要二者之一：配置具有 Cast-SDK 读权限的 PAT secret（如 `CAST_SDK_PAT`）供 checkout 使用，或将 Cast-SDK 转为公开仓库。两者均涉凭证/可见性决策，按 AGENTS.md §9 需明确授权，本任务不擅自处理。顺带发现 macOS workflow 在 main 上最近三轮亦失败（疑似同源依赖/其他既有问题），归 01M 排查。
+- Code Review：workflow 只读权限（contents: read）、concurrency 取消冗余、无凭证硬编码、无测试筛选/条件编译放松；P0/P1=0。
+- 未覆盖与风险：冷/热绿时长、产物上传验证须待凭证决策后首轮绿运行补记；desktop 层真实 CEF 集成测试在 GitHub runner 窗口站下的可行性未验证（若受限将如实单列）。`QAR-01W` 转 `IMPLEMENTED`，凭证就绪后跑绿即补 VERIFIED/DONE。
