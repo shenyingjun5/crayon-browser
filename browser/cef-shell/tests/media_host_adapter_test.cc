@@ -175,9 +175,13 @@ bool RunCastCommandPump() {
       !std::holds_alternative<mh::DevicePageReply>(cast.front()))
     return false;
 
-  if (!adapter.RequestResolveCastCode("AB1 CD2"))
+  const auto resolve_request_id =
+      adapter.RequestResolveCastCode("AB1 CD2");
+  if (!resolve_request_id)
     return false;
   const auto resolve = std::get<mh::ResolveCastCode>(fake->sent.back());
+  if (*resolve_request_id != resolve.request_id)
+    return false;
   fake->inbound.push_back(mh::ResolveCastCodeReply{
       resolve.request_id,
       mh::Device{"receiver-1", "Living Room", mh::DeviceState::kReady, true},
@@ -217,20 +221,29 @@ bool RunCastCommandPump() {
                                  std::nullopt) ||
       adapter.RequestControlCast(5, mh::CastControlAction::kPause, 1) ||
       adapter.RequestControlCast(5, mh::CastControlAction::kSeek,
-                                 mh::kMaxSeekSeconds + 1) ||
-      !adapter.RequestControlCast(5, mh::CastControlAction::kPause,
-                                  std::nullopt))
+                                 mh::kMaxSeekSeconds + 1))
+    return false;
+  const auto pause_request_id = adapter.RequestControlCast(
+      5, mh::CastControlAction::kPause, std::nullopt);
+  if (!pause_request_id)
     return false;
   const auto pause = std::get<mh::ControlCast>(fake->sent.back());
+  if (*pause_request_id != pause.request_id)
+    return false;
   fake->inbound.push_back(
       mh::ControlCastReply{pause.request_id, 5, std::nullopt});
   adapter.Tick();
   cast = adapter.DrainCast(2);
   if (cast.size() != 1 ||
-      !std::holds_alternative<mh::ControlCastReply>(cast.front()) ||
-      !adapter.RequestControlCast(5, mh::CastControlAction::kSeek, 30))
+      !std::holds_alternative<mh::ControlCastReply>(cast.front()))
+    return false;
+  const auto seek_request_id =
+      adapter.RequestControlCast(5, mh::CastControlAction::kSeek, 30);
+  if (!seek_request_id)
     return false;
   const auto seek = std::get<mh::ControlCast>(fake->sent.back());
+  if (*seek_request_id != seek.request_id)
+    return false;
   fake->inbound.push_back(
       mh::ControlCastReply{seek.request_id, 5, mh::CastError::kRouteLost});
   adapter.Tick();

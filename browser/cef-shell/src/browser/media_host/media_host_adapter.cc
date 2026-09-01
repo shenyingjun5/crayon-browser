@@ -305,20 +305,29 @@ bool MediaHostAdapter::RequestStopCast(std::uint64_t session_generation) {
   return Submit(media_host_ipc::StopCast{NextRequestId(), session_generation});
 }
 
-bool MediaHostAdapter::RequestResolveCastCode(std::string cast_code) {
-  return Submit(
-      media_host_ipc::ResolveCastCode{NextRequestId(), std::move(cast_code)});
+std::optional<std::string> MediaHostAdapter::RequestResolveCastCode(
+    std::string cast_code) {
+  std::string request_id = NextRequestId();
+  if (!Submit(media_host_ipc::ResolveCastCode{request_id,
+                                               std::move(cast_code)})) {
+    return std::nullopt;
+  }
+  return request_id;
 }
 
-bool MediaHostAdapter::RequestControlCast(
+std::optional<std::string> MediaHostAdapter::RequestControlCast(
     std::uint64_t session_generation, media_host_ipc::CastControlAction action,
     std::optional<std::uint64_t> position_seconds) {
   if (!active_session_generation_ || session_generation == 0 ||
       session_generation != *active_session_generation_) {
-    return false;
+    return std::nullopt;
   }
-  return Submit(media_host_ipc::ControlCast{NextRequestId(), session_generation,
-                                            action, position_seconds});
+  std::string request_id = NextRequestId();
+  if (!Submit(media_host_ipc::ControlCast{request_id, session_generation,
+                                          action, position_seconds})) {
+    return std::nullopt;
+  }
+  return request_id;
 }
 
 std::vector<media_host_ipc::Message>

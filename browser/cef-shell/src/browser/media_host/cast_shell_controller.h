@@ -20,6 +20,32 @@ struct CastCommandPort final {
   std::function<bool(std::optional<std::uint64_t>, std::uint16_t)> list_devices;
   std::function<bool(std::uint64_t, std::string, bool)> start_cast;
   std::function<bool(std::uint64_t)> stop_cast;
+  std::function<std::optional<std::string>(std::string)> resolve_cast_code;
+  std::function<std::optional<std::string>(
+      std::uint64_t, media_host_ipc::CastControlAction,
+      std::optional<std::uint64_t>)>
+      control_cast;
+};
+
+struct CastShellPresentation final {
+  bool cast_code_pending = false;
+  bool cast_code_failed = false;
+  bool control_pending = false;
+  bool control_failed = false;
+  bool playback_paused = false;
+
+  friend bool operator==(const CastShellPresentation& left,
+                         const CastShellPresentation& right) {
+    return left.cast_code_pending == right.cast_code_pending &&
+           left.cast_code_failed == right.cast_code_failed &&
+           left.control_pending == right.control_pending &&
+           left.control_failed == right.control_failed &&
+           left.playback_paused == right.playback_paused;
+  }
+  friend bool operator!=(const CastShellPresentation& left,
+                         const CastShellPresentation& right) {
+    return !(left == right);
+  }
 };
 
 // Single UI-thread shell owner between Browser-verified media facts, the
@@ -42,6 +68,9 @@ class CastShellController final {
   bool RefreshReceivers();
   void CancelReceiverPicker();
   bool SelectReceiver(const std::string& device_id);
+  bool ConnectCastCode(std::string cast_code);
+  bool SetPaused(bool paused);
+  bool SeekSession(std::uint64_t position_seconds);
   bool StopSession();
 
   const browser_cast_view::CastUiCoordinator& coordinator() const {
@@ -49,6 +78,7 @@ class CastShellController final {
   }
   bool device_page_pending() const { return device_page_pending_; }
   bool start_pending() const { return start_pending_; }
+  CastShellPresentation presentation() const;
 
  private:
   void ResetPage(bool page_active);
@@ -56,7 +86,13 @@ class CastShellController final {
   bool RequestFirstDevicePage(media_host_ipc::DiscoveryAction action);
   bool HandleDevicePage(const media_host_ipc::DevicePageReply& page);
   void HandleStartReply(const media_host_ipc::StartCastReply& reply);
+  void HandleResolveCastCodeReply(
+      const media_host_ipc::ResolveCastCodeReply& reply);
+  void HandleControlCastReply(
+      const media_host_ipc::ControlCastReply& reply);
   void HandleSessionEvents(const media_host_ipc::SessionEventsReply& reply);
+  bool ControlSession(media_host_ipc::CastControlAction action,
+                      std::optional<std::uint64_t> position_seconds);
   void FailSelection();
 
   CastCommandPort commands_;
@@ -70,6 +106,12 @@ class CastShellController final {
   bool discovery_active_ = false;
   bool device_page_pending_ = false;
   bool start_pending_ = false;
+  std::optional<std::string> cast_code_request_id_;
+  bool cast_code_failed_ = false;
+  std::optional<std::string> control_request_id_;
+  bool control_failed_ = false;
+  bool playback_paused_ = false;
+  std::optional<media_host_ipc::CastControlAction> pending_control_action_;
   bool shutdown_ = false;
 };
 

@@ -7,7 +7,9 @@
 
 #include <iostream>
 #include <iterator>
+#include <optional>
 #include <string>
+#include <utility>
 
 #include "crayon/browser_cast_view/cast_ui_coordinator.h"
 
@@ -80,9 +82,14 @@ bool CastChromeLifecycle() {
   int refreshes = 0;
   int cancellations = 0;
   std::string selected;
+  std::string cast_code;
+  std::optional<bool> paused;
+  std::optional<std::uint64_t> seek_seconds;
   windows::CastChromeWin chrome(
       {L"Select receiver", L"Stop casting", L"Cast to device", L"No receivers",
-       L"Cast", L"Refresh", L"Cancel"},
+       L"Cast", L"Refresh", L"Cancel", L"Cast code", L"Connect",
+       L"Cast code failed", L"Pause", L"Resume", L"Seek", L"Seconds",
+       L"Control failed"},
       {[&] {
          ++activations;
          if (coordinator.active_session_generation())
@@ -99,6 +106,18 @@ bool CastChromeLifecycle() {
        },
        [&](const std::string& device_id) {
          selected = device_id;
+         return true;
+       },
+       [&](std::string value) {
+         cast_code = std::move(value);
+         return true;
+       },
+       [&](bool value) {
+         paused = value;
+         return true;
+       },
+       [&](std::uint64_t value) {
+         seek_seconds = value;
          return true;
        }});
 
@@ -123,6 +142,12 @@ bool CastChromeLifecycle() {
   CHECK_CAST(empty != nullptr && IsWindowVisible(empty));
   HWND select = FindChild(picker, L"BUTTON", L"Cast");
   CHECK_CAST(select != nullptr && !IsWindowEnabled(select));
+  HWND code_edit = FindWindowExW(picker, nullptr, L"EDIT", nullptr);
+  HWND connect = FindChild(picker, L"BUTTON", L"Connect");
+  CHECK_CAST(code_edit != nullptr && connect != nullptr);
+  SetWindowTextW(code_edit, L"AB1 CD2");
+  SendMessageW(connect, BM_CLICK, 0, 0);
+  CHECK_CAST(cast_code == "AB1 CD2");
 
   CHECK_CAST(coordinator.ReplaceReceivers(
       {{"receiver_a", "Living room", true},
@@ -148,12 +173,22 @@ bool CastChromeLifecycle() {
   CHECK_CAST(coordinator.OpenPicker().has_value());
   CHECK_CAST(coordinator.ApplyPolicyOutcome(cast::PolicyOutcome::kDirect));
   CHECK_CAST(coordinator.NotifySessionStarted(9));
-  chrome.Render(coordinator);
+  chrome.Render(coordinator, {});
   PumpMessages();
   wchar_t label[64]{};
   GetWindowTextW(cast_button, label, static_cast<int>(std::size(label)));
   CHECK_CAST(std::wstring(label) == L"Stop casting");
   CHECK_CAST(!IsWindowVisible(picker));
+  HWND pause = FindChild(root, L"BUTTON", L"Pause");
+  CHECK_CAST(pause != nullptr && IsWindowVisible(pause));
+  SendMessageW(pause, BM_CLICK, 0, 0);
+  CHECK_CAST(paused == true);
+  HWND seek_edit = FindWindowExW(root, nullptr, L"EDIT", nullptr);
+  HWND seek = FindChild(root, L"BUTTON", L"Seek");
+  CHECK_CAST(seek_edit != nullptr && seek != nullptr);
+  SetWindowTextW(seek_edit, L"30");
+  SendMessageW(seek, BM_CLICK, 0, 0);
+  CHECK_CAST(seek_seconds == 30);
   SendMessageW(cast_button, BM_CLICK, 0, 0);
   CHECK_CAST(activations == 2);
 

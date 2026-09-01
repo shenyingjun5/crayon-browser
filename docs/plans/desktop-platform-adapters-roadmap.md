@@ -1,6 +1,6 @@
 # PLT Windows/macOS 平台适配 Roadmap
 
-- 状态：`PLT-01/02/W04/M04 DONE`；macOS 共享装配 `PLT-M05 IN_PROGRESS`（M05a、M05b1/b2/b3 DONE，b4..b6/M05c 后置）；Windows 首发装配 `PLT-W05 IN_PROGRESS`（W05a DONE、W05b IN_PROGRESS，后续严格串行）
+- 状态：`PLT-01/02/W04/M04 DONE`；macOS 共享装配 `PLT-M05 IN_PROGRESS`（M05a、M05b1/b2/b3 DONE，b4..b6/M05c 后置）；Windows 首发装配 `PLT-W05 IN_PROGRESS`（W05a/W05b/W05c0 DONE、W05c BLOCKED，后续严格串行）
 - 任务数：7
 - 平台：Windows、macOS
 - 非目标：Linux、屏幕/标签页/系统音频采集、编码器、WebRTC sender
@@ -443,7 +443,7 @@
 | PLT-W05a | DONE | PLT-M05b3 DONE | 用 Windows named pipe/Job/process owner 装配 bundled `crayon-media-host`，接通现有 CEF observation/planning 与有界 health/kill/reap | `browser/cef-shell/src/windows/**`、`browser/cef-shell/src/browser/media_host/**`（仅提取既有平台无关 adapter）、顶层组合 crate `crates/crayon-media-host/**`（从 runtime 提升 binary owner，仅补平台 health/启动）、平台 CMake/package、相邻 process/adapter tests；Debug/Release build/CTest；不接 UI/SDK 真机 |
 | PLT-W05b | DONE | W05a DONE | 接通共享 `CastUiCoordinator`、浏览器 chrome 按钮/receiver picker、Cast command/event worker 与 navigation/close/app-exit | Windows shell/chrome/locale、相邻 tests；无设备/刷新/取消/失败/旧 session/stop；UI 线程无阻塞 SDK |
 | PLT-W05c0 | DONE | W05b DONE | 补齐 bundled Browser/media-host 私有 MHV1 的投屏码解析与 generation-bound play/pause/seek 控制，使产品壳能消费既有 CastFacade 能力 | Rust/C++ 双 codec、current/previous golden、runtime/adapter/process contract；不改 Cast-SDK facade/接收端、不做 UI 或真机结论 |
-| PLT-W05c | READY | W05c0 DONE | 使用 ADB 正式接收端完成 clear fixture Direct 发现、连接、投送、pause/resume/seek/stop | E2E-001/CS-010；真实 Desktop Host 与真实上屏；不以 SDK standalone/Fake/ADB 在线代替 |
+| PLT-W05c | BLOCKED | W05c0 DONE | 使用 ADB 正式接收端完成 clear fixture Direct 发现、连接、投送、pause/resume/seek/stop | E2E-001/CS-010；真实 Desktop Host 与真实上屏；当前远程桌面点击带 `LLMHF_INJECTED`，须在可产生可信物理输入的 Windows 控制台复验 |
 | PLT-W05d | TODO | W05c | 同一接收端完成 MP4 Range 与 HLS Relay 全链路 | E2E-002；opaque route、200/206/416、分片、撤销后拒绝、零 secret；不支持 DASH Relay/加密 HLS |
 | PLT-W05e | TODO | W05d | DRM/EME/加密/credential 拒绝与 ExternalClientHandoff 确认/取消/未安装/失败反馈 | E2E-003/004；交接不创建 SDK/Relay session、不显示投屏中 |
 | PLT-W05f | TODO | W05e | 100 次开始/停止/设备/网络切换及睡眠/唤醒/退出，关闭 CP-W01 | E2E-005；进程/线程/socket/RSS/UI delay/dropped、旧 generation、退出零残留 |
@@ -467,13 +467,18 @@
 - Code Review：按 v0.9 依次审查需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试/证据、可维护性/供应链。审查中关闭三项 P1：投屏码错误不得扁平化为 HostError、控制错误必须使用稳定 reply、late control reply 必须绑定并校验 session generation。最终 P0 0、P1 0、P2 0、P3 0，`APPROVE`；Roadmap 最高状态 `DONE`。
 - 未覆盖与风险：本切片按范围不接 Windows UI、不声明 ADB/Direct 真机通过，均由 `PLT-W05c` 闭合。固定 SDK 的投屏码调用没有 cooperative cancel，当前以有界调用方丢弃、process generation 和 controller pending state 防止迟到结果污染；产品 UI 的取消行为仍须在 W05c 验证。macOS 仅通过 Windows 上的 source contract 检查 reply allow-set，macOS 构建、签名与行为均 `NOT_RUN` 并按用户决策后置。
 
-### PLT-W05c 预备记录（2026-09-01）
+### PLT-W05c 验证记录（2026-09-01）
 
-- 状态：`READY`；依赖 `PLT-W05c0 DONE`。单一目标是由 Windows x64 真实 `CrayonBrowser.exe` 与 bundled Desktop Host 驱动 clear fixture，经产品 Cast chrome 完成蜡笔正式接收端的自动发现和投屏码连接，并闭合 Direct 首帧、pause/resume/seek/stop 与资源清理。
+- 状态：`BLOCKED`；依赖 `PLT-W05c0 DONE`。Windows 产品缺失的投屏码与 pause/resume/seek 原生入口、Browser/controller/media-host request/reply 接线及 generation fencing 已实现并自动化验证；但本轮无法产生 Browser 可接受的可信物理播放输入，故真实 Direct 首帧、播控与停止没有冒充通过。
 - 输入与真机：离线 clear fixture；ADB 设备 `VED7N18906000919`（Huawei EML-AL00、Android 10），正式接收端 `com.zknowai.labi.cast.receiver` 1.1.1（versionCode 10101），本轮开始时 `wlan0=192.168.3.166/24` 且 `MainActivity` 前台。上述仅是开工快照，完成记录仍须包含测试时刻的 build/network/上屏/终态证据。
 - 允许路径：Windows CEF 产品装配与相邻 E2E/Harness、测试 fixture、平台 package/CMake、`browser/cef-shell/src/browser/media_host/**` 中现有共享 controller 的最小缺陷修复，以及本 Roadmap。禁止修改 Cast-SDK/接收端、复制协议、借用 standalone/Fake 结论，禁止把 ADB online、Activity 启动或页面截图单独冒充 Direct 成功。
 - 验收与命令：Windows x64 Debug/Release `ALL_BUILD` 与完整 CTest；`scripts/check.ps1 fast`、`scripts/check.ps1 security`；E2E-001 必须从页面点击播放进入产品自动发现并在手机真实首帧后完成 pause/resume/seek/stop；CS-010 还必须以产品投屏码入口连接同一接收端。记录产品/receiver 会话、播放位置变化、停止后 `MainActivity` 与 Browser/Host/SDK 资源归零。若发现 Windows 产品缺陷，先补稳定复现测试再做共同入口最小修复。
 - 不做：MP4 Range/HLS Relay（W05d）、DRM/credential/handoff（W05e）、100 次/电源网络长稳（W05f）、macOS 特有验证，以及 Cast-SDK/receiver 功能开发。
+- 实现与缺陷修复：Windows receiver picker 新增本地化投屏码输入/连接，活动会话新增 pause/resume 与有界秒数 seek；所有入口只调用共享 `CastShellController` 与单 worker `MediaHostAdapter`。Review 先以稳定测试复现两项同类竞态：投屏码回复必须精确匹配请求 ID；同一 session 的旧/重复 control reply 也必须同时匹配 request ID 与 session generation，不能清除或覆盖后继请求。两项均在共同入口最小修复，导航、取消、终态和新 session 会清理 pending 状态，错误保持稳定 UI 状态。
+- 构建与自动化：Windows 11 x64 multi-config tree 的 Debug/Release `ALL_BUILD` 在最终代码上均通过（组合命令退出码 0，137s）；targeted `media_host_adapter_win`、`cast_shell_controller_win` 2/2 通过。最终 `ctest --test-dir .cache/build/windows-cef-debug -C Debug --output-on-failure` **85/85**（395.55s，真实 CEF page snapshot 64.32s、Cast 4.81s），Release **85/85**（311.00s，分别 52.93s/3.07s）。`RUST_TEST_THREADS=1 scripts/check.ps1 fast` 退出码 0（86.8s），`scripts/check.ps1 security` 退出码 0（5.7s；guard、relay-unit、relay-security 全通过），`git diff --check` 通过；repo guard 只保留既有文件/函数规模和可配置字面量 warning，RG-006 因未传发布 artifact 为 `not_applicable`。Debug 前一轮为 84/85：Cast 已通过，page snapshot 的全部场景输出均完成但进程最终非零；隔离复跑 1/1（70.30s）且随后全量 85/85，记录为既有 CEF 退出波动而非伪造通过。错误的独立 Release build 目录命令因目录不存在退出 1、未执行测试；改用同一 Visual Studio multi-config tree 的 `-C Release` 后取得上述完整结果。
+- 真机与阻塞证据：ADB 设备在线、正式 receiver 1.1.1 前台、PC/手机位于同一 `192.168.3.0/24`；产品使用真实 `CrayonBrowser.exe`、bundled media/content host 与循环 WebM VP9/Opus clear fixture。用户经当前 Codex/远程桌面点击后，低级鼠标探针原样得到 `flags=0x1, injected=True, lower_integrity_injected=False, class=Chrome_RenderWidgetHostHWND`；产品 Cast 控件 `0x5C01` 随即仍为 `Visible=False, Enabled=False`，证明输入证据门禁未建立，而非控件被遮挡。按安全红线没有接受 injected input、没有调用测试 seam、没有直接启用按钮，因此未产生可审计的自动发现/投屏码连接、手机首帧、pause/resume/seek/stop 证据。测试结束后 Browser、fixture、probe 进程均停止，两条临时本地子网防火墙规则精确删除并验证残留为 0。
+- Code Review：按 v0.9 顺序审查需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试/证据、可维护性/供应链；关闭 request correlation 两项 P1 后，最终 P0 0、P1 0、P2 0、P3 0，`APPROVE`。未复制 Cast-SDK/receiver/Relay 协议，UI 线程无网络、pipe 或等待，注入输入拒绝边界保持不变。
+- 未覆盖与解阻条件：须在**能够产生非 `LLMHF_INJECTED` 物理点击**的 Windows 本地控制台，以同一正式 receiver 重新执行 E2E-001/CS-010，记录真实 device/session、手机首帧、播放位置 pause/resume/seek 变化、stop 与资源归零；此前这些项均为 `NOT_RUN`。W05d 严格依赖 W05c，当前不得领取；macOS 特有验证继续后置。
 
 ### PLT-W05a 完成记录（2026-08-31，Windows bundled media-host 产品装配）
 

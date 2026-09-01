@@ -26,6 +26,15 @@ struct CommandLog final {
   std::vector<std::pair<std::optional<std::uint64_t>, std::uint16_t>> pages;
   std::vector<std::pair<std::uint64_t, std::string>> starts;
   std::vector<std::uint64_t> stops;
+  std::vector<std::string> cast_codes;
+  std::vector<std::string> cast_code_request_ids;
+  struct Control final {
+    std::uint64_t generation = 0;
+    mh::CastControlAction action = mh::CastControlAction::kPlay;
+    std::optional<std::uint64_t> position;
+  };
+  std::vector<Control> controls;
+  std::vector<std::string> control_request_ids;
   bool accept = true;
 
   media_host::CastCommandPort Port() {
@@ -46,6 +55,21 @@ struct CommandLog final {
         [this](std::uint64_t generation) {
           stops.push_back(generation);
           return accept;
+        },
+        [this](std::string cast_code) {
+          cast_codes.push_back(std::move(cast_code));
+          if (!accept) return std::optional<std::string>{};
+          cast_code_request_ids.push_back(
+              "code-" + std::to_string(cast_code_request_ids.size() + 1));
+          return std::optional<std::string>{cast_code_request_ids.back()};
+        },
+        [this](std::uint64_t generation, mh::CastControlAction action,
+               std::optional<std::uint64_t> position) {
+          controls.push_back({generation, action, position});
+          if (!accept) return std::optional<std::string>{};
+          control_request_ids.push_back(
+              "control-" + std::to_string(control_request_ids.size() + 1));
+          return std::optional<std::string>{control_request_ids.back()};
         }};
   }
 };
@@ -262,12 +286,87 @@ bool CancelRefreshAndHostFailure() {
   return true;
 }
 
+bool CastCodeAndPlaybackControls() {
+  CommandLog log;
+  media_host::CastShellController controller(log.Port());
+  controller.OnNavigation();
+  controller.OnBrowserVerifiedMedia();
+  controller.ConsumePlanning({Candidate(51)});
+  CHECK_CAST(controller.ActivateCastButton());
+  log.accept = false;
+  CHECK_CAST(!controller.ConnectCastCode("REJECT"));
+  CHECK_CAST(controller.presentation().cast_code_failed);
+  log.accept = true;
+  CHECK_CAST(controller.ConnectCastCode("AB1 CD2"));
+  CHECK_CAST(controller.presentation().cast_code_pending);
+  CHECK_CAST((log.cast_codes ==
+              std::vector<std::string>{"REJECT", "AB1 CD2"}));
+  CHECK_CAST(log.discovery.back() == mh::DiscoveryAction::kStop);
+
+  controller.ConsumeCast({mh::ResolveCastCodeReply{
+      "code-1", Device("phone", "Crayon phone"), std::nullopt}});
+  CHECK_CAST(!controller.presentation().cast_code_pending);
+  CHECK_CAST((log.starts == std::vector<std::pair<std::uint64_t, std::string>>{
+                                {51, "phone"}}));
+  controller.ConsumeCast({Started(15, mh::DeliveryRoute::kDirect)});
+
+  CHECK_CAST(controller.SetPaused(true));
+  CHECK_CAST(controller.presentation().control_pending);
+  CHECK_CAST(log.controls.back().generation == 15 &&
+             log.controls.back().action == mh::CastControlAction::kPause &&
+             !log.controls.back().position);
+  controller.ConsumeCast(
+      {mh::ControlCastReply{"control-1", 15, std::nullopt}});
+  CHECK_CAST(controller.presentation().playback_paused);
+  CHECK_CAST(!controller.presentation().control_pending);
+
+  CHECK_CAST(controller.SetPaused(false));
+  controller.ConsumeCast(
+      {mh::ControlCastReply{"control-1", 15, std::nullopt}});
+  CHECK_CAST(controller.presentation().control_pending);
+  CHECK_CAST(controller.presentation().playback_paused);
+  controller.ConsumeCast({mh::ControlCastReply{
+      "control-2", 15, mh::CastError::kReceiverUnreachable}});
+  CHECK_CAST(controller.presentation().playback_paused);
+  CHECK_CAST(controller.presentation().control_failed);
+  CHECK_CAST(controller.SeekSession(30));
+  CHECK_CAST(log.controls.back().action == mh::CastControlAction::kSeek &&
+             log.controls.back().position == 30);
+  controller.ConsumeCast(
+      {mh::ControlCastReply{"control-3", 14, std::nullopt}});
+  CHECK_CAST(controller.presentation().control_pending);
+  controller.ConsumeCast(
+      {mh::ControlCastReply{"control-2", 15, std::nullopt}});
+  CHECK_CAST(controller.presentation().control_pending);
+  controller.ConsumeCast(
+      {mh::ControlCastReply{"control-3", 15, std::nullopt}});
+  CHECK_CAST(!controller.presentation().control_pending);
+
+  controller.OnNavigation();
+  controller.OnBrowserVerifiedMedia();
+  controller.ConsumePlanning({Candidate(52)});
+  CHECK_CAST(controller.ActivateCastButton());
+  CHECK_CAST(controller.ConnectCastCode("ZX9"));
+  controller.CancelReceiverPicker();
+  CHECK_CAST(controller.ActivateCastButton());
+  CHECK_CAST(controller.ConnectCastCode("NEXT"));
+  controller.ConsumeCast({mh::ResolveCastCodeReply{
+      "code-2", Device("late", "Late receiver"), std::nullopt}});
+  CHECK_CAST(log.starts.size() == 1);
+  CHECK_CAST(controller.presentation().cast_code_pending);
+  controller.ConsumeCast({mh::ResolveCastCodeReply{
+      "code-3", Device("next", "Next receiver"), std::nullopt}});
+  CHECK_CAST(log.starts.size() == 2 && log.starts.back().second == "next");
+  return true;
+}
+
 }  // namespace
 
 int main() {
   const bool ok = EligibilityAndPaging() && DirectStopAndLifecycle() &&
                   ClosedOutcomesAndFailures() && RejectAndFailedOutcomes() &&
-                  CancelRefreshAndHostFailure();
+                  CancelRefreshAndHostFailure() &&
+                  CastCodeAndPlaybackControls();
   if (ok) std::cout << "cast_shell_controller_test passed\n";
   return ok ? 0 : 1;
 }

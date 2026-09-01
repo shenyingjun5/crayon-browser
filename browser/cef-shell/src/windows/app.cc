@@ -175,7 +175,23 @@ windows::CastChromeStrings LoadCastStrings(HINSTANCE resource_module) {
       LoadWideString(resource_module, IDS_CRAYON_CAST_PICKER_EMPTY),
       LoadWideString(resource_module, IDS_CRAYON_CAST_PICKER_SELECT),
       LoadWideString(resource_module, IDS_CRAYON_CAST_PICKER_REFRESH),
-      LoadWideString(resource_module, IDS_CRAYON_CAST_PICKER_CANCEL)};
+      LoadWideString(resource_module, IDS_CRAYON_CAST_PICKER_CANCEL),
+      LoadWideString(resource_module, IDS_CRAYON_CAST_CODE_LABEL),
+      LoadWideString(resource_module, IDS_CRAYON_CAST_CODE_CONNECT),
+      LoadWideString(resource_module, IDS_CRAYON_CAST_CODE_FAILED),
+      LoadWideString(resource_module, IDS_CRAYON_CAST_PAUSE),
+      LoadWideString(resource_module, IDS_CRAYON_CAST_RESUME),
+      LoadWideString(resource_module, IDS_CRAYON_CAST_SEEK),
+      LoadWideString(resource_module, IDS_CRAYON_CAST_SECONDS),
+      LoadWideString(resource_module, IDS_CRAYON_CAST_CONTROL_FAILED)};
+}
+
+windows::CastChromePresentation CastChromePresentation(
+    media_host::CastShellPresentation presentation) {
+  return windows::CastChromePresentation{
+      presentation.cast_code_pending, presentation.cast_code_failed,
+      presentation.control_pending, presentation.control_failed,
+      presentation.playback_paused};
 }
 
 }  // namespace
@@ -243,6 +259,16 @@ BrowserApp::BrowserApp(HINSTANCE resource_module, std::wstring product_name)
               },
               [this](std::uint64_t generation) {
                 return media_host_->RequestStopCast(generation);
+              },
+              [this](std::string cast_code) {
+                return media_host_->RequestResolveCastCode(
+                    std::move(cast_code));
+              },
+              [this](std::uint64_t generation,
+                     media_host::media_host_ipc::CastControlAction action,
+                     std::optional<std::uint64_t> position) {
+                return media_host_->RequestControlCast(generation, action,
+                                                       position);
               }})),
       trusted_input_monitor_(
           std::make_unique<windows::TrustedInputMonitorWin>()),
@@ -255,7 +281,9 @@ BrowserApp::BrowserApp(HINSTANCE resource_module, std::wstring product_name)
             static_cast<void>(cast_chrome_->AttachWindow(
                 active_browser_id_, browser->GetHost()->GetWindowHandle()));
             cast_chrome_->SetActiveWindow(active_browser_id_);
-            cast_chrome_->Render(cast_shell_->coordinator());
+            cast_chrome_->Render(
+                cast_shell_->coordinator(),
+                CastChromePresentation(cast_shell_->presentation()));
           },
           browser_new_tab::kNewTabUrl, permission_store_.get())),
       shell_runtime_(std::make_shared<WindowsShellRuntime>(tab_controller_)) {}
@@ -277,6 +305,13 @@ void BrowserApp::OnContextInitialized() {
           [this] { cast_shell_->CancelReceiverPicker(); },
           [this](const std::string& device_id) {
             return cast_shell_->SelectReceiver(device_id);
+          },
+          [this](std::string cast_code) {
+            return cast_shell_->ConnectCastCode(std::move(cast_code));
+          },
+          [this](bool paused) { return cast_shell_->SetPaused(paused); },
+          [this](std::uint64_t seconds) {
+            return cast_shell_->SeekSession(seconds);
           }});
   std::weak_ptr<WindowsShellRuntime> shell_runtime = shell_runtime_;
   tab_controller_->SetChromeCommandCallback([shell_runtime](int command_id) {
@@ -400,7 +435,9 @@ void BrowserApp::OnContextInitialized() {
         static_cast<void>(cast_chrome_->AttachWindow(
             active_browser_id_, browser->GetHost()->GetWindowHandle()));
         cast_chrome_->SetActiveWindow(active_browser_id_);
-        cast_chrome_->Render(cast_shell_->coordinator());
+        cast_chrome_->Render(
+            cast_shell_->coordinator(),
+            CastChromePresentation(cast_shell_->presentation()));
       });
   tab_controller_->SetBrowserClosingCallback(
       [this](CefRefPtr<CefBrowser> browser) {
@@ -503,7 +540,8 @@ void BrowserApp::ContentHostTick() {
         active_browser_id_, active_browser->GetHost()->GetWindowHandle()));
     cast_chrome_->SetActiveWindow(active_browser_id_);
   }
-  cast_chrome_->Render(cast_shell_->coordinator());
+  cast_chrome_->Render(cast_shell_->coordinator(),
+                       CastChromePresentation(cast_shell_->presentation()));
   ScheduleContentHostTick();
 }
 
@@ -601,7 +639,15 @@ bool BrowserApp::cast_strings_valid() const {
          !cast_strings_.picker_empty.empty() &&
          !cast_strings_.picker_select.empty() &&
          !cast_strings_.picker_refresh.empty() &&
-         !cast_strings_.picker_cancel.empty();
+         !cast_strings_.picker_cancel.empty() &&
+         !cast_strings_.cast_code_label.empty() &&
+         !cast_strings_.cast_code_connect.empty() &&
+         !cast_strings_.cast_code_failed.empty() &&
+         !cast_strings_.playback_pause.empty() &&
+         !cast_strings_.playback_resume.empty() &&
+         !cast_strings_.playback_seek.empty() &&
+         !cast_strings_.playback_seconds.empty() &&
+         !cast_strings_.playback_failed.empty();
 }
 
 CefRefPtr<CefClient> BrowserApp::GetDefaultClient() {

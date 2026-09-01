@@ -103,6 +103,13 @@ void CastShellController::ConsumeCast(
     } else if (const auto* start =
                    std::get_if<media_host_ipc::StartCastReply>(&message)) {
       HandleStartReply(*start);
+    } else if (const auto* resolved =
+                   std::get_if<media_host_ipc::ResolveCastCodeReply>(
+                       &message)) {
+      HandleResolveCastCodeReply(*resolved);
+    } else if (const auto* control =
+                   std::get_if<media_host_ipc::ControlCastReply>(&message)) {
+      HandleControlCastReply(*control);
     } else if (const auto* events =
                    std::get_if<media_host_ipc::SessionEventsReply>(&message)) {
       HandleSessionEvents(*events);
@@ -134,6 +141,8 @@ void CastShellController::CancelReceiverPicker() {
   pending_receivers_.clear();
   device_snapshot_revision_.reset();
   device_page_pending_ = false;
+  cast_code_request_id_.reset();
+  cast_code_failed_ = false;
   if (discovery_active_ && commands_.discovery) {
     static_cast<void>(
         commands_.discovery(media_host_ipc::DiscoveryAction::kStop));
@@ -152,6 +161,42 @@ bool CastShellController::SelectReceiver(const std::string& device_id) {
   }
   start_pending_ = true;
   return true;
+}
+
+bool CastShellController::ConnectCastCode(std::string cast_code) {
+  if (shutdown_ || cast_code_request_id_ || start_pending_ ||
+      !current_candidate_ || !commands_.resolve_cast_code) {
+    return false;
+  }
+  auto request_id = commands_.resolve_cast_code(std::move(cast_code));
+  if (!request_id || request_id->empty()) {
+    cast_code_failed_ = true;
+    return false;
+  }
+  if (discovery_active_ && commands_.discovery) {
+    static_cast<void>(
+        commands_.discovery(media_host_ipc::DiscoveryAction::kStop));
+  }
+  discovery_active_ = false;
+  device_page_pending_ = false;
+  pending_receivers_.clear();
+  device_snapshot_revision_.reset();
+  cast_code_request_id_ = std::move(*request_id);
+  cast_code_failed_ = false;
+  return true;
+}
+
+bool CastShellController::SetPaused(bool paused) {
+  if (paused == playback_paused_) return false;
+  return ControlSession(paused ? media_host_ipc::CastControlAction::kPause
+                               : media_host_ipc::CastControlAction::kPlay,
+                        std::nullopt);
+}
+
+bool CastShellController::SeekSession(std::uint64_t position_seconds) {
+  if (position_seconds > media_host_ipc::kMaxSeekSeconds) return false;
+  return ControlSession(media_host_ipc::CastControlAction::kSeek,
+                        position_seconds);
 }
 
 bool CastShellController::StopSession() {
@@ -176,6 +221,12 @@ void CastShellController::ResetPage(bool page_active) {
   discovery_active_ = false;
   device_page_pending_ = false;
   start_pending_ = false;
+  cast_code_request_id_.reset();
+  cast_code_failed_ = false;
+  control_request_id_.reset();
+  control_failed_ = false;
+  playback_paused_ = false;
+  pending_control_action_.reset();
 }
 
 void CastShellController::StopActiveSession() {
@@ -261,6 +312,10 @@ void CastShellController::HandleStartReply(
           commands_.discovery(media_host_ipc::DiscoveryAction::kStop));
     }
     discovery_active_ = false;
+    control_request_id_.reset();
+    control_failed_ = false;
+    playback_paused_ = false;
+    pending_control_action_.reset();
     return;
   }
   const RejectReason reason =
@@ -277,19 +332,92 @@ void CastShellController::HandleStartReply(
   discovery_active_ = false;
 }
 
+void CastShellController::HandleResolveCastCodeReply(
+    const media_host_ipc::ResolveCastCodeReply& reply) {
+  if (!cast_code_request_id_ || reply.request_id != *cast_code_request_id_)
+    return;
+  cast_code_request_id_.reset();
+  if (!reply.device || reply.error ||
+      !coordinator_.ReplaceReceivers(
+          {{reply.device->device_id, reply.device->display_name,
+            reply.device->is_crayon_receiver}}) ||
+      !SelectReceiver(reply.device->device_id)) {
+    cast_code_failed_ = true;
+    return;
+  }
+  cast_code_failed_ = false;
+}
+
+void CastShellController::HandleControlCastReply(
+    const media_host_ipc::ControlCastReply& reply) {
+  const auto generation = coordinator_.active_session_generation();
+  if (!control_request_id_ || reply.request_id != *control_request_id_ ||
+      !generation || reply.session_generation != *generation)
+    return;
+  control_request_id_.reset();
+  if (reply.error) {
+    control_failed_ = true;
+    pending_control_action_.reset();
+    return;
+  }
+  if (pending_control_action_ == media_host_ipc::CastControlAction::kPause) {
+    playback_paused_ = true;
+  } else if (pending_control_action_ ==
+             media_host_ipc::CastControlAction::kPlay) {
+    playback_paused_ = false;
+  }
+  control_failed_ = false;
+  pending_control_action_.reset();
+}
+
 void CastShellController::HandleSessionEvents(
     const media_host_ipc::SessionEventsReply& reply) {
   for (const auto& event : reply.events) {
+    const auto generation = coordinator_.active_session_generation();
+    if (!generation || event.session_generation != *generation) continue;
     if (event.phase == media_host_ipc::SessionPhase::kTerminated) {
       static_cast<void>(
           coordinator_.NotifySessionEnded(event.session_generation));
+      control_request_id_.reset();
+      control_failed_ = false;
+      playback_paused_ = false;
+      pending_control_action_.reset();
+    } else if (event.playback == media_host_ipc::SessionPlayback::kPaused) {
+      playback_paused_ = true;
+    } else if (event.playback == media_host_ipc::SessionPlayback::kPlaying) {
+      playback_paused_ = false;
     }
   }
+}
+
+bool CastShellController::ControlSession(
+    media_host_ipc::CastControlAction action,
+    std::optional<std::uint64_t> position_seconds) {
+  const auto generation = coordinator_.active_session_generation();
+  if (shutdown_ || control_request_id_ || !generation ||
+      !commands_.control_cast) {
+    return false;
+  }
+  auto request_id =
+      commands_.control_cast(*generation, action, position_seconds);
+  if (!request_id || request_id->empty()) return false;
+  control_request_id_ = std::move(*request_id);
+  control_failed_ = false;
+  pending_control_action_ = action;
+  return true;
+}
+
+CastShellPresentation CastShellController::presentation() const {
+  return CastShellPresentation{
+      cast_code_request_id_.has_value(), cast_code_failed_,
+      control_request_id_.has_value(), control_failed_, playback_paused_};
 }
 
 void CastShellController::FailSelection() {
   device_page_pending_ = false;
   start_pending_ = false;
+  cast_code_request_id_.reset();
+  cast_code_failed_ = true;
   pending_receivers_.clear();
   device_snapshot_revision_.reset();
   if (discovery_active_ && commands_.discovery) {

@@ -63,10 +63,11 @@ public:
   bool RequestStartCast(std::uint64_t candidate_id, std::string device_id,
                         bool handoff_available);
   bool RequestStopCast(std::uint64_t session_generation);
-  bool RequestResolveCastCode(std::string cast_code);
-  bool RequestControlCast(std::uint64_t session_generation,
-                          media_host_ipc::CastControlAction action,
-                          std::optional<std::uint64_t> position_seconds);
+  std::optional<std::string> RequestResolveCastCode(std::string cast_code);
+  std::optional<std::string> RequestControlCast(
+      std::uint64_t session_generation,
+      media_host_ipc::CastControlAction action,
+      std::optional<std::uint64_t> position_seconds);
   std::vector<media_host_ipc::Message> DrainCast(std::size_t max_messages);
 
 private:
