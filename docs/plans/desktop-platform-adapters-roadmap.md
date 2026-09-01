@@ -467,6 +467,18 @@
 - Code Review：按 v0.9 依次审查需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试/证据、可维护性/供应链。审查中关闭三项 P1：投屏码错误不得扁平化为 HostError、控制错误必须使用稳定 reply、late control reply 必须绑定并校验 session generation。最终 P0 0、P1 0、P2 0、P3 0，`APPROVE`；Roadmap 最高状态 `DONE`。
 - 未覆盖与风险：本切片按范围不接 Windows UI、不声明 ADB/Direct 真机通过，均由 `PLT-W05c` 闭合。固定 SDK 的投屏码调用没有 cooperative cancel，当前以有界调用方丢弃、process generation 和 controller pending state 防止迟到结果污染；产品 UI 的取消行为仍须在 W05c 验证。macOS 仅通过 Windows 上的 source contract 检查 reply allow-set，macOS 构建、签名与行为均 `NOT_RUN` 并按用户决策后置。
 
+### PLT-W05c 解阻操作手册（物理控制台一次性采集，2026-09-01 增补）
+
+> 目的：把"用户在本地物理控制台的一次真实点击"扩展为完整 W05c 证据包，避免多轮往返。以下步骤不产生任何代码变更，不绕过可信输入门禁。
+
+1. 前置（本会话已备妥）：ADB 设备 `VED7N18906000919` 在线；手机安装正式接收端 `com.zknowai.labi.cast.receiver` 1.1.1 并启动到 `MainActivity` 前台；PC 与手机同网段。
+2. 在**本地物理控制台**（非远程桌面/非注入工具）双击运行 `D:\crayon-browser\.cacheuild\windows-cef-debugrowser\cef-shell\Release\CrayonBrowser.exe`（Release 产物；Debug 亦可但须记录配置）。
+3. 打开含公开可播放视频的页面（建议仓库 fixture 本地页或任一 HTML5 视频页），用**物理鼠标**点击页面播放按钮，确认视频真实推进。
+4. 物理点击工具栏 Cast 按钮 → picker 中选择手机接收端（或用投屏码入口输入接收端显示的投屏码）。
+5. 手机出现首帧后，在 picker/会话 UI 依次点 pause、resume、seek（任意位置）、stop。
+6. 完成后告知 Agent；Agent 侧将自动采集：media-host MHV1 会话记录、播放位置变化、stop 后 `MainActivity` 前台状态与 Browser/Host/SDK 资源归零，并把这些证据写入 W05c 完成记录。手机侧请保持屏幕常亮且不要手动操作其它 App。
+7. 判定：只有全程物理输入（鼠标探针 `injected=False`）取得的证据才计入 E2E-001/CS-010；注入输入证据一律拒收。
+
 ### PLT-W05c 验证记录（2026-09-01）
 
 - 状态：`BLOCKED`；依赖 `PLT-W05c0 DONE`。Windows 产品缺失的投屏码与 pause/resume/seek 原生入口、Browser/controller/media-host request/reply 接线及 generation fencing 已实现并自动化验证；但本轮无法产生 Browser 可接受的可信物理播放输入，故真实 Direct 首帧、播控与停止没有冒充通过。
