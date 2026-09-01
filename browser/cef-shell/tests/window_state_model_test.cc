@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "browser/window/popup_target.h"
 #include "browser/window/tab_model.h"
 
 namespace {
@@ -255,6 +256,54 @@ void BindBrowserContract() {
 
 }  // namespace
 
+
+namespace popup = crayon::browser::cef_shell::window;
+using crayon::browser::cef_shell::window::PopupTargetAction;
+
+// CEF-16: popup routing must open user-gesture http/https targets in a new
+// tab and fail closed for everything else.
+void PopupUserGestureOpensInNewTab() {
+  Check(popup::EvaluatePopupTarget("https://example.com/next", true, 0,
+                                   false) == PopupTargetAction::kOpenInNewTab,
+        "user-gesture https popup must route to a new tab");
+  Check(popup::EvaluatePopupTarget("http://127.0.0.1:8080/page", true, 0,
+                                   false) == PopupTargetAction::kOpenInNewTab,
+        "user-gesture http popup must route to a new tab");
+}
+
+void PopupProgrammaticDenied() {
+  Check(popup::EvaluatePopupTarget("https://example.com/next", false, 0,
+                                   false) == PopupTargetAction::kDeny,
+        "programmatic popup must be denied");
+}
+
+void PopupSchemeAndShapeMatrix() {
+  const char* denied[] = {
+      "", "ftp://example.com/x", "file:///D:/doc.md", "javascript:alert(1)",
+      "chrome://newtab/", "crayon://mdv/app.html", "https://",
+      "https://exa mple.com/x", "https://example.com/a	b",
+  };
+  for (const char* url : denied) {
+    Check(popup::EvaluatePopupTarget(url, true, 0, false) ==
+              PopupTargetAction::kDeny,
+          url);
+  }
+  std::string too_long = "https://example.com/" +
+                         std::string(popup::kMaxPopupUrlBytes, 'a');
+  Check(popup::EvaluatePopupTarget(too_long, true, 0, false) ==
+            PopupTargetAction::kDeny,
+        "over-length popup URL must be denied");
+}
+
+void PopupCapacityDenied() {
+  Check(popup::EvaluatePopupTarget("https://example.com/x", true, 4, false) ==
+            PopupTargetAction::kDeny,
+        "pending popup queue at the per-opener cap must be denied");
+  Check(popup::EvaluatePopupTarget("https://example.com/x", true, 0, true) ==
+            PopupTargetAction::kDeny,
+        "full tab strip must be denied");
+}
+
 int main() {
   const std::pair<const char*, void (*)()> cases[] = {
       {"CreateActivateAndOrder", &CreateActivateAndOrder},
@@ -272,6 +321,10 @@ int main() {
       {"CloseCreatingTabRemovesItImmediately",
        &CloseCreatingTabRemovesItImmediately},
       {"BindBrowserContract", &BindBrowserContract},
+      {"PopupUserGestureOpensInNewTab", &PopupUserGestureOpensInNewTab},
+      {"PopupProgrammaticDenied", &PopupProgrammaticDenied},
+      {"PopupSchemeAndShapeMatrix", &PopupSchemeAndShapeMatrix},
+      {"PopupCapacityDenied", &PopupCapacityDenied},
   };
   for (const auto& test_case : cases) {
     test_case.second();

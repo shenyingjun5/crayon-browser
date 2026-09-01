@@ -464,3 +464,21 @@
 - 包体基线（Release）：目录总计 392 MB，其中官方 `libcef.dll` 263 MB；自有 `CrayonBrowser.exe` 3,177,472 bytes、`CrayonBrowser.dll` 847,360 bytes，自有代码增量可忽略。
 - Code Review：按需求/边界、正确性、架构/API、并发/生命周期、安全/隐私、性能、测试和可维护性复核本次 Windows 修复集；最终 P0/P1/P2 均为 `0`。`/utf-8` 与 `_CRT_SECURE_NO_WARNINGS` 只作用于 MSVC 构建，不影响 macOS 工具链；repo-guard 规则细化有正反两向回归用例；golden eol 钉住后 macOS 侧不受影响（仓库内 blob 始终为 LF）。
 - 未覆盖与风险：CEF-14 的 Windows 侧 E2E harness（`run_smoke.py` 当前为 macOS LaunchServices/lsof 实现）仍未移植，本次实机证据由 PowerShell 进程/网络轮询承担，Windows 版 harness 归 CEF-14 后续切片；URL 驱动内容级 E2E（BR-001..014）待 shell omnibox 接线；窗口标题的"- Chromium"后缀与 Chromium 内建文案属 CEF-03 已记录的 Chrome runtime 硬边界，归后续 BUX/CEF 任务；签名/打包归 QAR-09。`CEF-15` 转 `DONE`，V1 CEF 部分完成。
+
+### CEF-16 原子范围（Windows 壳 popup→新标签接线）
+
+- 状态：`DONE`；依赖 `CEF-03 DONE`、`BUX-08 DONE`（共享 `PopupPolicy`）、用户 2026-09-01 反馈（链接弹窗不应新开浏览器窗口）。
+- 单一目标：Windows CEF 壳实现 `OnBeforePopup`：用户手势触发的 http/https popup 取消独立窗口、改为当前窗口新建 tab 并加载目标 URL；无手势的程序化 popup 与非 http/https 目标一律取消（fail closed，绝不开新窗口）。决策复用 `browser/shared-ui/windows` 的 `PopupPolicy`（手势/容量），不在壳里复制策略。
+- 输出与允许路径：`browser/cef-shell/src/browser/window/**`（WindowClient/TabController 接线、popup URL 有界队列）、共享 URL/决策纯函数（无 CEF 类型）及其单元测试、本 Roadmap。
+- 禁止修改：Cast/MDV/权限/Profile/Cast-SDK；不改变既有 newtab 重定向与标签模型语义；不引入新依赖。
+- 边界：popup URL 仅接受 http/https、≤2048 字节、无控制字符；待开 URL 队列有界（≤kMaxPopupsPerWindow），容量满 fail closed；不存储页面数据；MDV `.md` 等本地入口仍走既有手势门禁，popup 路径不打开本地文件。
+- 验收：纯函数单元测试（手势矩阵/scheme 白名单/长度/控制字符/容量）；Windows Debug/Release 构建 + 全量 ctest；真实 CEF 实机：target=_blank 链接开在"新 tab"而非新窗口、程序化 window.open 被静默取消；`git diff --check`；Review P0/P1=0。
+- 明确不做：macOS 接线（对称切片后续）、多窗口产品策略、popup 确认 UI（BUX-14 已 DONE 的决策模型不在本次改动）。
+
+### CEF-16 完成记录（2026-09-01，popup→新标签接线）
+
+- 实现：`WindowClient::OnBeforePopup` 接线到 `TabController::HandlePopupRequest`——用户手势的 http/https 目标经有界 `pending_popup_urls_`（≤kMaxPopupsPerWindow）排队，`ExecuteChromeCommand(IDC_NEW_TAB)` 复用 Chrome 标签条新建 tab，`OnBrowserCreated` 中 popup URL 优先于内置 newtab 重定向（`already_redirected` 语义不变）；无手势程序化 popup、非 http/https（file/crayon/javascript/chrome scheme）、超长（>2048）或含控制字符（含空格）URL、容量满一律 fail closed 取消（不开窗不开 tab）。决策纯函数 `popup_target.h`（无 CEF 类型）复用共享 `PopupPolicy`，壳与集成测试 target 均链接 `crayon::browser-windows`。
+- 自动化：`window_state_model_test` 新增 4 组（手势 http/https 开 tab、程序化拒绝、scheme/形状矩阵拒绝含空格与控制字符、待开队列/标签条容量拒绝）；Windows x64 Debug/Release 全量构建 + `ctest` 双配置各 **85/85**；`RUST_TEST_THREADS=1 scripts/check.ps1 fast` passed（并行模式再现 PLT-W05b 已登记的 formal-workspace 时序抖动一次，单线程复跑通过，非本任务引入）；`git diff --check` 通过。
+- 真实 CEF 实机（Windows 11 x64 Debug，CDP 输入管线点击）：`target=_blank` 链接点击后在**同一窗口新建 tab** 加载 example.com（进程 MainWindowHandle 恰 1 个，活动标题切为 Example Domain）；控制台直接 `window.open`（无手势）不产生新 tab 也不产生新窗口。修复过程记录：初版 `WindowOpenDisposition` 在双基类下歧义（C2385，限定 `CefLifeSpanHandler::`）；空格未被控制字符检查拦截导致矩阵用例失败，收紧为 `byte <= 0x20`。
+- Code Review：P0 0、P1 0、P2 0；popup 路径不触碰 MDV 本地入口手势门禁与可信输入门禁；待开 URL 队列有界且不持久化。
+- 未覆盖与风险：macOS 壳同样缺 `OnBeforePopup` 接线（对称切片后续，本任务未改 macOS）；`browser_created_callback_`/缩放等对新 tab 沿用既有路径。`CEF-16` 转 `DONE`。

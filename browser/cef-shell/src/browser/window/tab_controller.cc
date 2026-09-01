@@ -1,5 +1,7 @@
 #include "browser/window/tab_controller.h"
 
+#include "browser/window/popup_target.h"
+
 #include <cmath>
 #include <utility>
 
@@ -76,6 +78,35 @@ void WindowClient::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
         300);
   }
 #endif
+}
+
+bool WindowClient::OnBeforePopup(CefRefPtr<CefBrowser> browser,
+                                 CefRefPtr<CefFrame> frame, int popup_id,
+                                 const CefString& target_url,
+                                 const CefString& target_frame_name,
+                                 CefLifeSpanHandler::WindowOpenDisposition target_disposition,
+                                 bool user_gesture,
+                                 const CefPopupFeatures& popupFeatures,
+                                 CefWindowInfo& windowInfo,
+                                 CefRefPtr<CefClient>& client,
+                                 CefBrowserSettings& settings,
+                                 CefRefPtr<CefDictionaryValue>& extra_info,
+                                 bool* no_javascript_access) {
+  CEF_REQUIRE_UI_THREAD();
+  static_cast<void>(frame);
+  static_cast<void>(popup_id);
+  static_cast<void>(target_frame_name);
+  static_cast<void>(target_disposition);
+  static_cast<void>(popupFeatures);
+  static_cast<void>(windowInfo);
+  static_cast<void>(client);
+  static_cast<void>(settings);
+  static_cast<void>(extra_info);
+  static_cast<void>(no_javascript_access);
+  // The single-window shell never spawns a standalone popup window; the
+  // controller decides between a new tab and silent denial.
+  return controller_->HandlePopupRequest(browser, target_url.ToString(),
+                                         user_gesture);
 }
 
 bool WindowClient::DoClose(CefRefPtr<CefBrowser> browser) {
@@ -736,10 +767,22 @@ void TabController::ShowMainWindow() {
 void TabController::OnBrowserCreated(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
   CefRefPtr<CefFrame> main_frame = browser->GetMainFrame();
+  // CEF-16: a tab created to host a queued popup target loads that URL; the
+  // built-in new-tab redirect must not overwrite it.
+  std::optional<std::string> popup_url;
+  if (!pending_popup_urls_.empty()) {
+    popup_url = std::move(pending_popup_urls_.front());
+    pending_popup_urls_.pop_front();
+  }
   bool already_redirected = false;
   if (main_frame) {
-    already_redirected =
-        RedirectBuiltInNewTab(main_frame, main_frame->GetURL().ToString());
+    if (popup_url.has_value()) {
+      main_frame->LoadURL(*popup_url);
+      already_redirected = true;
+    } else {
+      already_redirected =
+          RedirectBuiltInNewTab(main_frame, main_frame->GetURL().ToString());
+    }
   }
 
   // Bind the oldest creating tab if one belongs to our own CreateBrowser
@@ -863,6 +906,32 @@ void TabController::OnChromeCommand(int command_id) {
   if (chrome_command_callback_) {
     chrome_command_callback_(command_id);
   }
+}
+
+bool TabController::HandlePopupRequest(CefRefPtr<CefBrowser> browser,
+                                       const std::string& target_url,
+                                       bool user_gesture) {
+  CEF_REQUIRE_UI_THREAD();
+  // The tab strip is the only window surface: queueing capacity equals the
+  // popup policy's per-opener bound and a full tab strip closes the door.
+  const bool tab_capacity_reached =
+      model_.size() >= kMaximumTabsPerWindow;
+  if (EvaluatePopupTarget(target_url, user_gesture,
+                          pending_popup_urls_.size(),
+                          tab_capacity_reached) !=
+      PopupTargetAction::kOpenInNewTab) {
+    return true;  // fail closed: no new window, no new tab
+  }
+  pending_popup_urls_.push_back(target_url);
+  static const int kNewTabCommandId = cef_id_for_command_id_name("IDC_NEW_TAB");
+  if (browser && kNewTabCommandId > 0) {
+    browser->GetHost()->ExecuteChromeCommand(kNewTabCommandId,
+                                             CEF_WOD_CURRENT_TAB);
+    return true;
+  }
+  // The tab command is unavailable in this build; drop the queued target.
+  pending_popup_urls_.pop_back();
+  return true;
 }
 
 bool TabController::RedirectBuiltInNewTab(CefRefPtr<CefFrame> frame,

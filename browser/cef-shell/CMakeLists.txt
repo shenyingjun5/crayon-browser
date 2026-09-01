@@ -140,7 +140,7 @@ if(OS_WINDOWS)
             crayon::cef-shell-observation-gateway
             crayon::cef-shell-core-client crayon::cef-shell-ipc
             crayon::browser-cast-view crayon::browser-page-tools
-            crayon::browser-shared-shell
+            crayon::browser-shared-shell crayon::browser-windows
             crayon_libcef libcef_dll_wrapper
             ${CEF_STANDARD_LIBS} comctl32 comdlg32)
   set_target_properties(${CRAYON_BROWSER_TARGET}
@@ -356,6 +356,7 @@ if(OS_WINDOWS)
       crayon_page_snapshot_cef_integration_win
       PRIVATE crayon::browser-new-tab
               crayon::browser-cast-view
+              crayon::browser-windows
               crayon::browser-page-snapshot-gateway
               crayon::cef-page-snapshot-collector
               crayon::cef-shell-media-observer
@@ -982,6 +983,8 @@ if(CRAYON_BUILD_TESTS)
   target_compile_features(crayon_window_state_model_test PRIVATE cxx_std_17)
   target_include_directories(crayon_window_state_model_test
                              PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_link_libraries(crayon_window_state_model_test
+                        PRIVATE crayon::browser-windows)
   add_test(NAME window_state_model_test
            COMMAND crayon_window_state_model_test)
   add_test(

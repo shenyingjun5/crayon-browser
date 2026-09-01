@@ -2,6 +2,7 @@
 #define CRAYON_BROWSER_CEF_SHELL_SRC_BROWSER_WINDOW_TAB_CONTROLLER_H_
 
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <map>
 #include <memory>
@@ -61,6 +62,15 @@ class WindowClient final : public CefClient,
   void OnAfterCreated(CefRefPtr<CefBrowser> browser) override;
   bool DoClose(CefRefPtr<CefBrowser> browser) override;
   void OnBeforeClose(CefRefPtr<CefBrowser> browser) override;
+  bool OnBeforePopup(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
+                     int popup_id, const CefString& target_url,
+                     const CefString& target_frame_name,
+                     CefLifeSpanHandler::WindowOpenDisposition target_disposition, bool user_gesture,
+                     const CefPopupFeatures& popupFeatures,
+                     CefWindowInfo& windowInfo, CefRefPtr<CefClient>& client,
+                     CefBrowserSettings& settings,
+                     CefRefPtr<CefDictionaryValue>& extra_info,
+                     bool* no_javascript_access) override;
 
   void OnAddressChange(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
                        const CefString& url) override;
@@ -330,6 +340,11 @@ class TabController final : public CefBaseRefCounted {
   void OnChromeCommand(int command_id);
   bool RedirectBuiltInNewTab(CefRefPtr<CefFrame> frame,
                              const std::string& target_url);
+  /// CEF-16: routes a popup request.  Returns true to suppress the
+  /// standalone popup window; user-gesture http/https targets are queued and
+  /// opened in a new tab of this window instead.
+  bool HandlePopupRequest(CefRefPtr<CefBrowser> browser,
+                          const std::string& target_url, bool user_gesture);
 
  private:
   bool CreateBrowserWindow();
@@ -349,6 +364,9 @@ class TabController final : public CefBaseRefCounted {
 #endif
   const BrowserCreatedCallback browser_created_callback_;
   const std::optional<std::string> new_tab_url_;
+  /// CEF-16: popup targets waiting for the Chrome-created tab they were
+  /// queued with.  Bounded by the popup policy (kMaxPopupsPerWindow).
+  std::deque<std::string> pending_popup_urls_;
   ChromeCommandCallback chrome_command_callback_;
   BrowserFocusedCallback browser_focused_callback_;
   BrowserClosingCallback browser_closing_callback_;
