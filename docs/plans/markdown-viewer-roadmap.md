@@ -565,3 +565,23 @@ MDV-02..06 按"模型层零 IO / 零 CEF 类型"交付后，产品仍不可见�
 - `MDV-20W DONE`（2026-09-01）：可见性 nudge 根因修复（new_tab_url 门控）+ 空态整面板 + 主题/DPI/窄窗/重载回落常驻 harness；双配置 85/85、Mermaid 50-block 47+3 终态、七类图、零公网、Release package/NOTICE/SPDX、fast/security 门禁全过；详见 MDV-20W 完成记录。下一任务 `MDV-24W`（Narrator/IME/DPI 真机）。
 - `MDV-24W TODO`：只补 Windows 首发实际支持矩阵需要的键盘/tooltip/英文与中文文本、原生系统 DPI 和可用的 Narrator/IME 证据；环境不可用项如实记 `NOT_RUN`，不阻塞不宣称的辅助能力，但必须进入候选已知限制。
 - 三个 slice 均不得等待或冒充原生 macOS x64、VoiceOver/Keychain、公证或 macOS 安装包；Windows 首发后再补 macOS 特有 addendum，不改写既有证据。
+
+### MDV-24W 原子范围（Windows 首发支持矩阵补证）
+
+- 状态：`DONE`；依赖 `MDV-23 DONE`、`MDV-20W DONE`。
+- 单一目标：补齐 Windows 首发实际支持矩阵缺口证据——键盘/tooltip 与中英文案复核、Narrator 可达性（UIA 树 + Narrator 实跑）、中文 IME 组合态真实输入、原生系统 DPI；环境不可替代项如实记 `NOT_RUN` 并进入候选已知限制。
+- 允许路径：`tests/e2e/desktop/**`、本 Roadmap、`docs/current/markdown-viewer.md` 已知限制节；发现缺陷先复现再最小修复（超出范围退回 MDV-22/23）。
+- 禁止修改：新增格式动作、parser、文件/保存协议；不以注入输入冒充可信输入（MDV 编辑无注入门禁，但记录输入方式）。
+- 验收：键盘/tooltip/locale 自动化复核通过；Narrator 启动 + UIA 树语义证据；中文 IME 组合串真实落屏（成功或如实 NOT_RUN）；原生 200% 系统 DPI（成功或如实 NOT_RUN）；Review P0/P1=0。
+- 明确不做：macOS 原生 x64 长稳、VoiceOver 复测（沿用 MDV-24 macOS 记录）、HarmonyOS/移动端。
+
+### MDV-24W 完成记录（2026-09-01，Windows 支持矩阵补证）
+
+- 环境与方法：Windows 11 x64 远程会话、Debug 真实 CEF（CEF 150.0.10 Chrome runtime）、手势入口（omnibox 路径 + Enter）加载含 Highlight/KaTeX/Mermaid 的本地 fixture；UIA 树经 computer-use 语义快照采集，键盘为前台真实按键事件（MDV 编辑无注入门禁，输入方式如实记录）。
+- 键盘/tooltip/locale（PASS）：`Shift+Tab` 从源码 textarea 进入 roving 工具栏（焦点落"一级标题"按钮），`Enter` 真实应用 `# ` 前缀且焦点返回 textarea；DOM 复核 22 个工具按钮（14 动作 + 结构菜单 8）全部携带本地化 `aria-label`/`data-tooltip-title`，9 个带 `data-shortcut`+`aria-keyshortcuts`（Ctrl+Alt+1..3、Ctrl+B/I、Ctrl+Shift+X/8/7、Ctrl+K），工具栏容器 `aria-label="编辑工具"`、三视图切换 `aria-pressed` 状态正确；locale parity 95/95 由 fast 门禁覆盖。
+- 读屏可达性（UIA PASS / Narrator NOT_RUN）：预览态 UIA 暴露命名视图切换（源码/预览/分栏）、KaTeX MathML 文本节点、highlight token、heading 语义；源码态暴露"编辑工具"toolbar、"缩进和对齐"菜单按钮与 14 个中文命名动作按钮、editable textfield。隐藏 pane 的按钮在 UIA 中以零 bounds 未命名节点出现，为 Chromium 对 `display:none` 子树的既有行为，可见态命名完整，非产品缺陷。本机未安装 Narrator（System32 无 Narrator.exe、无可选功能），语音审阅记 `NOT_RUN`，列为候选已知限制。
+- 中文 IME（NOT_RUN）：系统在线布局 `0x08040804`（简体中文），但本会话文本注入以 WM_CHAR 直落、未形成 TSF 组合串（"nihao/zhongwen" 以原文落入，Shift 中英切换未生效）；英文/中文原文本输入与 dirty/预览同步正常。IME 组合态需物理键盘控制台复测，列入已知限制。
+- DPI（awareness PASS / 原生 200% NOT_RUN）：`GetProcessDpiAwareness=2`（Per-Monitor）且 context `0x22`=PerMonitorV2——运行期由 Chromium 代码路径设置；`app.manifest` 的 PerMonitorV2 只编入 `CrayonBrowser.dll`，bootstrap exe（CEF 预编译 `bootstrap.exe` 原样复制）与 helper 无该声明，但进程实际 awareness 已由运行期 API 建立，非缺陷。200% 设备缩放渲染已有 MDV-24（Release `--force-device-scale-factor=2`）与 MDV-20W（CDP emulation）证据；原生系统 200% 需改显示缩放并注销重登录，远程会话不可承受，记 `NOT_RUN`。
+- 其他：UIA `AXPress` 于 `aria-pressed` toggle 按钮不触发视图切换（DOM `click()` 正常），记为自动化局限 P3，非产品缺陷；键盘 Enter 路径已实测可用。
+- Code Review：P0 0、P1 0、P2 0、P3 1（上述自动化局限）；未改生产代码。
+- 未覆盖与已知限制（进入候选清单）：Narrator 语音审阅、中文 IME 组合态、原生系统 200% DPI 三项 `NOT_RUN`，均需物理控制台/可选功能安装后补证。`MDV-24W` 转 `DONE`；`MDV-24` 顶层保持 `VERIFIED`（原生 macOS x64 长稳与 VoiceOver 复测仍后置）。
