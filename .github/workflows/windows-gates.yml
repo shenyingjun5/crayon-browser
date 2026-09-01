@@ -59,6 +59,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: true
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -95,6 +97,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: true
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -124,6 +128,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: true
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -138,7 +144,7 @@ jobs:
         shell: pwsh
         run: >-
           cmake
-          -DCRAYON_CEF_PLATFORM=$env:CEF_PLATFORM
+          -DCRAYON_CEF_PLATFORM="$env:CEF_PLATFORM"
           "-DCRAYON_CEF_CACHE_DIR=$env:GITHUB_WORKSPACE/.cache/cef"
           -P cmake/cef/DownloadCef.cmake
 
