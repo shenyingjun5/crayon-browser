@@ -563,7 +563,7 @@ MDV-02..06 按"模型层零 IO / 零 CEF 类型"交付后，产品仍不可见�
 
 - `MDV-25W DONE`：Windows x64 Debug/Release 重建、source/handler/package contract、主二进制扫描与真实 CEF 空态/本地文件恢复均已闭合；未扩张到 MDV-20W/24W。
 - `MDV-20W DONE`（2026-09-01）：可见性 nudge 根因修复（new_tab_url 门控）+ 空态整面板 + 主题/DPI/窄窗/重载回落常驻 harness；双配置 85/85、Mermaid 50-block 47+3 终态、七类图、零公网、Release package/NOTICE/SPDX、fast/security 门禁全过；详见 MDV-20W 完成记录。下一任务 `MDV-24W`（Narrator/IME/DPI 真机）。
-- `MDV-24W TODO`：只补 Windows 首发实际支持矩阵需要的键盘/tooltip/英文与中文文本、原生系统 DPI 和可用的 Narrator/IME 证据；环境不可用项如实记 `NOT_RUN`，不阻塞不宣称的辅助能力，但必须进入候选已知限制。
+- `MDV-24W DONE`（2026-09-01）：键盘/tooltip/locale、UIA 可达性与 DPI awareness 已补证；Narrator（未安装）、中文 IME 组合态、原生系统 200% DPI 三项如实记 `NOT_RUN` 并进入候选已知限制，详见 MDV-24W 完成记录。
 - 三个 slice 均不得等待或冒充原生 macOS x64、VoiceOver/Keychain、公证或 macOS 安装包；Windows 首发后再补 macOS 特有 addendum，不改写既有证据。
 
 ### MDV-24W 原子范围（Windows 首发支持矩阵补证）
