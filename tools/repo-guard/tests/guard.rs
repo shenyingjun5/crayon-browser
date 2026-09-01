@@ -414,6 +414,54 @@ fn ordinary_latest_release_name_does_not_match_test_token() {
 }
 
 #[test]
+fn upstream_libcef_dll_parser_string_is_exempt() {
+    // MRT-09W: the locked upstream CEF payload DLL embeds Chromium's own
+    // command-line parser string; RG-006 must exempt it exactly like the
+    // macOS framework binary while still scanning application binaries.
+    let repo = TestRepo::new("release-libcef");
+    repo.write("Cargo.toml", &basic_manifest("release-libcef"));
+    repo.write(
+        "src/lib.rs",
+        "pub fn value() {}
+",
+    );
+    repo.write(
+        "dist/libcef.dll",
+        "cef --remote-debugging-port switch
+",
+    );
+    repo.write(
+        "dist/CrayonBrowser.exe",
+        "clean bootstrap
+",
+    );
+    let mut config = GuardConfig::new(&repo.path);
+    config.artifact_dir = Some(repo.path.join("dist"));
+    let report = run(&config).unwrap();
+    assert_eq!(report.check("RG-006").unwrap().status, CheckStatus::Passed);
+}
+
+#[test]
+fn application_binary_with_debug_marker_still_fails() {
+    let repo = TestRepo::new("release-app-debug");
+    repo.write("Cargo.toml", &basic_manifest("release-app-debug"));
+    repo.write(
+        "src/lib.rs",
+        "pub fn value() {}
+",
+    );
+    repo.write(
+        "dist/CrayonBrowser.exe",
+        "embedded --remote-debugging-port
+",
+    );
+    let mut config = GuardConfig::new(&repo.path);
+    config.artifact_dir = Some(repo.path.join("dist"));
+    let report = run(&config).unwrap();
+    assert_eq!(report.check("RG-006").unwrap().status, CheckStatus::Failed);
+}
+
+#[test]
 fn legacy_route_bytes_fail_release_scan() {
     let repo = TestRepo::new("release-route");
     repo.write("Cargo.toml", &basic_manifest("release-route"));

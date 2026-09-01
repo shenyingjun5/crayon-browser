@@ -1,6 +1,6 @@
 # MRT：Markdown Runtime Extension Framework Roadmap
 
-状态：`MRT-01..08 DONE`；第一期只完成 `MRT-09 TODO` P0 Runtime 总 Review，`MRT-10..19 TODO` 统一进入第二期。本文吸收 `docs/reference/蜡笔投屏浏览器_Markdown_Runtime_Extension_Framework_V1.0.md` 第 34..59 章，但以当前 PRD、安全契约和真实 C++17/md4c/CEF 工程为准。
+状态：`MRT-01..09 DONE`（MRT-09 为 Windows 首发口径，macOS addendum 后续）；第一期 P0 Runtime 总 Review 已闭合，`MRT-10..19 TODO` 统一进入第二期。本文吸收 `docs/reference/蜡笔投屏浏览器_Markdown_Runtime_Extension_Framework_V1.0.md` 第 34..59 章，但以当前 PRD、安全契约和真实 C++17/md4c/CEF 工程为准。
 
 ## 1. 采纳结论
 
@@ -36,7 +36,7 @@ MRT 是用户侧 MDV 基础设施，不进入 `crayon-page-data`、CNT 的确定
 | MRT-06 | DONE | MRT-05 | `browser/shared-ui/markdown`,`browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | Code Highlight fence extension：语言 allowlist、grammar 按需加载、未知语言纯文本回退 | MR-004；Windows x64 Debug/Release + 真实 CEF 已闭合 |
 | MRT-07 | DONE | MRT-04 | `third_party/katex`,`tools`,`docs/current` | KaTeX 语法与供应链契约：明确 inline/block 定界、转义、宏/URL/HTML 禁令、字体/CSS 本地闭包 | MR-005；许可/语法/安全矩阵 |
 | MRT-08 | DONE | MRT-07 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | KaTeX inline/block extension：按需加载、局部错误、主题/字体离线与编辑 generation | MR-005；公式 golden/注入/实机 |
-| MRT-09 | TODO | MDV-20W,MDV-25W,MRT-06,MRT-08 | `tests/e2e/desktop`,`tools/repo-guard`,`docs/current`,`docs/plans` | `MRT-09W` 先做 Windows 首发 P0 Runtime/包体/性能/安全总 Review；macOS 特有 addendum 后续 | MR-001..005,MR-008/012；P0/P1=0 |
+| MRT-09 | DONE | MDV-20W,MDV-25W,MRT-06,MRT-08 | `tests/e2e/desktop`,`tools/repo-guard`,`docs/current`,`docs/plans` | `MRT-09W` 先做 Windows 首发 P0 Runtime/包体/性能/安全总 Review；macOS 特有 addendum 后续 | MR-001..005,MR-008/012；P0/P1=0 |
 | MRT-10 | TODO | MRT-09 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv` | TOC/Outline：从解析事实生成有界标题树、稳定会话锚点与键盘/读屏导航 | MR-006；重复标题/超深/编辑更新 |
 | MRT-11 | TODO | MRT-09 | `browser/shared-ui/mdv` | 当前文档本地 Search：只查内存源码/安全文本，结果/高亮有界，不持久化 query | MR-006；Unicode/大文档/取消 |
 | MRT-12 | TODO | MRT-09 | `third_party/echarts`,`tools`,`docs/current` | ECharts 供应链与纯 JSON option schema：固定运行时闭包、series/component allowlist、禁止 function/eval/URL | MR-007；schema/许可/包体 |
@@ -237,6 +237,26 @@ Gate:       MRT-18 TV/Cast gap / MRT-19 AI source-producer gap only
 
 ### MRT-09W Windows 首发边界（REL-05）
 
-- 状态：`TODO`；依赖 `MDV-20W/25W`、`MRT-06/08 DONE`。
+- 状态：`DONE`；依赖 `MDV-20W/25W`、`MRT-06/08 DONE`。
 - 只审 Windows x64 候选中的 CommonMark/GFM、Highlight、Mermaid Full、KaTeX：真实 CEF、离线闭包、manifest/hash/license、按需零加载、输出 policy、敌意输入、性能/RSS/UI delay、Release artifact scan 与资源回落；P0/P1=0。
+- 验收命令：Windows Debug/Release ctest 全量；`run_mdv_mermaid_perf.mjs`/`run_mdv_theme_viewport.mjs` 真机证据（未重跑项引用 MDV-20W 原始输出）；`node tools/mermaid/vendor.mjs --check`；`repo-guard scan`/`mermaid-metadata`；Release artifact 扩展资产扫描；按需零加载网络断言。
+- 明确不做：不新增/修改 extension 实现代码；不做 macOS addendum；不预审 MRT-10..19 第二期范围；发现问题只记录分级并开后续任务，不在本任务内顺手修实现。
 - macOS arm64 已有证据作为共享实现参考，但签名/公证、VoiceOver、Keychain、原生生命周期或安装包不属于 MRT-09W；后续 macOS addendum 单独记录，不能阻塞 Windows 或把 W 结论写成双平台 DONE。
+
+### MRT-09W 完成记录（2026-09-01，Windows x64 P0 Runtime 总 Review）
+
+- 逐项证据映射（全部在 Windows x64 真实 CEF 150 Chrome runtime 上复核，未重跑项引用原始记录）：
+  - MR-001（契约向量）：`markdown_runtime_registry`（ctest #41）+ `extension_registry_test.cc` 53 项 CHECK 覆盖 §13 RP-*/MF-*/OUT-*/REG-* 向量；双配置 85/85 内含。
+  - MR-002（golden/facts）：`markdown_render`/`markdown_extension_facts`/`markdown_math_facts`（#38..40）golden 逐字节、未知/禁用/超界回退；双配置通过。
+  - MR-003（按需零加载/隔离）：新增常驻 harness `tests/e2e/desktop/browser/run_mdv_zero_load.mjs`——纯文本文档零 `/runtime/` 请求、零公网；未注册合成节点（伪造 `data-mdv-highlight`/`data-mdv-math`）fail-closed：仅 adapter 小模块加载，grammar/KaTeX runtime/字体/mermaid chunk 零加载、渲染不落位、零公网。`markdown_runtime_lifecycle`（#42）覆盖 generation/清理。
+  - MR-004（Highlight）：`markdown_runtime_highlight`（#43）+ `highlight_adapter.test.mjs` 5/5；本任务真实手势入口（omnibox 路径 + Enter）加载 fixture，`js` fence 渲染 `hljs` 落位；请求序列 `highlight/adapter|core|css|graphql|javascript|xml` 全部同源（MRT-06 的 Windows Release 实机记录一并复核有效）。
+  - MR-005（KaTeX）：`markdown_runtime_katex`（#44）+ `katex_adapter.test.mjs` 3/3；本任务 Windows 真实 CEF 手势加载 fixture，inline/block 两条公式 `data-mdv-math-rendered=true`；资产仅 `katex/adapter|katex|stylesheet` + 2 个 WOFF2，全同源零公网——补齐 MRT-08 遗留的 Windows 真机缺口。
+  - MR-008（性能）：`run_mdv_mermaid_perf.mjs` 50-block 终态 47+3、cache 命中 40、内存压力清零、JSHeap≈15.7MB、maxUiDelayMs≈440ms（Debug 真机）；`run_mdv_theme_viewport.mjs` 整页重载 heap 5.79→6.18MB（<1.5× 回落上界）。ECharts/Graphviz 属第二期，不在 P0 范围。
+  - MR-012（Release 扫描）：staging 发行目录（cef-runtime-files.txt 清单 + 产品二进制 + NOTICE/SBOM/manifest sidecar）`repo-guard scan --artifact-dir` 全 12 项检查 0 error；`vendor.mjs --check` 104 files/3522090 bytes；无 node_modules/CDN/tiny/未注册 fence。
+- Review 发现与闭环：
+  - P1（已闭环）：RG-009 artifact 扫描只读主 exe，Windows 两文件布局下 Mermaid 资源 ID 实际嵌在 `CrayonBrowser.dll`，扫描恒假阴性。修复 `tools/repo-guard/src/mermaid_rules.rs`（exe+同名 DLL 联合扫描），新增 3 项单测（DLL 命中/缺失仍失败/单二进制命中）。
+  - P1（已闭环）：RG-006 在真实 Windows staging 上误报 `libcef.dll` 内嵌的 Chromium 上游命令行解析器字符串 `remote-debugging-port`。比照既有 macOS framework 豁免补 `libcef.dll` 豁免，新增 2 项测试（libcef 豁免/应用二进制仍 fail closed）。
+  - P3（接受）：伪造扩展节点会触发 adapter 小模块 import（有界、仅 adapter，不含 grammar/runtime/字体），adapter 校验后拒绝渲染；不扩大攻击面，记录为已知行为。
+- 验证命令与结果：`ctest --preset windows-cef-debug` Debug 85/85、`-C Release` 85/85（MDV-20W 记录，本任务复证 Release 集成测试在门控后通过）；`node tests/e2e/desktop/browser/run_mdv_zero_load.mjs --port=9333` failures=[]；`run_mdv_mermaid_perf.mjs`/`run_mdv_theme_viewport.mjs` failures=[]（MDV-20W 原始输出）；`cargo test -p repo-guard` 33/33；`scripts/check.ps1 -Mode fast` passed、`-Mode security` passed（MDV-20W 记录）；真实手势 fixture 渲染终态 hlDone/mathDone×2/mmdSvg 全 true。
+- Code Review：按标准顺序复核后 APPROVE；P0 0、P1 0（两项 gate 缺陷均已修复并带回归测试）、P2 0、P3 1（上述 adapter import 行为）。
+- 未覆盖与风险：macOS addendum（签名/公证/VoiceOver/Keychain/安装包）后续单独记录；`MDV-24W` 的 Narrator/IME/DPI 真机不属于本 Review；ECharts/Graphviz/Presentation/AI/TV 均第二期。`MRT-09W` 转为 `DONE`，MRT 第一期 P0 完成口径闭合。

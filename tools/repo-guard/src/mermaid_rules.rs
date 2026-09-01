@@ -328,14 +328,33 @@ fn validate_artifact(artifact_path: &Path, resource_ids: &[String], findings: &m
             return;
         }
     };
+    // Windows ships a bootstrap exe plus the real payload in
+    // CrayonBrowser.dll; embedded resource IDs live in the DLL there.
+    let sibling_payload = executable_sibling_payload(&executable);
     for resource_id in resource_ids {
-        if !contains_bytes(&bytes, resource_id.as_bytes()) {
+        if !resource_id_present(&bytes, sibling_payload.as_deref(), resource_id) {
             findings.push(error(
                 &executable,
                 &format!("embedded Mermaid resource ID is missing: {resource_id}"),
             ));
         }
     }
+}
+
+fn executable_sibling_payload(executable: &Path) -> Option<Vec<u8>> {
+    if executable.extension().and_then(|ext| ext.to_str()) != Some("exe") {
+        return None;
+    }
+    fs::read(executable.with_extension("dll")).ok()
+}
+
+fn resource_id_present(
+    executable: &[u8],
+    sibling_payload: Option<&[u8]>,
+    resource_id: &str,
+) -> bool {
+    contains_bytes(executable, resource_id.as_bytes())
+        || sibling_payload.is_some_and(|bytes| contains_bytes(bytes, resource_id.as_bytes()))
 }
 
 fn find_main_executable(artifact_path: &Path, findings: &mut Vec<Finding>) -> Option<PathBuf> {
@@ -376,5 +395,37 @@ fn error(path: &Path, message: &str) -> Finding {
         path: display_path(path),
         line: None,
         message: message.to_owned(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resource_id_present;
+
+    #[test]
+    fn resource_id_in_windows_dll_payload_satisfies_scan() {
+        // MRT-09W regression: the Windows bootstrap exe does not embed the
+        // Mermaid resource IDs; they live in the sibling CrayonBrowser.dll.
+        let exe = b"bootstrap-only";
+        let dll = b"payload ... chunks/mermaid.esm.min/x.mjs ...";
+        assert!(resource_id_present(
+            exe,
+            Some(dll),
+            "chunks/mermaid.esm.min/x.mjs"
+        ));
+    }
+
+    #[test]
+    fn missing_resource_id_still_fails() {
+        let exe = b"bootstrap-only";
+        let dll = b"payload without the id";
+        assert!(!resource_id_present(exe, Some(dll), "mermaid.esm.min.mjs"));
+        assert!(!resource_id_present(exe, None, "mermaid.esm.min.mjs"));
+    }
+
+    #[test]
+    fn resource_id_in_executable_itself_satisfies_scan() {
+        let exe = b"single binary with mermaid.esm.min.mjs inside";
+        assert!(resource_id_present(exe, None, "mermaid.esm.min.mjs"));
     }
 }

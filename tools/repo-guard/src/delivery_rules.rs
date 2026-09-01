@@ -100,13 +100,13 @@ fn find_forbidden_content(
         }
         carry.extend_from_slice(&chunk[..read]);
         for marker in FORBIDDEN_RELEASE_MARKERS {
-            // The locked upstream CEF framework necessarily contains its own
-            // Chromium command-line parser string. It is not a Crayon debug
-            // entry point; application and helper binaries remain scanned.
+            // The locked upstream CEF binaries necessarily contain their own
+            // Chromium command-line parser string. They are not Crayon debug
+            // entry points; application and helper binaries remain scanned.
             if *marker == b"remote-debugging-port"
-                && display_path_lower.ends_with(
+                && (display_path_lower.ends_with(
                     "chromium embedded framework.framework/versions/a/chromium embedded framework",
-                )
+                ) || display_path_lower.ends_with("libcef.dll"))
             {
                 continue;
             }
