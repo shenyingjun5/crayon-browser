@@ -472,7 +472,7 @@
 > 目的：把"用户在本地物理控制台的一次真实点击"扩展为完整 W05c 证据包，避免多轮往返。以下步骤不产生任何代码变更，不绕过可信输入门禁。
 
 1. 前置（本会话已备妥）：ADB 设备 `VED7N18906000919` 在线；手机安装正式接收端 `com.zknowai.labi.cast.receiver` 1.1.1 并启动到 `MainActivity` 前台；PC 与手机同网段。
-2. 在**本地物理控制台**（非远程桌面/非注入工具）双击运行 `D:\crayon-browser\.cacheuild\windows-cef-debugrowser\cef-shell\Release\CrayonBrowser.exe`（Release 产物；Debug 亦可但须记录配置）。
+2. 在**本地物理控制台**（非远程桌面/非注入工具）双击运行 `D:\crayon-browser\.cache\build\windows-cef-debug\browser\cef-shell\Release\CrayonBrowser.exe`（Release 产物；Debug 亦可但须记录配置）。
 3. 打开含公开可播放视频的页面（建议仓库 fixture 本地页或任一 HTML5 视频页），用**物理鼠标**点击页面播放按钮，确认视频真实推进。
 4. 物理点击工具栏 Cast 按钮 → picker 中选择手机接收端（或用投屏码入口输入接收端显示的投屏码）。
 5. 手机出现首帧后，在 picker/会话 UI 依次点 pause、resume、seek（任意位置）、stop。
