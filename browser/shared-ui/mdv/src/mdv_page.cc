@@ -402,25 +402,28 @@ std::string RenderMdvDocument(const MdvPageSnapshot& snapshot,
               "<span class=\"tooltip-hint\"></span></div>";
   document << StatusBanner(snapshot.error_text, strings, snapshot.save_ok,
                            snapshot.load_status);
-  if (!snapshot.has_document) {
-    document << "<main class=\"md-empty\"><p>"
-             << EscapeHtml(strings.status_empty) << "</p></main></body></html>";
-    return document.str();
-  }
-  // Source pane: fully escaped editable textarea.  Preview pane:
-  // trusted MDV-02 whitelist HTML inserted verbatim.
+  // The empty state keeps the full pane structure (source/preview/divider,
+  // overlays and the script) so harness-driven mdvPush injections land;
+  // the hint text lives in the preview article.
+  const std::string source_text =
+      snapshot.has_document ? snapshot.source_text : "";
+  const std::string preview_html =
+      snapshot.has_document
+          ? snapshot.rendered_html
+          : "<p class=\"md-empty-hint\">" + EscapeHtml(strings.status_empty) +
+                "</p>";
   document << "<div class=\"md-panes\"><section class=\"md-source-pane\" "
               "aria-label=\""
            << EscapeHtml(strings.view_source) << "\">" << RenderToolbar(strings)
            << "<textarea id=\"md-source\" spellcheck=\"false\">"
-           << EscapeHtml(snapshot.source_text)
+           << EscapeHtml(source_text)
            << "</textarea></section><div id=\"md-divider\" class=\"md-"
               "divider\" aria-hidden=\"true\"></div>"
               "<section class=\"md-preview-pane\" aria-label=\""
            << EscapeHtml(strings.view_preview)
            << "\"><article id=\"md-preview\" data-mermaid-error-text=\""
            << EscapeHtml(strings.mermaid_error)
-           << "\">" << snapshot.rendered_html
+           << "\">" << preview_html
            << "</article></section></div>"
               "<div id=\"md-mermaid-view\" class=\"md-mermaid-view\" role=\""
               "dialog\" aria-modal=\"true\" aria-label=\""

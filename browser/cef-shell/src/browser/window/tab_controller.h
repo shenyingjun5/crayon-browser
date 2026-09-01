@@ -336,6 +336,17 @@ class TabController final : public CefBaseRefCounted {
   void ApplyZoom(TabId tab_id);
 
   const std::string initial_url_;
+#if defined(_WIN32)
+ public:
+  /// MDV-20W: Windows Chrome runtime leaves the first CreateBrowser'd
+  /// WebContents reporting hidden until the tab strip mutates; one
+  /// synthetic new+close cycle after the first load unsticks it.  Runs the
+  /// one-shot nudge (no-op after it has run).
+  void MaybeRunInitialVisibilityNudge();
+
+ private:
+  bool initial_visibility_nudge_pending_ = false;
+#endif
   const BrowserCreatedCallback browser_created_callback_;
   const std::optional<std::string> new_tab_url_;
   ChromeCommandCallback chrome_command_callback_;

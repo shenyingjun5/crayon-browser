@@ -68,6 +68,30 @@ MDV-02..06 按"模型层零 IO / 零 CEF 类型"交付后，产品仍不可见�
 - 不修改 BUX-18 既有依赖；MDV 独立在 `MDV-07` 收口，不阻塞其他浏览器基线项。
 - Markdown Runtime 的通用 API、Highlight、KaTeX、ECharts、Graphviz、Presentation 统一归 `markdown-runtime-roadmap.md`；TV/Cast 与 AI Source Producer 分别由 `MRT-18/19` 做 gap analysis，PlantUML/Vega/AI 编辑保持延后。它们均不塞入 `MDV-14..20`。其中 Cast Markdown 涉及接收端/Cast-SDK 新协议，必须经 `MRT-18` 与外部独立 Roadmap 获得 facade 后才可实施。
 
+
+## MDV-20W 原子范围（Windows x64 Mermaid Full 总回归）
+
+- 状态：`DONE`；依赖 `MDV-25W DONE`、`MDV-20 VERIFIED`。
+- 单一目标：在 Windows x64 上闭合 Mermaid Full 的产品回归——七类重点图渲染、50-block lazy/cache 终态、Highlight、KaTeX、离线零公网、亮暗主题、窄/宽窗、100%/200% device scale、保存/退出资源回落、Windows Debug/Release 重建 + ctest + Release package/NOTICE/SPDX/零公网门禁。
+- 输入：MDV-14..20 已完成实现与 macOS 侧证据、`tests/e2e/desktop/browser/run_mdv_mermaid_perf.mjs` harness、RG-009 manifest 门禁。
+- 边界：不改写 macOS 已有证据；不引入新依赖；DevTools loopback 端口只允许在本任务实机验证期间通过命令行开关启用，不进入产品代码或 Release 产物（RG-006 保持 fail closed）。
+- 验收命令：Windows Debug/Release build + ctest 全量；`node tests/e2e/desktop/browser/run_mdv_mermaid_perf.mjs --port=9333` 真机通过（含七类图/50-block/cache/内存压力断言）；Release package contract + RG-009 manifest 校验；`scripts/check.ps1 fast/security`。
+- 明确不做：不扩展图类型清单；不做 Narrator/IME/窄窗交互（归 MDV-24W）；不改写 macOS 证据。
+
+### MDV-20W 完成记录（2026-09-01）
+
+- 实现一（根因修复，Windows Chrome runtime 可见性）：Windows x64 Chrome runtime 下首个 `CreateBrowser` 的 WebContents 滞留 `document.visibilityState=hidden`（`WasHidden(true/false)`、`SW_HIDE/SW_SHOW`、`SetForegroundWindow` 均无效），导致 MDV 页 IntersectionObserver 永不触发、Mermaid lazy 渲染挂死。修复：`TabController` 增加一次性合成标签条变更 nudge——`CreateBrowserWindow` 置位 `initial_visibility_nudge_pending_`（仅当产品壳配置了 `new_tab_url_`，集成测试 harness 不配置故不受扰），`OnAfterCreated` 投 300ms 延迟 UI 任务执行 `ExecuteChromeCommand(IDC_NEW_TAB/IDC_CLOSE_TAB)`（`cef_id_for_command_id_name` 版本安全映射）各一次，强制标签条变更使 WebContents 可见性重算。回归定位：该 nudge 曾使 `cast_cef_integration_windows`/`page_snapshot_cef_integration_windows` Release 失败（合成 close 误关 fixture tab），以 `new_tab_url_.has_value()` 门控闭合，双配置 85/85 复证。
+- 实现二（空态整面板）：`mdv_page.cc` 空态渲染完整 panes+divider+script 结构，harness 的 `mdvPush` 注入在空文档态可用（此前空态直接短路返回，无 preview 节点）。
+- 新增常驻 harness `tests/e2e/desktop/browser/run_mdv_theme_viewport.mjs`：亮/暗主题（`prefers-color-scheme` emulation 触发 retheme 重渲染且 SVG 输出变化）、520px 窄窗 + 200% device scale 渲染可用、整页重载后 JSHeap 回落（5.79MB→6.18MB，<1.5× 上界）。
+- 验证（Windows x64 真机，CEF 150.0.10 Chrome runtime）：
+  - `cmake --build --preset windows-cef-debug --config Debug/Release` 全量零错误；`ctest --preset windows-cef-debug`（Debug）85/85、`ctest --preset windows-cef-debug -C Release` 85/85（含 `windows_cef_shell_package_contract`、`mdv_handler_contract`、cast/page_snapshot 集成）。
+  - `node tests/e2e/desktop/browser/run_mdv_mermaid_perf.mjs --port=9333`：blockCount=50、rendered=47、errors=3（17 的倍数位非法图 + 49 位 70KiB 超限图按契约失败）、unresolved=0、七类图（flowchart/sequence/mindmap/architecture-beta/class/state-v2/er）全渲染、cache 与内存压力清零断言通过、`publicRequests=[]`（零公网）、`ordinaryMermaidRequests=0`、JSHeapUsedSize≈15.7MB。
+  - `node tests/e2e/desktop/browser/run_mdv_theme_viewport.mjs --port=9333`：failures=[]（亮/暗/窄窗/200%/重载回落）。
+  - 可见性探针：门控构建下初始页 `document.visibilityState="visible"`（修复前恒定 `hidden`）。
+  - Release 门禁：`repo-guard mermaid-metadata` 生成 THIRD_PARTY_NOTICES.md + SPDX-2.3 SBOM + manifest 成功；`node tools/mermaid/vendor.mjs --check` 104 files/3522090 bytes OK；`scripts/check.ps1 -Mode fast` passed（guard/format/brand-assets/formal-workspace/legacy-unit），`-Mode security` passed（guard/relay-unit/relay-security 7 项）。
+- Code Review：P0 0、P1 0、P2 1——可见性 nudge 依赖 Chrome runtime 内部行为（标签条变更触发可见性重算），属未文档化行为，CEF 升级时需复验（已在代码注释与 contract 测试覆盖 85/85 双配置）；另 `page_snapshot_cef_integration_windows` 在与 Release 构建并发时出现过一次超时 flake（单跑 69.8s 通过），归既有集成测试资源竞争，非本任务引入。
+- 未覆盖与风险：Narrator/IME/窄窗交互真机归 `MDV-24W`；"保存/退出资源回落"以整页重载 heap 回落近似覆盖，保存链路写后渲染资源释放已被 MDV-06/13 单测覆盖；macOS 特有验证继续如实后置。`MDV-20W` 转为 `DONE`。
+
 ## MDV-01 原子范围（契约冻结）
 
 - 状态：`READY`；依赖 `BUX-03 DONE`（内置页 scheme handler 模式）。
@@ -538,6 +562,6 @@ MDV-02..06 按"模型层零 IO / 零 CEF 类型"交付后，产品仍不可见�
 ### Windows 首发收口 slices（REL-05）
 
 - `MDV-25W DONE`：Windows x64 Debug/Release 重建、source/handler/package contract、主二进制扫描与真实 CEF 空态/本地文件恢复均已闭合；未扩张到 MDV-20W/24W。
-- `MDV-20W READY`：依赖 MDV-25W；执行 Mermaid Full 七类重点图、50-block lazy/cache、Highlight、KaTeX、离线/零公网、亮暗主题、窄宽窗、100%/200% device scale、保存/退出资源回落与 Windows Release package/NOTICE/SPDX 门禁。
+- `MDV-20W DONE`（2026-09-01）：可见性 nudge 根因修复（new_tab_url 门控）+ 空态整面板 + 主题/DPI/窄窗/重载回落常驻 harness；双配置 85/85、Mermaid 50-block 47+3 终态、七类图、零公网、Release package/NOTICE/SPDX、fast/security 门禁全过；详见 MDV-20W 完成记录。下一任务 `MDV-24W`（Narrator/IME/DPI 真机）。
 - `MDV-24W TODO`：只补 Windows 首发实际支持矩阵需要的键盘/tooltip/英文与中文文本、原生系统 DPI 和可用的 Narrator/IME 证据；环境不可用项如实记 `NOT_RUN`，不阻塞不宣称的辅助能力，但必须进入候选已知限制。
 - 三个 slice 均不得等待或冒充原生 macOS x64、VoiceOver/Keychain、公证或 macOS 安装包；Windows 首发后再补 macOS 特有 addendum，不改写既有证据。

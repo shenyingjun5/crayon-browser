@@ -3,7 +3,11 @@
 #include <cmath>
 #include <utility>
 
+#include "include/base/cef_bind.h"
+#include "include/base/cef_callback.h"
 #include "include/cef_app.h"
+#include "include/cef_task.h"
+#include "include/wrapper/cef_closure_task.h"
 #include "include/cef_id_mappers.h"
 #include "include/wrapper/cef_helpers.h"
 
@@ -55,6 +59,23 @@ WindowClient::WindowClient(TabController* controller,
 void WindowClient::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
   controller_->OnBrowserCreated(browser);
+#if defined(_WIN32)
+  if (controller_->model().active_tab().has_value()) {
+    // Chrome runtime keeps the first CreateBrowser'd WebContents hidden
+    // until the tab strip mutates (WasHidden/show-window calls do not).
+    // One synthetic new+close cycle after the window settles forces the
+    // visibility recompute that IntersectionObserver-driven lazy renders
+    // (Mermaid) depend on (MDV-20W).
+    CefPostDelayedTask(
+        TID_UI,
+        base::BindOnce(
+            [](CefRefPtr<TabController> controller) {
+              controller->MaybeRunInitialVisibilityNudge();
+            },
+            CefRefPtr<TabController>(controller_)),
+        300);
+  }
+#endif
 }
 
 bool WindowClient::DoClose(CefRefPtr<CefBrowser> browser) {
@@ -65,6 +86,7 @@ bool WindowClient::DoClose(CefRefPtr<CefBrowser> browser) {
 
 void WindowClient::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
+  browser->GetHost()->WasHidden(true);
   const TabSnapshot* tab =
       controller_->model().FindByBrowser(browser->GetIdentifier());
   if (tab) {
@@ -323,6 +345,8 @@ bool WindowClient::OnPreKeyEvent(CefRefPtr<CefBrowser> browser,
 
 void WindowClient::OnGotFocus(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
+  // Focusing implies the browser is shown; re-mark visible.
+  browser->GetHost()->WasHidden(false);
   controller_->OnBrowserFocused(browser);
 }
 
@@ -856,9 +880,50 @@ bool TabController::CreateBrowserWindow() {
   CefWindowInfo window_info;
   window_info.runtime_style = CEF_RUNTIME_STYLE_CHROME;
   CefBrowserSettings browser_settings;
+#if defined(_WIN32)
+  // The visibility nudge mutates the tab strip through chrome commands; only
+  // the product shell (which owns a real new-tab URL) may run it.  Test
+  // harnesses without a new-tab URL keep their fixture tab untouched.
+  initial_visibility_nudge_pending_ = new_tab_url_.has_value();
+#endif
   return CefBrowserHost::CreateBrowser(window_info, client_, initial_url_,
                                        browser_settings, nullptr, nullptr);
 }
+
+#if defined(_WIN32)
+void TabController::MaybeRunInitialVisibilityNudge() {
+  CEF_REQUIRE_UI_THREAD();
+  if (!initial_visibility_nudge_pending_ || model_.empty()) {
+    return;
+  }
+  const std::optional<TabId> active = model_.active_tab();
+  if (!active.has_value()) {
+    return;
+  }
+  const TabSnapshot* tab = model_.Find(*active);
+  if (!tab) {
+    return;
+  }
+  const auto found = browsers_.find(tab->browser_id);
+  if (found == browsers_.end()) {
+    return;
+  }
+  initial_visibility_nudge_pending_ = false;
+  // Chrome runtime: the first CreateBrowser'd WebContents reports hidden
+  // until the tab strip mutates.  One new+close cycle forces a recompute
+  // so IntersectionObserver-driven lazy rendering fires for real users.
+  CefRefPtr<CefBrowser> browser = found->second;
+  static const int kNewTabCommandId =
+      cef_id_for_command_id_name("IDC_NEW_TAB");
+  static const int kCloseTabCommandId =
+      cef_id_for_command_id_name("IDC_CLOSE_TAB");
+  if (kNewTabCommandId <= 0 || kCloseTabCommandId <= 0) {
+    return;
+  }
+  browser->GetHost()->ExecuteChromeCommand(kNewTabCommandId, CEF_WOD_CURRENT_TAB);
+  browser->GetHost()->ExecuteChromeCommand(kCloseTabCommandId, CEF_WOD_CURRENT_TAB);
+}
+#endif
 
 CefRefPtr<CefBrowser> TabController::ActiveBrowser() const {
   CEF_REQUIRE_UI_THREAD();
