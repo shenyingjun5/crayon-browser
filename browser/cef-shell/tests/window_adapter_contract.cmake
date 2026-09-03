@@ -160,4 +160,32 @@ foreach(forbidden_windows_token
   endforeach()
 endforeach()
 
+file(READ "${CRAYON_CEF_SHELL_SOURCE}/src/browser/branding/about_browser.h"
+     about_source)
+file(READ "${CRAYON_CEF_SHELL_SOURCE}/src/browser/branding/about_destination.h"
+     about_destination)
+string(APPEND about_source "${about_destination}")
+foreach(token "IDS_ABOUT" "IDS_ABOUT_MAC" "app.about" "https://www.zknowai.com/"
+              "cef_id_for_pack_string_name")
+  string(FIND "${about_source}" "${token}" found)
+  if(found EQUAL -1)
+    message(FATAL_ERROR "About branding is missing ${token}")
+  endif()
+endforeach()
+foreach(platform windows macos)
+  file(READ "${CRAYON_CEF_SHELL_SOURCE}/src/${platform}/app.h" app_header)
+  file(READ "${CRAYON_CEF_SHELL_SOURCE}/src/${platform}/app.cc" app_source)
+  if(NOT app_header MATCHES "GetResourceBundleHandler" OR
+     NOT app_source MATCHES "AboutBrowserResources.*locale_snapshot.locale")
+    message(FATAL_ERROR "${platform} must wire About resources to the locale snapshot")
+  endif()
+endforeach()
+foreach(token "cef_id_for_command_id_name(\"IDC_ABOUT\")"
+              "kAboutCommandId > 0" "branding::kAboutBrowserUrl")
+  string(FIND "${controller_source}" "${token}" found)
+  if(found EQUAL -1)
+    message(FATAL_ERROR "About command routing is missing ${token}")
+  endif()
+endforeach()
+
 message(STATUS "window adapter contract passed")

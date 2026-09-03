@@ -14,8 +14,9 @@ struct LocaleCatalogEntry {
   std::string_view zh_tw;
 };
 
-inline constexpr std::array<LocaleCatalogEntry, 155> kLocaleCatalogEntries{{
+inline constexpr std::array<LocaleCatalogEntry, 156> kLocaleCatalogEntries{{
     {"app.title", "Crayon AI Agent Cast Browser", "蜡笔 AI Agent 投屏浏览器", "蠟筆 AI Agent 投影瀏覽器"},
+    {"app.about", "About Crayon Browser", "关于蜡笔浏览器", "關於蠟筆瀏覽器"},
     {"nav.back", "Back", "后退", "後退"},
     {"nav.forward", "Forward", "前进", "前進"},
     {"nav.reload", "Reload", "刷新", "重新整理"},

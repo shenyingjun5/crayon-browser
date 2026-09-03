@@ -156,6 +156,8 @@ BrowserApp::BrowserApp(
     HINSTANCE resource_module,
     ::crayon::browser::localization::LocaleSnapshot locale_snapshot)
     : window_icons_(std::make_shared<WindowsWindowIcons>(resource_module)),
+      about_resources_(
+          new branding::AboutBrowserResources(locale_snapshot.locale)),
       product_strings_(BuildProductStringsOrEmpty(locale_snapshot)),
       page_markdown_strings_(
           BuildPageMarkdownStrings(product_strings_.page_markdown)),

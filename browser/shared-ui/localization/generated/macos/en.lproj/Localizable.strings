@@ -1,4 +1,5 @@
 "app.title" = "Crayon AI Agent Cast Browser";
+"app.about" = "About Crayon Browser";
 "nav.back" = "Back";
 "nav.forward" = "Forward";
 "nav.reload" = "Reload";

@@ -7,6 +7,7 @@
 #include <memory>
 #include <string>
 
+#include "browser/branding/about_browser.h"
 #include "browser/mdv/cef_mdv_editing.h"
 #include "browser/mdv/cef_mdv_entries.h"
 #include "browser/media_host/cast_shell_controller.h"
@@ -52,6 +53,9 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   CefRefPtr<CefBrowserProcessHandler> GetBrowserProcessHandler() override {
     return this;
   }
+  CefRefPtr<CefResourceBundleHandler> GetResourceBundleHandler() override {
+    return about_resources_;
+  }
   void OnRegisterCustomSchemes(
       CefRawPtr<CefSchemeRegistrar> registrar) override;
   void OnContextInitialized() override;
@@ -69,6 +73,7 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   void ConsumeMediaObservations();
 
   const std::shared_ptr<WindowsWindowIcons> window_icons_;
+  const CefRefPtr<branding::AboutBrowserResources> about_resources_;
   const ::crayon::browser::product_strings::ProductStrings product_strings_;
   const page_markdown::PageMarkdownStrings page_markdown_strings_;
   const windows::CastChromeStrings cast_strings_;

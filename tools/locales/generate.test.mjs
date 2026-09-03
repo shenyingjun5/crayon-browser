@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from "node:fs";
+import {mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -18,9 +18,21 @@ const repoRoot = path.resolve(scriptDirectory, "../..");
 test("real catalogs generate deterministic three-language outputs", () => {
   const first = buildOutputs(repoRoot);
   const second = buildOutputs(repoRoot);
-  assert.equal(first.keyCount, 155);
+  assert.equal(first.keyCount, 156);
   assert.deepEqual([...first.outputs], [...second.outputs]);
   assert.deepEqual(first.manifest.locales.map(({tag}) => tag), ["en-US", "zh-CN", "zh-TW"]);
+});
+
+test("About menu uses the Crayon brand in every supported language", () => {
+  for (const [locale, label] of [
+    ["en-US", "About Crayon Browser"],
+    ["zh-CN", "关于蜡笔浏览器"],
+    ["zh-TW", "關於蠟筆瀏覽器"],
+  ]) {
+    const catalog = JSON.parse(readFileSync(
+      path.join(repoRoot, `browser/shared-ui/locales/${locale}.json`), "utf8"));
+    assert.equal(catalog["app.about"], label);
+  }
 });
 
 test("strict parser rejects duplicate keys", () => {

@@ -34,6 +34,26 @@
 | BUX-17 | DONE | BUX-13,PRV-05,PRV-11 | `browser/autofill/address`,`browser/shared-ui/autofill` | 仅地址/联系信息的本地保存确认、匹配、编辑和删除；明确排除密码/支付 | UX-017；PII redaction、无痕、Agent 不可见、跨 Profile |
 | BUX-18 | DONE | BUX-01..17,CEF-14,PRV-12 | `tests/e2e/desktop/browser-ux`,`docs/current` | Windows/macOS 浏览器体验、性能、包体、隐私与品牌总 Review | UX-001..018；Debug/Release、P0/P1=0、未覆盖真机明确 |
 
+## BUX-18A 关于菜单品牌修正（2026-09-03）
+
+- 状态：`VERIFIED`；依赖 BUX-18、LOC-04；输入为用户明确要求“关于 Chromium”改为“关于蜡笔浏览器”，点击打开 `https://www.zknowai.com/`。
+- 单一目标：Windows/macOS 共用 About 命令路由与三语言品牌文案；只在用户触发 About 时打开官网新标签，保留当前页面和 Profile。
+- 允许路径：CEF shell 的 browser/branding、window/tab_controller、两平台 app 装配与 window adapter 测试；三语言 catalog/生成物、locale 测试；本 Roadmap。禁止修改 CEF vendor/pak、其余菜单/版本/许可页面、投屏、Agent、Profile 和无关在途改动。
+- 边界：按名称解析 CEF string/command ID；未知 ID/default 资源 pass-through；无浏览器、关闭或标签容量不足时不打开页面；不启动默认公网请求，不增加权限、持久状态或后台任务。
+- 验收：先运行 `node --test tools/locales/generate.test.mjs` 与 `cmake -DCRAYON_CEF_SHELL_SOURCE=browser/cef-shell -P browser/cef-shell/tests/window_adapter_contract.cmake` 的失败回归；修复后生成/检查三语言资源、定向 localization/window 契约、macOS arm64 Debug/Release build+CTest 与菜单/跳转 smoke；Windows 对称实机未运行须明确保留，不标 DONE。
+- 明确不做：官网内容修改、网络可达性保证、更新服务、Chromium 全局替换或删除开源署名。
+
+完成记录（2026-09-03，基线 `3fd7804` + 本任务未提交差异，macOS arm64；其他在途投屏/快照改动保留）：
+
+- 实现：共享 `AboutBrowserResources` 只覆盖 `IDS_ABOUT`/`IDS_ABOUT_MAC`，三语言 `app.about` 同步生成；两平台装配同一资源处理器。`IDC_ABOUT` 复用有界新标签导航，官网常量独立于本地化依赖；保留 Chromium 版本/许可资源。
+- 失败先行：`node --test tools/locales/generate.test.mjs` 初次退出 1（4 PASS / 2 FAIL，缺少品牌文案及 key 数量不符）；`cmake -DCRAYON_CEF_SHELL_SOURCE=browser/cef-shell -P browser/cef-shell/tests/window_adapter_contract.cmake` 初次退出 1（缺少品牌处理器），修复后两者退出 0，前者 6/6 PASS。初次 Debug build 暴露共享导航目标不应依赖本地化处理器，拆出 `about_destination.h` 后通过。
+- 资源/静态检查：`node tools/locales/generate.mjs`、`node tools/locales/generate.mjs --check`、`git diff --check` 均退出 0；`cargo run --quiet -p repo-guard -- scan --root .` 退出 0（既有 RG003/RG004 warnings，RG006 artifact 检查不适用）。Xcode `clang-format --dry-run --Werror --style=Google` 对新增两个 branding header 退出 0；未做无关文件重排。
+- Debug：`cmake --build .cache/build/macos-arm64-cef-debug --parallel 4` 退出 0；`ctest --test-dir .cache/build/macos-arm64-cef-debug --output-on-failure` 首轮退出 8，86/91 PASS（107.41s）；受沙箱本地端口/AppKit 限制的 5 项用 `ctest --test-dir .cache/build/macos-arm64-cef-debug --rerun-failed --output-on-failure` 在获准环境补测，退出 0、5/5 PASS（148.20s）。合计覆盖 91/91，不宣称首轮全绿。
+- Release：`cmake --build .cache/build/macos-arm64-cef-release --parallel 4` 退出 0；`ctest --test-dir .cache/build/macos-arm64-cef-release --output-on-failure -E '^page_snapshot_cef_integration$'` 退出 8、89/90 PASS（74.68s，content-host 单项失败）；`ctest --test-dir .cache/build/macos-arm64-cef-release --output-on-failure -R '^(content_host_process_mac|page_snapshot_cef_integration)$'` 退出 0、2/2 PASS（121.06s）。合计覆盖 91/91，content-host 首轮失败后复跑通过，未隐藏首次失败。
+- 最终定向回归：对上述 Debug/Release 目录分别运行 `ctest --test-dir <build-dir> --output-on-failure -R '^(localization_generated_check|localization_generator_contract|browser_localization_contract|window_state_model_test|window_adapter_contract)$'`，均退出 0、5/5 PASS（1.42s / 0.17s）。新增行为断言覆盖精确官网 URL、用户操作、pending 和标签容量限制。
+- Code Review：按当前 Review 契约完成范围、正确性、依赖、生命周期、安全、测试和生成物自审；本任务 P0/P1/P2/P3 均为 0，`APPROVE`；最高状态 `VERIFIED`。
+- 未覆盖/风险：当前正在运行的浏览器保留投屏 fixture 页面，未获重启确认，真实菜单名称/点击跳转 smoke 为 `NOT_RUN`；Windows build/真机 UI 为 `NOT_RUN`。上述自动化不能替代两平台实际菜单验收；未验证官网公网可达性，未执行发布签名、公证、提交或推送。下一步在允许重启后补 macOS 菜单验收，并补 Windows 对称验收，再决定是否 `DONE`。
+
 ## 开发规则
 
 - 每次只领取一项；涉及公共 schema、持久化格式、credential、扩展或云服务时先建立独立 Roadmap，不扩大当前任务。

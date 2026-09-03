@@ -1,5 +1,6 @@
 #include "browser/window/tab_controller.h"
 
+#include "browser/branding/about_destination.h"
 #include "browser/window/popup_target.h"
 
 #include <cmath>
@@ -391,6 +392,14 @@ bool WindowClient::OnChromeCommand(CefRefPtr<CefBrowser> browser,
                                    cef_window_open_disposition_t disposition) {
   CEF_REQUIRE_UI_THREAD();
   static_cast<void>(disposition);
+  static const int kAboutCommandId = cef_id_for_command_id_name("IDC_ABOUT");
+  if (kAboutCommandId > 0 && command_id == kAboutCommandId) {
+    if (browser && browser->IsValid() &&
+        !browser->GetHost()->IsReadyToBeClosed()) {
+      controller_->HandlePopupRequest(browser, branding::kAboutBrowserUrl, true);
+    }
+    return true;
+  }
   if (controller_->HandleLocalEntryCommand(browser, command_id)) {
     return true;
   }

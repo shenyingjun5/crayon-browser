@@ -5,6 +5,7 @@
 #include <memory>
 #include <string>
 
+#include "browser/branding/about_browser.h"
 #include "browser/mdv/cef_mdv_editing.h"
 #include "browser/mdv/cef_mdv_entries.h"
 #include "browser/media_host/media_host_adapter.h"
@@ -34,6 +35,9 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   CefRefPtr<CefBrowserProcessHandler> GetBrowserProcessHandler() override {
     return this;
   }
+  CefRefPtr<CefResourceBundleHandler> GetResourceBundleHandler() override {
+    return about_resources_;
+  }
 
   // Product decision (2026-08-23): this browser never stores its
   // cookie-encryption "Safe Storage" key in the system keychain — dev
@@ -61,6 +65,7 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   void ContentHostTick();
   void ConsumeMediaObservations();
 
+  const CefRefPtr<branding::AboutBrowserResources> about_resources_;
   const ::crayon::browser::product_strings::ProductStrings product_strings_;
   const page_markdown::PageMarkdownStrings page_markdown_strings_;
   const macos::CastChromeStrings cast_strings_;

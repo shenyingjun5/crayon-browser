@@ -113,7 +113,7 @@ bool ProjectionIsClosedAndExact() {
 }
 
 bool CatalogIsClosedAndDoesNotFallback() {
-  CHECK(LocaleCatalog::Size() == 155);
+  CHECK(LocaleCatalog::Size() == 156);
   CHECK(LocaleCatalog::Version() == "desktop-localization-v1");
   const LocaleCatalog english(AppLocale::kEnUs);
   const LocaleCatalog simplified(AppLocale::kZhCn);
@@ -121,6 +121,9 @@ bool CatalogIsClosedAndDoesNotFallback() {
   CHECK(english.Find("app.title") == "Crayon AI Agent Cast Browser");
   CHECK(simplified.Find("app.title") == "蜡笔 AI Agent 投屏浏览器");
   CHECK(traditional.Find("app.title") == "蠟筆 AI Agent 投影瀏覽器");
+  CHECK(english.Find("app.about") == "About Crayon Browser");
+  CHECK(simplified.Find("app.about") == "关于蜡笔浏览器");
+  CHECK(traditional.Find("app.about") == "關於蠟筆瀏覽器");
   CHECK(traditional.Find("mdv.view_source") == "原始碼");
   CHECK(!english.Find("missing.key").has_value());
   CHECK(!simplified.Find("").has_value());

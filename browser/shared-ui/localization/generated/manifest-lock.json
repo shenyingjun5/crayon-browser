@@ -6,12 +6,12 @@
     "zh-CN",
     "zh-TW"
   ],
-  "key_count": 155,
+  "key_count": 156,
   "source_files": [
     {
       "path": "browser/shared-ui/locales/en-US.json",
-      "sha256": "ce48e71a6f79d30fd3697100a0ba19da5e3f011155c44bd9f1b73f9f66c08170",
-      "bytes": 7470
+      "sha256": "e45c314080f1a2827f6be0b7f3c94cbdc10100dff20c09c917e416d3dd6518a9",
+      "bytes": 7509
     },
     {
       "path": "browser/shared-ui/locales/manifest.json",
@@ -20,20 +20,20 @@
     },
     {
       "path": "browser/shared-ui/locales/zh-CN.json",
-      "sha256": "e3b1c8ab4e7f19e50f68d47fda3ec064b0b09224c5b7776a4ace590df5ea8248",
-      "bytes": 7340
+      "sha256": "7f6ae6c6e0e58409002d5f061a7f28e39e73f5b50a2565395a347d5b1c6fe82b",
+      "bytes": 7380
     },
     {
       "path": "browser/shared-ui/locales/zh-TW.json",
-      "sha256": "bba3c5bfea7ebb02a535b6c4fa0d3a1a17e1c2e98fa6a1b5d16509b61269ddae",
-      "bytes": 7451
+      "sha256": "a1cfa652fe6c9d59193c56eef8dd1da88dd55ca06af0ae5e3cfa4c38500c5328",
+      "bytes": 7491
     }
   ],
   "generated_files": [
     {
       "path": "browser/shared-ui/localization/generated/locale_catalog_data.h",
-      "sha256": "7103b4ed9ae7b8f86ccbafd409c18bf943894a42dd6c2d2f891907704596ef59",
-      "bytes": 15525
+      "sha256": "13d73e94441fc2829bf7c9aba232a32a78cc2b0c9b4baf5f895a546d04f7df59",
+      "bytes": 15618
     },
     {
       "path": "browser/shared-ui/localization/generated/macos/en.lproj/InfoPlist.strings",
@@ -42,8 +42,8 @@
     },
     {
       "path": "browser/shared-ui/localization/generated/macos/en.lproj/Localizable.strings",
-      "sha256": "30ffc377c9de8ad4638eba02b3dd13da36707df231c6d867b8e57b813e5f1aba",
-      "bytes": 7312
+      "sha256": "0c1c1be6119f4ecbb264aef60d681a1a1c20c0ffd0ddef046b7f820974c84af2",
+      "bytes": 7350
     },
     {
       "path": "browser/shared-ui/localization/generated/macos/zh-Hans.lproj/InfoPlist.strings",
@@ -52,8 +52,8 @@
     },
     {
       "path": "browser/shared-ui/localization/generated/macos/zh-Hans.lproj/Localizable.strings",
-      "sha256": "8d997e0e1a0a9aafc66ad66e7395ac5a4e87aa79061f5437133019692cac4700",
-      "bytes": 7182
+      "sha256": "7cdd7266d478c3a8a97fa4f1ee7db8b21c5709c0f92d66aa57f0d76d9b7f1d2d",
+      "bytes": 7221
     },
     {
       "path": "browser/shared-ui/localization/generated/macos/zh-Hant.lproj/InfoPlist.strings",
@@ -62,8 +62,8 @@
     },
     {
       "path": "browser/shared-ui/localization/generated/macos/zh-Hant.lproj/Localizable.strings",
-      "sha256": "057dde4237d43d255194e99837af6adfa1273e37ba639c46be978ff14fd86770",
-      "bytes": 7293
+      "sha256": "e0f32f00cef60431d2ef89e071c77312ea7bb7bdf1b79e22a8c6932c6c5ef434",
+      "bytes": 7332
     },
     {
       "path": "browser/shared-ui/localization/generated/windows/localized_strings.rc.inc",

@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "browser/window/popup_target.h"
+#include "browser/branding/about_destination.h"
 #include "browser/window/tab_model.h"
 
 namespace {
@@ -304,6 +305,25 @@ void PopupCapacityDenied() {
         "full tab strip must be denied");
 }
 
+void AboutDestinationUsesBoundedUserNavigation() {
+  const std::string url =
+      crayon::browser::cef_shell::branding::kAboutBrowserUrl;
+  Check(url == "https://www.zknowai.com/",
+        "About destination is the product website");
+  Check(popup::EvaluatePopupTarget(url, true, 0, false) ==
+            PopupTargetAction::kOpenInNewTab,
+        "About opens a new tab after a user command");
+  Check(popup::EvaluatePopupTarget(url, false, 0, false) ==
+            PopupTargetAction::kDeny,
+        "About never bypasses the user gesture policy");
+  Check(popup::EvaluatePopupTarget(url, true, 4, false) ==
+            PopupTargetAction::kDeny,
+        "About respects the pending navigation limit");
+  Check(popup::EvaluatePopupTarget(url, true, 0, true) ==
+            PopupTargetAction::kDeny,
+        "About respects the tab capacity limit");
+}
+
 int main() {
   const std::pair<const char*, void (*)()> cases[] = {
       {"CreateActivateAndOrder", &CreateActivateAndOrder},
@@ -325,6 +345,8 @@ int main() {
       {"PopupProgrammaticDenied", &PopupProgrammaticDenied},
       {"PopupSchemeAndShapeMatrix", &PopupSchemeAndShapeMatrix},
       {"PopupCapacityDenied", &PopupCapacityDenied},
+      {"AboutDestinationUsesBoundedUserNavigation",
+       &AboutDestinationUsesBoundedUserNavigation},
   };
   for (const auto& test_case : cases) {
     test_case.second();

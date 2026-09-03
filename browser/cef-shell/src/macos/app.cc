@@ -93,7 +93,9 @@ macos::CastChromeStrings BuildCastStrings(
 
 BrowserApp::BrowserApp(
     ::crayon::browser::localization::LocaleSnapshot locale_snapshot)
-    : product_strings_(BuildProductStringsOrEmpty(locale_snapshot)),
+    : about_resources_(
+          new branding::AboutBrowserResources(locale_snapshot.locale)),
+      product_strings_(BuildProductStringsOrEmpty(locale_snapshot)),
       page_markdown_strings_(
           BuildPageMarkdownStrings(product_strings_.page_markdown)),
       cast_strings_(BuildCastStrings(product_strings_.cast)),
