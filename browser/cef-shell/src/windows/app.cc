@@ -27,7 +27,6 @@ namespace {
 
 constexpr int kMainIconSize = 32;
 constexpr int kSmallIconSize = 16;
-constexpr std::size_t kResourceStringCapacity = 512;
 constexpr std::size_t kContentHostStartupChecks = 500;
 constexpr std::int64_t kContentHostTickMilliseconds = 20;
 
@@ -51,96 +50,30 @@ std::string WideToUtf8(std::wstring_view value) {
   return utf8;
 }
 
-std::string LoadUtf8String(HINSTANCE resource_module,
-                           unsigned int resource_id) {
-  std::array<wchar_t, kResourceStringCapacity> buffer{};
-  const int length = LoadStringW(resource_module, resource_id, buffer.data(),
-                                 static_cast<int>(buffer.size()));
-  if (length <= 0 || static_cast<std::size_t>(length) >= buffer.size() - 1) {
+std::wstring Utf8ToWide(std::string_view value) {
+  if (value.empty()) {
     return {};
   }
-  return WideToUtf8(
-      std::wstring_view(buffer.data(), static_cast<std::size_t>(length)));
-}
-
-std::wstring LoadWideString(HINSTANCE resource_module,
-                            unsigned int resource_id) {
-  std::array<wchar_t, kResourceStringCapacity> buffer{};
-  const int length = LoadStringW(resource_module, resource_id, buffer.data(),
-                                 static_cast<int>(buffer.size()));
-  if (length <= 0 || static_cast<std::size_t>(length) >= buffer.size() - 1) {
+  const int value_length = static_cast<int>(value.size());
+  const int wide_length = MultiByteToWideChar(
+      CP_UTF8, MB_ERR_INVALID_CHARS, value.data(), value_length, nullptr, 0);
+  if (wide_length <= 0) {
     return {};
   }
-  return std::wstring(buffer.data(), static_cast<std::size_t>(length));
+  std::wstring wide(static_cast<std::size_t>(wide_length), L'\0');
+  if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value.data(),
+                          value_length, wide.data(), wide_length) !=
+      wide_length) {
+    return {};
+  }
+  return wide;
 }
 
-browser_new_tab::NewTabPageStrings LoadNewTabStrings(
-    HINSTANCE resource_module) {
-  return browser_new_tab::NewTabPageStrings{
-      "zh-CN",
-      LoadUtf8String(resource_module, IDS_CRAYON_NEW_TAB_TITLE),
-      LoadUtf8String(resource_module, IDS_CRAYON_NEW_TAB_REGULAR_HEADING),
-      LoadUtf8String(resource_module, IDS_CRAYON_NEW_TAB_INCOGNITO_HEADING),
-      LoadUtf8String(resource_module, IDS_CRAYON_NEW_TAB_REGULAR_DESCRIPTION),
-      LoadUtf8String(resource_module, IDS_CRAYON_NEW_TAB_INCOGNITO_DESCRIPTION),
-      LoadUtf8String(resource_module, IDS_CRAYON_NEW_TAB_OMNIBOX_HINT),
-      LoadUtf8String(resource_module, IDS_CRAYON_NEW_TAB_SHORTCUTS_HEADING),
-      LoadUtf8String(resource_module, IDS_CRAYON_NEW_TAB_EMPTY_SHORTCUTS),
-      LoadUtf8String(resource_module, IDS_CRAYON_NEW_TAB_CONFIG_ERROR),
-  };
-}
-
-browser_mdv::MdvPageStrings LoadMdvStrings(HINSTANCE resource_module) {
-  return browser_mdv::MdvPageStrings{
-      "zh-CN",
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TITLE),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_VIEW_SOURCE),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_VIEW_PREVIEW),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_VIEW_SPLIT),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_STATUS_EMPTY),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_STATUS_TOO_LARGE),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_STATUS_INVALID_UTF8),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_STATUS_RENDER_POLICY),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_STATUS_NOT_MARKDOWN),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_STATUS_SAVED),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_CONFIRM_TEXT),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_LABEL_SAVE),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_LABEL_DISCARD),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_LABEL_CANCEL),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_LABEL_OPEN_IN_VIEWER),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOLBAR_TITLE),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_BOLD),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_ITALIC),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_STRIKE),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_INLINE_CODE),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_BULLET_LIST),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_ORDERED_LIST),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_TASK_LIST),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_QUOTE),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_CODE_BLOCK),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_TABLE),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_LINK),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_DIVIDER),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_HEADING1),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_HEADING2),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_HEADING3),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_STRUCTURE),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_INDENT),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_OUTDENT),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_ALIGN_DEFAULT),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_ALIGN_LEFT),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_ALIGN_CENTER),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOL_ALIGN_RIGHT),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOLTIP_VIEW),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOLTIP_MARKDOWN),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOLTIP_STRUCTURE),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_TOOLTIP_TABLE_ALIGNMENT),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_MERMAID_FULLSCREEN),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_MERMAID_SOURCE),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_MERMAID_CLOSE),
-      LoadUtf8String(resource_module, IDS_CRAYON_MDV_MERMAID_ERROR),
-      browser_mdv::MdvShortcutPlatform::kWindows,
-  };
+::crayon::browser::product_strings::ProductStrings BuildProductStringsOrEmpty(
+    const ::crayon::browser::localization::LocaleSnapshot& snapshot) {
+  return ::crayon::browser::product_strings::BuildProductStrings(
+             snapshot, browser_mdv::MdvShortcutPlatform::kWindows)
+      .value_or(::crayon::browser::product_strings::ProductStrings{});
 }
 
 std::string HelperExecutablePath(std::wstring_view name) {
@@ -156,34 +89,26 @@ std::string HelperExecutablePath(std::wstring_view name) {
           .wstring());
 }
 
-page_markdown::PageMarkdownStrings LoadPageMarkdownStrings(
-    HINSTANCE resource_module) {
+page_markdown::PageMarkdownStrings BuildPageMarkdownStrings(
+    const ::crayon::browser::product_strings::PageMarkdownStrings& strings) {
   return page_markdown::PageMarkdownStrings{
-      LoadUtf8String(resource_module, IDS_CRAYON_PAGE_MARKDOWN_PREVIEW),
-      LoadUtf8String(resource_module, IDS_CRAYON_PAGE_MARKDOWN_COPY),
-      LoadUtf8String(resource_module, IDS_CRAYON_PAGE_MARKDOWN_SAVE_AS),
-      LoadUtf8String(resource_module, IDS_CRAYON_PAGE_MARKDOWN_COPIED),
-      LoadUtf8String(resource_module, IDS_CRAYON_PAGE_MARKDOWN_COPY_FAILED),
-      LoadUtf8String(resource_module, IDS_CRAYON_PAGE_MARKDOWN_SAVE_CANCELLED)};
+      strings.preview_command, strings.copy_command, strings.save_as_command,
+      strings.copied_status, strings.copy_failed_status,
+      strings.save_cancelled_status};
 }
 
-windows::CastChromeStrings LoadCastStrings(HINSTANCE resource_module) {
+windows::CastChromeStrings BuildCastStrings(
+    const ::crayon::browser::product_strings::CastStrings& strings) {
   return windows::CastChromeStrings{
-      LoadWideString(resource_module, IDS_CRAYON_CAST_SELECT_RECEIVER),
-      LoadWideString(resource_module, IDS_CRAYON_CAST_STOP),
-      LoadWideString(resource_module, IDS_CRAYON_CAST_PICKER_TITLE),
-      LoadWideString(resource_module, IDS_CRAYON_CAST_PICKER_EMPTY),
-      LoadWideString(resource_module, IDS_CRAYON_CAST_PICKER_SELECT),
-      LoadWideString(resource_module, IDS_CRAYON_CAST_PICKER_REFRESH),
-      LoadWideString(resource_module, IDS_CRAYON_CAST_PICKER_CANCEL),
-      LoadWideString(resource_module, IDS_CRAYON_CAST_CODE_LABEL),
-      LoadWideString(resource_module, IDS_CRAYON_CAST_CODE_CONNECT),
-      LoadWideString(resource_module, IDS_CRAYON_CAST_CODE_FAILED),
-      LoadWideString(resource_module, IDS_CRAYON_CAST_PAUSE),
-      LoadWideString(resource_module, IDS_CRAYON_CAST_RESUME),
-      LoadWideString(resource_module, IDS_CRAYON_CAST_SEEK),
-      LoadWideString(resource_module, IDS_CRAYON_CAST_SECONDS),
-      LoadWideString(resource_module, IDS_CRAYON_CAST_CONTROL_FAILED)};
+      Utf8ToWide(strings.button_select), Utf8ToWide(strings.button_stop),
+      Utf8ToWide(strings.picker_title), Utf8ToWide(strings.picker_empty),
+      Utf8ToWide(strings.picker_select), Utf8ToWide(strings.picker_refresh),
+      Utf8ToWide(strings.picker_cancel), Utf8ToWide(strings.cast_code_label),
+      Utf8ToWide(strings.cast_code_connect),
+      Utf8ToWide(strings.cast_code_failed),
+      Utf8ToWide(strings.playback_pause), Utf8ToWide(strings.playback_resume),
+      Utf8ToWide(strings.playback_seek), Utf8ToWide(strings.playback_seconds),
+      Utf8ToWide(strings.playback_failed)};
 }
 
 windows::CastChromePresentation CastChromePresentation(
@@ -227,18 +152,20 @@ void WindowsWindowIcons::Apply(CefRefPtr<CefBrowser> browser) const {
   }
 }
 
-BrowserApp::BrowserApp(HINSTANCE resource_module, std::wstring product_name)
-    : product_name_(std::move(product_name)),
-      window_icons_(std::make_shared<WindowsWindowIcons>(resource_module)),
-      new_tab_strings_(LoadNewTabStrings(resource_module)),
-      mdv_strings_(LoadMdvStrings(resource_module)),
-      page_markdown_strings_(LoadPageMarkdownStrings(resource_module)),
-      cast_strings_(LoadCastStrings(resource_module)),
+BrowserApp::BrowserApp(
+    HINSTANCE resource_module,
+    ::crayon::browser::localization::LocaleSnapshot locale_snapshot)
+    : window_icons_(std::make_shared<WindowsWindowIcons>(resource_module)),
+      product_strings_(BuildProductStringsOrEmpty(locale_snapshot)),
+      page_markdown_strings_(
+          BuildPageMarkdownStrings(product_strings_.page_markdown)),
+      cast_strings_(BuildCastStrings(product_strings_.cast)),
       mdv_runtime_(std::make_shared<mdv::MdvRuntimeState>()),
-      mdv_entries_(std::make_shared<mdv::MdvEntryController>(mdv_runtime_,
-                                                             mdv_strings_)),
+      mdv_entries_(std::make_shared<mdv::MdvEntryController>(
+          mdv_runtime_, product_strings_.mdv)),
       mdv_editing_(
-          std::make_shared<mdv::MdvEditController>(mdv_runtime_, mdv_strings_)),
+          std::make_shared<mdv::MdvEditController>(mdv_runtime_,
+                                                   product_strings_.mdv)),
       permission_store_(std::make_unique<permission::PermissionStore>()),
       content_host_(std::make_unique<windows::ContentHostAdapter>()),
       media_host_(std::make_unique<media_host::MediaHostAdapter>(
@@ -327,13 +254,14 @@ void BrowserApp::OnContextInitialized() {
   const auto page_model = browser_new_tab::BuildNewTabPageModel(
       browser_new_tab::NewTabProfileMode::kRegular,
       browser_new_tab::ShortcutConfig{});
-  if (!new_tab::RegisterNewTabSchemeHandlerFactory(page_model,
-                                                   new_tab_strings_)) {
+  if (!new_tab::RegisterNewTabSchemeHandlerFactory(
+          page_model, product_strings_.new_tab)) {
     shell_runtime_->Shutdown();
     CefQuitMessageLoop();
     return;
   }
-  if (!mdv::RegisterMdvSchemeHandlerFactory(mdv_strings_, mdv_runtime_)) {
+  if (!mdv::RegisterMdvSchemeHandlerFactory(product_strings_.mdv,
+                                             mdv_runtime_)) {
     shell_runtime_->Shutdown();
     CefQuitMessageLoop();
     return;
@@ -567,69 +495,18 @@ void BrowserApp::ConsumeMediaObservations() {
 }
 
 bool BrowserApp::new_tab_strings_valid() const {
-  return !new_tab_strings_.language.empty() &&
-         !new_tab_strings_.document_title.empty() &&
-         !new_tab_strings_.regular_heading.empty() &&
-         !new_tab_strings_.incognito_heading.empty() &&
-         !new_tab_strings_.regular_description.empty() &&
-         !new_tab_strings_.incognito_description.empty() &&
-         !new_tab_strings_.omnibox_hint.empty() &&
-         !new_tab_strings_.shortcuts_heading.empty() &&
-         !new_tab_strings_.empty_shortcuts.empty() &&
-         !new_tab_strings_.config_error.empty();
+  return ::crayon::browser::product_strings::ProductStringsAreComplete(
+      product_strings_);
 }
 
 bool BrowserApp::mdv_strings_valid() const {
-  return !mdv_strings_.language.empty() &&
-         !mdv_strings_.document_title.empty() &&
-         !mdv_strings_.view_source.empty() &&
-         !mdv_strings_.view_preview.empty() &&
-         !mdv_strings_.view_split.empty() &&
-         !mdv_strings_.status_empty.empty() &&
-         !mdv_strings_.status_too_large.empty() &&
-         !mdv_strings_.status_invalid_utf8.empty() &&
-         !mdv_strings_.status_render_policy.empty() &&
-         !mdv_strings_.status_not_markdown.empty() &&
-         !mdv_strings_.status_saved.empty() &&
-         !mdv_strings_.confirm_text.empty() &&
-         !mdv_strings_.label_save.empty() &&
-         !mdv_strings_.label_discard.empty() &&
-         !mdv_strings_.label_cancel.empty() &&
-         !mdv_strings_.label_open_in_viewer.empty() &&
-         !mdv_strings_.toolbar_title.empty() &&
-         !mdv_strings_.tool_bold.empty() && !mdv_strings_.tool_italic.empty() &&
-         !mdv_strings_.tool_strike.empty() &&
-         !mdv_strings_.tool_inline_code.empty() &&
-         !mdv_strings_.tool_bullet_list.empty() &&
-         !mdv_strings_.tool_ordered_list.empty() &&
-         !mdv_strings_.tool_task_list.empty() &&
-         !mdv_strings_.tool_quote.empty() &&
-         !mdv_strings_.tool_code_block.empty() &&
-         !mdv_strings_.tool_table.empty() && !mdv_strings_.tool_link.empty() &&
-         !mdv_strings_.tool_divider.empty() &&
-         !mdv_strings_.tool_heading1.empty() &&
-         !mdv_strings_.tool_heading2.empty() &&
-         !mdv_strings_.tool_heading3.empty() &&
-         !mdv_strings_.tool_structure.empty() &&
-         !mdv_strings_.tool_indent.empty() &&
-         !mdv_strings_.tool_outdent.empty() &&
-         !mdv_strings_.tool_align_default.empty() &&
-         !mdv_strings_.tool_align_left.empty() &&
-         !mdv_strings_.tool_align_center.empty() &&
-         !mdv_strings_.tool_align_right.empty() &&
-         !mdv_strings_.tooltip_view.empty() &&
-         !mdv_strings_.tooltip_markdown.empty() &&
-         !mdv_strings_.tooltip_structure.empty() &&
-         !mdv_strings_.tooltip_table_alignment.empty();
+  return ::crayon::browser::product_strings::ProductStringsAreComplete(
+      product_strings_);
 }
 
 bool BrowserApp::page_markdown_strings_valid() const {
-  return !page_markdown_strings_.preview_command.empty() &&
-         !page_markdown_strings_.copy_command.empty() &&
-         !page_markdown_strings_.save_as_command.empty() &&
-         !page_markdown_strings_.copied_status.empty() &&
-         !page_markdown_strings_.copy_failed_status.empty() &&
-         !page_markdown_strings_.save_cancelled_status.empty();
+  return ::crayon::browser::product_strings::ProductStringsAreComplete(
+      product_strings_);
 }
 
 bool BrowserApp::cast_strings_valid() const {

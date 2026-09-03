@@ -16,6 +16,8 @@
 #include "browser/window/tab_controller.h"
 #include "crayon/browser_mdv/mdv_page.h"
 #include "crayon/browser_new_tab/new_tab_page.h"
+#include "crayon/browser_localization/locale_snapshot.h"
+#include "crayon/browser_product_strings/product_strings.h"
 #include "include/cef_app.h"
 #include "windows/content_host_adapter_win.h"
 #include "windows/cast_chrome_win.h"
@@ -43,7 +45,8 @@ class WindowsWindowIcons final {
 
 class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
  public:
-  BrowserApp(HINSTANCE resource_module, std::wstring product_name);
+  BrowserApp(HINSTANCE resource_module,
+             ::crayon::browser::localization::LocaleSnapshot locale_snapshot);
   ~BrowserApp() override;
 
   CefRefPtr<CefBrowserProcessHandler> GetBrowserProcessHandler() override {
@@ -65,10 +68,8 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   void ContentHostTick();
   void ConsumeMediaObservations();
 
-  const std::wstring product_name_;
   const std::shared_ptr<WindowsWindowIcons> window_icons_;
-  const browser_new_tab::NewTabPageStrings new_tab_strings_;
-  const browser_mdv::MdvPageStrings mdv_strings_;
+  const ::crayon::browser::product_strings::ProductStrings product_strings_;
   const page_markdown::PageMarkdownStrings page_markdown_strings_;
   const windows::CastChromeStrings cast_strings_;
   const std::shared_ptr<mdv::MdvRuntimeState> mdv_runtime_;

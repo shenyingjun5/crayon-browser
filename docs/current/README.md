@@ -15,12 +15,14 @@
 | [Content Data Plane v1](content-data-plane.md) | CNT C1 snapshot/Markdown/owner/delta/Agent R1 冻结接口、预算与 GO 结论 |
 | [品牌图标契约](brand-assets.md) | `app-icon-v1` 参考源、母版、平台组合与禁用规则 |
 | [桌面浏览器体验契约](browser-ux.md) | `browser-design-v1` 顶部信息架构、共享 token、标题栏/功能 icon、键盘与无障碍规则 |
+| [桌面三语言本地化契约](localization.md) | `en-US/zh-CN/zh-TW` 系统协商、资源 owner、术语、surface、隐私和平台发布证据 |
 | [本地 Markdown 查看器契约](markdown-viewer.md) | `crayon://mdv` scheme/CSP、入口手势门禁、图标工具栏与 Mermaid Full 离线扩展契约（v1.4） |
 | [Markdown Runtime v1 契约](markdown-runtime.md) | `markdown-runtime-v1` ExtensionNode/manifest/registry、能力、预算、generation、错误与 current/previous golden |
 | [Code Highlight 供应链契约](code-highlight.md) | `code-highlight-assets-v1` 选型、固定离线 grammar/别名/dependency、hash/许可/包体与安全输出边界 |
 | [KaTeX 数学语法与供应链契约](math-katex.md) | `math-katex-assets-v1` 的 `$`/`$$` 定界、固定 option/宏禁令、ESM/CSS/WOFF2 离线闭包与 MRT-08 输出门禁 |
-| [总 Roadmap](../crayon-private-cast-browser-roadmap.md) | 287 项活跃任务、Windows 首发候选、第一期/第二期阶段和当前领取顺序 |
+| [总 Roadmap](../crayon-private-cast-browser-roadmap.md) | 297 项活跃任务、Windows 首发候选、第一期/第二期阶段和当前领取顺序 |
 | [第一期发布 Roadmap](../plans/release-v1-roadmap.md) | 网页 Markdown、LAN 投屏、本地 Markdown 编辑三大闭环、平台顺序与关闭 feature |
+| [三语言本地化 Roadmap](../plans/localization-roadmap.md) | `en-US/zh-CN/zh-TW` 跟随系统、共享资源/解析器、CEF/平台装配和真机发布门禁 |
 | [第一期生产装配审计](release-v1-assembly.md) | REL-02 的真实 CEF source/link 调用图、断点任务映射与一期/二期默认开关 |
 | [模块 Roadmap 索引](../plans/README.md) | 每个模块的原子任务、依赖与状态 |
 
@@ -43,6 +45,7 @@ Cast-SDK source lock 的当前事实位于 `config/cast-sdk-source.toml`、`.git
 - 桌面 UI 采用 Chrome/Chromium 用户熟悉的信息架构与快捷键心智，但使用蜡笔品牌和自有本地页面；`BUX-01..18` 覆盖起始页、omnibox、标签、书签、历史、下载、设置、Profile/无痕与日用基础功能。
 - 浏览器内建本地 Markdown Runtime：用户经受控入口打开本地 `.md`，支持源码/渲染预览切换、分栏编辑实时预览、原子保存、图标化编辑工具栏与标准 Mermaid fence；`MDV-01..25` 承接查看器、工具栏、Mermaid 与生产 fixture 清理，`MRT-01..19` 承接闭合扩展框架、Highlight/KaTeX 及后续扩展/跨域门禁，均属用户能力，不作为 Agent 能力暴露。普通 Markdown 继续使用 vendored md4c 0.5.3/MIT；第三方 runtime 均为应用内固定闭包、按需加载，Mermaid tiny 选型已撤销。
 - Windows/macOS CEF 浏览器与 LAN Direct/Relay 投屏优先。
+- 桌面产品支持英文 `en-US`、简体中文 `zh-CN`、繁体中文 `zh-TW`，按用户首选系统 UI 语言在完整重启时自动选择；一期不提供手动覆盖或运行中热切换。
 - 无 Direct/Relay 路由时只交接给独立蜡笔投屏客户端；浏览器不做 WebRTC、屏幕/标签页/系统音频采集或编码。
 - 浏览器与投屏主链路完成后建设当前页数据/Markdown；CAAP、CLI/MCP、高性能读页与授权操作是核心分阶段能力。
 - HarmonyOS 只面向鸿蒙电脑 PC 形态技术预览。
@@ -56,6 +59,7 @@ Cast-SDK source lock 的当前事实位于 `config/cast-sdk-source.toml`、`.git
 - CEF 固定基线为 `150.0.10+g8042e43+chromium-150.0.7871.101` Standard。历史四平台 hash 已锁定，Windows x64 archive 已校验；后续产品构建只推进 Windows/macOS。
 - Cast-SDK source revision 已由 `SDK-01` 固定并通过 `RG-008`；`SDK-01..14 DONE`，包括真实接收端 Harness 与总 Review。`SDK-15/16` 只承接后续 Partner/TV Cast gap 与正式外部 facade。
 - `MED-19` 已完成：投屏决策集合为 `Direct/Relay/ExternalClientHandoff/Reject`，旧 `mirror` wire 值保留兼容读取窗口且不再发出；`tab_video`/`system_audio` 仅作为 `crayon-domain` 遗留字段存在，策略与 runtime 代码不再引用，不得继续扩张。
+- 三语言本地化 `LOC-01/03/04/05W/06W DONE` 已冻结 current 契约、纯 C++17 resolver、统一共享产品 catalog，完成 Windows 用户首选 UI 语言到 CEF locale/Accept-Language/自有 UI 的单 snapshot 装配，并把 Release 闭合为三套支持语言及必要 gender pak；`LOC-02 VERIFIED` 已建立三套 155-key 事实源和确定性生成物（繁体语言审校待 LOC-07W）。`LOC-07W BLOCKED` 等待 Windows 人工/系统语言矩阵；`LOC-08M IMPLEMENTED` 已接入 macOS 单 snapshot 与 `en/zh-Hans/zh-Hant` 生成资源，但平台构建/真机证据后置。不得把资源闭包解释为三语言已发布。
 - 当前开发前沿：2026-08-31 用户决策改为 Windows 10/11 x64 先形成第一期候选，已有 macOS arm64 共享实现/证据保留，macOS 特有签名/公证/Keychain/生命周期/打包后续验证。`CNT-17..19 DONE` 与 `CNT-20 VERIFIED` 已在 macOS 闭合网页 Markdown；Windows 尚无 content-host/process/platform UI adapter，先执行 `CNT-20W1/W2 -> CNT-21W`。`PLT-M05b1..b3 DONE` 已冻结共享观察、策略、MHV1、Cast runtime/UI 语义；Windows 尚无 media-host/Cast 平台装配，执行 `PLT-W05a..f`，Direct/Relay 使用当前 ADB 在线 `com.zknowai.labi.cast.receiver` 正式接收端取证。`MDV-20/24/25 VERIFIED` 只补 Windows 对称发布回归。Agent/CLI/MCP、Workflow、Hub、Partner、模型与 HarmonyOS 统一为第二期且默认关闭。
 
 ## 5. 权威与历史

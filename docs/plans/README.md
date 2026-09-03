@@ -8,7 +8,7 @@
 - 无视频推送路由时只交接给独立蜡笔投屏客户端；浏览器不做 WebRTC、采集或编码。
 - 浏览器和投屏主链路完成后建设当前页数据面与确定性 Markdown；CAAP 协议/权限内核可在浏览器后半段先行。
 - HarmonyOS 只规划鸿蒙电脑 PC 形态技术预览。
-- 第一期只发布网页 Markdown、LAN Direct/Relay 投屏、本地 Markdown 编辑三大闭环；CAAP、CLI/入站 MCP、高性能读页、语义动作、Workflow/Challenge、Capability Hub、Partner 与模型仍是产品方向，但统一进入第二期且默认关闭。Linux 没有当前活跃 Roadmap。
+- 第一期只发布网页 Markdown、LAN Direct/Relay 投屏、本地 Markdown 编辑三大闭环，并要求同一桌面候选包支持 `en-US/zh-CN/zh-TW` 跟随系统；本地化是三闭环的横切发布质量，不是第四条业务闭环。CAAP、CLI/入站 MCP、高性能读页、语义动作、Workflow/Challenge、Capability Hub、Partner 与模型仍是产品方向，但统一进入第二期且默认关闭。Linux 没有当前活跃 Roadmap。
 - 出站 Partner API/MCP 与入站 MCP 是不同安全边界；Partner/TV Cast Manifest 属于 Cast-SDK/接收端协议，不在浏览器内复制实现。
 
 ## 2. 权威入口
@@ -26,6 +26,7 @@
 | MED | [media-policy-relay-roadmap.md](media-policy-relay-roadmap.md) | 媒体观察、策略、LAN Relay、外部客户端交接迁移 | `MED-01..19 DONE` |
 | CEF | [desktop-cef-browser-roadmap.md](desktop-cef-browser-roadmap.md) | Windows/macOS CEF 壳、共享 UI、媒体观察和 IPC | `CEF-01..15 全部完成`（`CEF-06..14` 模型层 VERIFIED，实机接线归后续装配/切片任务）；Windows 总 Review 证据已补齐 |
 | BUX | [browser-product-experience-roadmap.md](browser-product-experience-roadmap.md) | Chrome-inspired 蜡笔桌面浏览器 UI 与日用基础功能 | `BUX-01..18 DONE`（BUX-17/18 2026-08-26） |
+| LOC | [localization-roadmap.md](localization-roadmap.md) | `en-US/zh-CN/zh-TW` 跟随系统、统一资源/解析器、CEF/平台装配与发布验证 | `LOC-01/03/04/05W/06W DONE`、`LOC-02 VERIFIED`、`LOC-07W BLOCKED`、`LOC-08M IMPLEMENTED`；Windows 等待人工/系统语言矩阵，macOS 等待后置平台验证 |
 | MDV | [markdown-viewer-roadmap.md](markdown-viewer-roadmap.md) | 本地 Markdown Runtime：查看/编辑/保存、图标工具栏、图片与 Mermaid Full 离线扩展 | 基线、工具栏与 Mermaid 已生产可达；`MDV-25 DONE`，`MDV-20/24 VERIFIED`，待 Windows x64 Runtime/辅助能力总回归 |
 | MRT | [markdown-runtime-roadmap.md](markdown-runtime-roadmap.md) | Markdown Runtime Extension Framework：闭合扩展 API、Highlight/KaTeX 与后续图表/演示门禁 | `MRT-01..08 DONE`（MRT-06 Windows blocker 修复与真机复验已收口，2026-08-29 合并）；`MRT-09..19` 分波次推进或仅做 gap analysis |
 | SDK | [cast-sdk-integration-roadmap.md](cast-sdk-integration-roadmap.md) | 固定源码 Cast-SDK facade、发现、连接和控制；后续 Partner Cast facade | `SDK-01..14 DONE`；`SDK-15/16` 等 HUB/外部已批准 API |
@@ -40,7 +41,7 @@
 | QAR | [quality-release-roadmap.md](quality-release-roadmap.md) | Windows/macOS 构建、真实设备、性能、长稳和发布门禁 | Windows 核心 `QAR-02AW/05AW/08AW`；第二期 feature `02B/05B/08B`；macOS 特有门禁后置 |
 | RNM | [naming-migration-roadmap.md](naming-migration-roadmap.md) | `get-video` → `crayon-browser` 仓库、包、README、GitHub 与本地路径迁移 | `RNM-01..08 DONE` |
 
-当前共 287 个活跃任务，212 个唯一当前测试用例。新增任务来自 `REL-01..05`、`CNT-17..21`、`PRV-13A/B` 对原 PRV-13 的分拆、`QAR-02/05/08` 的 A/B 分拆、REL-02 发现的 `MDV-25` 生产 fixture 清理，以及规范治理 `FND-13`；PLT-M05/PLT-W05 和 Windows-first W slices 为既有顶层任务的内部原子切片，不重复计数。MDV 的 `MDV-14..20` 专注 Mermaid Full，`MDV-21..24` 专注编辑器工具栏，`MDV-25` 负责 Release 生产隔离；MRT-09 P0 Runtime 总 Review 属于一期，MRT-10..19 属第二期。Linux、浏览器 WebRTC/采集/编码仍不计入活跃范围。
+当前共 297 个活跃任务，212 个唯一当前测试用例。新增任务来自 `REL-01..05`、`CNT-17..21`、`PRV-13A/B` 对原 PRV-13 的分拆、`QAR-02/05/08` 的 A/B 分拆、REL-02 发现的 `MDV-25` 生产 fixture 清理、规范治理 `FND-13`，以及三语言本地化 `LOC-01..10`；PLT-M05/PLT-W05 和 Windows-first W slices 为既有顶层任务的内部原子切片，不重复计数。LOC 复用现有 UX/RG 用例，不新增唯一测试 ID；MDV 的 `MDV-14..20` 专注 Mermaid Full，`MDV-21..24` 专注编辑器工具栏，`MDV-25` 负责 Release 生产隔离；MRT-09 P0 Runtime 总 Review 属于一期，MRT-10..19 属第二期。Linux、浏览器 WebRTC/采集/编码仍不计入活跃范围。
 
 ## 4. 当前领取队列
 
@@ -48,8 +49,9 @@
 
 | 顺序 | 任务 | 状态 | 说明 |
 |---:|---|---|---|
-| 1 | `PLT-W05c` | BLOCKED | 产品投屏码与播控 UI/接线、双配置自动化已验证；当前远程桌面点击带 `LLMHF_INJECTED`，须在可信物理输入控制台闭合 ADB 正式接收端 Direct 真机链路 |
-| 2 | `MDV-20W` | READY | `MDV-25W DONE` 已关闭生产 fixture；继续 Windows Mermaid Full/Highlight/KaTeX/性能与 Release package 总回归 |
+| 1 | `LOC-07W` | BLOCKED | 自动化已收口；等待 Windows 防火墙提示/可信物理点击及 en-US、zh-TW、不支持语言包切换与注销重启 |
+| 2 | `PLT-W05c` | BLOCKED | 产品投屏码与播控 UI/接线、双配置自动化已验证；当前远程桌面点击带 `LLMHF_INJECTED`，须在可信物理输入控制台闭合 ADB 正式接收端 Direct 真机链路 |
+| 3 | `MDV-20W` | READY | `MDV-25W DONE` 已关闭生产 fixture；继续 Windows Mermaid Full/Highlight/KaTeX/性能与 Release package 总回归 |
 
 ### 平台收口与待拆装配
 

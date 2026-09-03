@@ -46,6 +46,7 @@ set(CRAYON_ENGINE_API_BUILD_TESTS "${CRAYON_BUILD_TESTS}" CACHE BOOL
     "Build browser engine API contract tests" FORCE)
 if(CRAYON_BUILD_TESTS)
   enable_testing()
+  find_program(CRAYON_NODE_EXECUTABLE NAMES node REQUIRED)
   add_test(
     NAME cef_distribution_contract
     COMMAND "${CMAKE_COMMAND}" -P
@@ -56,6 +57,17 @@ if(CRAYON_BUILD_TESTS)
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/contracts/cef_build_graph_contract.cmake")
   set_tests_properties(cef_distribution_contract cef_build_graph_contract
                        PROPERTIES LABELS "cef;contract")
+  add_test(
+    NAME localization_generated_check
+    COMMAND "${CRAYON_NODE_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/locales/generate.mjs" --check)
+  add_test(
+    NAME localization_generator_contract
+    COMMAND "${CRAYON_NODE_EXECUTABLE}" --test
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/locales/generate.test.mjs")
+  set_tests_properties(localization_generated_check
+                       localization_generator_contract
+                       PROPERTIES LABELS "localization;contract")
 endif()
 add_subdirectory(browser/engine-api)
 add_subdirectory(browser/downloads)
@@ -64,6 +76,7 @@ add_subdirectory(browser/history)
 add_subdirectory(browser/preferences)
 add_subdirectory(browser/privacy/standard)
 add_subdirectory(browser/privacy/strict)
+add_subdirectory(browser/shared-ui/localization)
 add_subdirectory(browser/shared-ui/shell)
 add_subdirectory(browser/shared-ui/omnibox/core)
 add_subdirectory(browser/shared-ui/omnibox/provider)
@@ -89,6 +102,7 @@ add_subdirectory(browser/shared-ui/autofill)
 add_subdirectory(browser/shared-ui/markdown)
 add_subdirectory(browser/shared-ui/markdown-runtime)
 add_subdirectory(browser/shared-ui/mdv)
+add_subdirectory(browser/shared-ui/product-strings)
 add_subdirectory(tests/e2e/desktop/browser)
 add_subdirectory(browser/cef-shell/src/ipc)
 add_subdirectory(browser/cef-shell/src/browser/core_client)

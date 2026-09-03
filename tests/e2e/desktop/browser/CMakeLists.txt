@@ -14,12 +14,21 @@ if(NOT Python3_FOUND)
 endif()
 
 set(CRAYON_BROWSER_SMOKE_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/run_smoke.py")
+set(CRAYON_LOCALIZATION_PROBE_SCRIPT
+    "${CMAKE_CURRENT_SOURCE_DIR}/run_localization_probe.py")
 
 add_test(
   NAME browser_e2e_smoke_selfcheck
   COMMAND "${Python3_EXECUTABLE}" "${CRAYON_BROWSER_SMOKE_SCRIPT}" selfcheck)
 set_tests_properties(browser_e2e_smoke_selfcheck
                      PROPERTIES LABELS "e2e;browser;smoke")
+
+add_test(
+  NAME browser_localization_probe_selfcheck
+  COMMAND "${Python3_EXECUTABLE}" "${CRAYON_LOCALIZATION_PROBE_SCRIPT}"
+          --self-check)
+set_tests_properties(browser_localization_probe_selfcheck
+                     PROPERTIES LABELS "e2e;browser;localization;contract")
 
 if(DEFINED CRAYON_E2E_APP_BUNDLE)
   if(NOT EXISTS "${CRAYON_E2E_APP_BUNDLE}")

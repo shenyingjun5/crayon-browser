@@ -3,6 +3,12 @@
 /assets/brand/generated/manifest-lock.json text eol=lf
 /tools/brand-assets/** text eol=lf
 
+# Canonical localization sources and deterministic generated outputs are
+# byte-checked on Windows and macOS; never let autocrlf alter their hashes.
+/browser/shared-ui/locales/** text eol=lf
+/browser/shared-ui/localization/generated/** text eol=lf
+/tools/locales/** text eol=lf
+
 /assets/brand/**/*.png binary
 /assets/brand/**/*.ico binary
 /assets/brand/**/*.icns binary

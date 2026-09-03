@@ -149,7 +149,8 @@ endforeach()
 assert_code_signed("${content_host}")
 assert_code_signed("${CRAYON_APP_BUNDLE}")
 
-foreach(locale en zh-Hans)
+set(expected_locales en zh-Hans zh-Hant)
+foreach(locale IN LISTS expected_locales)
   set(localized_info
       "${CRAYON_APP_BUNDLE}/Contents/Resources/${locale}.lproj/InfoPlist.strings")
   if(NOT EXISTS "${localized_info}")
@@ -161,5 +162,21 @@ foreach(locale en zh-Hans)
     message(FATAL_ERROR "MDV Localizable.strings is missing: ${localized_mdv}")
   endif()
 endforeach()
+
+file(GLOB bundled_locale_paths LIST_DIRECTORIES true
+     "${CRAYON_APP_BUNDLE}/Contents/Resources/*.lproj")
+set(bundled_locales)
+foreach(locale_path IN LISTS bundled_locale_paths)
+  if(IS_DIRECTORY "${locale_path}")
+    cmake_path(GET locale_path STEM locale_name)
+    list(APPEND bundled_locales "${locale_name}")
+  endif()
+endforeach()
+list(SORT bundled_locales)
+list(SORT expected_locales)
+if(NOT bundled_locales STREQUAL expected_locales)
+  message(FATAL_ERROR
+          "Unexpected macOS locale bundle closure: ${bundled_locales}")
+endif()
 
 message(STATUS "macOS CEF shell package contract passed")

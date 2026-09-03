@@ -155,6 +155,10 @@ file(READ "${CRAYON_CEF_SHELL_SOURCE}/resources/windows/resource_ids.h"
      windows_ids)
 file(READ "${CRAYON_CEF_SHELL_SOURCE}/resources/windows/app.rc.in"
      windows_rc)
+file(READ
+     "${CRAYON_CEF_SHELL_SOURCE}/../shared-ui/localization/generated/windows/localized_strings.rc.inc"
+     windows_localized_rc)
+string(APPEND windows_rc "\n${windows_localized_rc}")
 foreach(resource IN ITEMS
         IDS_CRAYON_MDV_TOOL_HEADING1
         IDS_CRAYON_MDV_TOOL_HEADING2
@@ -174,13 +178,17 @@ foreach(resource IN ITEMS
         IDS_CRAYON_MDV_MERMAID_SOURCE
         IDS_CRAYON_MDV_MERMAID_CLOSE
         IDS_CRAYON_MDV_MERMAID_ERROR)
-  foreach(surface IN ITEMS windows_ids windows_rc windows_app)
+  foreach(surface IN ITEMS windows_ids windows_rc)
     string(FIND "${${surface}}" "${resource}" resource_hit)
     if(resource_hit EQUAL -1)
       message(FATAL_ERROR "${resource} is missing from ${surface}")
     endif()
   endforeach()
 endforeach()
+string(FIND "${windows_app}" "product_strings_.mdv" localized_bundle_hit)
+if(localized_bundle_hit EQUAL -1)
+  message(FATAL_ERROR "Windows MDV must consume the shared localized bundle")
+endif()
 string(FIND "${windows_app}" "MdvShortcutPlatform::kWindows" platform_hit)
 if(platform_hit EQUAL -1)
   message(FATAL_ERROR "Windows MDV must inject the kWindows shortcut profile")

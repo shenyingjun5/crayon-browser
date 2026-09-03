@@ -1,26 +1,20 @@
 #include "process/windows/bootstrap_entry.h"
 
-#include <array>
 #include <string>
-#include <utility>
 
 #include "browser/new_tab/cef_new_tab_handler.h"
 #include "include/cef_app.h"
-#include "include/cef_version_info.h"
-#include "resource_ids.h"
+#include "process/windows/ui_language_win.h"
 #include "windows/app.h"
 
 namespace crayon::browser::cef_shell::process {
 namespace {
-
-constexpr std::size_t kProductNameCapacity = 128;
 
 enum class ExitCode : int {
   kSuccess = 0,
   kBootstrapInstanceMissing = 10,
   kSandboxInfoMissing = 11,
   kClientModuleMissing = 12,
-  kProductNameMissing = 13,
   kBrandIconMissing = 14,
   kNewTabStringsMissing = 15,
   kMdvStringsMissing = 16,
@@ -38,17 +32,6 @@ HINSTANCE GetClientModule() {
     return nullptr;
   }
   return client_module;
-}
-
-std::wstring LoadProductName(HINSTANCE client_module) {
-  std::array<wchar_t, kProductNameCapacity> buffer{};
-  const int length =
-      LoadStringW(client_module, IDS_CRAYON_PRODUCT_NAME, buffer.data(),
-                  static_cast<int>(buffer.size()));
-  if (length <= 0) {
-    return {};
-  }
-  return std::wstring(buffer.data(), static_cast<std::size_t>(length));
 }
 
 }  // namespace
@@ -73,15 +56,14 @@ int RunBrowserProcess(HINSTANCE bootstrap_instance, void *sandbox_info) {
   if (!client_module) {
     return static_cast<int>(ExitCode::kClientModuleMissing);
   }
-  std::wstring product_name = LoadProductName(client_module);
-  if (product_name.empty()) {
-    return static_cast<int>(ExitCode::kProductNameMissing);
-  }
-
+  const auto locale_snapshot = ResolveWindowsLocaleSnapshot(
+      ReadWindowsPreferredUiLanguages());
   CefSettings settings;
   settings.log_severity = LOGSEVERITY_DISABLE;
-  CefRefPtr<BrowserApp> app(
-      new BrowserApp(client_module, std::move(product_name)));
+  CefString(&settings.locale) = std::string(locale_snapshot.cef_locale);
+  CefString(&settings.accept_language_list) =
+      std::string(locale_snapshot.accept_language_list);
+  CefRefPtr<BrowserApp> app(new BrowserApp(client_module, locale_snapshot));
   if (!app->brand_icons_valid()) {
     return static_cast<int>(ExitCode::kBrandIconMissing);
   }

@@ -1,9 +1,9 @@
 # 蜡笔 AI Agent 投屏浏览器总 Roadmap
 
-- 版本：v0.9（第一期三大闭环发布范围冻结）
-- 日期：2026-08-31
+- 版本：v0.10（第一期三大闭环三语言发布范围冻结）
+- 日期：2026-09-02
 - 状态：活跃
-- 当前任务总数：287
+- 当前任务总数：297
 - 当前测试用例总数：212
 
 ## 1. 当前结论
@@ -11,6 +11,7 @@
 - 已收口：`BRD-01..04`、Foundation、`MED-01..19`、`BUX-01..18`、`SDK-01..14`、`RNM-01..08`；CEF 为 `CEF-01..05/15 DONE`、`CEF-06..14 VERIFIED`，`ACT-01..12` 已完成契约/模型层总 Review，`MRT-01..08 DONE`。
 - 页面数据 C1 算法与数据面 `CNT-01..10` 已收口；一期产品链 `CNT-17..20 DONE`，其中 Windows `CNT-20W1/W2` 已用真实 CEF 对称闭合。`CNT-21W` 等三大闭环平台切片完成后的 `PRV-13AW` 再做总 Review。
 - 第一期范围由 `REL-01 DONE` 冻结为网页 Markdown、LAN Direct/Relay 投屏、本地 Markdown 编辑三大闭环；远程后续已在 macOS arm64 闭合共享协议与大部分产品链。`REL-05 DONE` 按 2026-08-31 用户决策改为 Windows 10/11 x64 先形成发布候选，macOS 特有验证后置且不阻塞 Windows。Agent/CLI/MCP、Workflow、Hub、Partner、模型与 HarmonyOS 默认关闭并进入第二期。
+- 第一期三个闭环在同一候选包支持 `en-US/zh-CN/zh-TW` 并跟随用户首选系统 UI 语言；`LOC-01..10` 独立承接统一资源、locale resolver、CEF/平台装配和真实发布矩阵，当前 `LOC-01/03/04/05W/06W DONE`、`LOC-02 VERIFIED`、`LOC-07W BLOCKED`、`LOC-08M IMPLEMENTED`。本地化是横切质量，不扩张第四条业务闭环。
 - 平台剩余重点：网页 Markdown 的 `CNT-20W1/W2` 与本地 Markdown 生产隔离 `MDV-25W` 已闭合；`PLT-W05a/W05b/W05c0 DONE`，`PLT-W05c` 的产品投屏码/播控装配与双配置自动化已闭合，但当前远程桌面点击被标记为 `LLMHF_INJECTED`，须在可信物理输入控制台补 ADB 正式接收端 Direct 真机证据后才能继续 W05d..f；独立主线继续 `MDV-20W -> MRT-09W`、`PRV-13AW -> CNT-21W` 与 QAR Windows 核心矩阵。macOS `PLT-M05b4..b6/M05c`、QAR-10 和其他 macOS 特有门禁保留后续，不得改写已有证据或冒充 Windows 结果。
 - 产品依赖顺序不变，但发布拆为两期：第一期先完成浏览器/LAN 投屏/网页 Markdown/本地 MDV；第二期再开放 Agent 协议与语义动作、Workflow/Challenge、Capability Hub/合作方和模型。
 - CAAP、CLI/入站 MCP、高性能读页和授权操作仍是产品核心方向，但不进入第一期发布包启用范围；具体模型/provider 与视频/文档总结同属第二期。
@@ -29,6 +30,7 @@
 8. 模型型 AI 必须等 Markdown、Agent 权限与 provider 数据门禁稳定；模型不参与确定性安全决策。
 9. 浏览器投屏仅 LAN Direct/Relay；无路由只 ExternalClientHandoff，不做 WebRTC/采集/编码。
 10. Partner/TV Cast Manifest 由 Cast-SDK/接收端拥有；浏览器只做缺口分析并消费受审 facade。
+11. CEF/Chromium、自有页面和平台原生 UI 必须使用同一进程级 locale snapshot；只支持 `en-US/zh-CN/zh-TW`，不在支持集合内的语言回退英文，完整系统偏好不得作为 Accept-Language 暴露。
 
 ## 3. 模块与任务数
 
@@ -38,6 +40,7 @@
 | FND | 20 | Workspace、契约、质量入口与仓库基线 |
 | CEF | 20 | Windows/macOS CEF 浏览器壳（含 `01A..01E`、`02W/02M` 拆分） |
 | BUX | 19 | Chrome-inspired 蜡笔浏览器 UI 与日用基础功能（含 `04A/04B` 拆分） |
+| LOC | 10 | 三语言资源、系统 locale 协商、CEF/平台装配与真实发布验证 |
 | MDV | 25 | 本地 Markdown Runtime：查看/编辑/保存、图标工具栏、图片、Mermaid Full、生产隔离与跨平台门禁 |
 | MRT | 19 | Markdown Runtime Extension Framework、Highlight/KaTeX、后续图表/演示与跨域 gap analysis |
 | MED | 19 | 媒体观察、LAN Relay 与外部客户端交接语义 |
@@ -53,7 +56,7 @@
 | HM | 12 | HarmonyOS 电脑 PC 形态技术预览 |
 | QAR | 18 | 核心/第二期 feature 分离的质量、性能、安全、发布和回滚 |
 | RNM | 8 | `get-video` → `crayon-browser` 命名迁移 |
-| **合计** | **287** | |
+| **合计** | **297** | |
 
 ## 4. 依赖关系
 
@@ -63,11 +66,14 @@ flowchart LR
   REL --> CNT
   REL --> PLT
   REL --> QAR
+  REL --> LOC
   BRD --> CEF
   BRD --> HM
   BRD --> QAR
   FND --> CEF
   CEF --> BUX
+  BUX --> LOC["LOC 三语言本地化"]
+  LOC --> QAR
   PRV --> BUX
   BUX --> MDVBASE["MDV-01..14 查看器 / Mermaid closure"]
   PRV --> MDVBASE
@@ -152,9 +158,9 @@ flowchart LR
 
 ### R1：第一期三大闭环 Windows 首发候选
 
-- `REL-01..05`、`CNT-17..21` 的 Windows slices、`PLT-W05/19W`、`MDV-20W/24W/25W`、`MRT-09W`、`PRV-13AW` 与 `QAR-01W..16W` 的核心 A 任务。
-- 顺序：范围/调用图审计 → Windows 网页 Markdown → Windows 媒体观察/Direct/Relay/交接 → Windows MDV/MRT P0 收口 → 安全/性能/长稳 → 安装/升级/回滚 → Windows Go/NoGo。
-- 验收：Windows x64 候选包真实完成网页→Markdown→复制/保存、网页视频→设备→Direct/Relay→控制/停止、本地 `.md`→编辑→预览→安全保存；P0/P1=0。Agent/Workflow/Partner/model 等第二期 feature 默认为 off/NOT_IN_RELEASE。
+- `REL-01..05`、`CNT-17..21` 的 Windows slices、`PLT-W05/19W`、`MDV-20W/24W/25W`、`MRT-09W`、`LOC-01..07W`、`PRV-13AW` 与 `QAR-01W..16W` 的核心 A 任务。
+- 顺序：范围/调用图审计 → Windows 网页 Markdown → Windows 媒体观察/Direct/Relay/交接 → Windows MDV/MRT P0 收口 → 三语言系统跟随与资源闭包 → 安全/性能/长稳 → 安装/升级/回滚 → Windows Go/NoGo。
+- 验收：Windows x64 候选包真实完成网页→Markdown→复制/保存、网页视频→设备→Direct/Relay→控制/停止、本地 `.md`→编辑→预览→安全保存，并在 `en-US/zh-CN/zh-TW` 系统 UI 语言下保持 CEF/产品/原生 UI 一致；P0/P1=0。Agent/Workflow/Partner/model 等第二期 feature 默认为 off/NOT_IN_RELEASE。
 - 平台：Windows 10/11 x64 为当前首发候选。已有 macOS arm64 共享实现和证据保留；macOS 签名/公证、Keychain、原生生命周期、安装/升级/回滚与最终 Go/NoGo 后续独立验证，不能阻塞或冒充 Windows 候选。
 
 以下 S1 对外装配、A1/A2/W/H/X/M2/Harmony 阶段统一属于第二期，不阻塞 R1：
@@ -238,17 +244,19 @@ flowchart LR
 
 ## 7. 当前领取顺序
 
-1. `PLT-W05a/b/c0 DONE -> W05c BLOCKED -> W05d..f`：Windows media-host、Cast UI、投屏码/播控入口与自动化已装配；W05c 等待可产生非 injected 点击的 Windows 控制台闭合 ADB 正式接收端 Direct，之后才能继续 Relay、拒绝/交接与 100 次资源稳定性。
-2. `MDV-25W DONE -> MDV-20W -> MRT-09W`：Windows 本地 Markdown 生产隔离已闭合，继续 P0 Runtime、包体与真机回归。
-3. `PRV-13AW -> CNT-21W -> PLT-19W -> QAR Windows slices -> REL-03/04 -> QAR-16W`：三闭环数据流与网页 Markdown 总 Review后，执行安全、性能、长稳、安装/升级/回滚、SBOM 与候选 Go/NoGo。
+1. `LOC-01/03/04/05W/06W DONE + LOC-02 VERIFIED -> LOC-07W BLOCKED；LOC-08M IMPLEMENTED`：Windows 自动化与候选 artifact scan 已闭合，等待防火墙提示/可信物理点击和系统语言矩阵；macOS 单 snapshot 与三套生成资源已实现，平台构建/真机后置。
+2. `PLT-W05a/b/c0 DONE -> W05c BLOCKED -> W05d..f`：Windows media-host、Cast UI、投屏码/播控入口与自动化已装配；W05c 等待可产生非 injected 点击的 Windows 控制台闭合 ADB 正式接收端 Direct，之后才能继续 Relay、拒绝/交接与 100 次资源稳定性。
+3. `MDV-25W DONE -> MDV-20W -> MRT-09W`：Windows 本地 Markdown 生产隔离已闭合，继续 P0 Runtime、包体与真机回归。
+4. `PRV-13AW -> CNT-21W -> PLT-19W -> QAR Windows slices -> REL-03/04 -> QAR-16W`：三闭环数据流与网页 Markdown 总 Review 后，聚合 `LOC-07W` 并执行安全、性能、长稳、安装/升级/回滚、SBOM 与候选 Go/NoGo。
 
 第二期保持排队：`AGT-12C/13/14/16`、`WFL`、`HUB`、`CNT-11..16`、`MRT-10..19`、`SDK-15/16`、`HM`。其中 `CNT-11` 等 `CNT-21 + AGT-16 + PRV-13B + provider ADR`；不得在 R1 完成前抢占 CEF 装配和真机矩阵。
 
 ## 8. 发布门禁
 
-- 287 项任务按所选发布范围提供真实状态、命令与证据；212 个唯一当前测试 ID 可追踪，新增一期装配/生产隔离/Windows 顺序任务复用并扩展 CT/E2E/MD/CP/RG 用例映射；P0/P1 Review 为零。
+- 297 项任务按所选发布范围提供真实状态、命令与证据；212 个唯一当前测试 ID 可追踪，新增一期装配/生产隔离/Windows 顺序/本地化任务复用并扩展 CT/E2E/MD/CP/RG/UX 用例映射；P0/P1 Review 为零。
 - 一期核心发布不得依赖 QAR 的第二期 B 任务；Agent/Workflow/Partner/model 保持默认关闭并在 QAR-15 标记 `NOT_IN_RELEASE`。
 - MDV/MRT 发布包仅包含各 manifest 锁定的浏览器运行时闭包，无 tiny/CDN/npm runtime/动态插件；普通 Markdown 对未命中扩展的 runtime 零读取，Mermaid/Highlight/KaTeX 离线可用且通过类型化输出 policy、lazy/cache、generation 与资源回落门禁。
+- Windows 候选必须在真实 `en-US/zh-CN/zh-TW` 系统 UI 语言下通过，并只装配这三套产品/CEF locale 资源；不在支持集合内的语言稳定回退 `en-US`，系统语言变化在完整重启生效。
 - CLI/入站 MCP 共用 CAAP；出站 connector 独立；无 raw CDP/WebDriver/任意 JS/remote bind/通用文件上传。
 - 页面数据有界、action 有前置与效果、Workflow verified-only、Challenge 不绕过、self-heal 高风险 fail closed。
 - Hub route_reason/fallback 重授权和 Partner 信任/OAuth/SSRF/kill switch 通过后才开放对应 feature。

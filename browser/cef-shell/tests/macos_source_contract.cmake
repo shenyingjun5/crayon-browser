@@ -5,17 +5,29 @@ endif()
 
 set(macos_source_root "${CRAYON_CEF_SHELL_SOURCE}/src/macos")
 set(macos_resource_root "${CRAYON_CEF_SHELL_SOURCE}/resources/macos")
+cmake_path(ABSOLUTE_PATH CRAYON_CEF_SHELL_SOURCE
+           BASE_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}" NORMALIZE
+           OUTPUT_VARIABLE cef_shell_source_absolute)
+cmake_path(GET cef_shell_source_absolute PARENT_PATH browser_root)
+cmake_path(GET browser_root PARENT_PATH project_root)
+set(generated_macos_resource_root
+    "${project_root}/browser/shared-ui/localization/generated/macos")
 set(required_files
     "${macos_source_root}/app.h"
     "${macos_source_root}/app.cc"
     "${macos_source_root}/main_mac.mm"
     "${macos_source_root}/process_helper_mac.cc"
+    "${CRAYON_CEF_SHELL_SOURCE}/src/process/macos/ui_language_mac.h"
+    "${CRAYON_CEF_SHELL_SOURCE}/src/process/macos/ui_language_mac.cc"
+    "${CRAYON_CEF_SHELL_SOURCE}/src/process/macos/ui_language_mac.mm"
     "${macos_resource_root}/Info.plist.in"
     "${macos_resource_root}/helper-Info.plist.in"
-    "${macos_resource_root}/en.lproj/InfoPlist.strings"
-    "${macos_resource_root}/en.lproj/Localizable.strings"
-    "${macos_resource_root}/zh-Hans.lproj/InfoPlist.strings"
-    "${macos_resource_root}/zh-Hans.lproj/Localizable.strings")
+    "${generated_macos_resource_root}/en.lproj/InfoPlist.strings"
+    "${generated_macos_resource_root}/en.lproj/Localizable.strings"
+    "${generated_macos_resource_root}/zh-Hans.lproj/InfoPlist.strings"
+    "${generated_macos_resource_root}/zh-Hans.lproj/Localizable.strings"
+    "${generated_macos_resource_root}/zh-Hant.lproj/InfoPlist.strings"
+    "${generated_macos_resource_root}/zh-Hant.lproj/Localizable.strings")
 foreach(required_file IN LISTS required_files)
   if(NOT EXISTS "${required_file}")
     message(FATAL_ERROR "macOS CEF shell file is missing: ${required_file}")
@@ -24,6 +36,8 @@ endforeach()
 
 file(READ "${macos_source_root}/app.cc" app_source)
 file(READ "${macos_source_root}/main_mac.mm" main_source)
+file(READ "${CRAYON_CEF_SHELL_SOURCE}/src/process/macos/ui_language_mac.mm"
+     ui_language_source)
 file(READ "${macos_source_root}/process_helper_mac.cc" helper_source)
 file(READ "${CRAYON_CEF_SHELL_SOURCE}/CMakeLists.txt" cmake_source)
 file(READ "${CRAYON_CEF_SHELL_SOURCE}/macos_adhoc_sign.cmake" signing_source)
@@ -57,10 +71,36 @@ foreach(required_main_token
         "CefShutdown"
         "CEF_USE_SANDBOX"
         "CrayonApplication"
-        "CrayonAppDelegate")
+        "CrayonAppDelegate"
+        "ResolveMacLocaleSnapshot"
+        "ReadMacPreferredUiLanguages"
+        "settings.locale"
+        "settings.accept_language_list"
+        "product_strings_valid")
   string(FIND "${main_source}" "${required_main_token}" token_index)
   if(token_index EQUAL -1)
     message(FATAL_ERROR "macOS main entry is missing ${required_main_token}")
+  endif()
+endforeach()
+foreach(required_locale_token
+        "CFLocaleCopyPreferredLanguages"
+        "kMaximumPreferredLocaleCount"
+        "kMaximumPreferredLocaleBytes")
+  string(FIND "${ui_language_source}" "${required_locale_token}" token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "macOS UI language adapter is missing ${required_locale_token}")
+  endif()
+endforeach()
+foreach(forbidden_app_token
+        "DefaultNewTabStrings"
+        "DefaultMdvStrings"
+        "CFBundleCopyLocalizedString"
+        "PreferredLanguage")
+  string(FIND "${app_source}" "${forbidden_app_token}" token_index)
+  if(NOT token_index EQUAL -1)
+    message(FATAL_ERROR
+            "macOS app retains legacy localized string path ${forbidden_app_token}")
   endif()
 endforeach()
 string(FIND "${main_source}" "CefExecuteProcess" main_execute_index)
@@ -98,6 +138,8 @@ foreach(required_cmake_token
         "COPY_MAC_RESOURCES"
         "LINK_DEPENDS"
         "crayon::browser-mdv"
+        "crayon::browser-product-strings"
+        "localization/generated/macos/zh-Hant.lproj"
         "MACOSX_BUNDLE_INFO_PLIST")
   string(FIND "${cmake_source}" "${required_cmake_token}" token_index)
   if(token_index EQUAL -1)

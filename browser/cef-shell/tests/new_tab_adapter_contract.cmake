@@ -81,7 +81,7 @@ endif()
 foreach(required_windows_token
         "RegisterNewTabSchemeHandlerFactory"
         "kNewTabUrl"
-        "IDS_CRAYON_NEW_TAB_TITLE")
+        "product_strings_.new_tab")
   string(FIND "${windows_app_source}" "${required_windows_token}" token_index)
   if(token_index EQUAL -1)
     message(FATAL_ERROR

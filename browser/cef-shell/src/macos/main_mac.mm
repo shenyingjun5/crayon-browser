@@ -6,31 +6,16 @@
 #include "include/cef_command_line.h"
 #include "include/wrapper/cef_library_loader.h"
 #include "macos/app.h"
+#include "process/macos/ui_language_mac.h"
 
 namespace {
-
-NSString* const kDisplayNameKey = @"CFBundleDisplayName";
-NSString* const kBundleNameKey = @"CFBundleName";
 
 enum class ExitCode : int {
   kSuccess = 0,
   kFrameworkLoadFailed = 10,
-  kProductNameMissing = 11,
+  kProductStringsMissing = 11,
   kCefInitializeFailed = 20,
 };
-
-std::string LoadProductName() {
-  NSDictionary* localized_info = [[NSBundle mainBundle] localizedInfoDictionary];
-  NSString* product_name = localized_info[kDisplayNameKey];
-  if (product_name.length == 0U) {
-    product_name =
-        [[NSBundle mainBundle] objectForInfoDictionaryKey:kBundleNameKey];
-  }
-  if (product_name.length == 0U) {
-    return {};
-  }
-  return std::string(product_name.UTF8String);
-}
 
 }  // namespace
 
@@ -122,19 +107,24 @@ int main(int argc, char* argv[]) {
     [CrayonApplication sharedApplication];
     CefMainArgs main_args(argc, argv);
 
-    std::string product_name = LoadProductName();
-    if (product_name.empty()) {
-      return static_cast<int>(ExitCode::kProductNameMissing);
-    }
+    const auto locale_snapshot =
+        crayon::browser::cef_shell::process::ResolveMacLocaleSnapshot(
+            crayon::browser::cef_shell::process::ReadMacPreferredUiLanguages());
 
     CefSettings settings;
 #if !defined(CEF_USE_SANDBOX)
     settings.no_sandbox = true;
 #endif
     settings.log_severity = LOGSEVERITY_DISABLE;
+    CefString(&settings.locale) = std::string(locale_snapshot.cef_locale);
+    CefString(&settings.accept_language_list) =
+        std::string(locale_snapshot.accept_language_list);
 
     CefRefPtr<crayon::browser::cef_shell::BrowserApp> app(
-        new crayon::browser::cef_shell::BrowserApp(std::move(product_name)));
+        new crayon::browser::cef_shell::BrowserApp(locale_snapshot));
+    if (!app->product_strings_valid()) {
+      return static_cast<int>(ExitCode::kProductStringsMissing);
+    }
     if (!CefInitialize(main_args, settings, app, nullptr)) {
       const int cef_exit_code = CefGetExitCode();
       return cef_exit_code == 0

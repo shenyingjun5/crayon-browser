@@ -140,6 +140,7 @@ def unix_process_rows() -> list[tuple[int, int, int, int]]:
 def windows_process_rows() -> list[tuple[int, int, int, int]]:
     snapshot_flag = 0x00000002
     invalid_handle = ctypes.c_void_p(-1).value
+    query_information = 0x0400
     query_limited = 0x1000
     vm_read = 0x0010
 
@@ -215,23 +216,17 @@ def windows_process_rows() -> list[tuple[int, int, int, int]]:
         while present:
             rss_kib = 0
             created = 0
-            handle = kernel32.OpenProcess(
-                query_limited | vm_read, False, entry.th32ProcessID
+            time_handle = kernel32.OpenProcess(
+                query_limited, False, entry.th32ProcessID
             )
-            if handle:
+            if time_handle:
                 try:
-                    counters = ProcessMemoryCounters()
-                    counters.cb = ctypes.sizeof(counters)
-                    if psapi.GetProcessMemoryInfo(
-                        handle, ctypes.byref(counters), counters.cb
-                    ):
-                        rss_kib = int(counters.WorkingSetSize // 1024)
                     creation = FileTime()
                     exit_time = FileTime()
                     kernel_time = FileTime()
                     user_time = FileTime()
                     if kernel32.GetProcessTimes(
-                        handle,
+                        time_handle,
                         ctypes.byref(creation),
                         ctypes.byref(exit_time),
                         ctypes.byref(kernel_time),
@@ -241,7 +236,20 @@ def windows_process_rows() -> list[tuple[int, int, int, int]]:
                             int(creation.dwHighDateTime) << 32
                         ) | creation.dwLowDateTime
                 finally:
-                    kernel32.CloseHandle(handle)
+                    kernel32.CloseHandle(time_handle)
+            memory_handle = kernel32.OpenProcess(
+                query_information | vm_read, False, entry.th32ProcessID
+            )
+            if memory_handle:
+                try:
+                    counters = ProcessMemoryCounters()
+                    counters.cb = ctypes.sizeof(counters)
+                    if psapi.GetProcessMemoryInfo(
+                        memory_handle, ctypes.byref(counters), counters.cb
+                    ):
+                        rss_kib = int(counters.WorkingSetSize // 1024)
+                finally:
+                    kernel32.CloseHandle(memory_handle)
             rows.append(
                 (
                     int(entry.th32ProcessID),
@@ -489,6 +497,11 @@ def main() -> int:
                     sys.stdout.write(stdout)
                     sys.stderr.write(stderr)
                     if process.returncode != 0:
+                        print(
+                            "snapshot_fixture_process_exit "
+                            f"scenario={scenario} returncode={process.returncode}",
+                            file=sys.stderr,
+                        )
                         return process.returncode
                     if FORBIDDEN_CEF_ERROR.search(stdout + "\n" + stderr):
                         print(

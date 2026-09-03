@@ -14,8 +14,15 @@ if(OS_WINDOWS)
       "${PROJECT_SOURCE_DIR}/assets/brand/generated/windows/app.ico")
   set(CRAYON_WINDOWS_APP_MANIFEST
       "${CMAKE_CURRENT_SOURCE_DIR}/resources/windows/app.manifest")
+  set(CRAYON_WINDOWS_LOCALIZED_STRINGS
+      "${PROJECT_SOURCE_DIR}/browser/shared-ui/localization/generated/windows/localized_strings.rc.inc")
+  set(CRAYON_WINDOWS_LOCALE_STAGE_SCRIPT
+      "${CMAKE_CURRENT_SOURCE_DIR}/cmake/stage_windows_locales.cmake")
   if(NOT EXISTS "${CRAYON_WINDOWS_APP_ICON}")
     message(FATAL_ERROR "Managed Windows app icon is missing")
+  endif()
+  if(NOT EXISTS "${CRAYON_WINDOWS_LOCALIZED_STRINGS}")
+    message(FATAL_ERROR "Generated Windows localized strings are missing")
   endif()
 
   file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
@@ -72,6 +79,8 @@ if(OS_WINDOWS)
       src/browser/window/tab_model.cc
       src/process/windows/bootstrap_entry.cc
       src/process/windows/bootstrap_entry.h
+      src/process/windows/ui_language_win.cc
+      src/process/windows/ui_language_win.h
       src/windows/app.cc
       src/windows/app.h
       src/windows/cast_chrome_win.cc
@@ -92,7 +101,10 @@ if(OS_WINDOWS)
       src/windows/trusted_input_monitor_win.cc
       src/windows/trusted_input_monitor_win.h
       resources/windows/resource_ids.h
+      "${CRAYON_WINDOWS_LOCALE_STAGE_SCRIPT}"
       "${CMAKE_CURRENT_BINARY_DIR}/generated/app.rc")
+  set_source_files_properties("${CRAYON_WINDOWS_LOCALE_STAGE_SCRIPT}"
+                              PROPERTIES HEADER_FILE_ONLY TRUE)
 
   ADD_LOGICAL_TARGET(crayon_libcef "${CEF_LIB_DEBUG}" "${CEF_LIB_RELEASE}")
   add_library(${CRAYON_BROWSER_TARGET} SHARED ${crayon_browser_sources})
@@ -132,6 +144,7 @@ if(OS_WINDOWS)
   target_link_libraries(
     ${CRAYON_BROWSER_TARGET}
     PRIVATE crayon::browser-mdv crayon::browser-new-tab
+            crayon::browser-product-strings
             crayon::browser-page-snapshot-gateway
             crayon::cef-page-snapshot-collector
             crayon::cef-shell-media-observer
@@ -158,10 +171,18 @@ if(OS_WINDOWS)
 
   COPY_FILES("${CRAYON_BROWSER_TARGET}" "${CEF_BINARY_FILES}"
              "${CEF_BINARY_DIR}" "${CEF_TARGET_OUT_DIR}")
-  COPY_FILES("${CRAYON_BROWSER_TARGET}" "${CEF_RESOURCE_FILES}"
+  set(crayon_cef_product_resource_files ${CEF_RESOURCE_FILES})
+  list(REMOVE_ITEM crayon_cef_product_resource_files locales)
+  COPY_FILES("${CRAYON_BROWSER_TARGET}" "${crayon_cef_product_resource_files}"
              "${CEF_RESOURCE_DIR}" "${CEF_TARGET_OUT_DIR}")
   add_custom_command(
     TARGET ${CRAYON_BROWSER_TARGET} POST_BUILD
+    COMMAND
+      "${CMAKE_COMMAND}"
+      "-DCRAYON_CEF_RESOURCE_DIR=${CEF_RESOURCE_DIR}"
+      "-DCRAYON_STAGE_OUTPUT_DIR=$<TARGET_FILE_DIR:${CRAYON_BROWSER_TARGET}>"
+      "-DCRAYON_STAGE_CONFIGURATION=$<CONFIG>" -P
+      "${CRAYON_WINDOWS_LOCALE_STAGE_SCRIPT}"
     COMMAND "${CMAKE_COMMAND}" -E copy_if_different
             "${crayon_windows_content_host_binary}"
             "$<TARGET_FILE_DIR:${CRAYON_BROWSER_TARGET}>/crayon-content-host.exe"
@@ -178,6 +199,23 @@ if(OS_WINDOWS)
        CONTENT "${crayon_cef_runtime_manifest}\n")
 
   if(CRAYON_BUILD_TESTS)
+    add_executable(
+      crayon_ui_language_win_test
+      tests/ui_language_win_test.cc
+      src/process/windows/ui_language_win.cc)
+    target_compile_features(crayon_ui_language_win_test PRIVATE cxx_std_17)
+    target_include_directories(crayon_ui_language_win_test
+                               PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_definitions(crayon_ui_language_win_test
+                               PRIVATE UNICODE _UNICODE)
+    target_compile_options(crayon_ui_language_win_test
+                           PRIVATE /W4 /WX /permissive-)
+    target_link_libraries(crayon_ui_language_win_test
+                          PRIVATE crayon::browser-localization)
+    add_test(NAME windows_ui_language_contract
+             COMMAND crayon_ui_language_win_test)
+    set_tests_properties(windows_ui_language_contract
+                         PROPERTIES LABELS "cef;shell;windows;localization;contract")
     add_executable(crayon_windows_shell_contract
                    tests/windows_shell_contract.cc)
     target_compile_features(crayon_windows_shell_contract PRIVATE cxx_std_17)
@@ -193,9 +231,10 @@ if(OS_WINDOWS)
       COMMAND crayon_windows_shell_contract
               "$<TARGET_FILE_DIR:${CRAYON_BROWSER_TARGET}>/CrayonBrowser.exe"
               "$<TARGET_FILE:${CRAYON_BROWSER_TARGET}>"
-              "$<TARGET_FILE_DIR:${CRAYON_BROWSER_TARGET}>/cef-runtime-files.txt"
-              "$<TARGET_FILE_DIR:${CRAYON_BROWSER_TARGET}>/crayon-content-host.exe"
-              "$<TARGET_FILE_DIR:${CRAYON_BROWSER_TARGET}>/crayon-media-host.exe")
+               "$<TARGET_FILE_DIR:${CRAYON_BROWSER_TARGET}>/cef-runtime-files.txt"
+               "$<TARGET_FILE_DIR:${CRAYON_BROWSER_TARGET}>/crayon-content-host.exe"
+               "$<TARGET_FILE_DIR:${CRAYON_BROWSER_TARGET}>/crayon-media-host.exe"
+               "$<CONFIG>")
     add_executable(
       crayon_content_host_process_win_test
       tests/content_host_process_win_test.cc
@@ -426,6 +465,28 @@ if(OS_WINDOWS)
   endif()
 endif()
 
+if(CRAYON_BUILD_TESTS)
+  add_executable(crayon_ui_language_mac_test
+                 tests/ui_language_mac_test.cc
+                 src/process/macos/ui_language_mac.cc)
+  target_compile_features(crayon_ui_language_mac_test PRIVATE cxx_std_17)
+  target_include_directories(crayon_ui_language_mac_test
+                             PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  target_link_libraries(crayon_ui_language_mac_test
+                        PRIVATE crayon::browser-localization)
+  if(MSVC)
+    target_compile_options(crayon_ui_language_mac_test
+                           PRIVATE /W4 /WX /permissive-)
+  else()
+    target_compile_options(crayon_ui_language_mac_test
+                           PRIVATE -Wall -Wextra -Werror)
+  endif()
+  add_test(NAME macos_ui_language_contract
+           COMMAND crayon_ui_language_mac_test)
+  set_tests_properties(macos_ui_language_contract
+                       PROPERTIES LABELS "cef;shell;macos;localization;contract")
+endif()
+
 if(OS_MAC)
   if(NOT USE_SANDBOX)
     message(FATAL_ERROR
@@ -456,10 +517,12 @@ if(OS_MAC)
   set(crayon_macos_resources
       "${CRAYON_MACOS_APP_ICON}"
       "${PROJECT_SOURCE_DIR}/browser/shared-ui/design/icons/cast-device.svg"
-      resources/macos/en.lproj/InfoPlist.strings
-      resources/macos/en.lproj/Localizable.strings
-      resources/macos/zh-Hans.lproj/InfoPlist.strings
-      resources/macos/zh-Hans.lproj/Localizable.strings)
+      "${PROJECT_SOURCE_DIR}/browser/shared-ui/localization/generated/macos/en.lproj/InfoPlist.strings"
+      "${PROJECT_SOURCE_DIR}/browser/shared-ui/localization/generated/macos/en.lproj/Localizable.strings"
+      "${PROJECT_SOURCE_DIR}/browser/shared-ui/localization/generated/macos/zh-Hans.lproj/InfoPlist.strings"
+      "${PROJECT_SOURCE_DIR}/browser/shared-ui/localization/generated/macos/zh-Hans.lproj/Localizable.strings"
+      "${PROJECT_SOURCE_DIR}/browser/shared-ui/localization/generated/macos/zh-Hant.lproj/InfoPlist.strings"
+      "${PROJECT_SOURCE_DIR}/browser/shared-ui/localization/generated/macos/zh-Hant.lproj/Localizable.strings")
   set(crayon_macos_sources
       src/browser/context/profile_context_factory.cc
       src/browser/context/profile_context_factory.h
@@ -516,6 +579,9 @@ if(OS_MAC)
       src/browser/media_host/media_host_transport.h
       src/macos/media_host_process_mac.cc
       src/macos/media_host_process_mac.h
+      src/process/macos/ui_language_mac.cc
+      src/process/macos/ui_language_mac.h
+      src/process/macos/ui_language_mac.mm
       src/macos/main_mac.mm)
   list(APPEND crayon_macos_sources
        src/macos/page_markdown_platform_mac.h
@@ -622,6 +688,7 @@ if(OS_MAC)
   target_link_libraries(${CRAYON_BROWSER_TARGET}
                         PRIVATE libcef_dll_wrapper ${CEF_STANDARD_LIBS}
                                 crayon::browser-new-tab
+                                crayon::browser-product-strings
                                 crayon::browser-cast-view
                                 crayon::browser-page-tools
                                 crayon::browser-page-snapshot-gateway
@@ -701,7 +768,7 @@ if(OS_MAC)
   endforeach()
 
   set(crayon_macos_resource_prefixes
-      "assets/brand/generated/macos/;browser/shared-ui/design/icons/;resources/macos/")
+      "assets/brand/generated/macos/;browser/shared-ui/design/icons/;browser/shared-ui/localization/generated/macos/")
   COPY_MAC_RESOURCES("${crayon_macos_resources}"
                      "${crayon_macos_resource_prefixes}"
                      "${CRAYON_BROWSER_TARGET}"

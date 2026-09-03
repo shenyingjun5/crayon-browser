@@ -30,21 +30,6 @@ constexpr char kInitialUrl[] = "crayon://newtab";
 constexpr std::size_t kContentHostStartupChecks = 500;
 constexpr std::int64_t kContentHostTickMilliseconds = 20;
 
-browser_new_tab::NewTabPageStrings DefaultNewTabStrings() {
-  return browser_new_tab::NewTabPageStrings{
-      .language = "zh-CN",
-      .document_title = "蜡笔浏览器",
-      .regular_heading = "开始干净的画布",
-      .incognito_heading = "无痕浏览",
-      .regular_description = "使用地址栏搜索或输入网址。",
-      .incognito_description = "本页不显示跨会话快捷入口、历史或建议。",
-      .omnibox_hint = "聚焦地址栏",
-      .shortcuts_heading = "固定快捷入口",
-      .empty_shortcuts = "暂无固定快捷入口",
-      .config_error = "快捷入口配置已损坏并已安全忽略",
-  };
-}
-
 std::string Utf8(CFStringRef value) {
   if (!value)
     return {};
@@ -56,35 +41,6 @@ std::string Utf8(CFStringRef value) {
                             kCFStringEncodingUTF8)
              ? std::string(buffer.data())
              : std::string();
-}
-
-std::string Localized(const char* key) {
-  CFStringRef key_string = CFStringCreateWithCString(kCFAllocatorDefault, key,
-                                                     kCFStringEncodingUTF8);
-  if (!key_string)
-    return {};
-  CFStringRef value = CFBundleCopyLocalizedString(
-      CFBundleGetMainBundle(), key_string, key_string, CFSTR("Localizable"));
-  const std::string result = Utf8(value);
-  if (value)
-    CFRelease(value);
-  CFRelease(key_string);
-  return result;
-}
-
-std::string PreferredLanguage() {
-  CFArrayRef languages = CFLocaleCopyPreferredLanguages();
-  std::string language = "en-US";
-  if (languages && CFArrayGetCount(languages) > 0) {
-    const auto first =
-        static_cast<CFStringRef>(CFArrayGetValueAtIndex(languages, 0));
-    const std::string tag = Utf8(first);
-    if (tag.rfind("zh", 0) == 0)
-      language = "zh-CN";
-  }
-  if (languages)
-    CFRelease(languages);
-  return language;
 }
 
 std::string HelperExecutablePath(const char* helper_name) {
@@ -110,77 +66,43 @@ std::uint64_t MonotonicMilliseconds() {
           .count());
 }
 
-browser_mdv::MdvPageStrings DefaultMdvStrings() {
-  return browser_mdv::MdvPageStrings{
-      PreferredLanguage(),
-      Localized("mdv.title"),
-      Localized("mdv.view_source"),
-      Localized("mdv.view_preview"),
-      Localized("mdv.view_split"),
-      Localized("mdv.status_empty"),
-      Localized("mdv.status_too_large"),
-      Localized("mdv.status_invalid_utf8"),
-      Localized("mdv.status_render_policy"),
-      Localized("mdv.status_not_markdown"),
-      Localized("mdv.status_saved"),
-      Localized("mdv.confirm_text"),
-      Localized("mdv.label_save"),
-      Localized("mdv.label_discard"),
-      Localized("mdv.label_cancel"),
-      Localized("mdv.label_open_in_viewer"),
-      Localized("mdv.toolbar.title"),
-      Localized("mdv.tool.bold"),
-      Localized("mdv.tool.italic"),
-      Localized("mdv.tool.strike"),
-      Localized("mdv.tool.inline_code"),
-      Localized("mdv.tool.bullet_list"),
-      Localized("mdv.tool.ordered_list"),
-      Localized("mdv.tool.task_list"),
-      Localized("mdv.tool.quote"),
-      Localized("mdv.tool.code_block"),
-      Localized("mdv.tool.table"),
-      Localized("mdv.tool.link"),
-      Localized("mdv.tool.divider"),
-      Localized("mdv.tool.heading1"),
-      Localized("mdv.tool.heading2"),
-      Localized("mdv.tool.heading3"),
-      Localized("mdv.tool.structure"),
-      Localized("mdv.tool.indent"),
-      Localized("mdv.tool.outdent"),
-      Localized("mdv.tool.align_default"),
-      Localized("mdv.tool.align_left"),
-      Localized("mdv.tool.align_center"),
-      Localized("mdv.tool.align_right"),
-      Localized("mdv.tooltip.view"),
-      Localized("mdv.tooltip.markdown"),
-      Localized("mdv.tooltip.structure"),
-      Localized("mdv.tooltip.table_alignment"),
-      Localized("mdv.mermaid.fullscreen"),
-      Localized("mdv.mermaid.source"),
-      Localized("mdv.mermaid.close"),
-      Localized("mdv.mermaid.error"),
-      browser_mdv::MdvShortcutPlatform::kMacOS,
-  };
+::crayon::browser::product_strings::ProductStrings BuildProductStringsOrEmpty(
+    const ::crayon::browser::localization::LocaleSnapshot& snapshot) {
+  return ::crayon::browser::product_strings::BuildProductStrings(
+             snapshot, browser_mdv::MdvShortcutPlatform::kMacOS)
+      .value_or(::crayon::browser::product_strings::ProductStrings{});
 }
 
-macos::CastChromeStrings DefaultCastStrings() {
+page_markdown::PageMarkdownStrings BuildPageMarkdownStrings(
+    const ::crayon::browser::product_strings::PageMarkdownStrings& strings) {
+  return page_markdown::PageMarkdownStrings{
+      strings.preview_command, strings.copy_command, strings.save_as_command,
+      strings.copied_status, strings.copy_failed_status,
+      strings.save_cancelled_status};
+}
+
+macos::CastChromeStrings BuildCastStrings(
+    const ::crayon::browser::product_strings::CastStrings& strings) {
   return macos::CastChromeStrings{
-      Localized("cast.select_receiver"), Localized("cast.stop"),
-      Localized("cast.picker.title"),    Localized("cast.picker.empty"),
-      Localized("cast.picker.select"),   Localized("cast.picker.refresh"),
-      Localized("cast.picker.cancel")};
+      strings.button_select, strings.button_stop, strings.picker_title,
+      strings.picker_empty, strings.picker_select, strings.picker_refresh,
+      strings.picker_cancel};
 }
 
 }  // namespace
 
-BrowserApp::BrowserApp(std::string product_name)
-    : product_name_(std::move(product_name)),
-      mdv_strings_(DefaultMdvStrings()),
+BrowserApp::BrowserApp(
+    ::crayon::browser::localization::LocaleSnapshot locale_snapshot)
+    : product_strings_(BuildProductStringsOrEmpty(locale_snapshot)),
+      page_markdown_strings_(
+          BuildPageMarkdownStrings(product_strings_.page_markdown)),
+      cast_strings_(BuildCastStrings(product_strings_.cast)),
       mdv_runtime_(std::make_shared<mdv::MdvRuntimeState>()),
       mdv_entries_(std::make_shared<mdv::MdvEntryController>(mdv_runtime_,
-                                                             mdv_strings_)),
+                                                             product_strings_.mdv)),
       mdv_editing_(
-          std::make_shared<mdv::MdvEditController>(mdv_runtime_, mdv_strings_)),
+          std::make_shared<mdv::MdvEditController>(mdv_runtime_,
+                                                   product_strings_.mdv)),
       permission_store_(std::make_unique<permission::PermissionStore>()),
       content_host_(std::make_unique<macos::ContentHostAdapter>()),
       media_host_(std::make_unique<media_host::MediaHostAdapter>(
@@ -232,7 +154,7 @@ void BrowserApp::OnRegisterCustomSchemes(
 void BrowserApp::OnContextInitialized() {
   CEF_REQUIRE_UI_THREAD();
   cast_chrome_ = std::make_unique<macos::CastChromeMac>(
-      DefaultCastStrings(),
+      cast_strings_,
       macos::CastChromeCallbacks{
           [this] { return cast_shell_->ActivateCastButton(); },
           [this] { return cast_shell_->RefreshReceivers(); },
@@ -243,8 +165,9 @@ void BrowserApp::OnContextInitialized() {
   new_tab::RegisterNewTabSchemeHandlerFactory(
       browser_new_tab::BuildNewTabPageModel(
           browser_new_tab::NewTabProfileMode::kRegular, {}),
-      DefaultNewTabStrings());
-  if (!mdv::RegisterMdvSchemeHandlerFactory(mdv_strings_, mdv_runtime_)) {
+      product_strings_.new_tab);
+  if (!mdv::RegisterMdvSchemeHandlerFactory(product_strings_.mdv,
+                                             mdv_runtime_)) {
     CefQuitMessageLoop();
     return;
   }
@@ -317,13 +240,7 @@ void BrowserApp::OnContextInitialized() {
   page_markdown_preview_ =
       std::make_unique<page_markdown::CefPageMarkdownPreviewController>(
           tab_controller_.get(), mdv_editing_,
-          page_markdown::PageMarkdownStrings{
-              Localized("page_markdown.preview_command"),
-              Localized("page_markdown.copy_command"),
-              Localized("page_markdown.save_as_command"),
-              Localized("page_markdown.copied_status"),
-              Localized("page_markdown.copy_failed_status"),
-              Localized("page_markdown.save_cancelled_status")},
+          page_markdown_strings_,
           macos::CopyMarkdownToPasteboard);
   tab_controller_->SetPageSnapshotAdmission(
       [host = content_host_.get()] { return host->healthy(); });
@@ -470,6 +387,11 @@ void BrowserApp::ConsumeMediaObservations() {
 
 CefRefPtr<CefClient> BrowserApp::GetDefaultClient() {
   return tab_controller_->client();
+}
+
+bool BrowserApp::product_strings_valid() const {
+  return ::crayon::browser::product_strings::ProductStringsAreComplete(
+      product_strings_);
 }
 
 }  // namespace crayon::browser::cef_shell

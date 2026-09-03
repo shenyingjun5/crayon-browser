@@ -1,11 +1,12 @@
 # REL 第一期三大闭环发布 Roadmap
 
 - 版本：`release-v1-scope`
-- 日期：2026-08-31
+- 日期：2026-09-02
 - 状态：`REL-01/02/05 DONE`；`REL-03/04 TODO`
 - 任务数：5
 - 当前发布候选：Windows 10/11 x64 首发；已有 macOS arm64 共享实现/证据保留，签名、公证、Keychain、平台生命周期与打包等 macOS 特有门禁后续独立验证，不阻塞 Windows 候选
 - 第一期开关：网页 Markdown、本地 Markdown Runtime、LAN Direct/Relay 与外部客户端交接开启；Agent/CLI/MCP、Workflow、Capability Hub、Partner Cast、模型与 HarmonyOS 关闭
+- 第一期语言：同一候选包支持 `en-US/zh-CN/zh-TW`，按用户首选系统 UI 语言在完整重启时自动选择；Windows `LOC-07W` 是 `REL-03` 硬门禁
 
 ## 1. 一期完成口径
 
@@ -15,7 +16,7 @@
 2. 真实网页中经用户输入与播放推进验证的媒体可选择局域网接收端，完成 Direct/Relay、控制与停止；不满足条件时显式拒绝或经用户确认交接外部客户端。
 3. 用户可打开本地 `.md`，使用源码/预览/分栏、编辑工具栏与离线 P0 Runtime，并以原子写和外部修改冲突保护保存。
 
-完成不以模型类、Fake 或独立 Harness 存在为准。三个闭环都必须从真实 Windows x64 CEF 产品入口进入，在同一个候选包取得自动化、ADB 接收端实机、性能、安全、长稳、安装/升级/回滚证据，最终经 `QAR-16W` Go/NoGo。macOS 已有共享实现和 arm64 证据不得回退，但 macOS 特有门禁不作为本阶段 Windows 候选的依赖。
+完成不以模型类、Fake 或独立 Harness 存在为准。三个闭环都必须从真实 Windows x64 CEF 产品入口进入，在同一个候选包的 `en-US/zh-CN/zh-TW` 系统 UI 语言下取得自动化、ADB 接收端实机、性能、安全、长稳、安装/升级/回滚证据，最终经 `QAR-16W` Go/NoGo。macOS 已有共享实现和 arm64 证据不得回退，但 macOS 特有门禁不作为本阶段 Windows 候选的依赖。
 
 ## 2. 一期明确边界
 
@@ -23,6 +24,7 @@
 - DRM/EME、需要密钥的媒体、加密 HLS、凭证绑定且不可安全路由的来源不得产生 Direct/Relay。
 - 网页 Markdown 不包含隐藏/跨源正文、Cookie、Authorization、DOM/HTML/CDP 句柄；页面脚本不能触发预览、复制或文件写入。
 - 本地 MDV 仍是用户能力，不进入 CAAP/tool registry，不开放任意文件系统。
+- 一期语言只跟随用户首选系统 UI 语言，不提供手动 override 或运行中热切换；系统语言变化在完整重启后生效，不在支持集合内的语言回退 `en-US`，完整系统偏好列表不得直接进入 `Accept-Language`。
 - macOS 第一期支持 Apple Silicon。原生 Intel Mac/x64 长稳在取得硬件前标记 `NOT_IN_RELEASE`，不得把 Rosetta 证据写成原生支持；若产品决定宣称 Universal/Intel 支持，QAR-10/15/16 必须追加原生 x64 门禁。
 - Windows 候选不得宣称 macOS 已发布；macOS 的签名/公证、Keychain、原生生命周期、安装/升级/回滚和最终 Go/NoGo 保持 `TODO/NOT_IN_RELEASE`，后续补证时不能改写 Windows 已有证据。
 
@@ -43,7 +45,7 @@
 |---|---|---|---|---|
 | REL-01 | DONE | 用户范围决策、current/模块 Roadmap | 冻结一期三大闭环、平台顺序、第二期边界，并拆除核心 QAR 对 Agent 的错误硬依赖 | Roadmap/索引一致；任务数一致；Review P0/P1=0 |
 | REL-02 | DONE | REL-01 | 对 CEF 产品调用图做一次只读装配审计，列出只有模型/测试而无生产调用方的 CNT、Cast、MDV 与浏览器基础模块，并冻结一期 feature flag 默认值 | 入口→owner→adapter→平台调用图；无“DONE 即已装配”推断；无生产改动 |
-| REL-03 | TODO | CNT-21W,PLT-W05,MDV-20W,MDV-25W,MRT-09W,PRV-13AW | 聚合 Windows x64 三闭环真实产品证据与支持矩阵，关闭 Windows 可关闭的 VERIFIED 状态 | 三闭环真实 CEF；ADB 正式接收端；P0/P1=0；macOS 特有门禁明确 NOT_IN_RELEASE |
+| REL-03 | TODO | CNT-21W,PLT-W05,MDV-20W,MDV-25W,MRT-09W,LOC-07W,PRV-13AW | 聚合 Windows x64 三闭环与三语言真实产品证据和支持矩阵，关闭 Windows 可关闭的 VERIFIED 状态 | 三闭环真实 CEF；三语言系统跟随/资源闭包；ADB 正式接收端；P0/P1=0；macOS 特有门禁明确 NOT_IN_RELEASE |
 | REL-04 | TODO | REL-03,PLT-19W,QAR-01W/02AW/03W/04W/05AW/06W/07W/08AW/09/11W/12W/14W/15W | 聚合 Windows x64 发布门禁与一期已知限制，向 `QAR-16W` 提交 Go/NoGo 输入并形成可发布候选 | Windows 证据可追踪；关闭功能默认 off；artifact/SBOM/回滚 Runbook |
 | REL-05 | DONE | 用户 2026-08-31 平台顺序决策、当前 PRD §7、REL-02 | 将一期收口顺序改为 Windows x64 首发候选，拆出 Windows 原子装配/发布门禁并后置 macOS 特有验证 | 不改生产行为；Roadmap/索引/总数一致；Review P0/P1=0 |
 

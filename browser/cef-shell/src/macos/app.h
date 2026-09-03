@@ -11,7 +11,9 @@
 #include "browser/page_markdown/cef_page_markdown_preview.h"
 #include "browser/permission/permission_store.h"
 #include "browser/window/tab_controller.h"
+#include "crayon/browser_localization/locale_snapshot.h"
 #include "crayon/browser_mdv/mdv_page.h"
+#include "crayon/browser_product_strings/product_strings.h"
 #include "include/cef_app.h"
 #include "macos/cast_chrome_mac.h"
 #include "browser/media_host/cast_shell_controller.h"
@@ -25,7 +27,8 @@ class TrustedInputMonitor;
 
 class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
  public:
-  explicit BrowserApp(std::string product_name);
+  explicit BrowserApp(
+      ::crayon::browser::localization::LocaleSnapshot locale_snapshot);
   ~BrowserApp() override;
 
   CefRefPtr<CefBrowserProcessHandler> GetBrowserProcessHandler() override {
@@ -50,6 +53,7 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   CefRefPtr<window::TabController> tab_controller() const {
     return tab_controller_;
   }
+  bool product_strings_valid() const;
 
  private:
   void ContinueContentHostStartup();
@@ -57,8 +61,9 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   void ContentHostTick();
   void ConsumeMediaObservations();
 
-  const std::string product_name_;
-  const browser_mdv::MdvPageStrings mdv_strings_;
+  const ::crayon::browser::product_strings::ProductStrings product_strings_;
+  const page_markdown::PageMarkdownStrings page_markdown_strings_;
+  const macos::CastChromeStrings cast_strings_;
   const std::shared_ptr<mdv::MdvRuntimeState> mdv_runtime_;
   const std::shared_ptr<mdv::MdvEntryController> mdv_entries_;
   const std::shared_ptr<mdv::MdvEditController> mdv_editing_;
