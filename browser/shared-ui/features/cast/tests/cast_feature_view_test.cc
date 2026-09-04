@@ -72,7 +72,11 @@ bool PolicyOutcomeMapping() {
   rejected.OpenPicker();
   CHECK(rejected.SubmitPolicyOutcome(PolicyOutcome::kReject, RejectReason::kDrmProtected));
   CHECK(rejected.state() == CastFeatureState::kRejected);
-  CHECK(std::string(rejected.message_key()) == "cast.rejected");
+  CHECK(std::string(rejected.message_key()) == "cast.rejected.drm");
+  CHECK(rejected.AcknowledgeRejection());
+  CHECK(rejected.state() == CastFeatureState::kBrowsing);
+  CHECK(!rejected.OpenPicker());
+  CHECK(!rejected.AcknowledgeRejection());
   return true;
 }
 

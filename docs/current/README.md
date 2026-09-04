@@ -6,8 +6,8 @@
 
 | 文档 | 作用 |
 |---|---|
-| [当前 PRD](../crayon-private-cast-browser-prd.md) | v0.8 产品事实源：定位、范围、阶段、语义动作、Workflow/Hub、隐私与验收 |
-| [当前架构](architecture.md) | v0.9 CAAP、主/辅链、跨仓 Cast-SDK、语义动作、Workflow/Hub、投屏、模型与平台边界 |
+| [当前 PRD](../crayon-private-cast-browser-prd.md) | v0.9 产品事实源：自定义外壳＋Alloy、范围、阶段、隐私与验收 |
+| [当前架构](architecture.md) | v1.0 自定义 Shell/内容视图、CAAP、主/辅链、跨仓 Cast-SDK 与平台边界 |
 | [技术方案](../crayon-private-cast-browser-technical-design.md) | 当前实现方案与构建/供应链考虑 |
 | [测试标准](testing-standard.md) | v0.8 分层、变更类型矩阵、平台/真机与 Release artifact 证据规则 |
 | [测试用例](test-cases.md) | 212 个唯一当前权威测试 ID |
@@ -15,6 +15,7 @@
 | [Content Data Plane v1](content-data-plane.md) | CNT C1 snapshot/Markdown/owner/delta/Agent R1 冻结接口、预算与 GO 结论 |
 | [品牌图标契约](brand-assets.md) | `app-icon-v1` 参考源、母版、平台组合与禁用规则 |
 | [桌面浏览器体验契约](browser-ux.md) | `browser-design-v1` 顶部信息架构、共享 token、标题栏/功能 icon、键盘与无障碍规则 |
+| [投屏交互与媒体主机兼容契约](cast-interaction.md) | `cast-interaction-v1` 网址栏入口、多播放器/草稿、预检事实、MHV1→MHV2 迁移与默认拒绝；实施按 PLT-CAST-R 验证 |
 | [桌面三语言本地化契约](localization.md) | `en-US/zh-CN/zh-TW` 系统协商、资源 owner、术语、surface、隐私和平台发布证据 |
 | [本地 Markdown 查看器契约](markdown-viewer.md) | `crayon://mdv` scheme/CSP、入口手势门禁、图标工具栏与 Mermaid Full 离线扩展契约（v1.4） |
 | [Markdown Runtime v1 契约](markdown-runtime.md) | `markdown-runtime-v1` ExtensionNode/manifest/registry、能力、预算、generation、错误与 current/previous golden |
@@ -22,6 +23,7 @@
 | [KaTeX 数学语法与供应链契约](math-katex.md) | `math-katex-assets-v1` 的 `$`/`$$` 定界、固定 option/宏禁令、ESM/CSS/WOFF2 离线闭包与 MRT-08 输出门禁 |
 | [总 Roadmap](../crayon-private-cast-browser-roadmap.md) | 297 项活跃任务、Windows 首发候选、第一期/第二期阶段和当前领取顺序 |
 | [第一期发布 Roadmap](../plans/release-v1-roadmap.md) | 网页 Markdown、LAN 投屏、本地 Markdown 编辑三大闭环、平台顺序与关闭 feature |
+| [自定义外壳迁移 Roadmap](../plans/desktop-shell-roadmap.md) | 一期自绘标签/导航/面板＋Alloy，内容视图边界、原子迁移、旧宿主退出与双平台验证 |
 | [三语言本地化 Roadmap](../plans/localization-roadmap.md) | `en-US/zh-CN/zh-TW` 跟随系统、共享资源/解析器、CEF/平台装配和真机发布门禁 |
 | [第一期生产装配审计](release-v1-assembly.md) | REL-02 的真实 CEF source/link 调用图、断点任务映射与一期/二期默认开关 |
 | [模块 Roadmap 索引](../plans/README.md) | 每个模块的原子任务、依赖与状态 |
@@ -55,6 +57,7 @@ Cast-SDK source lock 的当前事实位于 `config/cast-sdk-source.toml`、`.git
 
 ## 4. 真实现状
 
+- 2026-09-04 最新用户决策：自定义 Shell＋Alloy 是长期架构，一期开始迁移，具体领取和状态以 PLT-SHELL 为准。默认产品尚为 Chrome-style；后文已有实现/平台证据是迁移前基线，不代表自定义外壳通过。当前 Mac 可先做共享代码和原生验证，Windows 首发与两平台独立发布门禁不变。
 - 已收口的主干包括 `BRD-01..04`、Foundation、`MED-01..19`、`BUX-01..18`、`SDK-01..14`、`RNM-01..08`、`ACT-01..12` 与 `MRT-01..08`；CEF 为 `CEF-01..05/15 DONE`、`CEF-06..14 VERIFIED`，其他模块的 VERIFIED/DONE 差异仍以专项 Roadmap 的真实门禁为准。
 - CEF 固定基线为 `150.0.10+g8042e43+chromium-150.0.7871.101` Standard。历史四平台 hash 已锁定，Windows x64 archive 已校验；后续产品构建只推进 Windows/macOS。
 - Cast-SDK source revision 已由 `SDK-01` 固定并通过 `RG-008`；`SDK-01..14 DONE`，包括真实接收端 Harness 与总 Review。`SDK-15/16` 只承接后续 Partner/TV Cast gap 与正式外部 facade。

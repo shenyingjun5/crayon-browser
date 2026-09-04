@@ -5,7 +5,7 @@ mod desktop {
     use crayon_app_runtime::media_host_cast_runtime::MediaHostCastRuntime;
     use crayon_app_runtime::media_host_runtime::{
         error_reply, message_request_id, MediaHostInterruptAction, MediaHostPendingQueue,
-        MediaHostRuntime, MediaHostRuntimeError, PreparedMediaHostDecision,
+        MediaHostRuntime, MediaHostRuntimeError,
     };
     use crayon_cast_adapter::{
         CapabilityCacheConfig, CastFacade, ReceiverCapabilityCache, SenderCastFacade,
@@ -23,14 +23,14 @@ mod desktop {
     use std::thread::{self, JoinHandle};
     use tokio::sync::mpsc;
 
-    enum ReaderEvent {
+    pub(super) enum ReaderEvent {
         Message(MediaHostMessage),
         Eof,
         Failed,
     }
 
-    pub(super) enum DecisionOutcome {
-        Completed(Result<MediaHostMessage, MediaHostRuntimeError>),
+    pub(super) enum DecisionOutcome<T> {
+        Completed(Result<T, MediaHostRuntimeError>),
         Cancelled,
         Shutdown,
         InputClosed,
@@ -100,7 +100,16 @@ mod desktop {
                         continue;
                     }
                 };
-                match drive_decision(&host, prepared, receiver, &mut pending, &mut output).await? {
+                match drive_probe(
+                    host.execute_decision(prepared),
+                    &request_id,
+                    false,
+                    receiver,
+                    &mut pending,
+                    &mut output,
+                )
+                .await?
+                {
                     DecisionOutcome::Completed(result) => {
                         write_runtime_result(&mut output, request_id, result)?;
                     }
@@ -141,7 +150,38 @@ mod desktop {
                         continue;
                     }
                 };
-                let result = host.execute_cast_command(prepared).await;
+                let result = if prepared.is_start_cast() {
+                    match drive_probe(
+                        host.preflight_start_cast(prepared),
+                        &request_id,
+                        true,
+                        receiver,
+                        &mut pending,
+                        &mut output,
+                    )
+                    .await?
+                    {
+                        DecisionOutcome::Completed(Ok(ready)) => {
+                            if apply_preflight_facts(&mut host, &mut pending, &mut output)? {
+                                host.commit_start_cast(ready).await
+                            } else {
+                                Err(MediaHostRuntimeError::StaleContext)
+                            }
+                        }
+                        DecisionOutcome::Completed(Err(error)) => Err(error),
+                        DecisionOutcome::Cancelled => Err(MediaHostRuntimeError::Cancelled),
+                        DecisionOutcome::Shutdown => {
+                            host.handle_immediate(MediaHostMessage::Shutdown)
+                                .map_err(|_| HostProcessError::InvalidState)?;
+                            return Ok(());
+                        }
+                        DecisionOutcome::InputClosed => {
+                            return Err(HostProcessError::UnexpectedEof)
+                        }
+                    }
+                } else {
+                    host.execute_cast_command(prepared).await
+                };
                 write_runtime_result(&mut output, request_id, result)?;
                 continue;
             }
@@ -214,19 +254,23 @@ mod desktop {
         Ok(value)
     }
 
-    async fn drive_decision(
-        host: &MediaHostRuntime,
-        prepared: PreparedMediaHostDecision,
+    pub(super) async fn drive_probe<T>(
+        decision: impl std::future::Future<Output = Result<T, MediaHostRuntimeError>>,
+        active_request: &str,
+        selected_preflight: bool,
         receiver: &mut mpsc::Receiver<ReaderEvent>,
         pending: &mut MediaHostPendingQueue,
         output: &mut impl Write,
-    ) -> Result<DecisionOutcome, HostProcessError> {
-        let active_request = prepared.request_id().to_owned();
-        let decision = host.execute_decision(prepared);
+    ) -> Result<DecisionOutcome<T>, HostProcessError> {
+        if selected_preflight && pending.has_preflight_revocation() {
+            return Ok(DecisionOutcome::Cancelled);
+        }
         tokio::pin!(decision);
+        let mut messages_processed = 0;
         loop {
             tokio::select! {
-                result = &mut decision => return Ok(DecisionOutcome::Completed(result)),
+                biased;
+                // Observe already-arrived revocations before a ready probe.
                 event = receiver.recv() => {
                     let Some(event) = event else {
                         return Ok(DecisionOutcome::InputClosed);
@@ -236,9 +280,10 @@ mod desktop {
                         ReaderEvent::Eof => return Ok(DecisionOutcome::InputClosed),
                         ReaderEvent::Failed => return Err(HostProcessError::InvalidFrame),
                     };
-                    let (action, reply) = pending
-                        .accept_during_decision(&active_request, message)
-                        .map_err(|_| HostProcessError::InvalidState)?;
+                    let (action, reply) = if selected_preflight {
+                        pending.accept_during_preflight(active_request, message)
+                    } else { pending.accept_during_decision(active_request, message) }
+                    .map_err(|_| HostProcessError::InvalidState)?;
                     if let Some(reply) = reply {
                         write_message(output, &reply)?;
                     }
@@ -247,9 +292,36 @@ mod desktop {
                         MediaHostInterruptAction::Cancel => return Ok(DecisionOutcome::Cancelled),
                         MediaHostInterruptAction::Shutdown => return Ok(DecisionOutcome::Shutdown),
                     }
+                    messages_processed += 1;
+                    if messages_processed >= crayon_app_runtime::media_host_runtime::MAX_MEDIA_HOST_PENDING_MESSAGES {
+                        return Ok(DecisionOutcome::Cancelled);
+                    }
+                }
+                result = &mut decision => return Ok(DecisionOutcome::Completed(result)),
+            }
+        }
+    }
+
+    fn apply_preflight_facts(
+        host: &mut MediaHostRuntime,
+        pending: &mut MediaHostPendingQueue,
+        output: &mut impl Write,
+    ) -> Result<bool, HostProcessError> {
+        let mut valid = true;
+        while let Some(message) = pending.pop_preflight_fact() {
+            let id = message_request_id(&message)
+                .ok_or(HostProcessError::InvalidMessage)?
+                .to_owned();
+            match host.handle_immediate(message) {
+                Ok(Some(reply)) => write_message(output, &reply)?,
+                Ok(None) => valid = false,
+                Err(error) => {
+                    valid = false;
+                    write_message(output, &error_reply(id, error))?;
                 }
             }
         }
+        Ok(valid)
     }
 
     fn write_runtime_result(
@@ -587,3 +659,7 @@ fn main() {
     eprintln!("crayon-media-host is supported on Windows and macOS");
     std::process::exit(78);
 }
+
+#[cfg(all(test, any(target_os = "macos", target_os = "windows")))]
+#[path = "../tests/support/probe_driver.rs"]
+mod probe_driver_tests;

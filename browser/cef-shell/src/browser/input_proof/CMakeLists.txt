@@ -1,7 +1,9 @@
 add_library(crayon-cef-shell-input-proof STATIC
   input_proof_gate.cc
+  player_input_proof.cc
 )
 add_library(crayon::cef-shell-input-proof ALIAS crayon-cef-shell-input-proof)
+target_link_libraries(crayon-cef-shell-input-proof PUBLIC crayon::cef-shell-media-observer)
 
 target_include_directories(crayon-cef-shell-input-proof
   PUBLIC
@@ -41,4 +43,15 @@ if(CRAYON_BUILD_TESTS)
     )
   endif()
   add_test(NAME input_proof_gate COMMAND crayon_input_proof_gate_test)
+
+  add_executable(crayon_player_input_proof_test player_input_proof_test.cc)
+  target_compile_features(crayon_player_input_proof_test PRIVATE cxx_std_17)
+  target_link_libraries(crayon_player_input_proof_test PRIVATE crayon::cef-shell-input-proof)
+  if(MSVC)
+    target_compile_options(crayon_player_input_proof_test PRIVATE /W4 /WX /permissive-)
+  else()
+    target_compile_options(crayon_player_input_proof_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+  endif()
+  add_test(NAME player_input_proof COMMAND crayon_player_input_proof_test)
+  set_tests_properties(player_input_proof PROPERTIES TIMEOUT 15)
 endif()

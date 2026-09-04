@@ -50,13 +50,25 @@ bool TraditionalAndEnglishSamplesAreExact() {
   CHECK(traditional->mdv.view_source == "原始碼");
   CHECK(traditional->page_markdown.save_cancelled_status == "已取消儲存");
   CHECK(traditional->cast.cast_code_label == "投影碼");
+  CHECK(traditional->cast.picker_select == "開始投影");
+  CHECK(traditional->cast.cast_code_connect == "尋找裝置");
+  CHECK(traditional->cast.rejected_drm == "DRM 保護內容無法投影。");
 
-  const auto english = BuildProductStrings(
-      SnapshotFor(AppLocale::kEnUs),
-      crayon::browser_mdv::MdvShortcutPlatform::kMacOS);
+  const auto english =
+      BuildProductStrings(SnapshotFor(AppLocale::kEnUs),
+                          crayon::browser_mdv::MdvShortcutPlatform::kMacOS);
   CHECK(english.has_value());
   CHECK(english->product_name == "Crayon AI Agent Cast Browser");
   CHECK(english->cast.playback_failed == "Control failed");
+  CHECK(english->cast.retry == "Choose a receiver and retry");
+  CHECK(english->cast.picker_select == "Start casting");
+  CHECK(english->cast.cast_code_connect == "Find device");
+  const auto simplified =
+      BuildProductStrings(SnapshotFor(AppLocale::kZhCn),
+                          crayon::browser_mdv::MdvShortcutPlatform::kMacOS);
+  CHECK(simplified.has_value());
+  CHECK(simplified->cast.picker_select == "开始投屏");
+  CHECK(simplified->cast.cast_code_connect == "查找设备");
   return true;
 }
 

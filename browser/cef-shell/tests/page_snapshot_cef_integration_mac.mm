@@ -14,8 +14,12 @@
 #include <variant>
 #include <vector>
 
-#include "browser/window/tab_controller.h"
+#include "browser/media_host/cast_shell_controller.h"
 #include "browser/media_host/media_host_adapter.h"
+#include "browser/window/tab_controller.h"
+#include "cast_toolbar_host_probe.h"
+#include "cast_entry_surface_probe.h"
+#include "media_observation_cef_message_checks.h"
 #include "include/base/cef_callback.h"
 #include "include/cef_app.h"
 #include "include/cef_application_mac.h"
@@ -25,8 +29,8 @@
 #include "include/wrapper/cef_library_loader.h"
 #include "ipc/media_observation_cef_message.h"
 #include "macos/cast_chrome_mac.h"
-#include "browser/media_host/cast_shell_controller.h"
 #include "macos/content_host_adapter_mac.h"
+#include "macos/media_host_process_mac.h"
 #include "macos/trusted_input_monitor_mac.h"
 
 #ifndef CRAYON_SNAPSHOT_TEST_HELPER_PATH
@@ -69,6 +73,9 @@ using crayon::cef_shell::gateway::SnapshotGatewayEvent;
 constexpr std::int64_t kTickMilliseconds = 20;
 constexpr std::size_t kStartupChecks = 500;
 constexpr std::size_t kNoReplyChecks = 25;
+constexpr char kPlayFixtureMedia[] =
+    "(()=>{const audio = document.querySelector('audio,video');"
+    "if (audio) { audio.muted = true; audio.play(); }})();";
 
 std::uint64_t MonotonicMilliseconds() {
   return static_cast<std::uint64_t>(
@@ -175,7 +182,7 @@ class SnapshotFixtureApp final : public CefApp,
 
   void OnContextInitialized() override {
     CEF_REQUIRE_UI_THREAD();
-    if (!ValidateMediaIpcContracts()) {
+    if (!ValidateMediaIpcContracts() || !CheckMediaObservationCefMessages()) {
       Finish(false, "media IPC contract rejected");
       return;
     }
@@ -196,20 +203,38 @@ class SnapshotFixtureApp final : public CefApp,
         },
         [this](auto generation) {
           return media_host_->RequestStopCast(generation);
+        },
+        [this](std::string code) {
+          return media_host_->RequestResolveCastCode(std::move(code));
+        },
+        [this](auto generation, auto action, auto seconds) {
+          return media_host_->RequestControlCast(generation, action, seconds);
         }});
     cast_chrome_ = std::make_unique<CastChromeMac>(
         CastChromeStrings{"Choose cast device", "Stop casting",
                           "Cast to device", "No devices", "Cast", "Refresh",
-                          "Cancel"},
+                          "Cancel", "Cast code", "Connect code", "Code failed",
+                          "Pause", "Resume", "Seek", "Seconds",
+                          "Control failed", "Cast rejected", "No cast route",
+                          "DRM protected", "Retry cast"},
         CastChromeCallbacks{
             [this] { return cast_shell_->ActivateCastButton(); },
             [this] { return cast_shell_->RefreshReceivers(); },
             [this] { cast_shell_->CancelReceiverPicker(); },
             [this](const std::string& device_id) {
               return cast_shell_->SelectReceiver(device_id);
+            },
+            [this](std::string code) {
+              return cast_shell_->ConnectCastCode(std::move(code));
+            },
+            [this](bool paused) { return cast_shell_->SetPaused(paused); },
+            [this](std::uint64_t seconds) {
+              return cast_shell_->SeekSession(seconds);
             }});
+    const std::string initial_url =
+        scenario_ == "media-navigation" ? "crayon://newtab/" : fixture_url_;
     controller_ =
-        new TabController(fixture_url_, [this](CefRefPtr<CefBrowser> browser) {
+        new TabController(initial_url, [this](CefRefPtr<CefBrowser> browser) {
           browser_ = browser;
           if (scenario_ == "media-cast-ui") {
             static_cast<void>(cast_chrome_->AttachWindow(
@@ -247,6 +272,26 @@ class SnapshotFixtureApp final : public CefApp,
         });
     controller_->SetPageLoadCompletedCallback(
         [this](CefRefPtr<CefBrowser> browser) { OnPageLoaded(browser); });
+    controller_->SetPageQueryHandler(
+        [this](CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
+               std::int64_t, const CefString &request, bool persistent,
+               CefRefPtr<CefMessageRouterBrowserSide::Callback> callback) {
+          // This callback exists only in the isolated fixture application.
+          // A source-ready signal schedules input, never grants proof itself.
+          if (!waiting_for_source_ || finished_ || persistent || !browser_ ||
+              !browser ||
+              browser->GetIdentifier() != browser_->GetIdentifier() || !frame ||
+              !frame->IsMain() || frame->GetURL() != fixture_url_ ||
+              request != "fixture-media-source-ready")
+            return false;
+          waiting_for_source_ = false;
+          paused_samples_before_play_ =
+              controller_->media_observation_diagnostics()
+                  .not_playing_denied_total;
+          pending_play_script_ = kPlayFixtureMedia;
+          callback->Success("");
+          return true;
+        });
     controller_->SetBrowsersClosedCallback([this] {
       tick_active_ = false;
       browser_ = nullptr;
@@ -338,17 +383,37 @@ class SnapshotFixtureApp final : public CefApp,
           browser_->GetIdentifier(), browser_->GetHost()->GetWindowHandle()));
       cast_chrome_->SetActiveWindow(browser_->GetIdentifier());
     }
-    cast_chrome_->Render(cast_shell_->coordinator());
+    const auto cast_presentation = cast_shell_->presentation();
+    cast_chrome_->Render(
+        cast_shell_->coordinator(),
+        {cast_presentation.cast_code_pending,
+         cast_presentation.cast_code_failed, cast_presentation.control_pending,
+         cast_presentation.control_failed, cast_presentation.playback_paused});
     if (scenario_ == "media-cast-ui" && AdvanceCastUiScenario())
       return;
     ConsumeReplies();
     AdvanceCrashRecovery();
+    AdvanceMediaLifecycle();
+    if (!pending_play_script_.empty() &&
+        controller_->media_observation_diagnostics().not_playing_denied_total >
+            paused_samples_before_play_) {
+      // The fixture must observe the paused player before its explicit input.
+      // Loading completion alone does not order renderer observation IPC.
+      controller_->NoteTrustedUserInputForActiveTab();
+      browser_->GetMainFrame()->ExecuteJavaScript(pending_play_script_,
+                                                  fixture_url_, 1);
+      pending_play_script_.clear();
+    }
     if (media_checks_ > 0 && --media_checks_ == 0) {
       if (scenario_ == "media" || scenario_ == "media-manual" ||
-          scenario_ == "media-clear-mp4") {
+          scenario_ == "media-clear-mp4" || scenario_ == "media-navigation") {
         Finish(saw_actual_media_ && saw_media_network_ && saw_http_media_ &&
                    saw_media_candidate_ && saw_media_decision_,
                "CEF clear media observation and trusted playback proof");
+      } else if (scenario_ == "media-source-reload" ||
+                 scenario_ == "media-player-replace") {
+        Finish(media_lifecycle_stage_ == 3 && saw_media_decision_,
+               "source replacement revoked proof and required fresh input");
       } else if (scenario_ == "media-hls") {
         Finish(saw_actual_media_ && saw_manifest_network_ &&
                    saw_media_candidate_ && saw_media_decision_,
@@ -400,6 +465,10 @@ class SnapshotFixtureApp final : public CefApp,
     if (finished_ || !browser || !browser->GetMainFrame())
       return;
     const std::string loaded_url = browser->GetMainFrame()->GetURL();
+    if (scenario_ == "media-navigation" && loaded_url == "crayon://newtab/") {
+      browser->GetMainFrame()->LoadURL(fixture_url_);
+      return;
+    }
     if (loaded_url == recovery_url_) {
       if (scenario_ == "media-cast-ui")
         cast_ui_navigated_ = true;
@@ -417,36 +486,47 @@ class SnapshotFixtureApp final : public CefApp,
         scenario_ == "media-forged" || IsAutomatedMediaScenario(scenario_)) {
       media_checks_ = scenario_ == "media-manual" ? 1500 : 250;
       if (scenario_ == "media" || IsAutomatedMediaScenario(scenario_)) {
-        controller_->NoteTrustedUserInputForActiveTab();
-        std::string script =
-            "const audio = document.querySelector('audio,video');"
-                             "if (audio) { audio.muted = true; audio.play(); }";
+        std::string script = kPlayFixtureMedia;
         if (scenario_ == "media-blob") {
-          script =
-              "fetch('/clear.mp4').then(r=>r.blob()).then(b=>{"
+          script = "fetch('/clear.mp4').then(r=>r.blob()).then(b=>{"
                    "const a=document.querySelector('audio,video');"
-                   "a.src=URL.createObjectURL(b);a.muted=true;return a.play();});";
+                   "a.src=URL.createObjectURL(b);a.muted=true;});";
         } else if (scenario_ == "media-mse") {
-          script =
-              "const a=document.querySelector('audio,video');const m=new "
+          script = "const a=document.querySelector('audio,video');const m=new "
                    "MediaSource();"
                    "a.src=URL.createObjectURL(m);a.muted=true;"
                    "m.addEventListener('sourceopen',async()=>{"
                    "const b=m.addSourceBuffer('video/mp4; "
                    "codecs=\"av01.0.04M.08\"');"
                    "const d=await (await fetch('/mse.mp4')).arrayBuffer();"
-                   "b.addEventListener('updateend',()=>{m.endOfStream();a.play();},{"
+                   "b.addEventListener('updateend',()=>{m.endOfStream();},{"
                    "once:true});"
                    "b.appendBuffer(d);},{once:true});";
         } else if (scenario_ == "media-eme") {
-          script += "setTimeout(()=>audio.dispatchEvent(new "
+          script += "setTimeout(()=>document.querySelector('audio,video')"
+                    ".dispatchEvent(new "
                     "MediaEncryptedEvent('encrypted',"
                     "{initDataType:'cenc',initData:new ArrayBuffer(0)})),100);";
+        } else if (scenario_ == "media-host-crash") {
+          script += "document.querySelector('audio,video').loop=true;";
         } else if (scenario_ == "media-cross-frame") {
           script.clear();
         }
         if (!script.empty()) {
-          browser->GetMainFrame()->ExecuteJavaScript(script, loaded_url, 1);
+          if (scenario_ == "media-blob" || scenario_ == "media-mse") {
+            waiting_for_source_ = true;
+            script =
+                "document.querySelector('video').addEventListener('loadeddata',"
+                "()=>mdvQuery({request:'fixture-media-source-ready'}),"
+                "{once:true});" +
+                script;
+            browser->GetMainFrame()->ExecuteJavaScript(script, loaded_url, 1);
+          } else {
+            paused_samples_before_play_ =
+                controller_->media_observation_diagnostics()
+                    .not_playing_denied_total;
+            pending_play_script_ = std::move(script);
+          }
         }
       }
       return;
@@ -576,11 +656,48 @@ class SnapshotFixtureApp final : public CefApp,
     media_host_->Consume(std::move(facts));
   }
 
+  void AdvanceMediaLifecycle() {
+    if (scenario_ != "media-source-reload" &&
+        scenario_ != "media-player-replace")
+      return;
+    const auto diagnostics = controller_->media_observation_diagnostics();
+    if (media_lifecycle_stage_ == 0 && saw_actual_media_) {
+      lifecycle_denied_before_ = diagnostics.input_proof_denied_total;
+      const char *change = scenario_ == "media-source-reload"
+                               ? "a.load();"
+                               : "const next=a.cloneNode(false);"
+                                 "a.replaceWith(next);a=next;";
+      browser_->GetMainFrame()->ExecuteJavaScript(
+          std::string("(()=>{let a=document.querySelector('audio,video');") +
+              change + "a.muted=true;a.play();})();",
+          fixture_url_, 1);
+      media_lifecycle_stage_ = 1;
+    } else if (media_lifecycle_stage_ == 1 &&
+               diagnostics.input_proof_denied_total >=
+                   lifecycle_denied_before_ + 2 &&
+               diagnostics.last_input_proof_result ==
+                   crayon::cef_shell::input_proof::ProofResult::
+                       kDeniedNoTrustedInput) {
+      // Test-only autoplay after reload/replacement must be denied first.
+      // Re-arm only after the new player is observed paused, as for initial
+      // play.
+      lifecycle_eligible_before_ = diagnostics.eligible_total;
+      paused_samples_before_play_ = diagnostics.not_playing_denied_total;
+      browser_->GetMainFrame()->ExecuteJavaScript(
+          "document.querySelector('audio,video').pause();", fixture_url_, 1);
+      pending_play_script_ = kPlayFixtureMedia;
+      media_lifecycle_stage_ = 2;
+    } else if (media_lifecycle_stage_ == 2 &&
+               diagnostics.eligible_total > lifecycle_eligible_before_) {
+      media_lifecycle_stage_ = 3;
+    }
+  }
+
   void ConsumeMediaPlanningEvents() {
     static_cast<void>(media_host_->Drain(64));
     auto events = media_host_->DrainPlanning(64);
     cast_shell_->ConsumePlanning(events);
-    for (auto& event : events) {
+    for (auto &event : events) {
       if (event.kind == MediaPlanningEventKind::kCandidate &&
           event.candidate_id) {
         saw_media_candidate_ = true;
@@ -593,6 +710,11 @@ class SnapshotFixtureApp final : public CefApp,
         }
         if (scenario_ == "media-host-crash" && saw_media_host_recovery_) {
           saw_media_candidate_after_crash_ = true;
+        }
+        if (scenario_ == "media-host-crash" && !saw_media_host_recovery_) {
+          // Replies already queued before Shutdown are not recovery evidence
+          // and must not consume the fixture's one post-restart decision.
+          continue;
         }
         if (scenario_ == "media-eme" && !saw_protected_media_)
           continue;
@@ -768,6 +890,10 @@ class SnapshotFixtureApp final : public CefApp,
               << " media_current=" << media_diagnostics.accepted_current_total
               << " media_denied=" << media_diagnostics.proof_denied_total
               << " media_eligible=" << media_diagnostics.eligible_total
+              << " host_recovered=" << saw_media_host_recovery_
+              << " candidate_before=" << saw_media_candidate_before_crash_
+              << " candidate_after=" << saw_media_candidate_after_crash_
+              << " media_lifecycle_stage=" << media_lifecycle_stage_
               << " first_chunk_ms="
               << (first_chunk_elapsed_ ? first_chunk_elapsed_->count() : 0)
               << " complete_ms=" << complete_time
@@ -803,6 +929,12 @@ class SnapshotFixtureApp final : public CefApp,
   std::size_t events_ready_count_ = 0;
   std::size_t no_reply_checks_ = 0;
   std::size_t media_checks_ = 0;
+  std::uint64_t paused_samples_before_play_ = 0;
+  std::string pending_play_script_;
+  bool waiting_for_source_ = false;
+  int media_lifecycle_stage_ = 0;
+  std::uint64_t lifecycle_denied_before_ = 0;
+  std::uint64_t lifecycle_eligible_before_ = 0;
   std::optional<std::chrono::steady_clock::time_point> snapshot_started_;
   std::optional<std::chrono::milliseconds> first_chunk_elapsed_;
   std::optional<std::chrono::steady_clock::time_point> last_tick_;
@@ -868,9 +1000,18 @@ class SnapshotFixtureApp final : public CefApp,
 @end
 
 int main(int argc, char *argv[]) {
-  if (argc != 3) return 2;
+  const bool entry_probe =
+      argc == 2 && std::string(argv[1]) == "--cast-entry-surface-probe";
+  const bool toolbar_close_probe =
+      argc == 2 && std::string(argv[1]) == "--cast-toolbar-close-probe";
+  const bool toolbar_probe =
+      toolbar_close_probe ||
+      (argc == 2 && std::string(argv[1]) == "--cast-toolbar-host-probe");
+  if (argc != 3 && !toolbar_probe && !entry_probe)
+    return 2;
   CefScopedLibraryLoader library_loader;
-  if (!library_loader.LoadInMain()) return 3;
+  if (!library_loader.LoadInMain())
+    return 3;
   @autoreleasepool {
     [SnapshotTestApplication sharedApplication];
     CefMainArgs main_args(argc, argv);
@@ -883,14 +1024,35 @@ int main(int argc, char *argv[]) {
     CefString(&settings.root_cache_path).FromString(cache_path.string());
     CefString(&settings.browser_subprocess_path)
         .FromString(CRAYON_SNAPSHOT_TEST_HELPER_PATH);
-    CefRefPtr<SnapshotFixtureApp> app(new SnapshotFixtureApp(argv[1], argv[2]));
+    auto toolbar_result = std::make_shared<CastToolbarHostProbeResult>();
+    auto entry_result = std::make_shared<CastEntrySurfaceProbeResult>();
+    CefRefPtr<SnapshotFixtureApp> snapshot_app;
+    CefRefPtr<CefApp> app;
+    if (entry_probe) {
+      app = CreateCastEntrySurfaceProbe(entry_result);
+    } else if (toolbar_probe) {
+      app = CreateCastToolbarHostProbe(toolbar_result, toolbar_close_probe);
+    } else {
+      snapshot_app = new SnapshotFixtureApp(argv[1], argv[2]);
+      app = snapshot_app;
+    }
     if (!CefInitialize(main_args, settings, app, nullptr))
       return 4;
     [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
     [NSApp finishLaunching];
     [NSApp activateIgnoringOtherApps:YES];
     CefRunMessageLoop();
-    const bool passed = app->passed();
+    const bool passed =
+        entry_probe
+            ? entry_result->behavior_passed && entry_result->browser_closed &&
+                  entry_result->window_closed
+            : toolbar_probe
+                  ? toolbar_result->layout_passed &&
+                        toolbar_result->browser_closed &&
+                        toolbar_result->window_closed &&
+                        (!toolbar_close_probe ||
+                         toolbar_result->cancellation_verified)
+                  : snapshot_app->passed();
     CefShutdown();
     std::error_code cleanup_error;
     std::filesystem::remove_all(cache_path, cleanup_error);

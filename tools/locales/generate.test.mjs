@@ -18,7 +18,7 @@ const repoRoot = path.resolve(scriptDirectory, "../..");
 test("real catalogs generate deterministic three-language outputs", () => {
   const first = buildOutputs(repoRoot);
   const second = buildOutputs(repoRoot);
-  assert.equal(first.keyCount, 156);
+  assert.equal(first.keyCount, 180);
   assert.deepEqual([...first.outputs], [...second.outputs]);
   assert.deepEqual(first.manifest.locales.map(({tag}) => tag), ["en-US", "zh-CN", "zh-TW"]);
 });

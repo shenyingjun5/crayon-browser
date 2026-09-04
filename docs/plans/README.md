@@ -26,11 +26,12 @@
 | MED | [media-policy-relay-roadmap.md](media-policy-relay-roadmap.md) | 媒体观察、策略、LAN Relay、外部客户端交接迁移 | `MED-01..19 DONE` |
 | CEF | [desktop-cef-browser-roadmap.md](desktop-cef-browser-roadmap.md) | Windows/macOS CEF 壳、共享 UI、媒体观察和 IPC | `CEF-01..15 全部完成`（`CEF-06..14` 模型层 VERIFIED，实机接线归后续装配/切片任务）；Windows 总 Review 证据已补齐 |
 | BUX | [browser-product-experience-roadmap.md](browser-product-experience-roadmap.md) | Chrome-inspired 蜡笔桌面浏览器 UI 与日用基础功能 | `BUX-01..18 DONE`（BUX-17/18 2026-08-26） |
-| LOC | [localization-roadmap.md](localization-roadmap.md) | `en-US/zh-CN/zh-TW` 跟随系统、统一资源/解析器、CEF/平台装配与发布验证 | `LOC-01/03/04/05W/06W DONE`、`LOC-02 VERIFIED`、`LOC-07W BLOCKED`、`LOC-08M IMPLEMENTED`；Windows 等待人工/系统语言矩阵，macOS 等待后置平台验证 |
-| MDV | [markdown-viewer-roadmap.md](markdown-viewer-roadmap.md) | 本地 Markdown Runtime：查看/编辑/保存、图标工具栏、图片与 Mermaid Full 离线扩展 | 基线、工具栏与 Mermaid 已生产可达；`MDV-25 DONE`，`MDV-20/24 VERIFIED`，待 Windows x64 Runtime/辅助能力总回归 |
-| MRT | [markdown-runtime-roadmap.md](markdown-runtime-roadmap.md) | Markdown Runtime Extension Framework：闭合扩展 API、Highlight/KaTeX 与后续图表/演示门禁 | `MRT-01..08 DONE`（MRT-06 Windows blocker 修复与真机复验已收口，2026-08-29 合并）；`MRT-09..19` 分波次推进或仅做 gap analysis |
+| LOC | [localization-roadmap.md](localization-roadmap.md) | `en-US/zh-CN/zh-TW` 跟随系统、统一资源/解析器、CEF/平台装配与发布验证 | `LOC-01/03/04/05W/06W DONE`、`LOC-02 VERIFIED`、`LOC-07W BLOCKED`、`LOC-08M VERIFIED`；macOS arm64 双配置各 91/91 与本地 artifact 已补证，真实三语言交互归 LOC-09M |
+| MDV | [markdown-viewer-roadmap.md](markdown-viewer-roadmap.md) | 本地 Markdown Runtime：查看/编辑/保存、图标工具栏、图片与 Mermaid Full 离线扩展 | `MDV-20/20W/25 DONE`；`MDV-24 VERIFIED`，24W 已记录支持矩阵，Narrator/IME/原生 DPI 等未覆盖项仍保留 |
+| MRT | [markdown-runtime-roadmap.md](markdown-runtime-roadmap.md) | Markdown Runtime Extension Framework：闭合扩展 API、Highlight/KaTeX 与后续图表/演示门禁 | `MRT-01..09 DONE`（09 为 Windows 首发口径，macOS addendum 待补）；`MRT-10..19` 属第二期 |
 | SDK | [cast-sdk-integration-roadmap.md](cast-sdk-integration-roadmap.md) | 固定源码 Cast-SDK facade、发现、连接和控制；后续 Partner Cast facade | `SDK-01..14 DONE`；`SDK-15/16` 等 HUB/外部已批准 API |
 | PLT | [desktop-platform-adapters-roadmap.md](desktop-platform-adapters-roadmap.md) | Windows/macOS 存储、网络、生命周期、更新和客户端交接 | `PLT-01/02/W04/M04 DONE`；`PLT-M05 IN_PROGRESS`（macOS 后续切片暂缓），`PLT-W05a/W05b/W05c0 DONE`、`W05c BLOCKED` |
+| PLT 内部切片 | [desktop-shell-roadmap.md](desktop-shell-roadmap.md) | 自定义外壳＋Alloy；一期全功能迁移、可替换内容视图与双平台门禁 | `PLT-SHELL-00/01 VERIFIED、02 READY`；默认产品未切换，不重复计入顶层总数 |
 | PRV | [privacy-security-roadmap.md](privacy-security-roadmap.md) | Profile、隐私、安全、日志和删除语义 | `PRV-01..12` 已完成或 VERIFIED；一期核心 `PRV-13A`、第二期扩展 `PRV-13B` |
 | CNT | [content-intelligence-roadmap.md](content-intelligence-roadmap.md) | 页面数据/Markdown 与第二阶段模型总结 | C1 数据面 `CNT-01..10 DONE/VERIFIED`；一期产品装配 `CNT-17..20 DONE`，`CNT-21W` 等 `PRV-13AW` 后总 Review；`CNT-11..16` 第二期 |
 | AGT | [agent-access-roadmap.md](agent-access-roadmap.md) | CAAP、tool registry、CLI/MCP、高性能读页和授权操作 | A0 完成；`AGT-07/15 VERIFIED`，`AGT-12C/13/14` 按装配依赖后续推进 |
@@ -45,23 +46,53 @@
 
 ## 4. 当前领取队列
 
+### 自定义外壳＋Alloy（2026-09-04 最新决策）
+
+- 用户批准长期自定义 Shell＋Alloy，一期同步调整；[PLT-SHELL](desktop-shell-roadmap.md) 是当前宿主迁移队列，REL §5 是一期总依赖。00 方案与 01 命令 owner VERIFIED：Debug/Release 无 GUI 契约各 1/1、Debug 连续 3 次、ASan/UBSan 通过；关闭重入修复与启动超时原始证据见 §9。下一步 02 内容视图契约 READY、03M 本地 Alloy 宿主与复用窗口 Harness，再逐项接线。默认产品未切换，Windows 独立验收与首发政策不变。
+- 原 R02b/b2 LOCATION 多 Chrome view 方案及“等待选择宿主”由本决定取代；旧记录保留为历史，不标完成、不继续原路线。R08 候选宿主接线不等待最终默认切换，防止循环依赖。
+- 浏览器日用基线、三闭环、三语言和原隐私/设备/发布门禁全部保留。新增宿主相关证据不能复用旧 Chrome UI 通过结论；其他 WebView/Chrome 特殊容器只预留边界，不在一期伪造多引擎支持。
+- 测试先无 GUI，后续 Alloy Harness 同进程/专用窗口复用标签；不接管用户日用窗口，不默认抢焦点。需要前台输入/重启新原生二进制的例外须提前说明。
+
+### 投屏体验重设计（2026-09-03）
+
+- 2026-09-04 用户要求继续 Mac 一期：独立推进 R04c1 MHV2 Hello/Welcome 固定字节、Rust/C++ codec 与共用 golden，状态 VERIFIED。启动延迟后原样复核，新协议 Rust 3/3、新旧 C++ Debug/Release 各 2/2、Release 媒体 5/5；双配置 C++ build、Rust build/clippy、格式/guard 通过，未启用产品握手或投屏能力。此前超时保留在 §18，不再当作当前永久阻塞。剩余一期范围仍是下表的投屏产品/真机、本地化、总审与发布矩阵，不把第二期引入。
+- 同轮无 GUI 回归：Debug 93/93 PASS（明确排除五项窗口测试）；Release 分段累计 33 项通过，另 page_markdown_export/chrome/cast_selection 无输出超时，余项未完成后停止。仍不能宣称整个工作区全绿或 R04a/b2/R08u2r 平台门禁已关闭，见 §18 的完整命令和中断证据。
+- 2026-09-04 续测：R08u2r 测试就绪修正后 Debug/Release 原生入口专项各连续 8 次通过；本轮 Debug 无界面定向 8/8，Release 定向 4/8、4 项启动超时，采样的 observer 停在 `_dyld_start`。最终完整回归仍未闭合，R08u2r/R04a/R04b2 保留 IMPLEMENTED，详见重设计 Roadmap §18；R04b2 已接 renderer 换源/删除的私有 CEF v2，并非 MHV2/runtime 或默认三入口产品装配完成。
+- 2026-09-04 用户明确要求入口代码先做：R08u1 共享多视频选择与 R08u2 原生三入口组件 VERIFIED；新旧原生 unit 已能执行，历史 `_dyld_start` 启动阻塞不再是本次结论。新两专项在 Debug/Release 各连续 3 次通过，两套完整回归各 95/96，剩余媒体导航播放资格失败；状态/Review/完整证据见重设计 Roadmap §17。默认产品 Views 宿主与 MHV2/runtime 接线仍未完成，不把组件通过当作产品上线。
+- 用户新增要求由[投屏体验重设计 Roadmap](cast-experience-redesign-roadmap.md)统一承接：代理环境域名 Direct、网址框后常驻灰态入口、多视频/设备显式选择、播放器悬浮快捷入口。
+- `PLT-CAST-R00/R01/R02a/R03a/R00b/R07a VERIFIED`（方案/契约、Mac CEF 独立宿主原语、内部预检原因保留、范围调整、投屏码解析不再自动播放）；R07a 的 Mac Debug/Release 各 92/92，查找设备后须明确开始。§18 新发现：固定 CEF 单窗口最多一个 Chrome BrowserView，R02b 多 view 设计回退 IMPLEMENTED/REQUEST_CHANGES，R02b2 BLOCKED 等待替代宿主范围决定；默认窗口未改变。R04a 已修复导航/Blob/MSE/重启 fixture 时序，R04b1 实例/source 身份已实现，完整双配置复验与后续 renderer/MHV2/runtime 接线分别记录。用户明确不处理代理专项，R05/R06 撤出队列，不等待接收端代检接口。
+- 这些是既有 PLT 的内部切片，不增加顶层 297 项统计，不覆盖下列平台剩余门禁；原 LAN b4 公网阻塞仍保留，b3c 视觉/picker 核对由 R08M 承接。
+
 ### 第一期可直接领取
 
 | 顺序 | 任务 | 状态 | 说明 |
 |---:|---|---|---|
 | 1 | `LOC-07W` | BLOCKED | 自动化已收口；等待 Windows 防火墙提示/可信物理点击及 en-US、zh-TW、不支持语言包切换与注销重启 |
 | 2 | `PLT-W05c` | BLOCKED | 产品投屏码与播控 UI/接线、双配置自动化已验证；当前远程桌面点击带 `LLMHF_INJECTED`，须在可信物理输入控制台闭合 ADB 正式接收端 Direct 真机链路 |
-| 3 | `MDV-20W` | READY | `MDV-25W DONE` 已关闭生产 fixture；继续 Windows Mermaid Full/Highlight/KaTeX/性能与 Release package 总回归 |
+| 3 | `PLT-M05b4` | BLOCKED | [受限 LAN 预检](lan-media-probe-roadmap.md) 与本地 Direct 首帧/播控/stop PASS；公开 VP9 浏览器播放 PASS、投屏被系统 DNS 的基准测试网段阻塞；自动发现补证 6 台，真实拒绝文案视觉核对归 b3c；strict 签名归 QAR-10 |
+| 4 | `LOC-09M` | TODO | LOC-08M 已补双配置构建/91 项完整 CTest/三语言 bundle；下一步真实系统语言与 VoiceOver/IME/缩放，当前需用户解锁 Mac，系统设置变更另需确认 |
 
 ### 平台收口与待拆装配
 
 | 任务 | 状态 | 说明 |
 |---|---|---|
-| `MDV-20` | VERIFIED | 仅缺 Windows x64 Mermaid Full 发布回归；不得改写 macOS 已有证据 |
+| `MDV-20` | DONE | Windows 回归由 2026-09-01 MDV-20W 完成记录闭合，保留 macOS 已有证据 |
 | `MDV-24` | VERIFIED | 主矩阵已闭合；Narrator、中文 IME、原生 200% DPI、原生 macOS x64 仍待补 |
-| `MRT-09` | TODO | 等 `MDV-25` 清除生产 fixture 后执行 P0 Runtime 总 Review |
+| `MRT-09` | DONE | 2026-09-01 Windows 首发 P0 Review 已闭合；macOS addendum 单独补证 |
 | `PLT-W05a..f` | DONE/BLOCKED/TODO | W05a/b/c0 已装配；W05c 等可信物理输入闭合 ADB Direct，之后才能 Relay→拒绝/交接→100 次稳定性，严格串行 |
-| `PLT-M05b4..b6/M05c` | TODO | macOS 特有真机与生命周期验证后置；不阻塞 Windows 候选，不改写已有 macOS 证据 |
+| `PLT-M05b4..b6/M05c` | BLOCKED/TODO | b4 导航修复、受限 LAN 原语/产品取消接线/重试状态恢复/拒绝 UI VERIFIED；真机仍待闭合，b5/b6/M05c 不越过依赖 |
+
+### 第一期剩余门禁盘点（2026-09-03）
+
+| 范围 | 尚未闭合的任务/证据 | Mac 执行顺序或边界 |
+|---|---|---|
+| 三语言 | `LOC-02` 独立语言审校、`LOC-07W BLOCKED`、`LOC-09M/10 TODO`；08M 本次达到 VERIFIED | 下一步 09M 真实系统语言、header/JS/html-lang、VoiceOver/IME/缩放/签名包；不擅改用户系统设置 |
+| 投屏真机 | `PLT-M05b4..b6/M05c`；Windows `W05c BLOCKED`、`W05d..f TODO` | Mac 依次 Direct→MP4 Range/HLS Relay→拒绝/外部交接→100 次切换/睡眠唤醒/退出；使用 ADB 正式接收端，不能以 SDK standalone 或在线设备代替产品上屏 |
+| Markdown 收口 | `CNT-21W` 等 `PRV-13AW`；Mac CNT/MRT addendum；`MDV-24` 剩余辅助/输入真机证据 | Mermaid/Highlight/KaTeX 与生产 fixture 清理已有完成证据，不重复算未开发；多语言变更后仍需 Mac 对称回归 |
+| 平台与隐私总审 | `PLT-19W/19M`、`PRV-13AW` 与 Mac addendum | 等对应产品/真机证据；真实 SecureStore Keychain 依用户决策放最后，不作为构建/启动前置 |
+| 发布质量 | `QAR-01W/02AW/03W/04W/05AW/06W/07W/08AW/09/11W/12W/14W/15W/16W`、Mac `QAR-10` 及对应 M 补证、`REL-03/04` | CI/E2E、性能、安全、30 分钟/8 小时长稳、SBOM、安装/升级/回滚与 Go/NoGo；Mac Developer ID/公证不是本地 ad-hoc 验签，凭证与上传另需授权 |
+
+本次 LOC-08M 已达到 VERIFIED，不改变 Windows 首发策略；Mac 首期仅 Apple Silicon，原生 Intel/x64 长稳仍 `NOT_IN_RELEASE`。上述盘点按模块完成记录纠正索引旧状态，不把历史 `IN_PROGRESS` 段落当作当前任务。
 
 ### 第二期与依赖阻塞
 

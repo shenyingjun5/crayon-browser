@@ -24,7 +24,11 @@ enum class ShellCommand {
   kOmniboxNavigate,
 };
 
-enum class CommandOrigin { kProductUi = 0, kNativeChrome };
+enum class CommandOrigin { kProductUi = 0, kNativeChrome, kHostAccelerator };
+
+// Selected by the native composition root, never by page content. This only
+// selects command ownership; it does not advertise a working browser backend.
+enum class CommandRouting { kNativeChrome = 0, kCustomShell };
 
 enum class CommandDispatchResult {
   kExecuted = 0,
@@ -33,6 +37,7 @@ enum class CommandDispatchResult {
   kInvalidCommand,
   kStaleSequence,
   kInactive,
+  kReentrant,
 };
 
 enum class FocusArea {
@@ -83,6 +88,16 @@ constexpr bool IsValid(CommandOrigin origin) noexcept {
   switch (origin) {
     case CommandOrigin::kProductUi:
     case CommandOrigin::kNativeChrome:
+    case CommandOrigin::kHostAccelerator:
+      return true;
+  }
+  return false;
+}
+
+constexpr bool IsValid(CommandRouting routing) noexcept {
+  switch (routing) {
+    case CommandRouting::kNativeChrome:
+    case CommandRouting::kCustomShell:
       return true;
   }
   return false;
@@ -125,8 +140,17 @@ class ShellCommandObserver {
 
 class CommandRegistry final {
  public:
+  // UI-thread only. The registry and callback owners must outlive Dispatch.
+  // Callbacks may Shutdown(), but must not destroy the registry on its stack.
+  // Retain the legacy constructor for existing Chrome-style composition roots.
   CommandRegistry(ShellCommandTarget& target, ShellCommandObserver& observer)
-      : target_(&target), observer_(&observer) {}
+      : CommandRegistry(target, observer, CommandRouting::kNativeChrome) {}
+  CommandRegistry(ShellCommandTarget& target, ShellCommandObserver& observer,
+                  CommandRouting routing)
+      : target_(&target), observer_(&observer), routing_(routing) {}
+
+  CommandRegistry(const CommandRegistry&) = delete;
+  CommandRegistry& operator=(const CommandRegistry&) = delete;
 
   CommandDispatchResult Dispatch(ShellCommand command, std::uint64_t sequence,
                                  CommandOrigin origin);
@@ -138,8 +162,10 @@ class CommandRegistry final {
  private:
   ShellCommandTarget* target_;
   ShellCommandObserver* observer_;
+  const CommandRouting routing_;
   std::uint64_t last_sequence_ = 0;
   bool active_ = true;
+  bool dispatching_ = false;
 };
 
 }  // namespace crayon::browser_shell

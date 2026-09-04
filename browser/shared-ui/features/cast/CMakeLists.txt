@@ -1,6 +1,7 @@
 add_library(crayon-browser-cast-view STATIC
   src/cast_feature_view.cc
   src/cast_ui_coordinator.cc
+  src/cast_selection.cc
 )
 add_library(crayon::browser-cast-view ALIAS crayon-browser-cast-view)
 
@@ -27,6 +28,15 @@ else()
 endif()
 
 if(CRAYON_BUILD_TESTS)
+  add_executable(crayon_cast_selection_test tests/cast_selection_test.cc)
+  target_link_libraries(crayon_cast_selection_test PRIVATE crayon::browser-cast-view)
+  if(MSVC)
+    target_compile_options(crayon_cast_selection_test PRIVATE /W4 /WX /permissive-)
+  else()
+    target_compile_options(crayon_cast_selection_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+  endif()
+  add_test(NAME cast_selection COMMAND crayon_cast_selection_test)
+  set_tests_properties(cast_selection PROPERTIES TIMEOUT 15)
   add_executable(crayon_browser_cast_view_test
     tests/cast_feature_view_test.cc
   )

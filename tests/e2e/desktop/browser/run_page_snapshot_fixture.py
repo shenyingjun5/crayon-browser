@@ -77,7 +77,7 @@ MEDIA_AD_FIXTURE = """<!doctype html><meta charset=utf-8><title>Ad fixture</titl
 MEDIA_FORGED_FIXTURE = """<!doctype html><meta charset=utf-8><title>Forged media fixture</title>
 <main><h1>Forged media fixture</h1><audio controls src=/tone.wav></audio></main>
 <script>setTimeout(() => globalThis.crayonMediaObservationNative?.(
-  99, 1, 0, location.origin + '/forged.mp4', 1, 1, false), 100);</script>"""
+  99, 1, 0, location.origin + '/forged.mp4', 1, 1, false, 1, false), 100);</script>"""
 AUTOMATED_SCENARIOS = (
     "normal",
     "empty",
@@ -90,6 +90,9 @@ AUTOMATED_SCENARIOS = (
     "perf",
     "media",
     "media-clear-mp4",
+    "media-navigation",
+    "media-source-reload",
+    "media-player-replace",
     "media-cast-ui",
     "media-cast-ui-win",
     "media-hls",
@@ -116,6 +119,13 @@ CONTENT_SCENARIOS = (
     "perf",
 )
 MANUAL_SCENARIOS = ("media-manual",)
+PLATFORM_SCENARIOS = {
+    "media-navigation": "darwin",
+    "media-source-reload": "darwin",
+    "media-player-replace": "darwin",
+    "media-cast-ui": "darwin",
+    "media-cast-ui-win": "win32",
+}
 PERF_SAMPLES = 20
 FORBIDDEN_CEF_ERROR = re.compile(
     r"Content Security Policy|Refused to (?:load|connect)|"
@@ -344,20 +354,31 @@ class FixtureServer(http.server.ThreadingHTTPServer):
         super().handle_error(request, client_address)
 
 
+def select_scenarios(
+    platform: str, selection: str | None = None
+) -> tuple[str, ...] | None:
+    """Keep native UI scenarios on their own harness; never fake their input."""
+    automated = tuple(
+        scenario for scenario in AUTOMATED_SCENARIOS
+        if PLATFORM_SCENARIOS.get(scenario, platform) == platform
+    )
+    if selection is None:
+        return automated
+    if selection == "content":
+        return CONTENT_SCENARIOS
+    if selection in automated + MANUAL_SCENARIOS:
+        return (selection,)
+    return None
+
+
 def main() -> int:
     if len(sys.argv) not in (2, 3):
         return 2
     executable = pathlib.Path(sys.argv[1]).resolve()
-    if len(sys.argv) == 2:
-        scenarios = AUTOMATED_SCENARIOS
-    elif sys.argv[2] == "content":
-        scenarios = CONTENT_SCENARIOS
-    else:
-        scenarios = (sys.argv[2],)
-    if any(
-        scenario not in AUTOMATED_SCENARIOS + MANUAL_SCENARIOS
-        for scenario in scenarios
-    ):
+    scenarios = select_scenarios(
+        sys.platform, sys.argv[2] if len(sys.argv) == 3 else None
+    )
+    if scenarios is None:
         return 2
     with tempfile.TemporaryDirectory(prefix="crayon-snapshot-fixture-") as root:
         root_path = pathlib.Path(root)
@@ -457,6 +478,9 @@ def main() -> int:
                     "media": "media.html",
                     "media-manual": "media.html",
                     "media-clear-mp4": "media-mp4.html",
+                    "media-navigation": "media-mp4.html",
+                    "media-source-reload": "media-mp4.html",
+                    "media-player-replace": "media-mp4.html",
                     "media-cast-ui": "media-mp4.html",
                     "media-cast-ui-win": "media-cast-ui-win.html",
                     "media-hls": "media-hls.html",

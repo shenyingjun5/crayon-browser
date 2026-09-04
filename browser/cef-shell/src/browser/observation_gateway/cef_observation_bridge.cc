@@ -57,6 +57,8 @@ void CefObservationBridge::AdvanceNavigation(CefRefPtr<CefBrowser> browser,
   static_cast<void>(iterator->second.network_observer.Drain());
   iterator->second.tab_id = tab_id;
   iterator->second.navigation_id = navigation_id;
+  iterator->second.main_frame_identifier.clear();
+  input_proof_.ForgetTab(tab_id);
   iterator->second.eme_encrypted = false;
   gateway_.AdvanceGeneration(tab_id, navigation_id);
   const std::uint32_t generation = gateway_.GenerationOf(tab_id);
@@ -64,13 +66,30 @@ void CefObservationBridge::AdvanceNavigation(CefRefPtr<CefBrowser> browser,
     std::lock_guard<std::mutex> lock(io_bindings_mutex_);
     io_bindings_[browser->GetIdentifier()] = {tab_id, navigation_id};
   }
-  CefRefPtr<CefFrame> frame = browser->GetMainFrame();
-  if (frame) {
-    frame->SendProcessMessage(PID_RENDERER,
-                              media_ipc::CreateAdvanceMessage(navigation_id));
-  }
+  BindCurrentMainFrame(browser);
   if (lifecycle_callback_) {
     lifecycle_callback_(tab_id, navigation_id, generation, false);
+  }
+}
+
+void CefObservationBridge::BindCurrentMainFrame(CefRefPtr<CefBrowser> browser) {
+  CEF_REQUIRE_UI_THREAD();
+  if (!browser) return;
+  const auto found = bindings_.find(browser->GetIdentifier());
+  if (found == bindings_.end())
+    return;
+  CefRefPtr<CefFrame> frame = browser->GetMainFrame();
+  if (frame && frame->IsValid() && frame->IsMain()) {
+    const std::string identifier = frame->GetIdentifier().ToString();
+    if (!found->second.main_frame_identifier.empty() &&
+        found->second.main_frame_identifier != identifier)
+      input_proof_.ForgetTab(found->second.tab_id);
+    found->second.main_frame_identifier = identifier;
+    // A cross-site navigation may replace the renderer after loading starts.
+    // Repeat binding for the same frame preserves its facts; a replacement
+    // above withdraws old element proofs. Neither path resets protection.
+    frame->SendProcessMessage(PID_RENDERER, media_ipc::CreateAdvanceMessage(
+                                                found->second.navigation_id));
   }
 }
 
@@ -82,6 +101,7 @@ void CefObservationBridge::CloseBrowser(CefRefPtr<CefBrowser> browser,
   const auto found = bindings_.find(browser->GetIdentifier());
   if (found != bindings_.end()) {
     const std::uint32_t bound_tab_id = found->second.tab_id;
+    input_proof_.ForgetTab(bound_tab_id);
     gateway_.AdvanceGeneration(bound_tab_id, 0);
     const std::uint32_t generation = gateway_.GenerationOf(bound_tab_id);
     bindings_.erase(found);
@@ -125,20 +145,22 @@ bool CefObservationBridge::OnProcessMessageReceived(
   const auto found = bindings_.find(browser->GetIdentifier());
   if (!envelope || found == bindings_.end() ||
       envelope->observation.navigation_id != found->second.navigation_id ||
+      frame->GetIdentifier().ToString() !=
+          found->second.main_frame_identifier ||
       !ValidateMediaObservation(&envelope->observation)) {
     return true;
   }
   ++diagnostics_.accepted_current_total;
   const std::uint32_t tab_id = found->second.tab_id;
   const std::uint64_t navigation_id = found->second.navigation_id;
-  const MediaObservation& observation = envelope->observation;
-  if (observation.playback == MediaPlaybackState::kPaused ||
-      observation.playback == MediaPlaybackState::kEnded ||
-      observation.playback == MediaPlaybackState::kIdle) {
-    input_proof_.NotePlaybackSuspended(tab_id, navigation_id);
+  const MediaObservation &observation = envelope->observation;
+  if (envelope->removed) {
+    input_proof_.Remove(tab_id, navigation_id, observation.element_id,
+                        envelope->source_epoch);
+    return true;
   }
-  input_proof_.NotePlaybackProgress(tab_id, navigation_id,
-                                    observation.current_time_seconds);
+  const ProofResult playback_proof =
+      input_proof_.Observe(tab_id, observation, envelope->source_epoch);
   if (envelope->eme_encrypted) {
     found->second.eme_encrypted = true;
     found->second.network_observer.AssociateEmeEncrypted(navigation_id);
@@ -160,8 +182,7 @@ bool CefObservationBridge::OnProcessMessageReceived(
     ++diagnostics_.proof_denied_total;
     return true;
   }
-  diagnostics_.last_input_proof_result =
-      input_proof_.Evaluate(tab_id, navigation_id);
+  diagnostics_.last_input_proof_result = playback_proof;
   if (diagnostics_.last_input_proof_result != ProofResult::kEligible) {
     ++diagnostics_.input_proof_denied_total;
     ++diagnostics_.proof_denied_total;

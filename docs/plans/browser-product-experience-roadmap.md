@@ -1,5 +1,7 @@
 # BUX：桌面浏览器产品体验 Roadmap
 
+2026-09-04：用户选择自定义外壳＋Alloy，一期开始按 [PLT-SHELL](desktop-shell-roadmap.md) 逐项接线。复用本文已有模型/资源与 Chrome-inspired 交互契约；历史 BUX 完成记录不等于新自绘标签栏、omnibox、菜单和平台 UI 已装配。具体产品回归在 SHELL-05P..23P，原业务 owner 不重建。
+
 状态：`BUX-01..18 全部收口`（BUX-17/18 于 2026-08-26 完成，聚合 Review 见文末记录；真机项显式归 QAR）。本 Roadmap 把"基本浏览器有的功能"拆成可审查原子任务；视觉、品牌、内置页面与服务均为蜡笔自有实现。
 
 ## 产品设计结论

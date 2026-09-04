@@ -14,9 +14,12 @@ using ::crayon::cef_shell::renderer::MediaObservation;
 using ::crayon::cef_shell::renderer::MediaPlaybackState;
 using ::crayon::cef_shell::renderer::MediaSourceKind;
 
-constexpr std::size_t kObservationSize = 8;
+constexpr std::size_t kObservationSize = 10;
+constexpr std::size_t kMaxIdentityTextLength = 20;
 
-std::optional<std::uint64_t> ParseNavigation(const CefString& value) {
+std::optional<std::uint64_t> ParseNavigation(const CefString &value) {
+  if (value.empty() || value.length() > kMaxIdentityTextLength)
+    return std::nullopt;
   const std::string text = value.ToString();
   std::uint64_t navigation_id = 0;
   const auto parsed =
@@ -31,8 +34,8 @@ std::optional<std::uint64_t> ParseNavigation(const CefString& value) {
 bool HasObservationTypes(CefRefPtr<CefListValue> values) {
   if (!values || values->GetSize() != kObservationSize) return false;
   constexpr CefValueType kTypes[kObservationSize] = {
-      VTYPE_STRING, VTYPE_INT,    VTYPE_INT,    VTYPE_INT,
-      VTYPE_STRING, VTYPE_DOUBLE, VTYPE_DOUBLE, VTYPE_BOOL};
+      VTYPE_STRING, VTYPE_INT,    VTYPE_INT,  VTYPE_INT,    VTYPE_STRING,
+      VTYPE_DOUBLE, VTYPE_DOUBLE, VTYPE_BOOL, VTYPE_STRING, VTYPE_BOOL};
   for (std::size_t index = 0; index < kObservationSize; ++index) {
     if (values->GetType(index) != kTypes[index]) return false;
   }
@@ -62,6 +65,8 @@ CefRefPtr<CefProcessMessage> CreateObservationMessage(
   values->SetDouble(5, envelope.observation.visible_fraction);
   values->SetDouble(6, envelope.observation.current_time_seconds);
   values->SetBool(7, envelope.eme_encrypted);
+  values->SetString(8, std::to_string(envelope.source_epoch));
+  values->SetBool(9, envelope.removed);
   return message;
 }
 
@@ -85,12 +90,13 @@ std::optional<MediaObservationEnvelope> ReadObservationMessage(
   auto values = message->GetArgumentList();
   if (!HasObservationTypes(values)) return std::nullopt;
   const auto navigation_id = ParseNavigation(values->GetString(0));
+  const auto source_epoch = ParseNavigation(values->GetString(8));
   const int element_id = values->GetInt(1);
   const int playback = values->GetInt(2);
   const int source_kind = values->GetInt(3);
   const double visible = values->GetDouble(5);
   const double current_time = values->GetDouble(6);
-  if (!navigation_id || element_id <= 0 ||
+  if (!navigation_id || !source_epoch || element_id <= 0 ||
       playback < static_cast<int>(MediaPlaybackState::kIdle) ||
       playback > static_cast<int>(MediaPlaybackState::kEnded) ||
       source_kind < static_cast<int>(MediaSourceKind::kHttpUrl) ||
@@ -103,6 +109,12 @@ std::optional<MediaObservationEnvelope> ReadObservationMessage(
   if (source_url.size() > ::crayon::cef_shell::renderer::kMaxSourceUrlLen) {
     return std::nullopt;
   }
+  const bool removed = values->GetBool(9);
+  if (removed && (playback != static_cast<int>(MediaPlaybackState::kIdle) ||
+                  source_kind != static_cast<int>(MediaSourceKind::kUnknown) ||
+                  !source_url.empty() || visible != 0 || current_time != 0 ||
+                  values->GetBool(7)))
+    return std::nullopt;
   MediaObservation observation;
   observation.navigation_id = *navigation_id;
   observation.element_id = static_cast<std::uint32_t>(element_id);
@@ -111,7 +123,8 @@ std::optional<MediaObservationEnvelope> ReadObservationMessage(
   observation.source_url = source_url;
   observation.visible_fraction = visible;
   observation.current_time_seconds = current_time;
-  return MediaObservationEnvelope{std::move(observation), values->GetBool(7)};
+  return MediaObservationEnvelope{std::move(observation), values->GetBool(7),
+                                  *source_epoch, removed};
 }
 
 }  // namespace crayon::browser::cef_shell::media_ipc

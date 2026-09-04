@@ -18,7 +18,8 @@ use crayon_media_observer::{
     PlaybackProgress, SourceObservation, UserActivation,
 };
 use crayon_media_probe::{
-    assess_protection, HlsPlaylist, Inspection, MediaInspector, Protection, ProtectionEvidence,
+    assess_protection, HlsPlaylist, Inspection, InspectionStatus, MediaInspector, ProbeHttpError,
+    Protection, ProtectionEvidence, SameOriginLanTarget,
 };
 
 /// Browser-verified playback attached to an eligible currentSrc fact.
@@ -57,6 +58,17 @@ pub struct PlanningDecision {
     pub candidate_id: CandidateId,
     pub protocol: ProtocolKind,
     pub decision: CastPolicyDecision,
+    pub preflight: LocalPreflightStatus,
+}
+
+/// URL-free local facts, separate from protection and receiver capability.
+/// Never use this diagnostic projection to grant Direct/Relay authority.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum LocalPreflightStatus {
+    SkippedCredentials,
+    SkippedProtection,
+    Inspected(InspectionStatus),
+    Failed(ProbeHttpError),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -71,6 +83,11 @@ struct CandidateFacts {
     headers_class: HeadersClass,
     playback: Option<VerifiedPlayback>,
     eme_encrypted: bool,
+}
+
+enum ProbePurpose {
+    Background,
+    SelectedDevice,
 }
 
 /// Single platform-neutral owner of candidate lifecycle, bounded inspection
@@ -213,7 +230,9 @@ impl MediaPlanningRuntime {
         receiver: ReceiverCapabilities,
         handoff: HandoffAvailability,
     ) -> Result<PlanningDecision, MediaPlanningError> {
-        let (input, protection) = self.build_delivery_input(candidate_id, receiver).await?;
+        let (input, protection, preflight) = self
+            .build_delivery_input(candidate_id, receiver, ProbePurpose::Background)
+            .await?;
         let protocol = input.candidate().protocol();
         let decision = decide(
             &input,
@@ -227,6 +246,7 @@ impl MediaPlanningRuntime {
             candidate_id,
             protocol,
             decision,
+            preflight,
         })
     }
 
@@ -234,36 +254,41 @@ impl MediaPlanningRuntime {
     /// Receiver capabilities are deliberately empty here: the usecase reads
     /// the current device assessment through `ReceiverCapabilityCache` and
     /// replaces them immediately before policy evaluation.
-    pub async fn prepare_delivery_request(
+    pub(crate) async fn prepare_selected_delivery_request(
         &self,
         candidate_id: CandidateId,
         receiver: DeviceId,
         handoff: HandoffAvailability,
-    ) -> Result<DeliveryRequest, MediaPlanningError> {
-        let (input, protection) = self
+    ) -> Result<(DeliveryRequest, LocalPreflightStatus), MediaPlanningError> {
+        let (input, protection, preflight) = self
             .build_delivery_input(
                 candidate_id,
                 ReceiverCapabilities::new(false, false, false, false, false, false, 0),
+                ProbePurpose::SelectedDevice,
             )
             .await?;
-        Ok(DeliveryRequest {
-            input,
-            observation: verified_playback_observation(),
-            protection,
-            external_client_handoff: handoff,
-            receiver,
-            // The private protocol never carries receiver locators. The
-            // facade owns them; relay IP binding is finalized with the
-            // real receiver handoff in b4/b5.
-            receiver_ip: None,
-        })
+        Ok((
+            DeliveryRequest {
+                input,
+                observation: verified_playback_observation(),
+                protection,
+                external_client_handoff: handoff,
+                receiver,
+                // The private protocol never carries receiver locators. The
+                // facade owns them; relay IP binding is finalized with the
+                // real receiver handoff in b4/b5.
+                receiver_ip: None,
+            },
+            preflight,
+        ))
     }
 
     async fn build_delivery_input(
         &self,
         candidate_id: CandidateId,
         receiver: ReceiverCapabilities,
-    ) -> Result<(CastPolicyInput, Protection), MediaPlanningError> {
+        purpose: ProbePurpose,
+    ) -> Result<(CastPolicyInput, Protection, LocalPreflightStatus), MediaPlanningError> {
         let entry = self
             .candidates
             .get(candidate_id)
@@ -279,17 +304,32 @@ impl MediaPlanningRuntime {
 
         // Credential-bound and EME candidates need no network request to
         // reach their fail-closed policy branch.
-        let inspection =
-            if facts.headers_class == HeadersClass::CredentialBound || facts.eme_encrypted {
-                None
-            } else {
-                Some(
-                    self.inspector
-                        .inspect(entry.url())
-                        .await
-                        .unwrap_or(Inspection::Unknown),
-                )
+        let (inspection, preflight) = if facts.headers_class == HeadersClass::CredentialBound {
+            (None, LocalPreflightStatus::SkippedCredentials)
+        } else if facts.eme_encrypted {
+            (None, LocalPreflightStatus::SkippedProtection)
+        } else {
+            let selected_target = match purpose {
+                ProbePurpose::SelectedDevice => {
+                    SameOriginLanTarget::new(&facts.page_url, entry.url()).ok()
+                }
+                ProbePurpose::Background => None,
             };
+            let result = match selected_target {
+                Some(target) => self.inspector.inspect_selected_lan_report(target).await,
+                None => self.inspector.inspect_report(entry.url()).await,
+            };
+            match result {
+                Ok(report) => {
+                    let status = LocalPreflightStatus::Inspected(report.status());
+                    (Some(report.into_inspection()), status)
+                }
+                Err(error) => (
+                    Some(Inspection::Unknown),
+                    LocalPreflightStatus::Failed(error),
+                ),
+            }
+        };
         let protocol = protocol_for(inspection.as_ref(), entry.url());
         let (video_codec, audio_codec) = codecs_for(inspection.as_ref());
         let mut evidence = Vec::with_capacity(2);
@@ -315,7 +355,29 @@ impl MediaPlanningRuntime {
             candidate,
             receiver,
         );
-        Ok((input, assessment.protection))
+        Ok((input, assessment.protection, preflight))
+    }
+
+    /// Recheck facts that can tighten policy while a prepared request waits
+    /// for commit. Ordinary playback progress does not invalidate a selection.
+    pub(crate) fn delivery_request_is_current(
+        &self,
+        id: CandidateId,
+        request: &DeliveryRequest,
+    ) -> bool {
+        let Some(entry) = self.candidates.get(id) else {
+            return false;
+        };
+        let Some(facts) = self.facts.iter().find(|facts| facts.id == id) else {
+            return false;
+        };
+        let Some(playback) = facts.playback else {
+            return false;
+        };
+        entry.url() == request.input.candidate().url()
+            && facts.headers_class == request.input.candidate().headers_class()
+            && playback.ad_continuity == request.input.candidate().ad_continuity()
+            && (!facts.eme_encrypted || request.protection == Protection::DrmProtected)
     }
 
     /// URL-less blob/MediaStream evidence cannot enter `CandidateStore` and

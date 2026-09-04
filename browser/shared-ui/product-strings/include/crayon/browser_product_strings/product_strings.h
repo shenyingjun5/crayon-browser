@@ -35,6 +35,10 @@ struct CastStrings final {
   std::string playback_seek;
   std::string playback_seconds;
   std::string playback_failed;
+  std::string rejected;
+  std::string rejected_no_route;
+  std::string rejected_drm;
+  std::string retry;
 };
 
 struct ProductStrings final {

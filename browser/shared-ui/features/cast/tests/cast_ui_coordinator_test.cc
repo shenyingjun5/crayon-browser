@@ -127,6 +127,18 @@ bool RejectAndPageLossCannotFakeCasting() {
   CHECK_CAST(rejected.feature().state() == cast::CastFeatureState::kRejected);
   CHECK_CAST(rejected.button().state() == chrome::CastButtonState::kEligible);
   CHECK_CAST(!rejected.NotifySessionStarted(1));
+  // A new explicit click may reopen selection only while Browser proof is
+  // still current; it never starts a session or reuses the previous receiver.
+  CHECK_CAST(rejected.OpenPicker());
+  CHECK_CAST(rejected.receivers().empty());
+  CHECK_CAST(!rejected.active_session_generation());
+  CHECK_CAST(rejected.ApplyPolicyOutcome(cast::PolicyOutcome::kReject));
+  rejected.SetBrowserVerifiedEligible(false);
+  CHECK_CAST(!rejected.OpenPicker());
+  rejected.SetBrowserVerifiedEligible(true);
+  CHECK_CAST(rejected.OpenPicker());
+  rejected.SetPageActive(false);
+  CHECK_CAST(!rejected.OpenPicker());
 
   auto active = EligibleCoordinator();
   CHECK_CAST(active.OpenPicker());

@@ -258,6 +258,12 @@ bool RejectAndFailedOutcomes() {
     CHECK_CAST(controller.coordinator().feature().reject_reason() ==
                (rejected ? cast::RejectReason::kDrmProtected
                          : cast::RejectReason::kGeneral));
+    CHECK_CAST(controller.ActivateCastButton());
+    CHECK_CAST(controller.device_page_pending());
+    CHECK_CAST(!controller.coordinator().active_session_generation());
+    controller.CancelReceiverPicker();
+    controller.OnNavigation();
+    CHECK_CAST(!controller.ActivateCastButton());
   }
   return true;
 }
@@ -306,6 +312,10 @@ bool CastCodeAndPlaybackControls() {
   controller.ConsumeCast({mh::ResolveCastCodeReply{
       "code-1", Device("phone", "Crayon phone"), std::nullopt}});
   CHECK_CAST(!controller.presentation().cast_code_pending);
+  CHECK_CAST(log.starts.empty());
+  CHECK_CAST(!controller.start_pending());
+  CHECK_CAST(controller.coordinator().receivers().size() == 1);
+  CHECK_CAST(controller.SelectReceiver("phone"));
   CHECK_CAST((log.starts == std::vector<std::pair<std::uint64_t, std::string>>{
                                 {51, "phone"}}));
   controller.ConsumeCast({Started(15, mh::DeliveryRoute::kDirect)});
@@ -356,17 +366,70 @@ bool CastCodeAndPlaybackControls() {
   CHECK_CAST(controller.presentation().cast_code_pending);
   controller.ConsumeCast({mh::ResolveCastCodeReply{
       "code-3", Device("next", "Next receiver"), std::nullopt}});
+  CHECK_CAST(log.starts.size() == 1 && !controller.start_pending());
+  CHECK_CAST(controller.SelectReceiver("next"));
   CHECK_CAST(log.starts.size() == 2 && log.starts.back().second == "next");
   return true;
 }
 
-}  // namespace
+bool CastCodeIsOnlyLookupUntilExplicitStart() {
+  CommandLog log;
+  media_host::CastShellController controller(log.Port());
+  controller.OnNavigation();
+  controller.OnBrowserVerifiedMedia();
+  controller.ConsumePlanning({Candidate(61)});
+  CHECK_CAST(!controller.ConnectCastCode("CLOSED"));
+  CHECK_CAST(log.cast_codes.empty());
+  CHECK_CAST(controller.ActivateCastButton());
+  controller.ConsumeCast(
+      {Page(1, 0, std::nullopt, {Device("old", "Old receiver")})});
+  CHECK_CAST(controller.ConnectCastCode("LOOKUP"));
+  CHECK_CAST(controller.coordinator().receivers().empty());
+  CHECK_CAST(!controller.SelectReceiver("old"));
+  CHECK_CAST(!controller.ConnectCastCode("DUPLICATE"));
+  CHECK_CAST(!controller.RefreshReceivers());
+  CHECK_CAST(log.pages.size() == 1);
+  controller.ConsumeCast(
+      {Page(2, 0, std::nullopt, {Device("stale", "Stale discovery")})});
+  CHECK_CAST(controller.coordinator().receivers().empty());
+  CHECK_CAST(log.starts.empty());
+  controller.ConsumeCast({mh::ResolveCastCodeReply{
+      "code-1", Device("offline", "Offline", mh::DeviceState::kOffline),
+      std::nullopt}});
+  CHECK_CAST(controller.presentation().cast_code_failed);
+  CHECK_CAST(controller.coordinator().receivers().empty());
+  CHECK_CAST(log.starts.empty());
+
+  CHECK_CAST(controller.ConnectCastCode("RETRY"));
+  controller.ConsumeCast({mh::ResolveCastCodeReply{
+      "code-2", Device("ready", "Ready receiver"), std::nullopt}});
+  CHECK_CAST(!controller.presentation().cast_code_failed);
+  CHECK_CAST(controller.coordinator().feature().state() ==
+             cast::CastFeatureState::kSelecting);
+  CHECK_CAST(!controller.start_pending() && log.starts.empty());
+  controller.CancelReceiverPicker();
+  CHECK_CAST(!controller.SelectReceiver("ready"));
+  CHECK_CAST(log.starts.empty());
+
+  CHECK_CAST(controller.ActivateCastButton());
+  CHECK_CAST(controller.ConnectCastCode("LATE"));
+  controller.OnNavigation();
+  controller.ConsumeCast({mh::ResolveCastCodeReply{
+      "code-3", Device("late", "Late receiver"), std::nullopt}});
+  CHECK_CAST(controller.coordinator().receivers().empty());
+  CHECK_CAST(log.starts.empty());
+  return true;
+}
+
+} // namespace
 
 int main() {
   const bool ok = EligibilityAndPaging() && DirectStopAndLifecycle() &&
                   ClosedOutcomesAndFailures() && RejectAndFailedOutcomes() &&
                   CancelRefreshAndHostFailure() &&
-                  CastCodeAndPlaybackControls();
-  if (ok) std::cout << "cast_shell_controller_test passed\n";
+                  CastCodeAndPlaybackControls() &&
+                  CastCodeIsOnlyLookupUntilExplicitStart();
+  if (ok)
+    std::cout << "cast_shell_controller_test passed\n";
   return ok ? 0 : 1;
 }

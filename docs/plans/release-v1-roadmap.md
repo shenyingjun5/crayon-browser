@@ -1,12 +1,13 @@
 # REL 第一期三大闭环发布 Roadmap
 
 - 版本：`release-v1-scope`
-- 日期：2026-09-02
+- 日期：2026-09-04
 - 状态：`REL-01/02/05 DONE`；`REL-03/04 TODO`
 - 任务数：5
 - 当前发布候选：Windows 10/11 x64 首发；已有 macOS arm64 共享实现/证据保留，签名、公证、Keychain、平台生命周期与打包等 macOS 特有门禁后续独立验证，不阻塞 Windows 候选
 - 第一期开关：网页 Markdown、本地 Markdown Runtime、LAN Direct/Relay 与外部客户端交接开启；Agent/CLI/MCP、Workflow、Capability Hub、Partner Cast、模型与 HarmonyOS 关闭
 - 第一期语言：同一候选包支持 `en-US/zh-CN/zh-TW`，按用户首选系统 UI 语言在完整重启时自动选择；Windows `LOC-07W` 是 `REL-03` 硬门禁
+- 一期宿主：自定义 Shell＋CEF Alloy。2026-09-04 用户决策由 [PLT-SHELL](desktop-shell-roadmap.md) 承接，当前 Mac 先做共享/本地验证，Windows 首发政策不变；旧 Chrome-style 仅保留迁移基线，不作为长期第二套产品。
 
 ## 1. 一期完成口径
 
@@ -17,6 +18,8 @@
 3. 用户可打开本地 `.md`，使用源码/预览/分栏、编辑工具栏与离线 P0 Runtime，并以原子写和外部修改冲突保护保存。
 
 完成不以模型类、Fake 或独立 Harness 存在为准。三个闭环都必须从真实 Windows x64 CEF 产品入口进入，在同一个候选包的 `en-US/zh-CN/zh-TW` 系统 UI 语言下取得自动化、ADB 接收端实机、性能、安全、长稳、安装/升级/回滚证据，最终经 `QAR-16W` Go/NoGo。macOS 已有共享实现和 arm64 证据不得回退，但 macOS 特有门禁不作为本阶段 Windows 候选的依赖。
+
+2026-09-04 起，上述“真实 CEF 产品入口”以新自定义 Shell＋Alloy 默认包为验收对象。浏览器日用基线是三闭环前提，不能只做一个能打开网页的窗口；已有 Chrome 基线的输入/窗口/UI/性能/发布证据需要新宿主 addendum，算法/协议层证据按真实未变范围复用。
 
 ## 2. 一期明确边界
 
@@ -45,9 +48,30 @@
 |---|---|---|---|---|
 | REL-01 | DONE | 用户范围决策、current/模块 Roadmap | 冻结一期三大闭环、平台顺序、第二期边界，并拆除核心 QAR 对 Agent 的错误硬依赖 | Roadmap/索引一致；任务数一致；Review P0/P1=0 |
 | REL-02 | DONE | REL-01 | 对 CEF 产品调用图做一次只读装配审计，列出只有模型/测试而无生产调用方的 CNT、Cast、MDV 与浏览器基础模块，并冻结一期 feature flag 默认值 | 入口→owner→adapter→平台调用图；无“DONE 即已装配”推断；无生产改动 |
-| REL-03 | TODO | CNT-21W,PLT-W05,MDV-20W,MDV-25W,MRT-09W,LOC-07W,PRV-13AW | 聚合 Windows x64 三闭环与三语言真实产品证据和支持矩阵，关闭 Windows 可关闭的 VERIFIED 状态 | 三闭环真实 CEF；三语言系统跟随/资源闭包；ADB 正式接收端；P0/P1=0；macOS 特有门禁明确 NOT_IN_RELEASE |
+| REL-03 | TODO | PLT-SHELL-25W/26W,CNT-21W,PLT-W05,MDV-20W,MDV-25W,MRT-09W,LOC-07W,PRV-13AW | 聚合新 Alloy 默认包的 Windows x64 三闭环、日用基线与三语言证据 | 新宿主 UI/输入/生命周期 addendum；ADB 正式接收端；P0/P1=0；Mac 独立门禁 |
 | REL-04 | TODO | REL-03,PLT-19W,QAR-01W/02AW/03W/04W/05AW/06W/07W/08AW/09/11W/12W/14W/15W | 聚合 Windows x64 发布门禁与一期已知限制，向 `QAR-16W` 提交 Go/NoGo 输入并形成可发布候选 | Windows 证据可追踪；关闭功能默认 off；artifact/SBOM/回滚 Runbook |
 | REL-05 | DONE | 用户 2026-08-31 平台顺序决策、当前 PRD §7、REL-02 | 将一期收口顺序改为 Windows x64 首发候选，拆出 Windows 原子装配/发布门禁并后置 macOS 特有验证 | 不改生产行为；Roadmap/索引/总数一致；Review P0/P1=0 |
+
+## 5. 一期完整执行总图（2026-09-04 重排）
+
+下表是当前执行总入口，取代历史完成记录中的“下一任务”。具体开发只从所属计划领取原子切片；不重复创建功能计划，也不将聚合检查点算作新增顶层任务。
+
+| 波次 | 必须交付 | 执行 owner / 门禁 | 当前事实与退出条件 |
+|---|---|---|---|
+| A 架构与可嵌入边界 | 自有 Shell、内容用途/后端分离、命令 owner、视图生命周期 | SHELL-00/01/02 | 原方案改为 Alloy；未来 WebView 仅预留受限接口，不宣告后端可用 |
+| B 最小真实浏览器 | Alloy 窗口、多个视图、自绘标签栏/地址栏、导航/站点身份 | SHELL-03P..07P | 同一测试窗口切换/导航，无重建页面假切换；beforeunload/失败/关闭有证据 |
+| C 日用完整性 | 多窗口/高级标签/恢复、书签、历史、下载、设置/Profile、权限、页面工具和菜单 | SHELL-08P..17P；原 BUX/PRV | 已有模型/业务复用，逐项补真实接线；未支持项不可默默删减 PRD |
+| D1 本地文档闭环 | newtab/MDV 受控嵌入、编辑/保存/冲突、离线 Runtime | SHELL-18P；MDV/MRT | 旧业务证据保留，新增宿主/焦点/文件授权/离线 addendum |
+| D2 网页 Markdown | 当前网页→snapshot→Markdown→预览/复制/保存 | SHELL-19P；CNT/PRV | 当前标签/导航取消/跨源/隐藏内容不回退；总审 CNT-21W 与 Mac addendum |
+| D3 投屏新体验 | 常驻灰态入口、实例列表/草稿/MHV2、多视频与设备显式选择、普通播放器悬浮入口 | SHELL-20/21P/22P；PLT-CAST-R04/R07/R03b/R08/R09/R10 | 握手 codec/组件通过不代表产品完成；旧候选不回退自动开始 |
+| E 交互与默认切换 | 三语言、IME/读屏/缩放/主题、全功能产品回归、旧宿主退出 | SHELL-23P/24P/25P；LOC-02/07W/09M/10，MDV-24 剩余矩阵 | 对应平台全部前置通过后切换；不擅改系统语言，不删除另一平台仍用的代码 |
+| F 设备与生命周期 | Direct→MP4 Range/HLS Relay→拒绝/外部交接→100 次/睡眠/退出 | SHELL-26P；W05c..f、M05b4..b6/M05c、R11P | 正式接收端/可信输入补新宿主证据；特殊代理/SDK 新接口不作前置 |
+| G 隐私与质量 | 三闭环数据流、Profile、平台总审、CI/E2E、性能/30 分钟及 8 小时长稳、Release surface | PRV-13AW/Mac addendum、PLT-19W/M、QAR 核心 A/W/M | 不用旧 Chrome 包或短 smoke 替代新宿主结果；安全存储真实访问依用户授权 |
+| H 候选发布 | SBOM/许可、签名、公证（Mac）、安装/升级/回滚、支持矩阵与 Go/NoGo | REL-03/04、QAR-09/10/11W/12W/14W/15W/16W 与 M 对称门禁；SHELL-27P 汇总 | Windows 首发与 Mac 独立门禁；凭证/上传/发布另需授权，无证据不报 DONE |
+
+关键路径是 A→B→C/D→E→F→G→H。D3 的协议/草稿可按已批准独立依赖推进，不等待宿主 UI；最终产品仍须汇合。SHELL-27W 只聚合 REL/QAR 结果，REL 不反向依赖 27W，避免循环。宏观波次不改变原子任务表的精确前置。
+
+旧任务状态和历史失败不重写；SHELL-00 负责决策同步，后续每个切片记录命令、结果、未覆盖和独立 Review。旧工期估算不适用于本次完整外壳迁移，先以 B 波次真实接线结果重新评估，不给未经验证的发布日期。
 
 ## REL-01 完成记录（2026-08-30）
 

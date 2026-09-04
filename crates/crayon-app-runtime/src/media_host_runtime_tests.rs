@@ -398,3 +398,35 @@ fn active_decision_interrupt_and_backpressure_matrix_is_closed() {
         })
     ));
 }
+
+#[test]
+fn start_preflight_is_revoked_by_stop_device_replacement_and_protection_upgrade() {
+    for message in [
+        MediaHostMessage::StopCast {
+            request_id: "stop".into(),
+            session_generation: 1,
+        },
+        MediaHostMessage::StartCast {
+            request_id: "replace".into(),
+            candidate_id: 1,
+            device_id: "receiver-2".into(),
+            handoff_available: false,
+        },
+        MediaHostMessage::ResolveCastCode {
+            request_id: "code".into(),
+            cast_code: "EXAMPLE".into(),
+        },
+        MediaHostMessage::MarkEme {
+            request_id: "eme".into(),
+            tab_id: "tab-1".into(),
+            navigation_id: 1,
+            generation: 1,
+        },
+    ] {
+        let mut pending = MediaHostPendingQueue::default();
+        let (action, reply) = pending.accept_during_preflight("start", message).unwrap();
+        assert_eq!(action, MediaHostInterruptAction::Cancel);
+        assert!(reply.is_none());
+        assert_eq!(pending.len(), 1);
+    }
+}

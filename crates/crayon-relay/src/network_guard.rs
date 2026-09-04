@@ -97,12 +97,14 @@ impl std::error::Error for GuardError {}
 impl From<ProbeHttpError> for GuardError {
     fn from(error: ProbeHttpError) -> Self {
         match error {
-            ProbeHttpError::NonPublicAddress => Self::NonPublicAddress,
+            ProbeHttpError::NonPublicAddress | ProbeHttpError::ScopeMismatch => {
+                Self::NonPublicAddress
+            }
             ProbeHttpError::Dns => Self::Dns,
             ProbeHttpError::Connect => Self::Connect,
             ProbeHttpError::Timeout => Self::Timeout,
             ProbeHttpError::UnsupportedScheme => Self::UnsupportedScheme,
-            ProbeHttpError::InvalidUrl => Self::InvalidUrl,
+            ProbeHttpError::InvalidUrl | ProbeHttpError::InvalidRange => Self::InvalidUrl,
             ProbeHttpError::Transport => Self::Transport,
         }
     }

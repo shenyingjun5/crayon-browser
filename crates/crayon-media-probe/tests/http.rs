@@ -20,6 +20,26 @@ fn client(max_body_bytes: usize) -> ProbeHttpClient {
 }
 
 #[tokio::test]
+async fn empty_and_overflowing_ranges_are_rejected_before_connect() {
+    let upstream = MockUpstream::start(vec![]).await.unwrap();
+    let target = upstream.url("/never");
+    assert!(client(1024).range_get(&target, 0, 0).await.is_err());
+    assert!(client(0).range_get(&target, 0, 16).await.is_err());
+    assert!(client(1024).range_get(&target, u64::MAX, 16).await.is_err());
+    assert_eq!(upstream.hit_count("/never"), 0);
+}
+
+#[tokio::test]
+async fn url_credentials_are_rejected_before_connect() {
+    let upstream = MockUpstream::start(vec![]).await.unwrap();
+    let target = upstream
+        .url("/never")
+        .replacen("://", "://user:example@", 1);
+    assert!(client(1024).head(&target).await.is_err());
+    assert_eq!(upstream.hit_count("/never"), 0);
+}
+
+#[tokio::test]
 async fn head_returns_status_and_headers() {
     let upstream = MockUpstream::start(vec![(
         "/v.mp4".to_string(),
@@ -136,6 +156,10 @@ async fn private_and_loopback_targets_are_refused_by_default() {
         Err(ProbeHttpError::NonPublicAddress)
     );
     assert_eq!(upstream.hit_count("/v.mp4"), 0, "拒绝发生在连接之前");
+    assert_eq!(
+        strict.head("http://[::ffff:127.0.0.1]:1/v.mp4").await,
+        Err(ProbeHttpError::NonPublicAddress)
+    );
 }
 
 #[tokio::test]
@@ -223,7 +247,17 @@ fn ip_classification_matrix() {
     }
     assert!(is_publicly_routable(&IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8))));
 
-    for ip in ["::1", "::", "fe80::1", "fc00::1", "ff02::1"] {
+    for ip in [
+        "::1",
+        "::",
+        "fe80::1",
+        "fc00::1",
+        "ff02::1",
+        "::ffff:192.168.0.1",
+        "::ffff:127.0.0.1",
+        "::ffff:169.254.169.254",
+        "::ffff:100.64.0.1",
+    ] {
         let addr: IpAddr = ip.parse().unwrap();
         assert!(!is_publicly_routable(&addr), "{ip} 应被拦截");
     }

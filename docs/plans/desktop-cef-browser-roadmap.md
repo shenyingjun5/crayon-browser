@@ -1,5 +1,7 @@
 # CEF：Desktop 浏览器壳 Roadmap
 
+2026-09-04：历史 CEF 基线状态与证据保留；用户选择自定义外壳＋Alloy，第一期迁移按 [PLT-SHELL](desktop-shell-roadmap.md) 执行。这里的 Chrome-style 窗口/标签完成证据不能替代新的 Alloy 宿主、生命周期和产品装配门禁。
+
 状态：`CEF-01A..01E DONE`，`CEF-02W DONE`，`CEF-02M VERIFIED`，`CEF-03/04/05 DONE`，`CEF-06..14 VERIFIED`，`CEF-15 DONE`；Windows 正式 CEF bootstrap 多进程、sandbox、共享窗口/标签控制器、基础导航命令链与双平台总 Review 均已完成并实机验证。`RNM-01..08 DONE` 已完成命名和本地路径迁移。当前目标平台仍为 Windows、macOS；Linux 不在当前范围。每项以目标路径、测试 ID 和证据作为验收，不以单平台截图替代。
 
 ## 原子任务

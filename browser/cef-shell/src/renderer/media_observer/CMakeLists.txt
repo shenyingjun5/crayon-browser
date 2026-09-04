@@ -23,6 +23,10 @@ else()
 endif()
 
 if(CRAYON_BUILD_TESTS)
+  add_test(NAME media_collector_lifecycle
+    COMMAND "${CRAYON_NODE_EXECUTABLE}" --test
+      "${CMAKE_CURRENT_SOURCE_DIR}/../../../tests/media_collector.test.mjs")
+  set_tests_properties(media_collector_lifecycle PROPERTIES TIMEOUT 15)
   add_executable(crayon_media_observer_test
     media_observer_test.cc
   )

@@ -156,6 +156,25 @@ bool EligibilityPrefersVisiblePlaying() {
   return true;
 }
 
+bool RemovalIsFencedAndReleasesCapacity() {
+  MediaObserver observer(1);
+  observer.AdvanceNavigation(1);
+  for (std::uint32_t id = 1; id <= kMaxMediaElements; ++id)
+    CHECK(observer.Observe(Playing(1, id, "https://a.example/v.mp4",
+                                   MediaSourceKind::kHttpUrl, 1)) ==
+          ObserveResult::kAccepted);
+  CHECK(!observer.Remove(2, 1));
+  CHECK(observer.tracked_count() == kMaxMediaElements);
+  CHECK(observer.Remove(1, 1));
+  CHECK(!observer.Remove(1, 1));
+  CHECK(observer.Observe(
+            Playing(1, kMaxMediaElements + 1, "https://a.example/v.mp4",
+                    MediaSourceKind::kHttpUrl, 1)) == ObserveResult::kAccepted);
+  observer.TearDown();
+  CHECK(!observer.Remove(1, 2));
+  return true;
+}
+
 /// No auto-interaction by construction: the observer exposes no command
 /// surface — this compile-time check pins the API shape.
 bool ApiExposesNoInteractionSurface() {
@@ -172,10 +191,11 @@ bool ApiExposesNoInteractionSurface() {
 }  // namespace
 
 int main() {
-  const bool ok = SourceClassificationMatrix() && StaleNavigationDropped() &&
-                  NoFabricatedUrlsForBlobAndStream() && TeardownBlocksLateEvents() &&
-                  CapacityBounded() && EligibilityPrefersVisiblePlaying() &&
-                  ApiExposesNoInteractionSurface();
+  const bool ok =
+      SourceClassificationMatrix() && StaleNavigationDropped() &&
+      NoFabricatedUrlsForBlobAndStream() && TeardownBlocksLateEvents() &&
+      CapacityBounded() && EligibilityPrefersVisiblePlaying() &&
+      ApiExposesNoInteractionSurface() && RemovalIsFencedAndReleasesCapacity();
   if (!ok) {
     return EXIT_FAILURE;
   }

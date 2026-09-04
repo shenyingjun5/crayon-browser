@@ -14,7 +14,28 @@ struct LocaleCatalogEntry {
   std::string_view zh_tw;
 };
 
-inline constexpr std::array<LocaleCatalogEntry, 156> kLocaleCatalogEntries{{
+inline constexpr std::array<LocaleCatalogEntry, 180> kLocaleCatalogEntries{{
+    {"cast.selection.unavailable", "Casting is not ready in this window", "此窗口的投屏入口尚未就绪", "此視窗的投屏入口尚未就緒"},
+    {"cast.selection.expired", "Selection expired. Prepare again.", "选择已过期，请重新准备", "選擇已過期，請重新準備"},
+    {"cast.selection.connecting", "Connecting to device…", "正在连接设备…", "正在連線裝置…"},
+    {"cast.selection.submitting", "Starting cast…", "正在开始投屏…", "正在開始投屏…"},
+    {"cast.selection.ready", "Ready to cast", "已准备好投屏", "已準備好投屏"},
+    {"cast.selection.choose_video", "Choose a video", "请选择视频", "請選擇影片"},
+    {"cast.selection.choose_device", "Choose a device", "请选择设备", "請選擇裝置"},
+    {"cast.selection.connected", "Device connected", "设备已连接", "裝置已連線"},
+    {"cast.selection.device_selected", "Device selected", "已选择设备", "已選擇裝置"},
+    {"cast.selection.videos", "Videos", "视频", "影片"},
+    {"cast.selection.devices", "Devices", "设备", "裝置"},
+    {"cast.selection.video_fallback", "Untitled video", "未命名视频", "未命名影片"},
+    {"cast.selection.device_fallback", "Unnamed device", "未命名设备", "未命名裝置"},
+    {"cast.selection.selected", "Selected", "已选", "已選"},
+    {"cast.selection.prepare", "Prepare cast", "准备投屏", "準備投屏"},
+    {"cast.selection.connect", "Connect device", "连接设备", "連線裝置"},
+    {"cast.selection.confirm_replace", "Confirm replacing the current cast", "确认替换当前投屏", "確認取代目前投屏"},
+    {"cast.selection.previous", "Previous", "上一页", "上一頁"},
+    {"cast.selection.next", "Next", "下一页", "下一頁"},
+    {"cast.selection.overlay", "Cast this video", "投屏此视频", "投屏此影片"},
+    {"cast.selection.empty_video", "No eligible videos. Play a video first.", "暂无可投视频，请先播放视频", "暫無可投影片，請先播放影片"},
     {"app.title", "Crayon AI Agent Cast Browser", "蜡笔 AI Agent 投屏浏览器", "蠟筆 AI Agent 投影瀏覽器"},
     {"app.about", "About Crayon Browser", "关于蜡笔浏览器", "關於蠟筆瀏覽器"},
     {"nav.back", "Back", "后退", "後退"},
@@ -160,17 +181,20 @@ inline constexpr std::array<LocaleCatalogEntry, 156> kLocaleCatalogEntries{{
     {"page_markdown.save_cancelled_status", "Save cancelled", "已取消保存", "已取消儲存"},
     {"cast.picker.title", "Cast to device", "投屏到设备", "投影到裝置"},
     {"cast.picker.empty", "No available devices found. Refresh or cancel.", "未发现可用设备，可以刷新或取消。", "找不到可用的裝置。請重新整理或取消。"},
-    {"cast.picker.select", "Cast", "投屏", "投影"},
+    {"cast.picker.select", "Start casting", "开始投屏", "開始投影"},
     {"cast.picker.refresh", "Refresh", "刷新", "重新整理"},
     {"cast.picker.cancel", "Cancel", "取消", "取消"},
     {"cast.code.label", "Cast code", "投屏码", "投影碼"},
-    {"cast.code.connect", "Connect", "连接", "連線"},
+    {"cast.code.connect", "Find device", "查找设备", "尋找裝置"},
     {"cast.code.failed", "The cast code is invalid or the receiver is unavailable", "投屏码无效或接收端不可用", "投影碼無效或接收端無法使用"},
     {"cast.control.pause", "Pause", "暂停", "暫停"},
     {"cast.control.resume", "Resume", "继续", "繼續"},
     {"cast.control.seek", "Seek", "跳转", "跳轉"},
     {"cast.control.seconds", "Seconds", "秒", "秒"},
     {"cast.control.failed", "Control failed", "控制失败", "控制失敗"},
+    {"cast.rejected.no_route", "No playable cast route. Try another receiver.", "没有可用的投屏方式，可尝试其他接收端。", "沒有可用的投影方式，可嘗試其他接收端。"},
+    {"cast.rejected.drm", "DRM-protected content cannot be cast.", "DRM 保护内容不能投屏。", "DRM 保護內容無法投影。"},
+    {"cast.retry", "Choose a receiver and retry", "重新选择接收端并重试", "重新選擇接收端並重試"},
 }};
 
 inline constexpr std::string_view kCatalogVersion = "desktop-localization-v1";

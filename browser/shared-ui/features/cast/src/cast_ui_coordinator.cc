@@ -57,6 +57,14 @@ void CastUiCoordinator::SetBrowserVerifiedEligible(bool eligible) {
 }
 
 std::optional<CastUiAction> CastUiCoordinator::OpenPicker() {
+  // This is an explicit user action, not an automatic policy retry. The
+  // button's current Browser-verified eligibility is checked before clearing
+  // the error; acknowledging the feature alone cannot grant playback proof.
+  if (button_.state() == browser_chrome::CastButtonState::kEligible &&
+      feature_.state() == CastFeatureState::kRejected) {
+    feature_.AcknowledgeRejection();
+    feature_.SetBrowserVerifiedEligible(true);
+  }
   if (feature_.state() != CastFeatureState::kEligible ||
       button_.state() != browser_chrome::CastButtonState::kEligible) {
     return std::nullopt;

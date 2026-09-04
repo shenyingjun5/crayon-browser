@@ -17,7 +17,7 @@ using ::crayon::cef_shell::renderer::MediaPlaybackState;
 using ::crayon::cef_shell::renderer::MediaSourceKind;
 using ::crayon::cef_shell::renderer::ObserveResult;
 
-constexpr char kExtensionName[] = "crayon/media-observer-v1";
+constexpr char kExtensionName[] = "crayon/media-observer-v2";
 constexpr char kNativeFunction[] = "crayonMediaObservationNative";
 constexpr char kExtensionCode[] =
     "native function crayonMediaObservationNative();";
@@ -26,18 +26,20 @@ constexpr char kExtensionCode[] =
 // currentTime/rate setters, or filters by host/ad semantics (BR-009/010).
 constexpr char kCollectorScript[] = R"JS(
 (() => {
-  const installedKey = Symbol.for('crayon.media-observer.v1.installed');
+  const installedKey = Symbol.for('crayon.media-observer.v2.installed');
   if (globalThis[installedKey]) return;
   globalThis[installedKey] = true;
   const emitNative = (...facts) => {
     const nativeFunction = globalThis.crayonMediaObservationNative;
     if (typeof nativeFunction === 'function') nativeFunction(...facts);
   };
-  const ids = new WeakMap();
-  const attached = new WeakSet();
+  const active = new Map();
+  const exhausted = new WeakSet();
   let nextId = 1;
-  let tracked = 0;
+  let refillPending = false;
   const maxTracked = 16;
+  const maxIdentity = 2147483647;
+  const maxSourceUrlLength = 2048;
   const visibleFraction = (element) => {
     const rect = element.getBoundingClientRect();
     if (!(rect.width > 0 && rect.height > 0)) return 0;
@@ -47,42 +49,84 @@ constexpr char kCollectorScript[] = R"JS(
     const height = Math.max(0, Math.min(rect.bottom, innerHeight) - Math.max(rect.top, 0));
     return Math.max(0, Math.min(1, (width * height) / (rect.width * rect.height)));
   };
-  const emit = (element, encrypted = false) => {
-    const id = ids.get(element);
-    if (!id) return;
+  const remove = (element) => {
+    const entry = active.get(element);
+    if (!entry) return;
+    active.delete(element);
+    refillPending = true;
+    for (const [name, listener] of entry.listeners)
+      element.removeEventListener(name, listener);
+    emitNative(entry.id, 0, 0, '', 0, 0, false, entry.epoch, true);
+  };
+  const sourceOf = element => {
+    const url = String(element.currentSrc || element.src || '');
+    return {object: element.srcObject,
+            url: url.length <= maxSourceUrlLength ? url : null};
+  };
+  const emit = (element, encrypted = false, reloaded = false) => {
+    const entry = active.get(element);
+    if (!entry) return;
+    if (!element.isConnected) { remove(element); return; }
+    const sourceNow = sourceOf(element);
+    if (reloaded || sourceNow.url === null ||
+        sourceNow.object !== entry.source.object ||
+        sourceNow.url !== entry.source.url) {
+      if (entry.epoch === maxIdentity) {
+        exhausted.add(element);
+        remove(element);
+        return;
+      }
+      entry.epoch += 1;
+      entry.source = sourceNow;
+    }
     const state = element.ended ? 3 : (element.paused ? 2 : 1);
     const stream = typeof globalThis.MediaStream === 'function' &&
                    element.srcObject instanceof globalThis.MediaStream;
-    const source = stream ? '' : String(element.currentSrc || element.src || '');
-    emitNative(id, state, stream ? 2 : 0, source,
+    const source = stream ? '' : (sourceNow.url || '');
+    emitNative(entry.id, state, stream ? 2 : 0, source,
                visibleFraction(element), Number(element.currentTime) || 0,
-               Boolean(encrypted));
+               Boolean(encrypted), entry.epoch, false);
   };
   const attach = (element) => {
-    if (attached.has(element) || tracked >= maxTracked) return;
-    attached.add(element);
-    ids.set(element, nextId++);
-    tracked += 1;
+    if (!element.isConnected || active.has(element) || exhausted.has(element) ||
+        active.size >= maxTracked || nextId > maxIdentity) return;
+    const entry = {id: nextId++, epoch: 1, source: sourceOf(element), listeners: []};
+    active.set(element, entry);
     for (const name of ['play', 'playing', 'pause', 'ended', 'timeupdate',
-                        'loadedmetadata', 'durationchange']) {
-      element.addEventListener(name, () => emit(element), {passive: true});
+                        'loadedmetadata', 'durationchange', 'loadstart',
+                        'emptied', 'encrypted']) {
+      const listener = () => emit(element, name === 'encrypted',
+                                   name === 'loadstart' || name === 'emptied');
+      entry.listeners.push([name, listener]);
+      element.addEventListener(name, listener, {passive: true});
     }
-    element.addEventListener('encrypted', () => emit(element, true),
-                             {passive: true});
     emit(element);
   };
   const scan = (root) => {
+    if (active.size >= maxTracked) return;
     if (root instanceof HTMLMediaElement) attach(root);
-    if (root && typeof root.querySelectorAll === 'function') {
-      for (const element of root.querySelectorAll('video,audio')) attach(element);
+    if (active.size < maxTracked && root &&
+        typeof root.querySelectorAll === 'function') {
+      for (const element of root.querySelectorAll('video,audio')) {
+        if (active.size >= maxTracked) break;
+        attach(element);
+      }
     }
+  };
+  const refill = () => {
+    if (!refillPending) return;
+    refillPending = false;
+    scan(document);
   };
   scan(document);
   new MutationObserver((records) => {
+    for (const element of active.keys()) if (!element.isConnected) remove(element);
+    if (refillPending) { refill(); return; }
     for (const record of records) for (const node of record.addedNodes) scan(node);
   }).observe(document, {childList: true, subtree: true});
   globalThis.setInterval(() => {
-    for (const element of document.querySelectorAll('video,audio')) emit(element);
+    for (const element of active.keys()) emit(element);
+    refill();
   }, 250);
 })();
 )JS";
@@ -176,10 +220,11 @@ bool CefMediaObserverRenderer::OnProcessMessageReceived(
 bool CefMediaObserverRenderer::HandleNativeObservation(
     const CefV8ValueList& arguments, CefString* exception) {
   CEF_REQUIRE_RENDERER_THREAD();
-  if (arguments.size() != 7 || !IsInt(arguments[0]) || !IsInt(arguments[1]) ||
+  if (arguments.size() != 9 || !IsInt(arguments[0]) || !IsInt(arguments[1]) ||
       !IsInt(arguments[2]) || !arguments[3]->IsString() ||
       !IsNumber(arguments[4]) || !IsNumber(arguments[5]) ||
-      !arguments[6]->IsBool()) {
+      !arguments[6]->IsBool() || !IsInt(arguments[7]) ||
+      !arguments[8]->IsBool()) {
     if (exception) *exception = "invalid media observation";
     return true;
   }
@@ -195,9 +240,11 @@ bool CefMediaObserverRenderer::HandleNativeObservation(
   const int element_id = arguments[0]->GetIntValue();
   const int playback = arguments[1]->GetIntValue();
   const int source_tag = arguments[2]->GetIntValue();
+  const int source_epoch = arguments[7]->GetIntValue();
+  const bool removed = arguments[8]->GetBoolValue();
   const double visible = arguments[4]->GetDoubleValue();
   const double current_time = arguments[5]->GetDoubleValue();
-  if (element_id <= 0 ||
+  if (element_id <= 0 || source_epoch <= 0 ||
       playback < static_cast<int>(MediaPlaybackState::kIdle) ||
       playback > static_cast<int>(MediaPlaybackState::kEnded) ||
       (source_tag != 0 && source_tag != 2) || !std::isfinite(visible) ||
@@ -205,6 +252,10 @@ bool CefMediaObserverRenderer::HandleNativeObservation(
     return true;
   }
   std::string source_url = arguments[3]->GetStringValue().ToString();
+  if (removed && (playback != static_cast<int>(MediaPlaybackState::kIdle) ||
+                  source_tag != 0 || !source_url.empty() || visible != 0 ||
+                  current_time != 0 || arguments[6]->GetBoolValue()))
+    return true;
   std::string normalized;
   MediaSourceKind source_kind = MediaSourceKind::kUnknown;
   if (source_tag == 2) {
@@ -228,18 +279,23 @@ bool CefMediaObserverRenderer::HandleNativeObservation(
   observation.source_url = std::move(source_url);
   observation.visible_fraction = visible;
   observation.current_time_seconds = current_time;
-  if (found->second.observer.Observe(observation) != ObserveResult::kAccepted) {
+  if (removed) {
+    found->second.observer.Remove(observation.navigation_id,
+                                  observation.element_id);
+  } else if (found->second.observer.Observe(observation) !=
+             ObserveResult::kAccepted) {
     return true;
   }
   auto eligible =
       found->second.observer.FindEligible(found->second.navigation_id);
-  if (eligible && eligible->element_id == observation.element_id) {
+  if (!removed && eligible && eligible->element_id == observation.element_id) {
     observation = std::move(*eligible);
   }
   frame->SendProcessMessage(
       PID_BROWSER,
       media_ipc::CreateObservationMessage(media_ipc::MediaObservationEnvelope{
-          std::move(observation), arguments[6]->GetBoolValue()}));
+          std::move(observation), arguments[6]->GetBoolValue(),
+          static_cast<std::uint64_t>(source_epoch), removed}));
   return true;
 }
 

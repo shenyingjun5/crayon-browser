@@ -102,6 +102,20 @@ ObserveResult MediaObserver::Observe(MediaObservation observation) {
   return ObserveResult::kAccepted;
 }
 
+bool MediaObserver::Remove(std::uint64_t navigation_id,
+                           std::uint32_t element_id) {
+  if (torn_down_ || navigation_id != navigation_id_)
+    return false;
+  const auto found = std::find_if(elements_.begin(), elements_.end(),
+                                  [element_id](const auto &element) {
+                                    return element.element_id == element_id;
+                                  });
+  if (found == elements_.end())
+    return false;
+  elements_.erase(found);
+  return true;
+}
+
 void MediaObserver::TearDown() {
   torn_down_ = true;
   elements_.clear();

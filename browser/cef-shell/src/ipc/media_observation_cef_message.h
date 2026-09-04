@@ -9,11 +9,13 @@
 namespace crayon::browser::cef_shell::media_ipc {
 
 inline constexpr char kAdvanceMessageName[] = "crayon.media.advance.v1";
-inline constexpr char kObservationMessageName[] = "crayon.media.observation.v1";
+inline constexpr char kObservationMessageName[] = "crayon.media.observation.v2";
 
 struct MediaObservationEnvelope {
   ::crayon::cef_shell::renderer::MediaObservation observation;
   bool eme_encrypted = false;
+  std::uint64_t source_epoch = 1;
+  bool removed = false;
 };
 
 CefRefPtr<CefProcessMessage> CreateAdvanceMessage(std::uint64_t navigation_id);

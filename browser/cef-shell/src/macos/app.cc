@@ -20,6 +20,7 @@
 #include "include/cef_task.h"
 #include "include/wrapper/cef_closure_task.h"
 #include "include/wrapper/cef_helpers.h"
+#include "macos/media_host_process_mac.h"
 #include "macos/page_markdown_platform_mac.h"
 #include "macos/trusted_input_monitor_mac.h"
 
@@ -83,10 +84,32 @@ page_markdown::PageMarkdownStrings BuildPageMarkdownStrings(
 
 macos::CastChromeStrings BuildCastStrings(
     const ::crayon::browser::product_strings::CastStrings& strings) {
-  return macos::CastChromeStrings{
-      strings.button_select, strings.button_stop, strings.picker_title,
-      strings.picker_empty, strings.picker_select, strings.picker_refresh,
-      strings.picker_cancel};
+  return macos::CastChromeStrings{strings.button_select,
+                                  strings.button_stop,
+                                  strings.picker_title,
+                                  strings.picker_empty,
+                                  strings.picker_select,
+                                  strings.picker_refresh,
+                                  strings.picker_cancel,
+                                  strings.cast_code_label,
+                                  strings.cast_code_connect,
+                                  strings.cast_code_failed,
+                                  strings.playback_pause,
+                                  strings.playback_resume,
+                                  strings.playback_seek,
+                                  strings.playback_seconds,
+                                  strings.playback_failed,
+                                  strings.rejected,
+                                  strings.rejected_no_route,
+                                  strings.rejected_drm,
+                                  strings.retry};
+}
+
+macos::CastChromePresentation CastChromePresentation(
+    media_host::CastShellPresentation presentation) {
+  return {presentation.cast_code_pending, presentation.cast_code_failed,
+          presentation.control_pending, presentation.control_failed,
+          presentation.playback_paused};
 }
 
 }  // namespace
@@ -100,17 +123,16 @@ BrowserApp::BrowserApp(
           BuildPageMarkdownStrings(product_strings_.page_markdown)),
       cast_strings_(BuildCastStrings(product_strings_.cast)),
       mdv_runtime_(std::make_shared<mdv::MdvRuntimeState>()),
-      mdv_entries_(std::make_shared<mdv::MdvEntryController>(mdv_runtime_,
-                                                             product_strings_.mdv)),
-      mdv_editing_(
-          std::make_shared<mdv::MdvEditController>(mdv_runtime_,
-                                                   product_strings_.mdv)),
+      mdv_entries_(std::make_shared<mdv::MdvEntryController>(
+          mdv_runtime_, product_strings_.mdv)),
+      mdv_editing_(std::make_shared<mdv::MdvEditController>(
+          mdv_runtime_, product_strings_.mdv)),
       permission_store_(std::make_unique<permission::PermissionStore>()),
       content_host_(std::make_unique<macos::ContentHostAdapter>()),
       media_host_(std::make_unique<media_host::MediaHostAdapter>(
           std::make_unique<macos::MediaHostProcess>())),
-      cast_shell_(std::make_unique<media_host::CastShellController>(
-          media_host::CastCommandPort{
+      cast_shell_(std::make_unique<
+                  media_host::CastShellController>(media_host::CastCommandPort{
           [this](media_host::media_host_ipc::DiscoveryAction action) {
             return media_host_->RequestDiscovery(action);
           },
@@ -123,6 +145,14 @@ BrowserApp::BrowserApp(
           },
           [this](std::uint64_t generation) {
             return media_host_->RequestStopCast(generation);
+          },
+          [this](std::string code) {
+            return media_host_->RequestResolveCastCode(std::move(code));
+          },
+          [this](std::uint64_t generation,
+                 media_host::media_host_ipc::CastControlAction action,
+                 std::optional<std::uint64_t> seconds) {
+            return media_host_->RequestControlCast(generation, action, seconds);
           }})),
       trusted_input_monitor_(std::make_unique<macos::TrustedInputMonitor>()),
       tab_controller_(new window::TabController(
@@ -134,10 +164,11 @@ BrowserApp::BrowserApp(
             static_cast<void>(cast_chrome_->AttachWindow(
                 active_browser_id_, browser->GetHost()->GetWindowHandle()));
             cast_chrome_->SetActiveWindow(active_browser_id_);
-            cast_chrome_->Render(cast_shell_->coordinator());
+            cast_chrome_->Render(
+                cast_shell_->coordinator(),
+                CastChromePresentation(cast_shell_->presentation()));
           },
-          std::nullopt,
-          permission_store_.get())) {}
+          std::nullopt, permission_store_.get())) {}
 
 BrowserApp::~BrowserApp() = default;
 
@@ -163,6 +194,13 @@ void BrowserApp::OnContextInitialized() {
           [this] { cast_shell_->CancelReceiverPicker(); },
           [this](const std::string& device_id) {
             return cast_shell_->SelectReceiver(device_id);
+          },
+          [this](std::string code) {
+            return cast_shell_->ConnectCastCode(std::move(code));
+          },
+          [this](bool paused) { return cast_shell_->SetPaused(paused); },
+          [this](std::uint64_t seconds) {
+            return cast_shell_->SeekSession(seconds);
           }});
   new_tab::RegisterNewTabSchemeHandlerFactory(
       browser_new_tab::BuildNewTabPageModel(
@@ -275,7 +313,9 @@ void BrowserApp::OnContextInitialized() {
         static_cast<void>(cast_chrome_->AttachWindow(
             active_browser_id_, browser->GetHost()->GetWindowHandle()));
         cast_chrome_->SetActiveWindow(active_browser_id_);
-        cast_chrome_->Render(cast_shell_->coordinator());
+        cast_chrome_->Render(
+            cast_shell_->coordinator(),
+            CastChromePresentation(cast_shell_->presentation()));
       });
   tab_controller_->SetBrowserClosingCallback(
       [this](CefRefPtr<CefBrowser> browser) {
@@ -365,7 +405,8 @@ void BrowserApp::ContentHostTick() {
         active_browser_id_, active_browser->GetHost()->GetWindowHandle()));
     cast_chrome_->SetActiveWindow(active_browser_id_);
   }
-  cast_chrome_->Render(cast_shell_->coordinator());
+  cast_chrome_->Render(cast_shell_->coordinator(),
+                       CastChromePresentation(cast_shell_->presentation()));
   ScheduleContentHostTick();
 }
 

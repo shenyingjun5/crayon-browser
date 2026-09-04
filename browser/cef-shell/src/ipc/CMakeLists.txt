@@ -2,6 +2,7 @@ add_library(crayon-cef-shell-ipc STATIC
   src/content_host_codec.cc
   src/ipc_channel_contract.cc
   src/media_host_codec.cc
+  src/media_host_v2_codec.cc
 )
 add_library(crayon::cef-shell-ipc ALIAS crayon-cef-shell-ipc)
 
@@ -48,4 +49,17 @@ if(CRAYON_BUILD_TESTS)
     )
   endif()
   add_test(NAME ipc_channel_contract COMMAND crayon_cef_shell_ipc_test)
+
+  add_executable(crayon_media_host_v2_codec_test tests/media_host_v2_codec_test.cc)
+  target_link_libraries(crayon_media_host_v2_codec_test PRIVATE crayon::cef-shell-ipc)
+  target_compile_definitions(crayon_media_host_v2_codec_test PRIVATE
+    CRAYON_SOURCE_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/../../../..")
+  if(MSVC)
+    target_compile_options(crayon_media_host_v2_codec_test PRIVATE /W4 /WX /permissive-)
+  else()
+    target_compile_options(crayon_media_host_v2_codec_test PRIVATE
+      -Wall -Wextra -Wpedantic -Werror)
+  endif()
+  add_test(NAME media_host_v2_codec COMMAND crayon_media_host_v2_codec_test)
+  set_tests_properties(media_host_v2_codec PROPERTIES TIMEOUT 15)
 endif()

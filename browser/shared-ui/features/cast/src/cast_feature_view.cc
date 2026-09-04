@@ -49,6 +49,15 @@ void CastFeatureViewModel::ClosePicker() {
   }
 }
 
+bool CastFeatureViewModel::AcknowledgeRejection() {
+  if (state_ != CastFeatureState::kRejected) {
+    return false;
+  }
+  reject_reason_ = RejectReason::kGeneral;
+  state_ = CastFeatureState::kBrowsing;
+  return true;
+}
+
 bool CastFeatureViewModel::SubmitPolicyOutcome(PolicyOutcome outcome, RejectReason reason) {
   if (state_ != CastFeatureState::kSelecting) {
     return false;  // planning only from the picker with eligibility
@@ -131,9 +140,9 @@ const char* CastFeatureViewModel::message_key() const {
     case CastFeatureState::kRejected:
       switch (reject_reason_) {
         case RejectReason::kDrmProtected:
-          return "cast.rejected";
+          return "cast.rejected.drm";
         case RejectReason::kNoRoute:
-          return "cast.open_external_client";
+          return "cast.rejected.no_route";
         case RejectReason::kGateDenied:
         case RejectReason::kGeneral:
           return "cast.rejected";

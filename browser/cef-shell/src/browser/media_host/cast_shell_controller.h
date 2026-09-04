@@ -68,6 +68,7 @@ class CastShellController final {
   bool RefreshReceivers();
   void CancelReceiverPicker();
   bool SelectReceiver(const std::string& device_id);
+  // Legacy UI callback name: resolves the code only, never connects or starts.
   bool ConnectCastCode(std::string cast_code);
   bool SetPaused(bool paused);
   bool SeekSession(std::uint64_t position_seconds);

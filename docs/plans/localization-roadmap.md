@@ -2,7 +2,7 @@
 
 - 版本：`desktop-localization-v1`
 - 日期：2026-09-02
-- 状态：`LOC-01/03/04/05W/06W DONE`；`LOC-02 VERIFIED`（待独立繁体语言审校）；`LOC-07W BLOCKED`；`LOC-08M IMPLEMENTED`；其余任务按依赖 `TODO`
+- 状态：`LOC-01/03/04/05W/06W DONE`；`LOC-02 VERIFIED`（待独立繁体语言审校）；`LOC-07W BLOCKED`；`LOC-08M VERIFIED`（macOS arm64 双配置/完整 CTest/本地 artifact 已补证）；其余任务按依赖 `TODO`
 - 任务数：10
 - 当前发布顺序：Windows 10/11 x64 先完成 `LOC-01..07W` 并进入第一期候选；macOS `LOC-08M/09M` 后续验证，不能用 Windows 证据替代
 - 支持语言：简体中文 `zh-CN`、繁体中文 `zh-TW`、英文 `en-US`
@@ -15,7 +15,7 @@
 
 - `browser/shared-ui/locales/{en-US,zh-CN,zh-TW}.json` 已具备 155-key parity，并由确定性 generator 生成共享 C++ catalog、Windows RC 与 macOS strings；繁体语言人工审校仍待 LOC-07W。
 - Windows Browser process 已在 `CefInitialize` 前读取用户首选 UI 语言，并以同一不可变 snapshot 设置 `CefSettings.locale`/`accept_language_list` 及自有产品 catalog；Release 已闭合为三套支持语言及必要 gender pak。
-- macOS Browser process 已接入 `CFLocaleCopyPreferredLanguages` adapter，并以同一共享 snapshot 设置 CEF locale/Accept-Language 和产品 catalog；bundle 构建只消费 generator 的 `en/zh-Hans/zh-Hant.lproj`。macOS arm64 构建、真实系统语言与签名包验证仍后置。
+- macOS Browser process 已接入 `CFLocaleCopyPreferredLanguages` adapter，并以同一共享 snapshot 设置 CEF locale/Accept-Language 和产品 catalog；bundle 构建只消费 generator 的 `en/zh-Hans/zh-Hant.lproj`。macOS arm64 双配置构建/完整 CTest/本地 ad-hoc artifact 已于 LOC-08M 补证，真实系统语言与正式签名包仍待 LOC-09M/QAR。
 - CEF Windows Release 产物已闭合为三套支持语言及必要 gender pak；Debug 保留完整上游 locale 以便诊断。
 - BUX-13 preference schema v1 没有语言键。本期只实现“跟随系统”，不修改已完成的 BUX-13 历史结论或持久化 schema。
 
@@ -102,7 +102,7 @@ UI locale 和网页可观察语言由同一闭合选择结果派生，但不泄�
 | LOC-05W | DONE | LOC-04,CEF-15,PLT-W04 | Windows 系统 UI 语言探测、CEF locale/Accept-Language 与自有 UI 使用同一 snapshot | `browser/cef-shell/src/process/windows`,`browser/cef-shell/src/windows` | Debug/Release build、完整 CTest、CEF/产品语言 contract |
 | LOC-06W | DONE | LOC-05W | Windows 三语言 native/CEF 资源装配与 Release 语言包闭包，不夹带其他 locale | `browser/cef-shell/resources/windows`,`browser/cef-shell/CMakeLists.txt`,package contract | 三套 pak 必备/额外 pak 拒绝、artifact scan、大小/hash/NOTICE |
 | LOC-07W | BLOCKED | LOC-06W,CNT-20W2,MDV-25W,PLT-W05b | Windows 10/11 x64 三语言与非支持语言回退英文的真实 CEF、可访问性、IME/DPI 和包体验收 | `tests/e2e/desktop`,`tests/e2e/platform`,LOC/REL/QAR 证据 | UX-001/002/004/013/016/018；三语言真机；Review P0/P1=0 |
-| LOC-08M | IMPLEMENTED | LOC-04,CEF-02M | macOS resolver adapter、CEF locale 与 `en/zh-Hans/zh-Hant.lproj` 产品装配 | `browser/cef-shell/src/macos`,`browser/cef-shell/src/process/macos`,`browser/shared-ui/localization/generated/macos` | arm64 Debug/Release build/contract；不冒充签名/真机通过 |
+| LOC-08M | VERIFIED | LOC-04,CEF-02M | macOS resolver adapter、CEF locale 与 `en/zh-Hans/zh-Hant.lproj` 产品装配 | `browser/cef-shell/src/macos`,`browser/cef-shell/src/process/macos`,`browser/shared-ui/localization/generated/macos` | arm64 Debug/Release build/contract；不冒充签名/真机通过 |
 | LOC-09M | TODO | LOC-08M,macOS 候选环境 | macOS 三语言真实 CEF、VoiceOver/IME/缩放与 package/signature 语言闭包 | `tests/e2e/desktop`,`tests/e2e/platform`,LOC/QAR 证据 | UX-016/018；三语言真机；签名包；原生 x64 边界如实记录 |
 | LOC-10 | TODO | LOC-07W,LOC-09M | 跨平台本地化总 Review、文档/支持矩阵/残余风险与后续手动覆盖决策 | current/LOC/REL/QAR 文档 | P0/P1=0；Windows/macOS 证据隔离；APPROVE |
 
@@ -167,6 +167,11 @@ UI locale 和网页可观察语言由同一闭合选择结果派生，但不泄�
 
 ### LOC-08M/09M macOS 后置
 
+- LOC-08M 本次原子范围（2026-09-03，用户要求开始 macOS 验证）：依赖 `LOC-04 DONE` 与 `CEF-02M VERIFIED`；以 `3fd7804` 干净工作区为基线，只补 macOS arm64 本地化装配的 Debug/Release 构建、完整适用 CTest 和 bundle contract 证据，并修复此接线直接造成的构建/契约问题。
+- 允许路径：`browser/cef-shell` 的 macOS locale 接线、对应 CMake/package/source contract、LOC Roadmap 与计划索引；共享 locale/catalog 只读。首轮产品构建发现共享窗口策略依赖与媒体 transport 头文件遗漏，范围补充为仅修复这两处 Mac 产品构建接线并加回归门禁，不改其行为。禁止修改 Cast-SDK、公共协议、业务权限、系统语言/输入法偏好和用户 Profile；不访问真实 Keychain、不使用证书凭证、不公证上传或发布。
+- 验收命令：离线固定 CEF 下 `cmake --preset macos-arm64-cef-debug` 与 Release configure；两个构建目录分别 `cmake --build`、`ctest --output-on-failure`；`node tools/locales/generate.mjs --check`、`cargo run --quiet -p repo-guard -- scan --root .`、`git diff --check`。测试覆盖支持/不支持/非法/超界/API 失败回退；locale 初始化无后台任务，取消/超时由 CEF Harness 与退出释放覆盖。
+- 明确不做：LOC-09M 三语言系统切换、VoiceOver/IME/缩放、Developer ID/公证/安装升级、真实投屏与长稳；不以本次 macOS 补证改变 Windows 首发策略。
+- 首轮完整 CTest 补充范围：修复 `tests/e2e/desktop/browser/run_page_snapshot_fixture.py` 将 Windows 专用 `media-cast-ui-win` 误派给 Mac 导致的超时，只调整测试平台分派并新增独立回归测试；保留 Mac `media-cast-ui` 与 Windows 可信物理输入门禁，不修改产品或扩大输入授权。
 - LOC-08M 只完成共享实现消费、`zh-Hant.lproj`、CEF/bundle 资源和 arm64 构建/contract；没有真实系统语言/VoiceOver/IME/package evidence 最高 `VERIFIED`。
 - LOC-09M 在真实 macOS arm64 完成三语言、VoiceOver、中文/英文 IME、100%/200% scaling、签名包；原生 x64 只有原生硬件才能给长稳结论，Rosetta 只允许短 smoke。
 - Windows 证据不得升级 LOC-08M/09M 状态；macOS 特有失败也不回写已完成的 Windows LOC-07W。
@@ -279,7 +284,22 @@ UI locale 和网页可观察语言由同一闭合选择结果派生，但不泄�
 - Code Review：按 v0.9 顺序复核 resolver/CEF 单快照、资源 owner、失败回退、容量边界、包闭包和跨平台证据真实性；修正测试误用固定偏好项上限，并关闭 CoreFoundation UTF-8 保守容量导致合法 tag 被误拒绝的 P2，最终 P0/P1/P2/P3=`0/0/0/0`，`APPROVE`。
 - 未覆盖与风险：当前是 Windows 环境，macOS arm64 Debug/Release configure/build/完整 CTest、真实 App 启停、三系统语言、CEF header/JS/html-lang、VoiceOver/IME/缩放、签名与 package contract 均为 `NOT_RUN`；因此状态只到 `IMPLEMENTED`，不得升级为 `VERIFIED/DONE`。
 
-LOC 模块当前无 `IN_PROGRESS` 项：`LOC-07W BLOCKED` 等待 Windows 人工/系统环境，`LOC-08M IMPLEMENTED` 等待后续 macOS arm64 验证。后续严格按：
+## LOC-08M macOS 补证记录（2026-09-03）
+
+- 基线：`main@3fd7804`，开始时工作区干净、固定 Cast-SDK 未改；macOS 26.6.2（25G83）arm64，固定 CEF `150.0.10+g8042e43+chromium-150.0.7871.101_macosarm64`。本次只修改 Mac 产品/测试构建接线、平台测试分派与本任务文档。
+- 构建回归：首轮 Debug 产品编译失败于 `popup_policy.h file not found` 与 `macos::MediaHostProcess` 未声明；补齐生产与集成测试 target 的共享窗口策略依赖及具体 transport 头文件。新增 source contract 在修复前分别拒绝产品/集成 target 缺依赖，修复后通过；没有修改 popup/Cast 业务行为。
+- 配置：`cmake --preset macos-arm64-cef-debug -DCRAYON_CEF_ROOT="$PWD/.cache/cef/cef_binary_150.0.10+g8042e43+chromium-150.0.7871.101_macosarm64"` 与同命令追加 `-B .cache/build/macos-arm64-cef-release -DCMAKE_BUILD_TYPE=Release` 均 exit 0。修复后 `/usr/bin/time -p cmake --build .cache/build/macos-arm64-cef-debug --parallel 6` exit 0（最终增量确认 3.11 秒）；Release 对应命令 exit 0（最终重建 15.46 秒）。Release Ninja 报既有 `premature end of file; recovering` 并重建，未手动删除缓存。
+- 首轮完整 CTest：Debug 89/90、317.47 秒；Release 89/90、275.08 秒，均 exit 8。唯一失败为 Mac 执行 Windows 专用 `media-cast-ui-win` 后超时，既有 Mac `media-cast-ui` 已通过。首轮曾并行运行双配置，Release 后续增量重建与测试时段重叠，因此不作为最终发布/性能证据；修复后按配置串行完整重跑。
+- Harness 修复：以闭合平台映射选择 native UI 场景；Mac 保留全部共享场景和 `media-cast-ui`，Windows 保留其可信物理输入 `media-cast-ui-win`，显式错误平台请求在启动前拒绝。独立 `python3 tests/e2e/desktop/browser/page_snapshot_fixture_test.py` 4/4 PASS、exit 0，并接入 CTest；不是删除安全用例或放宽输入门禁。
+- 最终 Debug：`ctest --test-dir .cache/build/macos-arm64-cef-debug --output-on-failure --timeout 240` exit 0，91/91 PASS（146.16 秒）。真实 CEF Harness 23 类场景、含 20 次性能样本，`complete_p95_ms=37`、`max_tick_delay_ms=29`、`residue=0`；测试注入的可信播放事实只证明 Harness 路径，不替代真实用户点击/ADB 接收端 Direct 上屏。
+- 最终 Release：`ctest --test-dir .cache/build/macos-arm64-cef-release --output-on-failure --timeout 240` exit 0，91/91 PASS（147.06 秒），CEF 集成矩阵 99.10 秒；与 Debug 串行且没有构建重叠。最终两配置均为单次完整通过，不用定向复跑拼接覆盖首轮失败。
+- 静态验证：`python3 -m py_compile tests/e2e/desktop/browser/run_page_snapshot_fixture.py tests/e2e/desktop/browser/page_snapshot_fixture_test.py`、`cargo fmt --all -- --check`、`node tools/locales/generate.mjs --check`（3 locales/155 keys/9 files）、两份改动文档相对链接检查、`git diff --check` 均 exit 0。`cargo run --quiet -p repo-guard -- scan --root .` exit 0（复跑 4.11 秒），仅既有 RG-003/004 warning；未安装独立 Python/CMake formatter/linter，未宣称对应全量检查通过。
+- 本地 Release artifact：以 APFS clone 将本次 Release App 复制至 `.cache/loc08m-release-zexW1b/CrayonBrowser.app`，`repo-guard mermaid-metadata --root . --output-dir .cache/loc08m-release-zexW1b` 生成 NOTICE/SPDX/manifest；目录共 265 个常规文件、336,586,881 字节。主程序 6,646,048 字节、SHA-256 `fac4ac76f3449855883dad9a11ba943174042a5d988a4547a0af3a5090703fec`，与构建目录一致。`codesign --verify --deep .cache/loc08m-release-zexW1b/CrayonBrowser.app` exit 0；`cargo run --quiet -p repo-guard -- scan --root . --artifact-path .cache/loc08m-release-zexW1b` exit 0（20.52 秒，RG-006/009 PASS）。这只是本地 ad-hoc App 与资源闭包证据，不是 Developer ID、Apple 公证、签名安装器或 Go/NoGo。
+- 环境观察：首轮 locale 单测与 repo-guard 一度停留 `_dyld_start`，签名校验有效且随后自行恢复；未关闭系统安全服务、删除 provenance 或改 Keychain。computer-use 返回 Mac 锁屏、无法自动解锁，已请求用户手动解锁；没有执行系统语言/输入法/辅助功能设置变更。
+- 未覆盖：LOC-09M 的真实产品三语言/header/JS/html-lang、VoiceOver/IME/原生缩放、真实产品启停；Developer ID/公证/安装升级；手机 Direct/Relay、100 次稳定性与长稳。Windows 原生本次 `NOT_RUN`；真实 SecureStore Keychain 仍按用户决策最后验证。
+- Code Review（v0.9，`3fd7804` 上本次 9 文件工作区 diff）：独立复核单一构建目标、共享窗口策略的平台中立性、media transport owner、测试平台映射与早期拒绝、未改变输入授权/CEF 生命周期/锁序/热路径，以及源/产物隔离与证据真实性；P0/P1/P2/P3=`0/0/0/0`，`APPROVE`。未改动 Rust/SDK/schema 或 locale 事实源，无新增生产函数/规模提醒；全 workspace fast/security 本次未运行，不能用 CTest 替代其结论。最高状态 `VERIFIED`，LOC-09M 实际系统语言和用户交互门禁仍未关闭。
+
+LOC 模块当前无 `IN_PROGRESS` 项，`LOC-08M VERIFIED` 已补 macOS arm64 构建/契约/本地 artifact 证据，下一项为 `LOC-09M`（需解锁 Mac 并取得真实系统语言/交互证据）；`LOC-07W BLOCKED` 等待 Windows 人工/系统环境。后续严格按：
 
 `LOC-01 -> (LOC-02 || LOC-03) -> LOC-04 -> LOC-05W -> LOC-06W -> LOC-07W`
 

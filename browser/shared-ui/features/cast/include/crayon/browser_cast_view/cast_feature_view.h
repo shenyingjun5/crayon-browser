@@ -52,6 +52,10 @@ class CastFeatureViewModel final {
   bool OpenPicker();
   void ClosePicker();
 
+  /// Acknowledges a visible rejection without granting eligibility. The
+  /// coordinator must recheck current Browser proof before opening a picker.
+  bool AcknowledgeRejection();
+
   /// Submits the (already-decided) policy outcome; illegal states
   /// reject.  kReject/kDirect/kRelay consume the planning result;
   /// kExternalClientHandoff moves to the confirmation flow.

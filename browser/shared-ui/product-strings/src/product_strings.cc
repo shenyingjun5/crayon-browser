@@ -93,22 +93,25 @@ std::optional<ProductStrings> BuildProductStrings(
           Required(catalog, "page_markdown.copied_status", &complete),
           Required(catalog, "page_markdown.copy_failed_status", &complete),
           Required(catalog, "page_markdown.save_cancelled_status", &complete)},
-      CastStrings{
-          Required(catalog, "cast.select_receiver", &complete),
-          Required(catalog, "cast.stop", &complete),
-          Required(catalog, "cast.picker.title", &complete),
-          Required(catalog, "cast.picker.empty", &complete),
-          Required(catalog, "cast.picker.select", &complete),
-          Required(catalog, "cast.picker.refresh", &complete),
-          Required(catalog, "cast.picker.cancel", &complete),
-          Required(catalog, "cast.code.label", &complete),
-          Required(catalog, "cast.code.connect", &complete),
-          Required(catalog, "cast.code.failed", &complete),
-          Required(catalog, "cast.control.pause", &complete),
-          Required(catalog, "cast.control.resume", &complete),
-          Required(catalog, "cast.control.seek", &complete),
-          Required(catalog, "cast.control.seconds", &complete),
-          Required(catalog, "cast.control.failed", &complete)}};
+      CastStrings{Required(catalog, "cast.select_receiver", &complete),
+                  Required(catalog, "cast.stop", &complete),
+                  Required(catalog, "cast.picker.title", &complete),
+                  Required(catalog, "cast.picker.empty", &complete),
+                  Required(catalog, "cast.picker.select", &complete),
+                  Required(catalog, "cast.picker.refresh", &complete),
+                  Required(catalog, "cast.picker.cancel", &complete),
+                  Required(catalog, "cast.code.label", &complete),
+                  Required(catalog, "cast.code.connect", &complete),
+                  Required(catalog, "cast.code.failed", &complete),
+                  Required(catalog, "cast.control.pause", &complete),
+                  Required(catalog, "cast.control.resume", &complete),
+                  Required(catalog, "cast.control.seek", &complete),
+                  Required(catalog, "cast.control.seconds", &complete),
+                  Required(catalog, "cast.control.failed", &complete),
+                  Required(catalog, "cast.rejected", &complete),
+                  Required(catalog, "cast.rejected.no_route", &complete),
+                  Required(catalog, "cast.rejected.drm", &complete),
+                  Required(catalog, "cast.retry", &complete)}};
   if (!complete || !ProductStringsAreComplete(strings)) {
     return std::nullopt;
   }
@@ -132,23 +135,24 @@ bool ProductStringsAreComplete(const ProductStrings& strings) noexcept {
          present(mdv.view_source) && present(mdv.view_preview) &&
          present(mdv.view_split) && present(mdv.status_empty) &&
          present(mdv.status_too_large) && present(mdv.status_invalid_utf8) &&
-         present(mdv.status_render_policy) && present(mdv.status_not_markdown) &&
-         present(mdv.status_saved) && present(mdv.confirm_text) &&
-         present(mdv.label_save) && present(mdv.label_discard) &&
-         present(mdv.label_cancel) && present(mdv.label_open_in_viewer) &&
-         present(mdv.toolbar_title) && present(mdv.tool_bold) &&
-         present(mdv.tool_italic) && present(mdv.tool_strike) &&
-         present(mdv.tool_inline_code) && present(mdv.tool_bullet_list) &&
-         present(mdv.tool_ordered_list) && present(mdv.tool_task_list) &&
-         present(mdv.tool_quote) && present(mdv.tool_code_block) &&
-         present(mdv.tool_table) && present(mdv.tool_link) &&
-         present(mdv.tool_divider) && present(mdv.tool_heading1) &&
-         present(mdv.tool_heading2) && present(mdv.tool_heading3) &&
-         present(mdv.tool_structure) && present(mdv.tool_indent) &&
-         present(mdv.tool_outdent) && present(mdv.tool_align_default) &&
-         present(mdv.tool_align_left) && present(mdv.tool_align_center) &&
-         present(mdv.tool_align_right) && present(mdv.tooltip_view) &&
-         present(mdv.tooltip_markdown) && present(mdv.tooltip_structure) &&
+         present(mdv.status_render_policy) &&
+         present(mdv.status_not_markdown) && present(mdv.status_saved) &&
+         present(mdv.confirm_text) && present(mdv.label_save) &&
+         present(mdv.label_discard) && present(mdv.label_cancel) &&
+         present(mdv.label_open_in_viewer) && present(mdv.toolbar_title) &&
+         present(mdv.tool_bold) && present(mdv.tool_italic) &&
+         present(mdv.tool_strike) && present(mdv.tool_inline_code) &&
+         present(mdv.tool_bullet_list) && present(mdv.tool_ordered_list) &&
+         present(mdv.tool_task_list) && present(mdv.tool_quote) &&
+         present(mdv.tool_code_block) && present(mdv.tool_table) &&
+         present(mdv.tool_link) && present(mdv.tool_divider) &&
+         present(mdv.tool_heading1) && present(mdv.tool_heading2) &&
+         present(mdv.tool_heading3) && present(mdv.tool_structure) &&
+         present(mdv.tool_indent) && present(mdv.tool_outdent) &&
+         present(mdv.tool_align_default) && present(mdv.tool_align_left) &&
+         present(mdv.tool_align_center) && present(mdv.tool_align_right) &&
+         present(mdv.tooltip_view) && present(mdv.tooltip_markdown) &&
+         present(mdv.tooltip_structure) &&
          present(mdv.tooltip_table_alignment) &&
          present(mdv.mermaid_fullscreen) && present(mdv.mermaid_source) &&
          present(mdv.mermaid_close) && present(mdv.mermaid_error) &&
@@ -162,7 +166,9 @@ bool ProductStringsAreComplete(const ProductStrings& strings) noexcept {
          present(cast.cast_code_label) && present(cast.cast_code_connect) &&
          present(cast.cast_code_failed) && present(cast.playback_pause) &&
          present(cast.playback_resume) && present(cast.playback_seek) &&
-         present(cast.playback_seconds) && present(cast.playback_failed);
+         present(cast.playback_seconds) && present(cast.playback_failed) &&
+         present(cast.rejected) && present(cast.rejected_no_route) &&
+         present(cast.rejected_drm) && present(cast.retry);
 }
 
 }  // namespace crayon::browser::product_strings

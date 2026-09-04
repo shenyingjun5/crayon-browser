@@ -1,8 +1,10 @@
 //! Bounded MHV1 request owner around the single media planning runtime.
 
+use crate::delivery::DeliveryRequest;
 use crate::media_host_cast_runtime::MediaHostCastRuntime;
 use crate::media_planning_runtime::{
-    MediaPlanningError, MediaPlanningRuntime, VerifiedPlayback, VerifiedUrlFact,
+    LocalPreflightStatus, MediaPlanningError, MediaPlanningRuntime, VerifiedPlayback,
+    VerifiedUrlFact,
 };
 use crayon_cast_policy::HandoffAvailability;
 use crayon_domain::{DeviceId, TabId};
@@ -12,7 +14,7 @@ use crayon_ipc_schema::{
 };
 use crayon_media_observer::candidate::{CandidateId, LifecyclePolicy, RankingSignals};
 use crayon_media_observer::ObservationSource;
-use crayon_media_probe::MediaInspector;
+use crayon_media_probe::{MediaInspector, SELECTED_LAN_PROBE_TIMEOUT};
 use std::collections::VecDeque;
 use std::sync::Arc;
 
@@ -67,6 +69,66 @@ impl Default for MediaHostPendingQueue {
 }
 
 impl MediaHostPendingQueue {
+    /// A user-selected preflight is still cancellable; no SDK command has
+    /// started. Device replacement and stricter protection facts revoke it.
+    pub fn accept_during_preflight(
+        &mut self,
+        active_request: &str,
+        message: MediaHostMessage,
+    ) -> Result<(MediaHostInterruptAction, Option<MediaHostMessage>), MediaHostRuntimeError> {
+        if Self::revokes_preflight(&message) {
+            return Ok(self.enqueue_interrupt(message));
+        }
+        self.accept_during_decision(active_request, message)
+    }
+
+    fn revokes_preflight(message: &MediaHostMessage) -> bool {
+        match message {
+            MediaHostMessage::StartCast { .. }
+            | MediaHostMessage::StopCast { .. }
+            | MediaHostMessage::ResolveCastCode { .. }
+            | MediaHostMessage::MarkEme { .. }
+            | MediaHostMessage::Navigation { .. }
+            | MediaHostMessage::CloseTab { .. } => true,
+            MediaHostMessage::IngestUrl(fact) => {
+                fact.eme_encrypted || fact.headers_class != crayon_ipc_schema::HeadersClass::None
+            }
+            MediaHostMessage::Discovery { action, .. } => *action == MediaHostDiscoveryAction::Stop,
+            _ => false,
+        }
+    }
+
+    #[must_use]
+    pub fn has_preflight_revocation(&self) -> bool {
+        self.messages.iter().any(Self::revokes_preflight)
+    }
+
+    /// Apply queued ordinary facts before committing a completed preflight;
+    /// policy-tightening updates must not remain hidden behind SDK work.
+    pub fn pop_preflight_fact(&mut self) -> Option<MediaHostMessage> {
+        let index = self
+            .messages
+            .iter()
+            .position(|message| matches!(message, MediaHostMessage::IngestUrl(_)))?;
+        self.messages.remove(index)
+    }
+
+    fn enqueue_interrupt(
+        &mut self,
+        message: MediaHostMessage,
+    ) -> (MediaHostInterruptAction, Option<MediaHostMessage>) {
+        let reply = if self.messages.len() >= MAX_MEDIA_HOST_PENDING_MESSAGES {
+            self.messages.pop_back().and_then(|evicted| {
+                message_request_id(&evicted)
+                    .map(|id| error_reply(id.to_owned(), MediaHostRuntimeError::CapacityExceeded))
+            })
+        } else {
+            None
+        };
+        self.messages.push_front(message);
+        (MediaHostInterruptAction::Cancel, reply)
+    }
+
     pub fn accept_during_decision(
         &mut self,
         active_request: &str,
@@ -78,20 +140,7 @@ impl MediaHostPendingQueue {
             }
             MediaHostMessage::Shutdown => Ok((MediaHostInterruptAction::Shutdown, None)),
             message @ (MediaHostMessage::Navigation { .. } | MediaHostMessage::CloseTab { .. }) => {
-                let reply = if self.messages.len() >= MAX_MEDIA_HOST_PENDING_MESSAGES {
-                    self.messages.pop_back().and_then(|evicted| {
-                        message_request_id(&evicted).map(|request_id| {
-                            error_reply(
-                                request_id.to_owned(),
-                                MediaHostRuntimeError::CapacityExceeded,
-                            )
-                        })
-                    })
-                } else {
-                    None
-                };
-                self.messages.push_front(message);
-                Ok((MediaHostInterruptAction::Cancel, reply))
+                Ok(self.enqueue_interrupt(message))
             }
             MediaHostMessage::Cancel { request_id } => Ok((
                 MediaHostInterruptAction::Continue,
@@ -180,8 +229,7 @@ enum PreparedCastKind {
         offset: u16,
     },
     StartCast {
-        candidate_id: CandidateId,
-        device: DeviceId,
+        context: StartCastContext,
         handoff: HandoffAvailability,
     },
     StopCast {
@@ -198,6 +246,34 @@ enum PreparedCastKind {
     PollSessionEvents,
 }
 
+struct StartCastContext {
+    candidate_id: CandidateId,
+    tab_id: TabId,
+    navigation_id: u64,
+    generation: u64,
+    device: DeviceId,
+    revision: u64,
+    expires_at: tokio::time::Instant,
+}
+
+/// Private one-shot result of cancellable preflight. No Clone/Debug or URL
+/// accessor: only this owner can commit it after revalidating current state.
+pub struct ReadyMediaHostCastStart {
+    request_id: String,
+    context: StartCastContext,
+    request: DeliveryRequest,
+    preflight: LocalPreflightStatus,
+}
+
+impl ReadyMediaHostCastStart {
+    /// Closed local facts for the versioned UI projection. Not a grant and
+    /// not proof that the receiver can fetch or play this media.
+    #[must_use]
+    pub fn preflight_status(&self) -> &LocalPreflightStatus {
+        &self.preflight
+    }
+}
+
 /// Claimed and context-validated Cast command. It carries no URL or locator.
 pub struct PreparedMediaHostCastCommand {
     request_id: String,
@@ -205,6 +281,10 @@ pub struct PreparedMediaHostCastCommand {
 }
 
 impl PreparedMediaHostCastCommand {
+    #[must_use]
+    pub fn is_start_cast(&self) -> bool {
+        matches!(self.kind, PreparedCastKind::StartCast { .. })
+    }
     #[must_use]
     pub fn request_id(&self) -> &str {
         &self.request_id
@@ -224,6 +304,7 @@ pub struct MediaHostRuntime {
     candidates: Vec<WireCandidate>,
     recent_requests: Vec<String>,
     cast: Option<Arc<MediaHostCastRuntime>>,
+    cast_revision: u64,
     shutdown: bool,
 }
 
@@ -236,6 +317,7 @@ impl MediaHostRuntime {
             candidates: Vec::new(),
             recent_requests: Vec::new(),
             cast: None,
+            cast_revision: 0,
             shutdown: false,
         }
     }
@@ -449,7 +531,7 @@ impl MediaHostRuntime {
             .as_ref()
             .ok_or(MediaHostRuntimeError::InvalidState)?
             .clone();
-        let (request_id, kind) = match message {
+        let (request_id, mut kind) = match message {
             MediaHostMessage::Discovery { request_id, action } => {
                 self.claim(&request_id)?;
                 (request_id, PreparedCastKind::Discovery(action))
@@ -494,8 +576,15 @@ impl MediaHostRuntime {
                 (
                     request_id,
                     PreparedCastKind::StartCast {
-                        candidate_id: candidate.candidate_id,
-                        device,
+                        context: StartCastContext {
+                            candidate_id: candidate.candidate_id,
+                            tab_id: candidate.tab_id.clone(),
+                            navigation_id: candidate.navigation_id,
+                            generation: candidate.generation,
+                            device,
+                            revision: self.cast_revision,
+                            expires_at: tokio::time::Instant::now() + SELECTED_LAN_PROBE_TIMEOUT,
+                        },
                         handoff: handoff(handoff_available),
                     },
                 )
@@ -539,7 +628,90 @@ impl MediaHostRuntime {
             }
             _ => return Err(MediaHostRuntimeError::InvalidState),
         };
+        if matches!(
+            kind,
+            PreparedCastKind::StartCast { .. }
+                | PreparedCastKind::StopCast { .. }
+                | PreparedCastKind::ResolveCastCode { .. }
+                | PreparedCastKind::Discovery(MediaHostDiscoveryAction::Stop)
+        ) {
+            self.cast_revision = self
+                .cast_revision
+                .checked_add(1)
+                .ok_or(MediaHostRuntimeError::CapacityExceeded)?;
+            if let PreparedCastKind::StartCast { context, .. } = &mut kind {
+                context.revision = self.cast_revision;
+            }
+        }
         Ok(PreparedMediaHostCastCommand { request_id, kind })
+    }
+
+    pub async fn preflight_start_cast(
+        &self,
+        prepared: PreparedMediaHostCastCommand,
+    ) -> Result<ReadyMediaHostCastStart, MediaHostRuntimeError> {
+        let PreparedCastKind::StartCast { context, handoff } = prepared.kind else {
+            return Err(MediaHostRuntimeError::InvalidState);
+        };
+        self.validate_start_context(&context)?;
+        let (request, preflight) = tokio::time::timeout_at(
+            context.expires_at,
+            self.planner.prepare_selected_delivery_request(
+                context.candidate_id,
+                context.device.clone(),
+                handoff,
+            ),
+        )
+        .await
+        .map_err(|_| MediaHostRuntimeError::Cancelled)?
+        .map_err(map_planning_error)?;
+        Ok(ReadyMediaHostCastStart {
+            request_id: prepared.request_id,
+            context,
+            request,
+            preflight,
+        })
+    }
+
+    pub async fn commit_start_cast(
+        &self,
+        ready: ReadyMediaHostCastStart,
+    ) -> Result<MediaHostMessage, MediaHostRuntimeError> {
+        self.validate_start_context(&ready.context)?;
+        if !self
+            .planner
+            .delivery_request_is_current(ready.context.candidate_id, &ready.request)
+        {
+            return Err(MediaHostRuntimeError::StaleContext);
+        }
+        self.cast
+            .as_ref()
+            .ok_or(MediaHostRuntimeError::InvalidState)?
+            .start_cast(ready.request_id, ready.request)
+            .await
+    }
+
+    fn validate_start_context(
+        &self,
+        context: &StartCastContext,
+    ) -> Result<(), MediaHostRuntimeError> {
+        if self.shutdown {
+            return Err(MediaHostRuntimeError::HostUnavailable);
+        }
+        if context.revision != self.cast_revision
+            || tokio::time::Instant::now() >= context.expires_at
+        {
+            return Err(MediaHostRuntimeError::StaleContext);
+        }
+        self.require_context(&context.tab_id, context.navigation_id, context.generation)?;
+        if !self
+            .cast
+            .as_ref()
+            .is_some_and(|cast| cast.has_device(&context.device))
+        {
+            return Err(MediaHostRuntimeError::CandidateUnavailable);
+        }
+        Ok(())
     }
 
     pub async fn execute_cast_command(
@@ -569,18 +741,9 @@ impl MediaHostRuntime {
                 .await
                 .map_err(|_| MediaHostRuntimeError::HostUnavailable)?
             }
-            PreparedCastKind::StartCast {
-                candidate_id,
-                device,
-                handoff,
-            } => {
-                let request = self
-                    .planner
-                    .prepare_delivery_request(candidate_id, device, handoff)
-                    .await
-                    .map_err(map_planning_error)?;
-                cast.start_cast(request_id, request).await
-            }
+            // Start must use cancellable preflight, followed by a separate
+            // context-revalidated commit. Never hide probe IO in an SDK call.
+            PreparedCastKind::StartCast { .. } => Err(MediaHostRuntimeError::InvalidState),
             PreparedCastKind::StopCast { session_generation } => {
                 cast.stop_cast(request_id, session_generation).await
             }

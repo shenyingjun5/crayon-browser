@@ -6,9 +6,10 @@
 #include <map>
 #include <mutex>
 #include <optional>
+#include <string>
 #include <vector>
 
-#include "browser/input_proof/input_proof_gate.h"
+#include "browser/input_proof/player_input_proof.h"
 #include "browser/network_observer/cef_network_observer_adapter.h"
 #include "browser/network_observer/network_observer.h"
 #include "browser/observation_gateway/observation_gateway.h"
@@ -44,6 +45,7 @@ class CefObservationBridge final {
 
   void AdvanceNavigation(CefRefPtr<CefBrowser> browser, std::uint32_t tab_id,
                          std::uint64_t navigation_id);
+  void BindCurrentMainFrame(CefRefPtr<CefBrowser> browser);
   void CloseBrowser(CefRefPtr<CefBrowser> browser, std::uint32_t tab_id);
   void SetActiveTab(std::uint32_t tab_id);
   void NoteTrustedUserInput(CefRefPtr<CefBrowser> browser);
@@ -65,10 +67,11 @@ class CefObservationBridge final {
   void SetEventsReadyCallback(EventsReadyCallback callback);
   void SetLifecycleCallback(LifecycleCallback callback);
 
- private:
+private:
   struct Binding {
     std::uint32_t tab_id = 0;
     std::uint64_t navigation_id = 0;
+    std::string main_frame_identifier;
     bool eme_encrypted = false;
     ::crayon::cef_shell::network::NetworkObserver network_observer;
   };
@@ -84,7 +87,7 @@ class CefObservationBridge final {
   std::map<int, Binding> bindings_;
   mutable std::mutex io_bindings_mutex_;
   std::map<int, IoBinding> io_bindings_;
-  ::crayon::cef_shell::input_proof::InputProofGate input_proof_{0};
+  ::crayon::cef_shell::input_proof::PlayerInputProof input_proof_;
   ::crayon::cef_shell::gateway::ObservationGateway gateway_;
   EventsReadyCallback events_ready_callback_;
   LifecycleCallback lifecycle_callback_;

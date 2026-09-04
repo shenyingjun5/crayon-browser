@@ -1,5 +1,7 @@
 # PLT Windows/macOS 平台适配 Roadmap
 
+2026-09-04：一期新增自定义 Shell＋CEF Alloy 迁移，内部原子切片统一见 [PLT-SHELL](desktop-shell-roadmap.md)，归既有 PLT-M05/W05、不新增顶层任务。新宿主的本地实现先在当前 Mac 推进，Windows 保留独立首发门禁；原平台/设备证据保留，新默认宿主必须追加同等矩阵。
+
 - 状态：`PLT-01/02/W04/M04 DONE`；macOS 共享装配 `PLT-M05 IN_PROGRESS`（M05a、M05b1/b2/b3 DONE，b4..b6/M05c 后置）；Windows 首发装配 `PLT-W05 IN_PROGRESS`（W05a/W05b/W05c0 DONE、W05c BLOCKED，后续严格串行）
 - 任务数：7
 - 平台：Windows、macOS
@@ -247,13 +249,100 @@
 |---|---|---|---|---|
 | PLT-M05b2 | DONE | M05b1 | 接通 observation → candidate/lifecycle → probe → `Direct/Relay/ExternalClientHandoff/Reject` 唯一策略 | 按 M05b2a/b/c 严格串行；MP4/HLS/DASH/DRM/credential fixture；普通失败不提权、不重试；不调用 SDK/UI |
 | PLT-M05b3 | DONE | M05b2 | 接通 CastButton/FeatureView、设备选择、Cast-SDK facade、session event pump 与 PLT 生命周期 | 按 M05b3a-e 严格串行；无设备/取消/失败/旧 session/stop；UI 线程不执行有界 SOAP 阻塞；不做真机结论 |
-| PLT-M05b4 | TODO | M05b3 | ADB 在线手机上的固定 Cast-SDK 正式接收端完成 clear fixture Direct 发现、连接、投送、控制和停止 | E2E-001；真实 Desktop Host，不以 ADB 在线或 SDK standalone Harness 代替；按 REL-05 后置 |
+| PLT-M05b4 | BLOCKED | M05b3 | ADB 在线手机上的固定 Cast-SDK 正式接收端完成 clear fixture Direct 发现、连接、投送、控制和停止 | E2E-001；本地 Direct 首帧/播控/stop PASS，发现补证 6 台；公开 VP9 浏览器播放 PASS，系统 DNS 基准网段阻塞公网投屏；真实拒绝文案视觉核对归 b3c |
 | PLT-M05b5 | TODO | M05b4 | 同一 ADB 真机接收端完成 MP4 Range 与 HLS Relay 全链路 | E2E-002；opaque route、200/206/416、分片、撤销后拒绝；不支持 DASH Relay/加密 HLS |
 | PLT-M05b6 | TODO | M05b5 | DRM/EME/加密/凭证来源拒绝与无路由外部客户端确认/取消/未安装/失败反馈 | E2E-003/004；交接永不显示投屏中、不创建 SDK/Relay session |
 
 每个切片允许修改其所属 `browser/cef-shell` 装配、既有 MED/SDK/app-runtime 调用入口和独立测试；发现需要改变公共协议、Cast-SDK facade 或 Relay 安全边界时停止并新建原子任务。M05b1..b6 不包含 M05c 100 次稳定性、PLT-W05、PLT-19 或 QAR 发布矩阵。
 
 > 调度覆盖（2026-08-31）：M05b3 完成记录中的“下一任务 M05b4 READY”是当时的历史结论；`REL-05` 已将 M05b4..b6/M05c 后置，当前领取入口为 `PLT-W05a READY`。
+
+### PLT-M05b4 原子范围（正式产品 Direct 真机验证，2026-09-03）
+
+- 状态：`BLOCKED`（用户真实播放及设备发现已验证；正式 probe 拒绝私网 fixture，改变网络授权边界需独立方案与授权；不再等待用户点击）；依赖 M05b3 DONE、M05b4a VERIFIED、W05c0 DONE；不改变 Windows 首发策略。
+- 单一目标：真实 macOS CEF 产品通过正常页面播放与 Cast UI，在 ADB 在线的正式接收端完成 Direct 发现/连接、首帧、pause/resume/seek/stop 和结束清理。
+- 输入：本地合成 clear 视频与仅提供 fixture 的 LAN HTTP 服务、现有 Debug 产品、已安装正式接收端；设备/IP 只留临时诊断，不写入跟踪文档。
+- 允许路径：独立设备 fixture、macOS 既有 shell/controller 的必要装配修复及对应回归、本 Roadmap/索引。禁止修改 SDK/接收端、可信输入门禁、协议、Relay 安全边界、Keychain 和发布配置；发现公共能力缺口先阻塞并另行拆分。
+- 验收：记录产品 UI 与接收端实际画面/播放推进及请求证据，验证 pause/resume/seek/stop、停止后恢复和会话清理；ADB shell/dumpsys/screencap、fixture server 请求、computer-use 原生 UI；发生代码修复时先回归复现，再执行定向 CTest、双配置 build、format、repo-guard、security 与独立 Review；文档变更执行 `git diff --check`。
+- 明确不做：测试接口注入播放证明、SDK standalone 冒充产品、Relay/b6 交接、100 次稳定性、Windows、正式签名/公证、提交或推送。未完成首帧及播控不得 DONE。
+- 开工 Review：复用现有 owner/协议，仅验证既有产品能力；不新增依赖或安全边界，允许实施。
+
+#### M05b4 导航接线诊断范围补充（2026-09-03）
+
+- 用户已真实点击，画面播放推进，但产品无 Cast 入口。只读 LLDB 确认 Browser input `has_input=true`、current navigation=2，media diagnostics `received_total=0`；Cast controller 无 candidate。先在既有 CEF Harness 新增“新标签页 → 视频页”的跨源导航回归，不将 Harness 的测试输入视为真机证明。
+- 本原子任务允许上述独立测试及既有 `window/tab_controller`、`observation_gateway/cef_observation_bridge` 的最小生命周期接线修复；仍禁止改动可信输入判定、IPC schema、SDK、接收端与 Relay 安全策略。若根因涉及新协议或 Renderer 信任边界，停止扩改并拆任务。验收增加旧导航拒绝、当前媒体观察恢复与不依赖初始直达 URL。开工 Review：既有 owner/协议内的接线诊断与回归，不新增公共协议，允许实施。
+
+### PLT-M05b4 现场进展（2026-09-03，待真实用户播放）
+
+- 被审对象：基于 `3fd7804` 的既有 Debug 产品与本次文档 diff，macOS 26.6.2 arm64；保留 M05b4a/LOC-08M 未提交改动，本轮没有生产代码修改、提交或推送。
+- 真实 UI：computer-use `get_app_state` 已成功打开 Debug `CrayonBrowser.app`，经原生地址栏加载独立 LAN fixture；截图确认 VP9/MP4 640×360、120 秒视频已解码首帧，暂停于 0:00。尚未真实用户播放，未点击播放、注入证明或开启 autoplay；已请用户手动点击原生播放控件。
+- 设备：`adb devices -l` 在 sandbox 首次失败（ADB listener `Operation not permitted`），授权本机 ADB 权限后 exit 0。选用 Android 10 的现有正式接收端 `com.zknowai.labi.cast.receiver` 1.1.3；`adb -s <device> shell am start -n com.zknowai.labi.cast.receiver/.MainActivity` exit 0（已有 task brought to front），`dumpsys activity activities` 确认前台，`exec-out screencap -p` 显示已就绪/等待投屏及投屏码。`uiautomator dump` 返回 `could not get idle state`，不作为成功证据。
+- Fixture：`.cache/qa/plt-m05b4-direct-20260903/` 仅含合成媒体、无脚本播放的 HTML、固定两路径/只读/16 连接上限的临时 Node HTTP fixture 与本地截图，不进入 Release/源码生产图。`ffmpeg -hide_banner -nostdin -n -f lavfi -i 'testsrc2=size=640x360:rate=24:duration=120' -c:v libvpx-vp9 -deadline realtime -cpu-used 6 -b:v 400k -g 48 -an -movflags +faststart .cache/qa/plt-m05b4-direct-20260903/clear.mp4` exit 0，15.44s；`ffprobe -v error -show_entries stream=codec_name,width,height -show_entries format=duration,size -of json .cache/qa/plt-m05b4-direct-20260903/clear.mp4` exit 0，VP9、120s、6,641,408 bytes。无音轨，本轮不验证音频。
+- 连通性：`node .cache/qa/plt-m05b4-direct-20260903/server.mjs` 临时 fixture 就绪；`curl --noproxy '*' -sS -D - -o /dev/null http://<mac-lan>:18764/clear.mp4 -H 'Range: bytes=0-31'` exit 0，HTTP 206，Content-Range 0–31/6641408；`adb -s <device> shell 'printf "HEAD /clear.mp4 HTTP/1.0\r\nHost: fixture\r\n\r\n" | toybox nc -w 3 -W 3 <mac-lan> 18764'` exit 0，HTTP 200/Content-Length 6641408。手机到 Mac 的 ICMP 单包无应答，但 HTTP 实测可达，不据 ping 误判网络阻塞。
+- Review：本次范围/文档检查 P0/P1/P2/P3=0/0/0/0，`APPROVE`（仅准备与证据记录，不是 Direct 通过）；继承 b4a 的 QAR-10 严格签名 P2，不在本轮扩改。等待真实用户播放后继续 discovery/code/connect、接收端首帧/推进、pause/resume/seek/stop/清理；以上均 `NOT_RUN`，不能 DONE，也不解锁 b5。保留临时浏览器页面、接收端与 fixture 服务供用户点击继续；不访问 Keychain，不做公共网络/第三方影视站测试。
+
+### PLT-M05b4 导航观察断链修复与并发阻塞记录（2026-09-03）
+
+- 被审对象：`main`/`3fd7804` 工作区，本轮仅修改 Browser observation bridge/header、WindowClient 的 load-complete 接线、既有独立 CEF Harness/fixture 场景和本文/索引；保留前轮改动。验证途中另一任务修改品牌/About、本地化、app.cc、tab_controller.cc 的独立位置及共享构建产物；不覆盖、不归为本任务交付，不提交/推送。平台 macOS 26.6.2 arm64。
+- 现场证据：用户反馈已点击后，computer-use 两次截图确认真实页面视频时间/图案变化，但无 Cast 入口。LLDB 在 `BrowserApp::ContentHostTick` 只读字段：`active_browser_id=1`、media host healthy、Cast 无 candidate；`media_observation_bridge_.diagnostics_` 全部 0，input proof `has_input=true`、导航 2、`has_progress=false`。没有注入/修改 proof、执行页面脚本或调用 SDK。Renderer 的 native handler 断点未命中，进程之后正常退出，不能将其解释为已确认 Renderer 内部字段；调试会话已结束。
+- 根因/修复：原接线仅在 `isLoading=true` 发送媒体导航绑定，跨源换 Renderer 后新进程没有当前导航绑定，观察消息未抵达 Browser。新增 `BindCurrentMainFrame`，在 load-complete 对有效当前主 frame 重发 Browser 所有的既有导航消息；不推进 gateway generation、不清空输入/保护状态、不改 IPC/Renderer/门禁/SDK/Relay。新 `media-navigation` Harness 从新标签 URL 导航到本地视频，检查真实媒体观察、网络、candidate、decision；仅 macOS 注册，Windows 显式拒绝误跑。
+- 先失败后修复：`python3 tests/e2e/desktop/browser/run_page_snapshot_fixture.py .cache/build/macos-arm64-cef-debug/browser/cef-shell/Debug/crayon_page_snapshot_cef_integration_test.app/Contents/MacOS/crayon_page_snapshot_cef_integration_test media-navigation` 修复前 exit 1，`media_received=0 actual_media=0 media_network=1`；修复后同命令 exit 0，`media_received=31 media_current=31 media_eligible=15 actual_media=1 media_network=1`，process residue=0；单次墙钟未独立计时。Harness 的确定性播放/输入只证明接线，不作为正式产品真机通过。
+- Build：`/usr/bin/time -p cmake --build .cache/build/macos-arm64-cef-debug -j4` exit 0、3.49s；对应 release exit 0、20.43s。保留既有 duplicate library/Ninja recovering warning。这些是当时源码快照的成功构建，随后共享文件继续变化，不能视作最终候选包已固定。
+- 完整 Debug：`ctest --test-dir .cache/build/macos-arm64-cef-debug --output-on-failure` exit 8，**89/91，199.92s，FAIL**；CEF integration（含新增导航、旧 fixture/伪造/保护/生命周期矩阵）PASS 157.51s，AppKit PASS 2.69s。失败 1：`localization_generator_contract` 读取另一任务中间状态，`155 !== 156`/About key 缺失；稍后单独 `node --test tools/locales/generate.test.mjs` 6/6、exit 0、265ms，只说明该项后续状态已修正。失败 2：package contract 的 Helper 签名报 `code has no resources but signature indicates they must be present`；共享构建正在改写产物，未单独定位，不将其等同此前 QAR-10 strict 悬空链接。发现另一个完整 Debug CTest 与 Release build 并发后，本任务未再启动 Release 完整矩阵或重签/重建。
+- Format/Lint/Security：新增 bridge 方法及 WindowClient 接线分别以 `xcrun clang-format -style='{BasedOnStyle: Google, ColumnLimit: 80, PointerAlignment: Left, DerivePointerAlignment: false}' --lines=<changed-lines> --dry-run --Werror <file>` 检查，exit 0（首轮新方法排版 FAIL，按相同 formatter 修正后 PASS）；`cargo fmt --all -- --check`、`git diff --check` exit 0。`python3 -m unittest discover -s tests/e2e/desktop/browser -p page_snapshot_fixture_test.py` 4/4 PASS；`cargo run --quiet -p repo-guard -- scan --root .` PASS（RG-003/004 既有 warnings）。`bash scripts/check.sh security` exit 0/PASS：guard 3s、relay-unit 5s、relay-security 7/7（小于 1s）。不运行真实 Keychain。
+- 独立 Review：本轮接线 diff 按需求/正确性/架构/生命周期/安全/性能/测试检查，未发现新增代码 P0/P1；生产改动约 20 行、无新线程/锁/依赖/日志/持久化，重发操作在 UI thread 且不持锁。**结论 BLOCKED，最高 IMPLEMENTED**：完整包/Release/真实产品复验未闭合，不给合并或真机 APPROVE；既有 QAR-10 P2 保留。
+- 下一步：待另一任务暂停/完成共享源码与 Debug/Release bundle 构建，固定当前 diff，串行重建并跑双配置全套，核对 Helper 签名；随后重启真实产品、用户播放、验证 Direct 发现/投屏码/首帧/播控/stop。手机链路仍 NOT_RUN，b5/b6 不解锁；已向用户请求构建协调。保留测试页面/fixture/正式接收端，不要求用户现在重复点击。
+
+### PLT-M05b4 串行复验记录（2026-09-03，其他任务完成后）
+
+- 用户确认其他任务完成；只读进程检查无其他 build/CTest，保留品牌/About 与所有已有 diff，未提交/推送。基于 `main`/`3fd7804`，macOS 26.6.2 arm64；本轮无生产代码变化。关键 bridge、WindowClient、Mac app/Cast UI、CEF Harness 的 SHA-256 在验证前后相同；本记录仅提升导航修复的自动化状态，不把手机任务标记完成。
+- 严格串行：`/usr/bin/time -p cmake --build .cache/build/macos-arm64-cef-debug -j4` exit 0、11.91s；随后 `ctest --test-dir .cache/build/macos-arm64-cef-debug --output-on-failure` exit 0，**91/91，246.55s**，CEF integration 142.23s、AppKit 2.62s、package 2.74s；再执行对应 release build exit 0、30.09s（既有 Ninja recovering warning）；最后 release 完整 CTest exit 0，**91/91，190.28s**，CEF integration 129.88s、AppKit 2.61s、package 1.55s。本轮已闭合此前本地化/Helper package 两个失败项；没有以单项重跑冒充全量成功。
+- `bash scripts/check.sh security` exit 0/PASS：guard 5s、relay-unit 小于 1s、relay-security 7/7、1s；`cargo fmt --all -- --check`、`git diff --check`、bridge 修改范围 clang-format dry-run 均 exit 0。未运行真实 Keychain。两份产品 `codesign --verify --deep <app>` exit 0；额外 Debug `codesign --verify --deep --strict <app>` 仍 exit 1、0.58s、`No such file or directory`，沿用 QAR-10 strict 风险，不声称正式签名/公证就绪。
+- 产品/fixture：通过 computer-use 正常关闭旧测试窗口，`ps -p <old-pid>` 确認旧进程已退出，重新启动 Debug 产品并经原生地址栏加载 LAN 视频。为避免短片在手动播控期间结束，`ffmpeg -hide_banner -nostdin -n -stream_loop 4 -i .cache/qa/plt-m05b4-direct-20260903/clear.mp4 -map 0:v:0 -c copy -movflags +faststart .cache/qa/plt-m05b4-direct-20260903/clear-long.mp4` exit 0、0.04s，仅复用合成片段为 600s；临时 Node 服务仍仅开放原两路径，无公共网络/自动播放脚本。只停止了经进程命令校验的本任务旧 fixture server 并启动同一脚本；未删除数据。
+- ADB 正式 Android 10 接收端仍在线且前台 MainActivity，最新截图显示已就绪/等待投屏。产品截图显示新视频 `0:00 / 10:00`；重启/重新导航后不复用旧播放证明，已请求用户再次真实播放。正式产品 Direct 发现/投屏码/首帧/播控/stop 仍待本轮现场执行。
+- 暂停点：最终 UI 复查仍为 `0:00 / 10:00`，未收到本轮播放确认；M05b4 标为 BLOCKED，仅等待这一真实用户操作。保留当前页面、fixture 服务和手机接收端，不自动点击播放或注入证明；用户确认后从真机步骤继续，不重复已通过的构建矩阵（除非生产源码再次变化）。
+- 独立 Review：导航接线修复在稳定工作区的双配置自动化已闭合，P0/P1=0/0，既有 P2=1（QAR-10 strict 签名）、P3=0；`APPROVE`，导航修复最高 **VERIFIED**。没有新增状态 owner/线程/协议/权限，输入与 protected facts 不被重置；Windows 真机、手机 Direct/Relay/交接、长稳和正式发布均不由此证明，M05b4 不得 DONE。
+
+### PLT-M05b4 真实播放后的复验与边界阻塞（2026-09-03）
+
+- 被审对象：`main/cfaab39` 加既有未提交导航/Cast/LOC 改动，macOS 26.6.2 arm64 Debug 正式产品。其他任务已提交品牌/About；bridge、WindowClient、Mac app/Cast UI 的 SHA-256 与上轮双配置各 91/91 时一致。本轮没有生产代码修改，没有提交或推送。
+- PASS（真实 UI）：用户点击后 computer-use 截图确认视频时间/图案推进，并出现原生“选择接收端”；刷新后列出 7 个局域网设备。此前导航断链修复获得真实产品入口层证据，但不是投送完成证据。
+- 首选 Android 10 / receiver 1.1.3：投屏码解析失败。首轮输入未落入文本框，不能当作有效码失败；改用截图坐标输入，AX 确认完整值后再提交，仍返回“投屏码无效或接收端不可用”。`adb -s <device> shell ip -4 addr show wlan0` 确认地址未变；手机内通过 `toybox nc -w 3 -W 3 127.0.0.1 2202` 只读 GET `/device.xml` 为 HTTP 200，但 Mac `curl --noproxy '*' --connect-timeout 3 --max-time 5 -sS -i http://<receiver-lan>:2202/device.xml` exit 28、约 3s 连接超时。只能定位为 Mac 到该接收端服务不可达，未擅改路由器/防火墙/手机设置。
+- 替代设备：按用户任一 ADB 手机授权选用现有 Android 5.1 / receiver 1.1.3（versionCode 10103）。`adb ... shell am start -n com.zknowai.labi.cast.receiver/.MainActivity` exit 0；Mac 只读 GET `/device.xml` exit 0，设备名与产品发现列表一致；截图确认接收端等待投屏。产品中选择该项并点击“投屏”后，手机仍在等待页，fixture HTTP 日志未出现接收端媒体请求，未进入播控状态。未用 SDK standalone、原始 SOAP 或 ADB 播放命令代替产品。
+- 只读 LLDB：附加本轮 Debug Browser，在 `BrowserApp::ContentHostTick` 读取 controller，`browser_verified_media_=true`、current candidate 存在、`start_pending_=false`、feature=`kRejected`/reason=`kNoRoute`、button=`kEligible`、无 active session generation。未修改字段或注入 proof；调试断点已删除，正常 detach/quit。
+- 根因（代码与请求证据）：`crates/crayon-media-host/src/main.rs:67` 正式装配使用 `ProbeHttpConfig::default()`；`crates/crayon-media-probe/src/http.rs:35` 明确限定 `allow_private_addresses` 为禁止用于生产的测试钩子，默认 false，literal 私网 IP 在发请求前返回 `NonPublicAddress`。`media_planning_runtime.rs` 把 inspection 错误降为 `Unknown`，策略在 handoff 不可用时返回 `CapabilitiesUnavailable`，shell 映射 `kNoRoute`。因此本轮 LAN fixture 被正式安全策略拒绝，与“媒体预检应成功”的测试前置冲突；不能直接打开全私网开关，也不能把换片/伪造能力当作修复。未因此断言公网视频均不可投。
+- 新 P1（拒绝后的可见反馈与恢复）：`browser/cef-shell/src/macos/cast_chrome_mac.mm:486` 只以 button state 呈现，拒绝后仍显示可点击“选择接收端”；`browser/shared-ui/features/cast/src/cast_ui_coordinator.cc:59` 要求 feature 为 eligible，而 feature 已 rejected，导致实际点击无响应。现场 AX 与 LLDB 一致；拒绝原因未显示，也没有同页重试入口。修复需独立 b4 内部 UI 原子切片（先失败回归、保持重新校验，不靠导航重置伪造播放），不能将失败态宣称通过。
+- 实际验证：`/usr/bin/time -p cargo test -p crayon-media-probe` exit 0、13.10s，26 unit + 7 assess + 10 HTTP + 6 inspect = **49/49 PASS**，包含 `private_and_loopback_targets_are_refused_by_default`、mixed DNS、redirect/timeout/cancel。本轮不重复未变化产物的双配置 CTest；引用上轮 91/91 证据，不计作本轮执行。ADB 设备状态/截图和只读描述请求结果如上，UI/LLDB 分步未独立计时。
+- Review：`REQUEST_CHANGES`，新增 P0/P1/P2/P3=0/1/0/0（上述拒绝 UI P1），继承 QAR-10 strict 签名 P2。导航修复维持 VERIFIED；M05b4 整体 BLOCKED，首帧/推进/pause/resume/seek/stop 均未通过，b5/b6 不解锁。
+- 后续拆分提案（未实施）：先评审媒体预检的受限 LAN 授权方案，明确仅限用户当前已播放资源的短期范围、导航/设备绑定、逐跳 DNS/IP 固定、loopback/link-local/metadata 拒绝、撤销与容量边界；涉及公共协议/安全边界时建立独立 Roadmap，不能在本任务顺手扩权。另一独立 UI 切片补拒绝原因及重新校验后的重试。当前停止扩改并请求用户确认受限 LAN 能力是否纳入一期；不使用公网第三方视频或上传 fixture 绕过本地验证要求。
+- 收尾：通过原生关闭按钮结束本轮测试浏览器；经 `ps` 精确核验后向本任务 Node fixture 服务发送 TERM，关闭临时 LAN 服务；没有删除文件、修改接收端、访问 Keychain 或留下调试注入。不再要求用户重复点播放，待上述范围确认后再准备下一轮。
+- 收尾复核：`ps -p <browser>,<media-host>,<fixture-server> -o pid,command` 仅有表头、exit 1，三个本轮进程均已退出；`cargo run --quiet -p repo-guard -- scan --root .` exit 0、passed=true（RG-003/004 既有 warning；artifact N/A），单独 `git diff --check` exit 0。两项未独立计时。
+
+### PLT-M05b4a 原子范围（macOS 投屏码与播控产品接线，2026-09-03）
+
+2026-09-03 后续授权：用户已确认按上述受限 LAN 建议执行，并允许公开在线视频补充人工验证；独立安全边界及原子实现以 [PLT-M05b4b1..b4](lan-media-probe-roadmap.md) 为准。先领取 b1，父任务 b4 仍等待产品/真机证据，不再将方案授权列为阻塞。
+
+- 状态：`VERIFIED`；依赖 `M05b3 DONE`、`W05c0 DONE`。按用户本轮授权补 Mac 缺口，不改变 Windows 首发策略。b4a 是 M05b4 内部原子切片，不新增顶层计数；b4 真机验收依赖本切片。
+- 单一目标：把既有投屏码解析及 pause/resume/seek 命令接入 macOS 原生 Cast UI 与 BrowserApp，保持 stop 可用，不新增协议或 SDK 能力。
+- 输入：共享 CastShellController/presentation、MHV1 request/reply、MediaHostAdapter、三语言 CastStrings；输出：原生投屏码输入、pending/error 反馈和活动会话播控。
+- 允许路径：`browser/cef-shell/src/macos/{app.cc,cast_chrome_mac.h,cast_chrome_mac.mm}`、相邻独立 AppKit/source/CEF tests、必要 CMake 与本 Roadmap/索引。禁止修改 Cast-SDK、Rust/MHV1、共享 controller/策略、Renderer、可信输入、Windows、Keychain 和发布配置；保留已有 LOC-08M 未提交改动。
+- 边界：UI 线程只 enqueue；复用 controller 的 request ID/session generation fencing；只在 active/eligible picker 或 active Casting 状态允许操作；pending 禁止重复发送，错误显式反馈；空/非法/超长 code、seek 溢出/负数/非数字拒绝；导航/切窗/关闭/host loss 清理 UI 与迟到回调，stop 不受播控 pending 阻塞。
+- 验收：E2E-001/CS-010 的 UI 层子集；先以 AppKit 回归复现缺失入口，再验证 code/取消/失败/pending、pause/resume/seek/stop、inactive/关闭与资源释放。`cmake --build .cache/build/macos-arm64-cef-debug -j4`、对应 release、两配置完整 `ctest --test-dir <build> --output-on-failure`；定向 AppKit/controller/process/source/CEF 回归、clang-format、`cargo run -p repo-guard -- scan --root .`、`bash scripts/check.sh security`、`git diff --check`。不运行会访问真实 Keychain 的全量 fast。
+- 明确不做：Direct/Relay 手机通过结论、外部客户端交接、100 次稳定性、更新/安装/公证、Windows 真机。以上依次回到 b4/b5/b6/M05c/QAR；自动化通过最高 `VERIFIED`。
+- 开工 Review：复用已冻结协议与共享 owner，无新增跨模块状态机/依赖/安全边界；本原子范围可独立验证，允许实施。
+
+### PLT-M05b4a 完成记录（2026-09-03）
+
+- 被审对象：`main`，基于 `3fd7804` 的本任务工作区 diff；开工已有 LOC-08M 未提交改动，保留且不夹带提交。平台 macOS 26.6.2（25G83）arm64；Debug/Release 分别验证；未提交、未推送。
+- 实现：Mac picker 新增三语言投屏码输入/连接、pending 禁用与失败反馈；titlebar accessory 新增 pause/resume、秒数 seek 和可见失败提示，stop 在播控 pending 时仍可用。`BrowserApp` 与独立 CEF Harness 接入既有 `RequestResolveCastCode/RequestControlCast` 和 controller presentation；只 enqueue，不改 Rust/MHV1、SDK、可信输入或页面脚本。复用协议的 32-byte code/7-day seek 上界和 controller request ID/session generation fencing。
+- 生命周期：AppKit block 按值持有 shared owner，关闭/切窗/导航清理 input/target，sheet epoch 拒绝迟到 completion，销毁后旧控件不可回调。设备列表周期刷新与重排保留稳定 device ID 选择。无新增锁、网络、日志、持久化、依赖版本或 Keychain 访问。
+- 先失败后修复：AppKit 缺失 `Connect code` 入口断言 FAIL（exit 8，0.69s）；新增回调初版出现 `EXC_BAD_ACCESS`（2.17s），LLDB 定位到 block 捕获引用后改为值持有；设备选择刷新断言 FAIL（exit 8，0.88s）后修正。首轮完整 Debug 90/91（146.31s），唯一失败为新增测试漏掉停止后的 eligibility 重验，**仅修正 fixture 前置事实，不放宽生产门禁**；随后定向 1/1（2.66s）及最终双配置完整矩阵均通过。
+- Build：`/usr/bin/time -p cmake --build .cache/build/macos-arm64-cef-debug -j4` exit 0，4.66s，PASS；`/usr/bin/time -p cmake --build .cache/build/macos-arm64-cef-release -j4` exit 0，15.01s，PASS。最后仅修正测试前置后分别 `cmake --build .cache/build/macos-arm64-cef-debug --target crayon_cast_chrome_mac_test -j4`（1.02s）与对应 release（1.27s），exit 0。保留既有重复链接库及 Release Ninja `premature end of file; recovering` warning，均成功重建。
+- 完整自动化：`ctest --test-dir .cache/build/macos-arm64-cef-debug --output-on-failure` exit 0，**91/91，148.99s**，PASS；随后串行 `ctest --test-dir .cache/build/macos-arm64-cef-release --output-on-failure` exit 0，**91/91，154.14s**，PASS。AppKit 分别 2.64/2.71s，真实 CEF fixture 分别 105.86/106.05s；覆盖 code/错误/空值/超长/pending、pause/resume/seek 边界/stop、selection 重排、关闭 pending/销毁后回调，以及共享 controller/process/source/package/gateway 回归。真实 CEF 使用 `mock_keychain=1`，不代表手机已上屏。
+- Format/Lint/Security：`xcrun clang-format -style='{BasedOnStyle: Google, ColumnLimit: 80, PointerAlignment: Left, DerivePointerAlignment: false, AllowShortIfStatementsOnASingleLine: Never, AllowShortFunctionsOnASingleLine: Empty}' --dry-run --Werror browser/cef-shell/src/macos/cast_chrome_mac.h browser/cef-shell/src/macos/cast_chrome_mac.mm browser/cef-shell/tests/cast_chrome_mac_test.mm`、`cargo fmt --all -- --check`、`git diff --check` 均 exit 0；`cargo run --quiet -p repo-guard -- scan --root .` exit 0，0.80s，PASS（RG-003/004 仅既有 warning，任务路径无 findings；RG-006 未指定发布 artifact，N/A）。`bash scripts/check.sh security` exit 0，PASS，guard 1s、relay-unit 522s（3 项通过，其余测试程序零匹配但启动等待较长）、relay-security 7/7；独立 `cargo test --no-default-features --features legacy-dev --test fixtures security::` 也 7/7，exit 0。全量 fast 因包含真实 Keychain 测试明确 `NOT_RUN`。
+- Code Review：按 v0.9 独立复核需求、真实生产接线、错误/代际、AppKit UI 线程与 block 生命周期、安全/隐私、热路径、测试隔离与供应链；本次代码 P0/P1=0/0，发布待办 P2=1（如下），P3=0，`APPROVE`，最高 `VERIFIED`。约 521 行生产文件无规模提醒；约 240 行 AppKit 场景函数保留为有界、单一两窗口生命周期测试，便于推演关闭和旧回调，不在生产图内。
+- P2 → `QAR-10`：两配置 `codesign --verify --deep <CrayonBrowser.app>` exit 0，但额外 `--strict` 均 exit 1，原始错误 `No such file or directory`；verbose 停在 bundled CEF framework，只读 `find -L` 发现 Debug framework 的 `Resources/Resources`、`Libraries/Libraries`、`Versions/A/A` 等悬空链接。既有构建包需在 QAR-10 干净 staging/复制/签名任务中复核，不能据本次常规 ad-hoc/package contract 宣称正式签名/公证可发布。本任务未修改发布脚本或清理这些链接。
+- 未覆盖/下一步：两次 `computer-use` 真实界面检查均返回 `The Mac is locked and automatic unlock could not unlock it`，已请求用户解锁；真实布局/键盘/VoiceOver、ADB 正式接收端 Direct/投屏码/首帧/播控/stop 仍 `NOT_RUN`，归 `PLT-M05b4`。解锁后执行 b4，再依赖顺序进入 b5 Relay、b6 外部客户端交接；不越过真机前置去宣称三大闭环或一期发布完成。Windows、100 次稳定性、更新/回滚、正式签名/公证与 Release artifact scan 均未运行。
 
 ### PLT-M05b3 原子范围（按 a-e 五切片）
 

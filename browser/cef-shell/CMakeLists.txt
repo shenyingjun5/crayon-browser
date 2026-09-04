@@ -5,6 +5,12 @@ endif()
 set(CRAYON_BROWSER_TARGET crayon_browser)
 SET_CEF_TARGET_OUT_DIR()
 
+set(crayon_location_bar_sources
+    src/browser/window/chrome_location_bar.cc
+    src/browser/window/chrome_location_bar.h
+    src/browser/media_host/cast_entry_surface.cc
+    src/browser/media_host/cast_entry_surface.h)
+
 if(OS_WINDOWS)
   if(NOT USE_SANDBOX)
     message(FATAL_ERROR
@@ -32,6 +38,7 @@ if(OS_WINDOWS)
     @ONLY)
 
   set(crayon_browser_sources
+      ${crayon_location_bar_sources}
       src/browser/context/profile_context_factory.cc
       src/browser/context/profile_context_factory.h
       src/browser/context/profile_id_validator.cc
@@ -524,6 +531,7 @@ if(OS_MAC)
       "${PROJECT_SOURCE_DIR}/browser/shared-ui/localization/generated/macos/zh-Hant.lproj/InfoPlist.strings"
       "${PROJECT_SOURCE_DIR}/browser/shared-ui/localization/generated/macos/zh-Hant.lproj/Localizable.strings")
   set(crayon_macos_sources
+      ${crayon_location_bar_sources}
       src/browser/context/profile_context_factory.cc
       src/browser/context/profile_context_factory.h
       src/browser/context/profile_id_validator.cc
@@ -689,6 +697,7 @@ if(OS_MAC)
                         PRIVATE libcef_dll_wrapper ${CEF_STANDARD_LIBS}
                                 crayon::browser-new-tab
                                 crayon::browser-product-strings
+                                crayon::browser-windows
                                 crayon::browser-cast-view
                                 crayon::browser-page-tools
                                 crayon::browser-page-snapshot-gateway
@@ -876,6 +885,7 @@ if(OS_MAC)
     add_executable(
       crayon_cast_chrome_mac_test MACOSX_BUNDLE
       tests/cast_chrome_mac_test.mm
+      src/browser/media_host/cast_shell_controller.cc
       src/macos/cast_chrome_mac.mm)
     target_compile_features(crayon_cast_chrome_mac_test PRIVATE cxx_std_17)
     set_target_properties(
@@ -893,7 +903,7 @@ if(OS_MAC)
       PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CEF_ROOT}")
     target_link_libraries(
       crayon_cast_chrome_mac_test
-      PRIVATE crayon::browser-cast-view "-framework AppKit")
+      PRIVATE crayon::browser-cast-view crayon::cef-shell-ipc "-framework AppKit")
     add_custom_command(
       TARGET crayon_cast_chrome_mac_test POST_BUILD
       COMMAND "${CMAKE_COMMAND}" -E make_directory
@@ -933,7 +943,11 @@ if(CRAYON_BUILD_TESTS)
     find_program(CRAYON_PYTHON3_EXECUTABLE NAMES python3 REQUIRED)
     add_executable(
       crayon_page_snapshot_cef_integration_test MACOSX_BUNDLE
+      ${crayon_location_bar_sources}
       tests/page_snapshot_cef_integration_mac.mm
+      tests/cast_toolbar_host_probe.cc
+      tests/cast_entry_surface_probe.cc
+      tests/media_observation_cef_message_checks.cc
       src/browser/network_observer/cef_network_observer_adapter.cc
       src/browser/observation_gateway/cef_observation_bridge.cc
       src/browser/page_snapshot_gateway/cef_page_snapshot_bridge.cc
@@ -983,7 +997,9 @@ if(CRAYON_BUILD_TESTS)
     target_link_libraries(
       crayon_page_snapshot_cef_integration_test
       PRIVATE libcef_dll_wrapper ${CEF_STANDARD_LIBS}
+              crayon::browser-localization
               crayon::browser-cast-view
+              crayon::browser-windows
               crayon::browser-page-snapshot-gateway
               crayon::cef-shell-media-observer
               crayon::cef-shell-network-observer
@@ -1027,6 +1043,23 @@ if(CRAYON_BUILD_TESTS)
     set_tests_properties(page_snapshot_cef_integration
                          PROPERTIES LABELS "cef;shell;content;integration"
                                     TIMEOUT 240)
+    add_test(NAME cast_toolbar_host_probe
+             COMMAND crayon_page_snapshot_cef_integration_test
+             --cast-toolbar-host-probe)
+    add_test(NAME cast_entry_surface_probe
+             COMMAND crayon_page_snapshot_cef_integration_test
+             --cast-entry-surface-probe)
+    set_tests_properties(cast_entry_surface_probe PROPERTIES TIMEOUT 30
+                         LABELS "integration;cef;cast")
+    set_tests_properties(cast_toolbar_host_probe
+                         PROPERTIES LABELS "cef;shell;cast;integration"
+                                    TIMEOUT 30)
+    add_test(NAME cast_toolbar_close_probe
+             COMMAND crayon_page_snapshot_cef_integration_test
+                     --cast-toolbar-close-probe)
+    set_tests_properties(cast_toolbar_close_probe
+                         PROPERTIES LABELS "cef;shell;cast;integration"
+                                    TIMEOUT 30)
   endif()
 
   add_executable(

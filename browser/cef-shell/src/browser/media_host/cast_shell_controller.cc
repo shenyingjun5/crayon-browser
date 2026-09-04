@@ -131,7 +131,9 @@ bool CastShellController::ActivateCastButton() {
 }
 
 bool CastShellController::RefreshReceivers() {
-  if (shutdown_ || device_page_pending_ || start_pending_) return false;
+  if (shutdown_ || device_page_pending_ || start_pending_ ||
+      cast_code_request_id_)
+    return false;
   return RequestFirstDevicePage(media_host_ipc::DiscoveryAction::kRefresh);
 }
 
@@ -150,9 +152,9 @@ void CastShellController::CancelReceiverPicker() {
   discovery_active_ = false;
 }
 
-bool CastShellController::SelectReceiver(const std::string& device_id) {
-  if (shutdown_ || start_pending_ || !current_candidate_ ||
-      !commands_.start_cast)
+bool CastShellController::SelectReceiver(const std::string &device_id) {
+  if (shutdown_ || start_pending_ || cast_code_request_id_ ||
+      !current_candidate_ || !commands_.start_cast)
     return false;
   const auto action = coordinator_.SelectReceiver(device_id);
   if (!action ||
@@ -165,7 +167,9 @@ bool CastShellController::SelectReceiver(const std::string& device_id) {
 
 bool CastShellController::ConnectCastCode(std::string cast_code) {
   if (shutdown_ || cast_code_request_id_ || start_pending_ ||
-      !current_candidate_ || !commands_.resolve_cast_code) {
+      !current_candidate_ || !commands_.resolve_cast_code ||
+      coordinator_.feature().state() !=
+          browser_cast_view::CastFeatureState::kSelecting) {
     return false;
   }
   auto request_id = commands_.resolve_cast_code(std::move(cast_code));
@@ -183,6 +187,8 @@ bool CastShellController::ConnectCastCode(std::string cast_code) {
   device_snapshot_revision_.reset();
   cast_code_request_id_ = std::move(*request_id);
   cast_code_failed_ = false;
+  // A pending lookup must not leave an old receiver available for submission.
+  static_cast<void>(coordinator_.ReplaceReceivers({}));
   return true;
 }
 
@@ -333,18 +339,20 @@ void CastShellController::HandleStartReply(
 }
 
 void CastShellController::HandleResolveCastCodeReply(
-    const media_host_ipc::ResolveCastCodeReply& reply) {
+    const media_host_ipc::ResolveCastCodeReply &reply) {
   if (!cast_code_request_id_ || reply.request_id != *cast_code_request_id_)
     return;
   cast_code_request_id_.reset();
   if (!reply.device || reply.error ||
+      reply.device->state != media_host_ipc::DeviceState::kReady ||
       !coordinator_.ReplaceReceivers(
           {{reply.device->device_id, reply.device->display_name,
-            reply.device->is_crayon_receiver}}) ||
-      !SelectReceiver(reply.device->device_id)) {
+            reply.device->is_crayon_receiver}})) {
     cast_code_failed_ = true;
     return;
   }
+  // Resolving a code is not permission to play. Keep the picker open until
+  // the user's explicit start action calls SelectReceiver.
   cast_code_failed_ = false;
 }
 

@@ -152,6 +152,9 @@ void WindowClient::OnLoadingStateChange(CefRefPtr<CefBrowser> browser,
                                         bool canGoForward) {
   CEF_REQUIRE_UI_THREAD();
   controller_->OnLoadingUpdated(browser, isLoading, canGoBack, canGoForward);
+  if (!isLoading) {
+    media_observation_bridge_.BindCurrentMainFrame(browser);
+  }
 }
 
 void WindowClient::OnRenderProcessTerminated(CefRefPtr<CefBrowser> browser,

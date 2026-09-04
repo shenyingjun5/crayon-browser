@@ -1,13 +1,14 @@
 # 蜡笔 AI Agent 投屏浏览器总 Roadmap
 
-- 版本：v0.10（第一期三大闭环三语言发布范围冻结）
-- 日期：2026-09-02
+- 版本：v0.11（一期自定义外壳＋Alloy 迁移）
+- 日期：2026-09-04
 - 状态：活跃
 - 当前任务总数：297
 - 当前测试用例总数：212
 
 ## 1. 当前结论
 
+- **2026-09-04 最新决策**：长期采用自定义 Shell＋CEF Alloy，一期即开始迁移。完整一期执行总图见 [REL §5](plans/release-v1-roadmap.md#5-一期完整执行总图2026-09-04-重排)，具体宿主切片见 [PLT-SHELL](plans/desktop-shell-roadmap.md)。当前 Mac 先推进共享/本地验证，Windows 首发政策不变。后文 Chrome-style/BUX 既有完成证据是历史基线，不代表新自定义外壳通过。
 - 已收口：`BRD-01..04`、Foundation、`MED-01..19`、`BUX-01..18`、`SDK-01..14`、`RNM-01..08`；CEF 为 `CEF-01..05/15 DONE`、`CEF-06..14 VERIFIED`，`ACT-01..12` 已完成契约/模型层总 Review，`MRT-01..08 DONE`。
 - 页面数据 C1 算法与数据面 `CNT-01..10` 已收口；一期产品链 `CNT-17..20 DONE`，其中 Windows `CNT-20W1/W2` 已用真实 CEF 对称闭合。`CNT-21W` 等三大闭环平台切片完成后的 `PRV-13AW` 再做总 Review。
 - 第一期范围由 `REL-01 DONE` 冻结为网页 Markdown、LAN Direct/Relay 投屏、本地 Markdown 编辑三大闭环；远程后续已在 macOS arm64 闭合共享协议与大部分产品链。`REL-05 DONE` 按 2026-08-31 用户决策改为 Windows 10/11 x64 先形成发布候选，macOS 特有验证后置且不阻塞 Windows。Agent/CLI/MCP、Workflow、Hub、Partner、模型与 HarmonyOS 默认关闭并进入第二期。
@@ -57,6 +58,8 @@
 | QAR | 18 | 核心/第二期 feature 分离的质量、性能、安全、发布和回滚 |
 | RNM | 8 | `get-video` → `crayon-browser` 命名迁移 |
 | **合计** | **297** | |
+
+`PLT-SHELL-00..27`（含 M/W 原子切片）归既有 PLT-M05/W05，承接此次跨领域宿主迁移，不重复计入顶层总数。原用例 ID 复用并补 Alloy 场景，当前仍 212 个唯一 ID。
 
 ## 4. 依赖关系
 
@@ -158,6 +161,7 @@ flowchart LR
 
 ### R1：第一期三大闭环 Windows 首发候选
 
+- 最新宿主前置：SHELL 架构/命令/内容视图 → Alloy 标签/导航 → 全部日用功能和三闭环接线 → 三语言/平台交互 → 默认切换/旧路径退出 → 设备/隐私/质量/发布。新宿主本地验证从当前 Mac 开始，两平台分别完成；具体依赖以 REL §5 和 SHELL 原子表为准，下面旧平台业务顺序不替代新宿主门禁。
 - `REL-01..05`、`CNT-17..21` 的 Windows slices、`PLT-W05/19W`、`MDV-20W/24W/25W`、`MRT-09W`、`LOC-01..07W`、`PRV-13AW` 与 `QAR-01W..16W` 的核心 A 任务。
 - 顺序：范围/调用图审计 → Windows 网页 Markdown → Windows 媒体观察/Direct/Relay/交接 → Windows MDV/MRT P0 收口 → 三语言系统跟随与资源闭包 → 安全/性能/长稳 → 安装/升级/回滚 → Windows Go/NoGo。
 - 验收：Windows x64 候选包真实完成网页→Markdown→复制/保存、网页视频→设备→Direct/Relay→控制/停止、本地 `.md`→编辑→预览→安全保存，并在 `en-US/zh-CN/zh-TW` 系统 UI 语言下保持 CEF/产品/原生 UI 一致；P0/P1=0。Agent/Workflow/Partner/model 等第二期 feature 默认为 off/NOT_IN_RELEASE。
@@ -220,6 +224,8 @@ flowchart LR
 
 ## 6. 资源与工期建议
 
+以下是迁移前历史容量估算，不包含 2026-09-04 的完整自定义 Shell＋Alloy 迁移；新计划在最小真实宿主、标签和导航验证后重新评估，不能沿用下面 R1 周数承诺交付。
+
 以 2～3 名工程师、共享 Core 已有但 CEF 壳/真实接收端未完成为前提：
 
 | 阶段 | 建议工期 | 说明 |
@@ -244,6 +250,8 @@ flowchart LR
 
 ## 7. 当前领取顺序
 
+2026-09-04 起，先按 [PLT-SHELL](plans/desktop-shell-roadmap.md) 执行 00 方案、01 命令 owner、02 内容视图边界、03M 本地 Alloy 宿主，再按原子依赖补齐日用与三闭环。投屏 R04/R07 可独立推进；下列旧平台收口任务全部保留，但须在新默认宿主补相关证据。Windows 对称任务与首发政策不变。
+
 1. `LOC-01/03/04/05W/06W DONE + LOC-02 VERIFIED -> LOC-07W BLOCKED；LOC-08M IMPLEMENTED`：Windows 自动化与候选 artifact scan 已闭合，等待防火墙提示/可信物理点击和系统语言矩阵；macOS 单 snapshot 与三套生成资源已实现，平台构建/真机后置。
 2. `PLT-W05a/b/c0 DONE -> W05c BLOCKED -> W05d..f`：Windows media-host、Cast UI、投屏码/播控入口与自动化已装配；W05c 等待可产生非 injected 点击的 Windows 控制台闭合 ADB 正式接收端 Direct，之后才能继续 Relay、拒绝/交接与 100 次资源稳定性。
 3. `MDV-25W DONE -> MDV-20W -> MRT-09W`：Windows 本地 Markdown 生产隔离已闭合，继续 P0 Runtime、包体与真机回归。
@@ -253,6 +261,7 @@ flowchart LR
 
 ## 8. 发布门禁
 
+- 第一期候选必须使用经验证的自定义 Shell＋Alloy 默认宿主；PLT-SHELL-25W/26W 是 REL-03 前置，Mac 对称门禁独立。历史 Chrome UI/输入/窗口/性能/包体验证不能替代新宿主 addendum。
 - 297 项任务按所选发布范围提供真实状态、命令与证据；212 个唯一当前测试 ID 可追踪，新增一期装配/生产隔离/Windows 顺序/本地化任务复用并扩展 CT/E2E/MD/CP/RG/UX 用例映射；P0/P1 Review 为零。
 - 一期核心发布不得依赖 QAR 的第二期 B 任务；Agent/Workflow/Partner/model 保持默认关闭并在 QAR-15 标记 `NOT_IN_RELEASE`。
 - MDV/MRT 发布包仅包含各 manifest 锁定的浏览器运行时闭包，无 tiny/CDN/npm runtime/动态插件；普通 Markdown 对未命中扩展的 runtime 零读取，Mermaid/Highlight/KaTeX 离线可用且通过类型化输出 policy、lazy/cache、generation 与资源回落门禁。

@@ -1,5 +1,6 @@
 use super::media_planning_runtime::{
-    MediaPlanningError, MediaPlanningRuntime, VerifiedPlayback, VerifiedUrlFact,
+    LocalPreflightStatus, MediaPlanningError, MediaPlanningRuntime, VerifiedPlayback,
+    VerifiedUrlFact,
 };
 use crayon_cast_policy::HandoffAvailability;
 use crayon_domain::{CoreError, ReceiverCapabilities, TabId};
@@ -10,7 +11,7 @@ use crayon_ipc_schema::{
 use crayon_media_observer::candidate::{LifecyclePolicy, RankingSignals};
 use crayon_media_observer::ObservationSource;
 use crayon_media_probe::http::{ProbeHttpClient, ProbeHttpConfig};
-use crayon_media_probe::MediaInspector;
+use crayon_media_probe::{InspectionStatus, MediaInspector, ProbeHttpError};
 use std::time::Duration;
 use test_support::upstream::{drip, MockUpstream, UpstreamScript};
 
@@ -72,6 +73,27 @@ fn mp4() -> Vec<u8> {
 }
 
 #[tokio::test]
+async fn background_decision_does_not_authorize_same_origin_lan() {
+    let mut owner = runtime_with_config(ProbeHttpConfig::default());
+    let mut input = fact(
+        "http://192.168.0.10/video.mp4".into(),
+        ObservationSource::CurrentSrc,
+        HeadersClass::None,
+        Some(playback(10.0)),
+    );
+    input.page_url = "http://192.168.0.10/watch".into();
+    let id = owner.ingest_url(input).unwrap().unwrap().id;
+    let outcome = owner
+        .decide_for_receiver(id, all_capabilities(), HandoffAvailability::Unavailable)
+        .await
+        .unwrap();
+    assert!(matches!(
+        outcome.decision,
+        CastPolicyDecision::Reject { .. }
+    ));
+}
+
+#[tokio::test]
 async fn clear_mp4_is_direct_without_exposing_url() {
     let upstream = MockUpstream::start(vec![(
         "/clear.mp4?signature=fixture-value".to_owned(),
@@ -105,6 +127,11 @@ async fn clear_mp4_is_direct_without_exposing_url() {
         .unwrap();
     assert_eq!(plan.protocol, ProtocolKind::Mp4);
     assert_eq!(plan.decision, CastPolicyDecision::Direct);
+    assert_eq!(
+        plan.preflight,
+        LocalPreflightStatus::Inspected(InspectionStatus::Recognized)
+    );
+    assert!(!format!("{plan:?}").contains("signature"));
 }
 
 #[tokio::test]
@@ -243,6 +270,7 @@ async fn dash_content_protection_and_eme_are_stable_rejections() {
         }
     );
     assert_eq!(upstream.hit_count("/clear.mp4"), 0, "EME skips probe");
+    assert_eq!(decision.preflight, LocalPreflightStatus::SkippedProtection);
 }
 
 #[tokio::test]
@@ -284,6 +312,7 @@ async fn credential_bound_skips_probe_and_never_directs() {
         ))
     );
     assert_eq!(upstream.hit_count("/private.mp4"), 0);
+    assert_eq!(decision.preflight, LocalPreflightStatus::SkippedCredentials);
 }
 
 #[test]
@@ -426,6 +455,10 @@ async fn probe_failure_and_receiver_mismatch_fail_closed_without_retry() {
         ))
     );
     assert_eq!(upstream.hit_count("/missing.mp4"), 1, "no retry");
+    assert_eq!(
+        decision.preflight,
+        LocalPreflightStatus::Inspected(InspectionStatus::UpstreamRejected)
+    );
 
     let clear_upstream = MockUpstream::start(vec![(
         "/clear.mp4".to_owned(),
@@ -502,6 +535,49 @@ async fn stalled_probe_times_out_to_inconclusive_without_retry() {
         2,
         "HEAD then one Range, no retry"
     );
+    assert_eq!(
+        decision.preflight,
+        LocalPreflightStatus::Failed(ProbeHttpError::Timeout)
+    );
+}
+
+#[tokio::test]
+async fn benchmark_address_failure_survives_planning_and_selected_prepare() {
+    for address in ["198.18.0.22", "[::ffff:198.18.0.22]"] {
+        let mut owner = runtime_with_config(ProbeHttpConfig::default());
+        let url = format!("http://{address}/video.mp4?fixture=not-for-diagnostics");
+        let mut input = fact(
+            url.clone(),
+            ObservationSource::CurrentSrc,
+            HeadersClass::None,
+            Some(playback(1.0)),
+        );
+        input.page_url = url;
+        let id = owner.ingest_url(input).unwrap().unwrap().id;
+        let decision = owner
+            .decide_for_receiver(id, all_capabilities(), HandoffAvailability::Unavailable)
+            .await
+            .unwrap();
+        assert_eq!(
+            decision.preflight,
+            LocalPreflightStatus::Failed(ProbeHttpError::NonPublicAddress)
+        );
+        assert!(matches!(
+            decision.decision,
+            CastPolicyDecision::Reject { .. }
+        ));
+        assert!(!format!("{decision:?}").contains("not-for-diagnostics"));
+        let (request, status) = owner
+            .prepare_selected_delivery_request(
+                id,
+                crayon_domain::DeviceId::new("receiver-fixture").unwrap(),
+                HandoffAvailability::Unavailable,
+            )
+            .await
+            .unwrap();
+        assert_eq!(status, decision.preflight);
+        assert_eq!(request.protection, crayon_media_probe::Protection::Unknown);
+    }
 }
 
 #[tokio::test]

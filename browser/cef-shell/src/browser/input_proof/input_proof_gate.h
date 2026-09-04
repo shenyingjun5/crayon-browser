@@ -31,6 +31,7 @@ enum class ProofResult {
   kDeniedStaleNavigation,       // BR-007
   kDeniedAlreadyProgressing,    // BR-005: autoplay beat the input
   kDeniedNoProgressAfterInput,  // click never led to real playback
+  kDeniedStaleSource,          // an older renderer source epoch
 };
 
 /// Cross-check gate.  Facts are fed from browser-trusted sources only
@@ -57,6 +58,9 @@ class InputProofGate final {
 
   /// Switches the foreground tab.
   void SetActiveTab(std::uint32_t tab);
+
+  // Withdraw input without forgetting whether playback is already advancing.
+  void RevokeInput() { has_input_ = false; }
 
   /// Evaluates the playback-eligible claim for `tab`/`navigation_id`.
   ProofResult Evaluate(std::uint32_t tab, std::uint64_t navigation_id) const;

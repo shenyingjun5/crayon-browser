@@ -1,6 +1,8 @@
 #include <cstdint>
 #include <cstdlib>
+#include <functional>
 #include <iostream>
+#include <limits>
 #include <optional>
 #include <string>
 #include <utility>
@@ -25,10 +27,12 @@ using crayon::browser_engine::TabId;
 using crayon::browser_shell::CommandDispatchResult;
 using crayon::browser_shell::CommandOrigin;
 using crayon::browser_shell::CommandRegistry;
+using crayon::browser_shell::CommandRouting;
 using crayon::browser_shell::EngineEventAdapter;
 using crayon::browser_shell::FocusArea;
 using crayon::browser_shell::NavigationState;
 using crayon::browser_shell::ShellCommand;
+using crayon::browser_shell::ShellCommandObserver;
 using crayon::browser_shell::ShellCommandTarget;
 using crayon::browser_shell::ShellState;
 using crayon::browser_shell::ShellSurface;
@@ -71,6 +75,176 @@ class RecordingTarget final : public ShellCommandTarget {
   int execution_count_ = 0;
   ShellCommand last_command_ = ShellCommand::kNewTab;
 };
+
+class CallbackTarget final : public ShellCommandTarget {
+ public:
+  bool CanExecute(ShellCommand) const noexcept override {
+    if (on_check) on_check();
+    return available;
+  }
+  bool Execute(ShellCommand) override {
+    ++executions;
+    if (on_execute) on_execute();
+    return succeeds;
+  }
+  std::function<void()> on_check;
+  std::function<void()> on_execute;
+  bool available = true;
+  bool succeeds = true;
+  int executions = 0;
+};
+
+class CallbackObserver final : public ShellCommandObserver {
+ public:
+  void OnCommandAccepted(ShellCommand, CommandOrigin) override {
+    ++accepted;
+    if (on_accepted) on_accepted();
+  }
+  std::function<void()> on_accepted;
+  int accepted = 0;
+};
+
+constexpr std::array<ShellCommand, 14> kCommandCompatibilityVector = {
+    ShellCommand::kNewTab,        ShellCommand::kCloseTab,
+    ShellCommand::kFocusOmnibox,  ShellCommand::kBack,
+    ShellCommand::kForward,       ShellCommand::kReload,
+    ShellCommand::kStop,          ShellCommand::kZoomIn,
+    ShellCommand::kZoomOut,       ShellCommand::kResetZoom,
+    ShellCommand::kOmniboxEdit,   ShellCommand::kOmniboxSubmit,
+    ShellCommand::kOmniboxCancel, ShellCommand::kOmniboxNavigate};
+
+bool CommandOwnershipKeepsLegacyAndCustomPathsSeparate() {
+  CallbackTarget target;
+  CallbackObserver observer;
+  CommandRegistry legacy(target, observer);
+  std::uint64_t sequence = 0;
+  for (const auto command : kCommandCompatibilityVector) {
+    CHECK(legacy.Dispatch(command, ++sequence, CommandOrigin::kNativeChrome) ==
+          CommandDispatchResult::kPassThrough);
+  }
+  CHECK(target.executions == 0);
+  CHECK(observer.accepted == 14);
+
+  CommandRegistry custom(target, observer, CommandRouting::kCustomShell);
+  CHECK(
+      custom.Dispatch(ShellCommand::kNewTab, 1, CommandOrigin::kNativeChrome) ==
+      CommandDispatchResult::kInvalidCommand);
+  CHECK(custom.last_sequence() == 0);
+  sequence = 0;
+  for (const auto command : kCommandCompatibilityVector) {
+    for (const auto origin :
+         {CommandOrigin::kProductUi, CommandOrigin::kHostAccelerator}) {
+      CHECK(custom.Dispatch(command, ++sequence, origin) ==
+            CommandDispatchResult::kExecuted);
+    }
+  }
+  CHECK(target.executions == 28);
+  CHECK(observer.accepted == 42);
+  return true;
+}
+
+bool CustomDispatchRejectsInvalidUnavailableAndExhaustedCommands() {
+  CallbackTarget target;
+  CallbackObserver observer;
+  CommandRegistry invalid(target, observer, static_cast<CommandRouting>(999));
+  CHECK(invalid.Dispatch(ShellCommand::kBack, 1, CommandOrigin::kProductUi) ==
+        CommandDispatchResult::kInvalidCommand);
+  CHECK(invalid.last_sequence() == 0);
+  CommandRegistry custom(target, observer, CommandRouting::kCustomShell);
+  CHECK(custom.Dispatch(static_cast<ShellCommand>(999), 1,
+                        CommandOrigin::kProductUi) ==
+        CommandDispatchResult::kInvalidCommand);
+  CHECK(custom.Dispatch(ShellCommand::kBack, 1,
+                        static_cast<CommandOrigin>(999)) ==
+        CommandDispatchResult::kInvalidCommand);
+  CHECK(custom.last_sequence() == 0);
+  CHECK(custom.Dispatch(ShellCommand::kBack, 0, CommandOrigin::kProductUi) ==
+        CommandDispatchResult::kStaleSequence);
+  target.available = false;
+  CHECK(custom.Dispatch(ShellCommand::kBack, 1, CommandOrigin::kProductUi) ==
+        CommandDispatchResult::kUnavailable);
+  CHECK(target.executions == 0);
+  target.available = true;
+  target.succeeds = false;
+  CHECK(custom.Dispatch(ShellCommand::kBack, 2,
+                        CommandOrigin::kHostAccelerator) ==
+        CommandDispatchResult::kUnavailable);
+  CHECK(target.executions == 1);
+  CHECK(observer.accepted == 0);
+  target.succeeds = true;
+  constexpr auto kLastSequence = std::numeric_limits<std::uint64_t>::max();
+  CHECK(custom.Dispatch(ShellCommand::kBack, kLastSequence,
+                        CommandOrigin::kProductUi) ==
+        CommandDispatchResult::kExecuted);
+  CHECK(custom.Dispatch(ShellCommand::kBack, kLastSequence,
+                        CommandOrigin::kProductUi) ==
+        CommandDispatchResult::kStaleSequence);
+  CHECK(custom.Dispatch(ShellCommand::kBack, 1, CommandOrigin::kProductUi) ==
+        CommandDispatchResult::kStaleSequence);
+  custom.Shutdown();
+  custom.Shutdown();
+  CHECK(custom.Dispatch(ShellCommand::kBack, 3, CommandOrigin::kProductUi) ==
+        CommandDispatchResult::kInactive);
+  CHECK(target.executions == 2);
+  CHECK(observer.accepted == 1);
+  return true;
+}
+
+bool ShutdownDuringTargetCallbackDoesNotUseRevokedPointers() {
+  for (const auto routing :
+       {CommandRouting::kNativeChrome, CommandRouting::kCustomShell}) {
+    for (const bool during_check : {false, true}) {
+      CallbackTarget target;
+      CallbackObserver observer;
+      CommandRegistry registry(target, observer, routing);
+      auto shutdown = [&registry] { registry.Shutdown(); };
+      if (during_check)
+        target.on_check = shutdown;
+      else
+        target.on_execute = shutdown;
+      CHECK(registry.Dispatch(ShellCommand::kCloseTab, 1,
+                              CommandOrigin::kProductUi) ==
+            (during_check ? CommandDispatchResult::kInactive
+                          : CommandDispatchResult::kExecuted));
+      CHECK(target.executions == (during_check ? 0 : 1));
+      CHECK(observer.accepted == 0);
+      CHECK(!registry.active());
+    }
+  }
+  return true;
+}
+
+bool NestedDispatchCannotInterleaveOrConsumeSequence() {
+  for (const int callback_stage : {0, 1, 2}) {
+    CallbackTarget target;
+    CallbackObserver observer;
+    CommandRegistry registry(target, observer, CommandRouting::kCustomShell);
+    auto nested_result = CommandDispatchResult::kExecuted;
+    const auto nested = [&] {
+      nested_result = registry.Dispatch(ShellCommand::kReload, 2,
+                                        CommandOrigin::kHostAccelerator);
+    };
+    if (callback_stage == 0) target.on_check = nested;
+    if (callback_stage == 1) target.on_execute = nested;
+    if (callback_stage == 2) observer.on_accepted = nested;
+    CHECK(
+        registry.Dispatch(ShellCommand::kBack, 1, CommandOrigin::kProductUi) ==
+        CommandDispatchResult::kExecuted);
+    CHECK(nested_result == CommandDispatchResult::kReentrant);
+    CHECK(registry.last_sequence() == 1);
+    CHECK(target.executions == 1);
+    CHECK(observer.accepted == 1);
+    target.on_check = nullptr;
+    target.on_execute = nullptr;
+    observer.on_accepted = [&] { registry.Shutdown(); };
+    CHECK(registry.Dispatch(ShellCommand::kReload, 2,
+                            CommandOrigin::kHostAccelerator) ==
+          CommandDispatchResult::kExecuted);
+    CHECK(!registry.active());
+    CHECK(observer.accepted == 2);
+  }
+  return true;
+}
 
 bool CommandRegistryRejectsDuplicatesAndSeparatesNativePassThrough() {
   RecordingTarget target;
@@ -212,7 +386,11 @@ bool EngineAdapterIgnoresLateEventsAfterShutdown() {
 }  // namespace
 
 int main() {
-  if (!ShellStructureMatchesTheFrozenTwoRowContract() ||
+  if (!CommandOwnershipKeepsLegacyAndCustomPathsSeparate() ||
+      !CustomDispatchRejectsInvalidUnavailableAndExhaustedCommands() ||
+      !ShutdownDuringTargetCallbackDoesNotUseRevokedPointers() ||
+      !NestedDispatchCannotInterleaveOrConsumeSequence() ||
+      !ShellStructureMatchesTheFrozenTwoRowContract() ||
       !CommandRegistryRejectsDuplicatesAndSeparatesNativePassThrough() ||
       !FocusTokensAndRetiredTabsFailClosed() ||
       !NavigationEventsRejectUnknownAndOldGenerations() ||

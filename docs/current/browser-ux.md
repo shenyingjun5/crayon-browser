@@ -3,6 +3,8 @@
 - 版本：`browser-design-v1`
 - 状态：`BUX-01 DONE`，`browser-design-v1` 已冻结
 - 范围：Windows/macOS CEF 桌面浏览器；HarmonyOS 后续复用语义和可访问性原则，不复用桌面像素假设
+- 2026-09-03 投屏交互修订：`cast-interaction-v1` 补充入口顺序/常驻灰态/显式选择，旧 BUX 完成证据保留；新实现由 PLT-CAST-R 切片验收。
+- 2026-09-04 宿主决定：一期开始自定义 Shell＋CEF Alloy，按 [PLT-SHELL](../plans/desktop-shell-roadmap.md) 迁移。本文双行结构、design token、三语言、键盘与无障碍不变；原生 Chrome 标签栏/omnibox 不再是目标 UI owner。控件由 Browser 拥有，内容视图不得遮挡顶部安全区域。
 
 ## 1. 设计目标
 
@@ -13,7 +15,7 @@
 | 区域 | 逻辑高度 | 顺序与职责 |
 |---|---:|---|
 | 标签栏 | 40 DIP | 应用身份、标签集合、新建标签、标签搜索、窗口控制 |
-| 导航栏 | 48 DIP | 后退、前进、刷新/停止、主页、omnibox、书签、下载、投屏、Profile、主菜单 |
+| 导航栏 | 48 DIP | 后退、前进、刷新/停止、主页、omnibox、投屏、书签、下载、Profile、主菜单 |
 | 顶部合计 | 88 DIP | 页面 viewport 从该区域下方开始，不允许网页覆盖 |
 
 功能 glyph 使用 24×24 DIP 画布、默认 20 DIP 可见线条；最小点击目标 32×32 DIP，首选 36×36 DIP。焦点环为 2 DIP，不依赖颜色之外的单一状态信号。
@@ -39,6 +41,7 @@
 - 标签：`inactive/hover/active/attention/dragging`；active tab 与键盘 focus 分离，旧 tab/navigation 事件不得覆盖当前状态。
 - omnibox：`rest/hover/focused/editing/invalid`；站点身份属于浏览器 chrome，页面不可伪造。
 - 投屏：`unavailable/eligible/selecting/casting/error`；状态只消费 Browser process 可信播放事实和受审投屏用例。`casting` 必须对应真实 session，不显示虚假成功。
+- 投屏按钮在网址输入框外侧紧邻其后，零有效候选常驻灰色禁用；面板区分选择、连接、评估、提交和真实播放。多视频明确选择，连接不自动播放，播放器覆盖层只预选并打开同一面板。所有权、兼容、有效期和失效规则按 [投屏交互契约](cast-interaction.md)；本段不代表当前 CEF 标题栏实现已迁移。
 
 ## 6. 键盘、焦点与无障碍
 

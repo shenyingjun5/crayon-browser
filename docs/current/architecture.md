@@ -1,7 +1,7 @@
 # 蜡笔 AI Agent 投屏浏览器当前架构
 
-- 版本：v0.9
-- 日期：2026-08-30（补充主业务/辅助链与 Cast-SDK 跨仓所有权）
+- 版本：v1.0
+- 日期：2026-09-04（自定义桌面外壳＋Alloy 长期架构，一期开始迁移）
 - 状态：当前权威架构契约
 
 ## 1. 架构结论
@@ -93,6 +93,18 @@ flowchart TB
 | `browser/shared-ui/markdown-runtime`（规划） | 按 [Markdown Runtime v1](markdown-runtime.md) 提供编译期 Extension Registry、manifest loader、预算/cache/generation 与扩展 adapter 接口 | 第二 Markdown parser、运行时插件安装、Agent 能力、Cast 协议 |
 
 本地 `crayon://mdv` 是 `browser/shared-ui/{markdown,markdown-runtime,mdv}` 与 CEF shell resource handler 共同拥有的用户界面能力，不属于 `crayon-page-data`/`crayon-content-*` 的网页事实管线。普通 Markdown 继续由共享 C++17 md4c 确定性生成安全 HTML；`markdown-runtime` 只接受编译期闭合 registry 与 manifest 资源，负责通用预算、lazy/cache/generation 和错误隔离；MDV/各 adapter 拥有 Mermaid、Highlight、KaTeX 等具体渲染语义。任何扩展输出仍是不可信内容，SVG/HTML/URL 按类型经过独立 policy gate。该 runtime 不进入 Rust Core、CAAP registry、Agent 文件能力、CNT 的确定性页面 Markdown 或 Cast/receiver 协议。
+
+### 3.1 自定义外壳与可替换内容视图
+
+2026-09-04 用户决策：长期使用自定义桌面 Shell＋CEF Alloy，一期即开始迁移，按 [PLT-SHELL Roadmap](../plans/desktop-shell-roadmap.md) 分平台验收。初始 UI 实现采用现有 CEF Views/平台 adapter，网页后端使用固定 CEF windowed Alloy；不引入新 UI 框架、OSR 合成或内核 fork。Chrome-inspired 是交互心智，不再代表依赖 Chrome 原生标签栏和地址栏。
+
+- Shell 拥有可见标签、布局、焦点和命令；TabController/TabModel 继续确认真实标签身份/生命周期，共享模型只消费投影或发意图，不新增并行可写身份库。
+- 内容用途（网页、受控内置页、本地文档）与后端分离。内置 newtab/MDV 也可由 Alloy 渲染；未来其他 WebView 只经独立 adapter 接入，不能假定同时具备快照、可信输入、媒体观察或完整扩展能力。
+- 复用 engine-api 导航/快照契约；最小内容挂载接口由 PLT-SHELL-02 冻结。共享接口不含 CEF/OS/裸指针句柄、不扩张任意 JS/CDP/文件/网络能力。UI toolkit 与内容后端分别隔离，不将 CEF Views 类型传入共享 Core。
+- 视图事件绑定 Profile/tab/navigation/挂载 epoch；异步创建/关闭、beforeunload 取消、崩溃和跨窗口移动必须有终态、旧回调 fencing 与逆序释放。切标签不得通过重新打开 URL 假装保留页面状态。
+- 页面不得注册/选择 backend 或伪造内置内容身份；内置页面 bridge 绑定受控资源与短期上下文。换后端不继承 Cookie、文件授权、投屏播放证明或 Agent grant；能力缺失显式 unsupported，不静默降级引擎或放宽权限。
+- Chrome-style 只保留迁移期旧产品基线，原 LOCATION 多 Chrome BrowserView 方案不再实施；对应平台 PLT-SHELL-24/25 完成后退出旧生产路径。未来 Chrome-style 特殊容器必须另有兼容/生命周期评估，不承诺任意混合嵌入。
+- 本决定是目标架构，不代表产品已切换。现有业务/协议证据保留，宿主相关输入、UI、Profile、生命周期、性能和安装包必须重新验收。
 
 ## 4. CAAP 与入站访问
 
@@ -209,7 +221,10 @@ task 绑定 client/session/Profile/target/generation/tool/version/grant/route。
 
 ## 10. 投屏、模型与平台边界
 
+2026-09-03 后续用户决定：原 PLT-CAST-R05/R06 的代理专项/接收端代检撤出本次范围，不阻塞 UI 和普通 Direct；继续使用现有 SDK 原样投送媒体域名。§11 的 URL 评估描述仅保留未来新增能力的所有权限制，不再是一期开发前置。
+
 - 投屏决策仅 `Direct/Relay/ExternalClientHandoff/Reject`；Direct/Relay 只在 LAN。
+- 媒体预检默认拒绝非公网地址。用户选择已发现设备后的当前已验证播放，可以由 app-runtime 签发一次同源 RFC1918 IPv4 literal 预检范围；不授予域名/跨源/全私网访问。精确 URL、无代理/凭证/重定向、deadline 与取消/提交前重验按 [受限 LAN 预检计划](../plans/lan-media-probe-roadmap.md) 执行；网络目标类型不等于用户授权，Relay 与 SDK 边界不变。
 - R3 Agent 与 Workflow 投屏调用相同 use case，继续受用户真实播放、DRM、广告、设备能力和 Relay 安全门禁。
 - Partner/TV Cast Manifest 是 Cast-SDK/接收端协议变更；浏览器侧仅在外部 API 正式批准、固定版本并发布后通过 facade 接入。
 - 第二阶段模型只消费用户确认的内容 DTO或生成不可信建议；失败不影响本地 Markdown/动作/技能。
@@ -217,6 +232,8 @@ task 绑定 client/session/Profile/target/generation/tool/version/grant/route。
 - 浏览器无 WebRTC、屏幕/标签页/系统音频采集与编码。
 
 ## 11. 生命周期释放顺序
+
+投屏选择与预检的新增目标按 [cast-interaction-v1](cast-interaction.md)：app-runtime 唯一拥有有界播放器投影、选择草稿和授权，UI 两个入口只发意图；实例/source/draft revision 在提交前重验。预检传输状态与保护/设备能力分离，原因用于用户反馈而不构造 route；MHV1 不暗加字段，新语义走 MHV2 兼容迁移。接收端 URL 评估仍不可用，须 §2.2 外部交付后接入；当前 Unknown 拒绝、no-proxy 与受限 LAN literal 范围不变。
 
 1. 停止入站 CAAP/MCP/CLI，冻结 Hub 新路由，撤销 session/grant。
 2. 取消 Agent、动作验证、Workflow、Challenge checkpoint、页面数据与模型任务。

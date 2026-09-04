@@ -86,6 +86,338 @@ fn harness() -> Harness {
     }
 }
 
+fn preflight_host(
+    h: &Harness,
+    media_url: String,
+    config: ProbeHttpConfig,
+) -> (MediaHostRuntime, u64) {
+    initial_page(&h.runtime);
+    let mut host = MediaHostRuntime::with_cast(
+        MediaInspector::new(ProbeHttpClient::new(config)),
+        Arc::clone(&h.runtime),
+    );
+    let reply = host
+        .handle_immediate(MediaHostMessage::IngestUrl(MediaHostUrlFact {
+            request_id: "preflight-ingest".into(),
+            tab_id: "tab-1".into(),
+            navigation_id: 1,
+            generation: 1,
+            observed_at_ms: 1,
+            page_url: media_url.clone(),
+            media_url,
+            source: MediaHostSource::CurrentSrc,
+            headers_class: HeadersClass::None,
+            playback: Some(MediaHostPlayback {
+                position_ms: 1000,
+                duration_ms: Some(60000),
+                is_live: false,
+                ad_continuity: AdContinuity::Preserved,
+                current_src: true,
+                near_play_event: true,
+                audible: true,
+                main_frame: true,
+                visible_area_px: 100,
+            }),
+            eme_encrypted: false,
+        }))
+        .unwrap()
+        .unwrap();
+    let MediaHostMessage::CandidateReply {
+        candidate_id: Some(id),
+        ..
+    } = reply
+    else {
+        panic!("candidate missing")
+    };
+    (host, id)
+}
+
+fn start_message(id: u64, h: &Harness) -> MediaHostMessage {
+    MediaHostMessage::StartCast {
+        request_id: "preflight-start".into(),
+        candidate_id: id,
+        device_id: h.device.as_str().into(),
+        handoff_available: false,
+    }
+}
+
+async fn preflight_upstream() -> test_support::upstream::MockUpstream {
+    use test_support::upstream::{MockUpstream, UpstreamScript};
+    MockUpstream::start(vec![(
+        "/video.mp4".into(),
+        UpstreamScript::RangeAware {
+            content_type: Some("video/mp4".into()),
+            body: b"\x00\x00\x00\x18ftypmp42........".to_vec(),
+        },
+    )])
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn preflight_performs_no_sdk_start_until_explicit_commit() {
+    let h = harness();
+    let upstream = preflight_upstream().await;
+    let (mut host, id) = preflight_host(
+        &h,
+        upstream.url("/video.mp4"),
+        ProbeHttpConfig {
+            allow_private_addresses: true,
+            ..ProbeHttpConfig::default()
+        },
+    );
+    let command = host.prepare_cast_command(start_message(id, &h)).unwrap();
+    let calls = h.facade.calls();
+    let ready = host.preflight_start_cast(command).await.unwrap();
+    assert_eq!(
+        ready.preflight_status(),
+        &super::media_planning_runtime::LocalPreflightStatus::Inspected(
+            crayon_media_probe::InspectionStatus::Recognized
+        )
+    );
+    assert_eq!(h.facade.calls(), calls, "preflight must not enter SDK");
+    assert_eq!(upstream.requests().len(), 2);
+    assert!(matches!(
+        host.commit_start_cast(ready).await.unwrap(),
+        MediaHostMessage::StartCastReply {
+            outcome: MediaHostCastStartOutcome::Casting { .. },
+            ..
+        }
+    ));
+}
+
+#[tokio::test]
+async fn inconclusive_preflight_keeps_cause_but_never_connects_or_casts() {
+    use super::media_planning_runtime::LocalPreflightStatus;
+    use crayon_media_probe::{InspectionStatus, ProbeHttpError};
+    use test_support::upstream::{MockUpstream, UpstreamScript};
+
+    let upstream = MockUpstream::start(vec![
+        (
+            "/unknown".into(),
+            UpstreamScript::Full {
+                status: 200,
+                content_type: None,
+                body: b"unrecognized".to_vec(),
+            },
+        ),
+        (
+            "/redirect".into(),
+            UpstreamScript::Redirect {
+                location: "/not-fetched".into(),
+            },
+        ),
+    ])
+    .await
+    .unwrap();
+    let cases = [
+        (
+            upstream.url("/unknown"),
+            true,
+            LocalPreflightStatus::Inspected(InspectionStatus::Unrecognized),
+        ),
+        (
+            upstream.url("/missing"),
+            true,
+            LocalPreflightStatus::Inspected(InspectionStatus::UpstreamRejected),
+        ),
+        (
+            upstream.url("/redirect"),
+            true,
+            LocalPreflightStatus::Inspected(InspectionStatus::RedirectRefused),
+        ),
+        (
+            "http://198.18.0.22/video.mp4".into(),
+            false,
+            LocalPreflightStatus::Failed(ProbeHttpError::NonPublicAddress),
+        ),
+    ];
+    for (url, allow_private_addresses, expected) in cases {
+        let h = harness();
+        let (mut host, id) = preflight_host(
+            &h,
+            url,
+            ProbeHttpConfig {
+                allow_private_addresses,
+                ..ProbeHttpConfig::default()
+            },
+        );
+        let command = host.prepare_cast_command(start_message(id, &h)).unwrap();
+        let before = h.facade.calls();
+        let ready = host.preflight_start_cast(command).await.unwrap();
+        assert_eq!(ready.preflight_status(), &expected);
+        assert_eq!(
+            h.facade.calls(),
+            before,
+            "local preflight must not call SDK"
+        );
+        assert!(matches!(
+            host.commit_start_cast(ready).await.unwrap(),
+            MediaHostMessage::StartCastReply {
+                outcome: MediaHostCastStartOutcome::Rejected { .. },
+                ..
+            }
+        ));
+        assert!(!h
+            .facade
+            .calls()
+            .iter()
+            .any(|call| matches!(call, FakeCall::Connect(_) | FakeCall::CastMedia { .. })));
+    }
+    assert_eq!(upstream.hit_count("/not-fetched"), 0);
+}
+
+#[tokio::test]
+async fn completed_preflight_cannot_commit_after_context_or_policy_revocation() {
+    for reason in [
+        "navigation",
+        "close",
+        "eme",
+        "stop",
+        "replace",
+        "device-lost",
+        "shutdown",
+        "expired",
+        "credentials",
+        "ad-policy",
+    ] {
+        let h = harness();
+        let upstream = preflight_upstream().await;
+        let (mut host, id) = preflight_host(
+            &h,
+            upstream.url("/video.mp4"),
+            ProbeHttpConfig {
+                allow_private_addresses: true,
+                ..ProbeHttpConfig::default()
+            },
+        );
+        let command = host.prepare_cast_command(start_message(id, &h)).unwrap();
+        let ready = host.preflight_start_cast(command).await.unwrap();
+        match reason {
+            "navigation" => {
+                host.handle_immediate(MediaHostMessage::Navigation {
+                    request_id: "nav".into(),
+                    tab_id: "tab-1".into(),
+                    navigation_id: 2,
+                    generation: 2,
+                })
+                .unwrap();
+            }
+            "close" => {
+                host.handle_immediate(MediaHostMessage::CloseTab {
+                    request_id: "close".into(),
+                    tab_id: "tab-1".into(),
+                    generation: 1,
+                })
+                .unwrap();
+            }
+            "eme" => {
+                host.handle_immediate(MediaHostMessage::MarkEme {
+                    request_id: "eme".into(),
+                    tab_id: "tab-1".into(),
+                    navigation_id: 1,
+                    generation: 1,
+                })
+                .unwrap();
+            }
+            "stop" => {
+                host.prepare_cast_command(MediaHostMessage::StopCast {
+                    request_id: "stop".into(),
+                    session_generation: 1,
+                })
+                .unwrap();
+            }
+            "replace" => {
+                host.prepare_cast_command(MediaHostMessage::StartCast {
+                    request_id: "replace".into(),
+                    candidate_id: id,
+                    device_id: h.device.as_str().into(),
+                    handoff_available: false,
+                })
+                .unwrap();
+            }
+            "device-lost" => {
+                h.facade.remove_device(&h.device);
+                h.runtime.list_devices("refresh".into(), None, 0).unwrap();
+            }
+            "shutdown" => {
+                host.handle_immediate(MediaHostMessage::Shutdown).unwrap();
+            }
+            "expired" => {
+                tokio::time::pause();
+                tokio::time::advance(crayon_media_probe::SELECTED_LAN_PROBE_TIMEOUT).await;
+            }
+            "credentials" | "ad-policy" => {
+                host.handle_immediate(MediaHostMessage::IngestUrl(MediaHostUrlFact {
+                    request_id: "stricter-fact".into(),
+                    tab_id: "tab-1".into(),
+                    navigation_id: 1,
+                    generation: 1,
+                    observed_at_ms: 2,
+                    page_url: upstream.url("/video.mp4"),
+                    media_url: upstream.url("/video.mp4"),
+                    source: if reason == "credentials" {
+                        MediaHostSource::NetworkRequest
+                    } else {
+                        MediaHostSource::CurrentSrc
+                    },
+                    headers_class: if reason == "credentials" {
+                        HeadersClass::CredentialBound
+                    } else {
+                        HeadersClass::None
+                    },
+                    playback: if reason == "credentials" {
+                        None
+                    } else {
+                        Some(MediaHostPlayback {
+                            position_ms: 1000,
+                            duration_ms: Some(60000),
+                            is_live: false,
+                            ad_continuity: AdContinuity::Unknown,
+                            current_src: true,
+                            near_play_event: true,
+                            audible: true,
+                            main_frame: true,
+                            visible_area_px: 100,
+                        })
+                    },
+                    eme_encrypted: false,
+                }))
+                .unwrap();
+            }
+            _ => unreachable!(),
+        }
+        let calls = h.facade.calls();
+        assert!(host.commit_start_cast(ready).await.is_err(), "{reason}");
+        assert_eq!(
+            h.facade.calls(),
+            calls,
+            "{reason}: no SDK start after revocation"
+        );
+        if reason == "expired" {
+            tokio::time::resume();
+        }
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn selected_preflight_expires_before_any_network_or_sdk_work() {
+    let h = harness();
+    let (mut host, id) = preflight_host(
+        &h,
+        "http://192.168.0.10/video.mp4".into(),
+        ProbeHttpConfig::default(),
+    );
+    let command = host.prepare_cast_command(start_message(id, &h)).unwrap();
+    tokio::time::advance(crayon_media_probe::SELECTED_LAN_PROBE_TIMEOUT).await;
+    let calls = h.facade.calls();
+    assert!(matches!(
+        host.preflight_start_cast(command).await,
+        Err(MediaHostRuntimeError::StaleContext)
+    ));
+    assert_eq!(h.facade.calls(), calls);
+}
+
 #[test]
 fn host_claims_start_and_fences_candidate_device_and_navigation() {
     let h = harness();

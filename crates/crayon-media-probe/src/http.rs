@@ -11,6 +11,7 @@
 //!   refused, including mixed answers), and the connection pins the validated
 //!   address so DNS cannot be rebound between check and connect.
 
+use crate::lan::{parse_credential_free_http, SameOriginLanTarget};
 use std::fmt::{Display, Formatter};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::time::Duration;
@@ -65,6 +66,10 @@ pub enum ProbeHttpError {
     Transport,
     /// URL is malformed.
     InvalidUrl,
+    /// Range is empty or overflows the byte offset.
+    InvalidRange,
+    /// A scoped request attempted to change its exact URL.
+    ScopeMismatch,
 }
 
 impl Display for ProbeHttpError {
@@ -77,6 +82,8 @@ impl Display for ProbeHttpError {
             Self::Timeout => "probe timed out",
             Self::Transport => "transport error",
             Self::InvalidUrl => "malformed url",
+            Self::InvalidRange => "invalid byte range",
+            Self::ScopeMismatch => "probe target outside scope",
         };
         f.write_str(message)
     }
@@ -122,6 +129,11 @@ fn is_public_v4(ip: &Ipv4Addr) -> bool {
 }
 
 fn is_public_v6(ip: &Ipv6Addr) -> bool {
+    // The OS can connect mapped IPv6 literals as IPv4. Apply the same
+    // address policy before either literal connect or DNS pinning.
+    if let Some(mapped) = ip.to_ipv4_mapped() {
+        return is_public_v4(&mapped);
+    }
     !(ip.is_loopback()
         || ip.is_unspecified()
         || ip.is_multicast()
@@ -151,12 +163,28 @@ fn validate_resolved_inner(addrs: &[IpAddr], allow_private: bool) -> Result<(), 
 /// is fixed at construction.
 pub struct ProbeHttpClient {
     config: ProbeHttpConfig,
+    selected_lan_target: Option<SameOriginLanTarget>,
 }
 
 impl ProbeHttpClient {
     #[must_use]
     pub fn new(config: ProbeHttpConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            selected_lan_target: None,
+        }
+    }
+
+    /// Only the consuming inspector can create a scoped client; ordinary
+    /// head/range callers cannot enlarge their address policy.
+    pub(crate) fn for_selected_lan(&self, target: SameOriginLanTarget) -> Self {
+        Self {
+            config: ProbeHttpConfig {
+                allow_private_addresses: false,
+                ..self.config
+            },
+            selected_lan_target: Some(target),
+        }
     }
 
     /// HEAD with no redirect following. 3xx is surfaced, not followed.
@@ -175,11 +203,13 @@ impl ProbeHttpClient {
         max_len: usize,
     ) -> Result<ProbeResponse, ProbeHttpError> {
         let cap = max_len.min(self.config.max_body_bytes);
+        let end = u64::try_from(cap)
+            .ok()
+            .and_then(|len| len.checked_sub(1))
+            .and_then(|offset| start.checked_add(offset))
+            .ok_or(ProbeHttpError::InvalidRange)?;
         let request = self.prepare(reqwest::Method::GET, url).await?;
-        let request = request.header(
-            reqwest::header::RANGE,
-            format!("bytes={start}-{}", start + cap as u64 - 1),
-        );
+        let request = request.header(reqwest::header::RANGE, format!("bytes={start}-{end}"));
         self.send(request, cap).await
     }
 
@@ -188,10 +218,11 @@ impl ProbeHttpClient {
         method: reqwest::Method,
         url: &str,
     ) -> Result<reqwest::RequestBuilder, ProbeHttpError> {
-        let parsed = url::Url::parse(url).map_err(|_| ProbeHttpError::InvalidUrl)?;
-        match parsed.scheme() {
-            "http" | "https" => {}
-            _ => return Err(ProbeHttpError::UnsupportedScheme),
+        let parsed = parse_credential_free_http(url)?;
+        if let Some(target) = &self.selected_lan_target {
+            if !target.matches(&parsed) {
+                return Err(ProbeHttpError::ScopeMismatch);
+            }
         }
         let host = parsed.host_str().ok_or(ProbeHttpError::InvalidUrl)?;
 
@@ -203,12 +234,18 @@ impl ProbeHttpClient {
             .parse()
             .ok();
         let mut builder = reqwest::Client::builder()
+            // Probes must connect to the validated destination, never an
+            // ambient proxy that can resolve elsewhere or receive private URLs.
+            .no_proxy()
             .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(self.config.connect_timeout)
             .timeout(self.config.total_timeout)
             .user_agent(PROBE_UA);
         if let Some(ip) = host_ip {
-            if !self.config.allow_private_addresses && !is_publicly_routable(&ip) {
+            if self.selected_lan_target.is_none()
+                && !self.config.allow_private_addresses
+                && !is_publicly_routable(&ip)
+            {
                 return Err(ProbeHttpError::NonPublicAddress);
             }
         } else {
@@ -282,3 +319,7 @@ fn classify_reqwest(error: reqwest::Error) -> ProbeHttpError {
         ProbeHttpError::Transport
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/support/lan_transport.rs"]
+mod lan_transport;

@@ -4,6 +4,7 @@
 mod caap;
 mod content_host;
 mod media_host;
+pub mod media_host_v2;
 mod messages;
 mod secret;
 

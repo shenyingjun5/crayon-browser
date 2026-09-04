@@ -46,11 +46,53 @@ file(READ "${CRAYON_CEF_SHELL_SOURCE}/tests/macos_package_contract.cmake"
 file(READ "${macos_resource_root}/Info.plist.in" main_plist)
 file(READ "${macos_resource_root}/helper-Info.plist.in" helper_plist)
 
+# The macOS product (not just a portable test or Windows target) must link
+# the shared window policy consumed by TabController's popup routing.
+string(REGEX MATCH
+       "target_link_libraries\\(\\$\\{CRAYON_BROWSER_TARGET\\}[ \r\n]+PRIVATE libcef_dll_wrapper[^)]*\\)"
+       macos_product_links "${cmake_source}")
+string(FIND "${macos_product_links}" "crayon::browser-windows" window_policy_index)
+if(window_policy_index EQUAL -1)
+  message(FATAL_ERROR "macOS product must link the shared window policy")
+endif()
+string(FIND "${app_source}" "#include \"macos/media_host_process_mac.h\""
+       media_host_header_index)
+if(media_host_header_index EQUAL -1)
+  message(FATAL_ERROR "macOS app must include its concrete media host transport")
+endif()
+string(REGEX MATCH
+       "target_link_libraries\\([ \r\n]*crayon_page_snapshot_cef_integration_test[^)]*\\)"
+       macos_integration_links "${cmake_source}")
+string(FIND "${macos_integration_links}" "crayon::browser-windows"
+       integration_policy_index)
+if(integration_policy_index EQUAL -1)
+  message(FATAL_ERROR "macOS integration target must link the shared window policy")
+endif()
+file(READ "${CRAYON_CEF_SHELL_SOURCE}/tests/page_snapshot_cef_integration_mac.mm"
+     integration_source)
+string(FIND "${integration_source}" "#include \"macos/media_host_process_mac.h\""
+       integration_transport_index)
+if(integration_transport_index EQUAL -1)
+  message(FATAL_ERROR "macOS integration must include its concrete media host transport")
+endif()
+
 string(REGEX MATCHALL "crayon://newtab" initial_urls "${app_source}")
 list(LENGTH initial_urls initial_url_count)
 if(NOT initial_url_count EQUAL 1)
   message(FATAL_ERROR "macOS shell must contain exactly one crayon://newtab URL")
 endif()
+
+foreach(required_cast_token
+        "strings.cast_code_label" "strings.playback_pause"
+        "strings.playback_resume" "strings.playback_seek"
+        "RequestResolveCastCode" "RequestControlCast"
+        "ConnectCastCode" "SetPaused" "SeekSession"
+        "CastChromePresentation(cast_shell_->presentation())")
+  string(FIND "${app_source}" "${required_cast_token}" token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR "macOS app is missing Cast wiring ${required_cast_token}")
+  endif()
+endforeach()
 
 foreach(required_mdv_token
         "RegisterMdvSchemeHandlerFactory"

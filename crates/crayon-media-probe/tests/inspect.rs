@@ -3,7 +3,9 @@
 //! PL-006 DASH ContentProtection. All fixtures local (MockUpstream).
 
 use crayon_media_probe::http::{ProbeHttpClient, ProbeHttpConfig};
-use crayon_media_probe::{HlsEncryption, HlsPlaylist, Inspection, MediaInspector};
+use crayon_media_probe::{
+    HlsEncryption, HlsPlaylist, Inspection, InspectionStatus, MediaInspector,
+};
 use test_support::upstream::{MockUpstream, UpstreamScript};
 
 fn inspector() -> MediaInspector {
@@ -225,4 +227,87 @@ async fn unknown_content_is_unknown_not_error() {
         .await
         .unwrap();
     assert_eq!(outcome, Inspection::Unknown);
+}
+
+#[tokio::test]
+async fn detailed_report_preserves_http_refusal_without_following_redirects() {
+    for range_fallback in [false, true] {
+        for redirect in [false, true] {
+            let script = if redirect {
+                UpstreamScript::Redirect {
+                    location: "/must-not-fetch".into(),
+                }
+            } else {
+                UpstreamScript::Full {
+                    status: 403,
+                    content_type: None,
+                    body: Vec::new(),
+                }
+            };
+            let script = if range_fallback {
+                UpstreamScript::HeadRejected(Box::new(script))
+            } else {
+                script
+            };
+            let upstream = MockUpstream::start(vec![("/video".into(), script)])
+                .await
+                .unwrap();
+            let report = inspector()
+                .inspect_report(&upstream.url("/video"))
+                .await
+                .unwrap();
+            assert_eq!(
+                report.status(),
+                if redirect {
+                    InspectionStatus::RedirectRefused
+                } else {
+                    InspectionStatus::UpstreamRejected
+                }
+            );
+            assert_eq!(report.into_inspection(), Inspection::Unknown);
+            assert_eq!(upstream.hit_count("/must-not-fetch"), 0);
+            assert_eq!(
+                upstream.hit_count("/video"),
+                if range_fallback { 2 } else { 1 }
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn detailed_report_distinguishes_parsed_protection_from_unrecognized_content() {
+    let upstream = MockUpstream::start(vec![
+        (
+            "/protected.mpd".into(),
+            UpstreamScript::Full {
+                status: 200,
+                content_type: Some("application/dash+xml".into()),
+                body: b"<MPD><ContentProtection/></MPD>".to_vec(),
+            },
+        ),
+        (
+            "/unknown".into(),
+            UpstreamScript::Full {
+                status: 200,
+                content_type: None,
+                body: b"not media".to_vec(),
+            },
+        ),
+    ])
+    .await
+    .unwrap();
+    let report = inspector()
+        .inspect_report(&upstream.url("/protected.mpd"))
+        .await
+        .unwrap();
+    assert_eq!(report.status(), InspectionStatus::Recognized);
+    assert!(
+        matches!(report.into_inspection(), Inspection::Dash(info) if info.has_content_protection)
+    );
+    let report = inspector()
+        .inspect_report(&upstream.url("/unknown"))
+        .await
+        .unwrap();
+    assert_eq!(report.status(), InspectionStatus::Unrecognized);
+    assert_eq!(report.into_inspection(), Inspection::Unknown);
 }

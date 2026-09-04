@@ -70,6 +70,9 @@ class MediaObserver final {
   /// fabricated URL.
   ObserveResult Observe(MediaObservation observation);
 
+  // Removes an element only in the current navigation; frees its capacity.
+  bool Remove(std::uint64_t navigation_id, std::uint32_t element_id);
+
   /// Tears the observer down; every further observation is dropped
   /// (BR-013: late events cannot rebuild candidates).
   void TearDown();
