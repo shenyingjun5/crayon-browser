@@ -28,6 +28,25 @@ bool IsMdvDocument(const CefString& frame_url) {
   return IsMdvDocument(frame_url.ToString());
 }
 
+PageMarkdownSnapshotHost LegacySnapshotHost(window::TabController* tabs) {
+  return PageMarkdownSnapshotHost{
+      [tabs](int browser_id) -> std::optional<PageMarkdownTabState> {
+        if (!tabs) return std::nullopt;
+        const window::TabSnapshot* tab = tabs->model().FindByBrowser(browser_id);
+        if (!tab) return std::nullopt;
+        return PageMarkdownTabState{
+            tab->browser_id, tab->id, tab->navigation_generation, tab->url,
+            tab->lifecycle == window::TabLifecycle::kReady, tab->loading};
+      },
+      [tabs](CefRefPtr<CefBrowser> browser) {
+        return tabs ? tabs->StartPageSnapshot(std::move(browser))
+                    : std::optional<browser_engine::SnapshotRequestId>{};
+      },
+      [tabs](const browser_engine::SnapshotRequestId& request_id) {
+        if (tabs) static_cast<void>(tabs->CancelPageSnapshot(request_id));
+      }};
+}
+
 }  // namespace
 
 CefPageMarkdownPreviewController::CefPageMarkdownPreviewController(
@@ -35,7 +54,16 @@ CefPageMarkdownPreviewController::CefPageMarkdownPreviewController(
     std::shared_ptr<mdv::MdvEditController> mdv_editing,
     PageMarkdownStrings strings,
     std::function<bool(const std::string&)> clipboard_write)
-    : tabs_(tabs),
+    : CefPageMarkdownPreviewController(
+          LegacySnapshotHost(tabs), std::move(mdv_editing), std::move(strings),
+          std::move(clipboard_write)) {}
+
+CefPageMarkdownPreviewController::CefPageMarkdownPreviewController(
+    PageMarkdownSnapshotHost host,
+    std::shared_ptr<mdv::MdvEditController> mdv_editing,
+    PageMarkdownStrings strings,
+    std::function<bool(const std::string&)> clipboard_write)
+    : host_(std::move(host)),
       mdv_editing_(std::move(mdv_editing)),
       strings_(std::move(strings)),
       clipboard_write_(std::move(clipboard_write)) {}
@@ -98,14 +126,15 @@ bool CefPageMarkdownPreviewController::HandleContextMenuCommand(
     return true;
   }
   if (command_id != kPreviewCommandId) return false;
-  if (!browser || assembler_.active() || !tabs_) return true;
-  const window::TabSnapshot* tab =
-      tabs_->model().FindByBrowser(browser->GetIdentifier());
-  if (!tab || tab->navigation_generation == 0) return true;
-  auto request = tabs_->StartPageSnapshot(browser);
+  if (!browser || assembler_.active() || !host_.lookup || !host_.start) {
+    return true;
+  }
+  const auto tab = host_.lookup(browser->GetIdentifier());
+  if (!tab || !tab->ready || tab->navigation_id == 0) return true;
+  auto request = host_.start(browser);
   if (!request ||
-      !assembler_.Begin(request->value(), "tab-" + std::to_string(tab->id),
-                        tab->navigation_generation)) {
+      !assembler_.Begin(request->value(), "tab-" + std::to_string(tab->tab_id),
+                        tab->navigation_id)) {
     return true;
   }
   browser_ = browser;
@@ -114,8 +143,8 @@ bool CefPageMarkdownPreviewController::HandleContextMenuCommand(
   pending_preview_navigation_id_ = 0;
   request_id_ = *request;
   browser_id_ = browser->GetIdentifier();
-  tab_id_ = tab->id;
-  navigation_id_ = tab->navigation_generation;
+  tab_id_ = tab->tab_id;
+  navigation_id_ = tab->navigation_id;
   return true;
 }
 
@@ -123,26 +152,24 @@ void CefPageMarkdownPreviewController::Tick(
     std::vector<::crayon::cef_shell::ipc::content_host::Message> replies,
     bool content_host_healthy) {
   CEF_REQUIRE_UI_THREAD();
-  if (tabs_ && pending_preview_browser_id_ > 0) {
-    const window::TabSnapshot* pending =
-        tabs_->model().FindByBrowser(pending_preview_browser_id_);
+  if (host_.lookup && pending_preview_browser_id_ > 0) {
+    const auto pending = host_.lookup(pending_preview_browser_id_);
     if (!pending) {
       pending_preview_browser_id_ = -1;
       pending_preview_navigation_id_ = 0;
-    } else if (IsMdvDocument(pending->url)) {
+    } else if (pending->ready && IsMdvDocument(pending->url)) {
       export_session_.Activate(pending_preview_browser_id_);
       pending_preview_browser_id_ = -1;
       pending_preview_navigation_id_ = 0;
-    } else if (pending->navigation_generation !=
+    } else if (pending->navigation_id !=
                    pending_preview_navigation_id_ &&
                !pending->loading) {
       pending_preview_browser_id_ = -1;
       pending_preview_navigation_id_ = 0;
     }
   }
-  if (tabs_ && export_session_.browser_id() > 0) {
-    const window::TabSnapshot* preview =
-        tabs_->model().FindByBrowser(export_session_.browser_id());
+  if (host_.lookup && export_session_.browser_id() > 0) {
+    const auto preview = host_.lookup(export_session_.browser_id());
     if (!preview || !IsMdvDocument(preview->url)) {
       export_session_.Invalidate();
     }
@@ -184,8 +211,8 @@ void CefPageMarkdownPreviewController::Stop() {
 }
 
 void CefPageMarkdownPreviewController::Reset() {
-  if (tabs_ && request_id_) {
-    static_cast<void>(tabs_->CancelPageSnapshot(*request_id_));
+  if (host_.cancel && request_id_) {
+    host_.cancel(*request_id_);
   }
   assembler_.Cancel();
   browser_ = nullptr;
@@ -196,13 +223,13 @@ void CefPageMarkdownPreviewController::Reset() {
 }
 
 bool CefPageMarkdownPreviewController::SameNavigation() const {
-  if (!tabs_ || browser_id_ <= 0 || tab_id_ == 0 || navigation_id_ == 0) {
+  if (!host_.lookup || browser_id_ <= 0 || tab_id_ == 0 ||
+      navigation_id_ == 0) {
     return false;
   }
-  const window::TabSnapshot* tab = tabs_->model().FindByBrowser(browser_id_);
-  return tab && tab->id == tab_id_ &&
-         tab->navigation_generation == navigation_id_ &&
-         tab->lifecycle == window::TabLifecycle::kReady;
+  const auto tab = host_.lookup(browser_id_);
+  return tab && tab->tab_id == tab_id_ &&
+         tab->navigation_id == navigation_id_ && tab->ready;
 }
 
 }  // namespace crayon::browser::cef_shell::page_markdown

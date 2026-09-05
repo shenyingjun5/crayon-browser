@@ -25,6 +25,8 @@ namespace crayon::cef_shell::renderer {
 inline constexpr std::size_t kMaxSourceUrlLen = 2'048;
 /// Maximum concurrent tracked media elements per frame.
 inline constexpr std::size_t kMaxMediaElements = 16;
+inline constexpr double kMaxMediaGeometryDip = 32'768.0;
+inline constexpr double kMaxMediaGeometryOffsetDip = 1'000'000.0;
 
 /// Closed media element playback states.
 enum class MediaPlaybackState { kIdle = 0, kPlaying, kPaused, kEnded };
@@ -32,6 +34,7 @@ enum class MediaPlaybackState { kIdle = 0, kPlaying, kPaused, kEnded };
 /// Closed source kinds (BR-012: blob/MediaStream carry no castable
 /// URL and must not be fabricated).
 enum class MediaSourceKind { kHttpUrl = 0, kBlobUrl, kMediaStream, kUnknown };
+enum class MediaElementKind { kVideo = 0, kAudio };
 
 /// One normalized media observation.  All fields derive from renderer
 /// facts; nothing here is trusted for authorization.
@@ -41,10 +44,20 @@ struct MediaObservation {
   std::uint32_t element_id = 0;
   MediaPlaybackState playback = MediaPlaybackState::kIdle;
   MediaSourceKind source_kind = MediaSourceKind::kUnknown;
-  std::string source_url;           // empty for blob/stream kinds
-  double visible_fraction = 0.0;    // [0,1] viewport intersection
-  double current_time_seconds = 0;  // page-reported, untrusted
-  bool has_user_gesture = false;    // page-reported, untrusted
+  std::string source_url;          // empty for blob/stream kinds
+  double visible_fraction = 0.0;   // [0,1] viewport intersection
+  double current_time_seconds = 0; // page-reported, untrusted
+  bool has_user_gesture = false;   // page-reported, untrusted
+  MediaElementKind element_kind = MediaElementKind::kVideo;
+  // Page-reported placement hint only. Browser binds it to the verified
+  // player reference; it never authorizes playback, selection or routing.
+  bool geometry_supported = false;
+  double geometry_x = 0;
+  double geometry_y = 0;
+  double geometry_width = 0;
+  double geometry_height = 0;
+  double viewport_width = 0;
+  double viewport_height = 0;
 };
 
 /// Classified observation outcome.
@@ -54,11 +67,12 @@ enum class ObserveResult {
   kDroppedCapacity,
   kDroppedTeardown,
   kDroppedInvalidUrl,
+  kDroppedInvalidGeometry,
 };
 
 /// Per-frame observation aggregator.
 class MediaObserver final {
- public:
+public:
   explicit MediaObserver(std::uint64_t frame_id) : frame_id_(frame_id) {}
 
   /// Advances the navigation identity; observations carrying older ids
@@ -80,13 +94,14 @@ class MediaObserver final {
   /// Reports whether an element would currently satisfy the
   /// visibility/playback preconditions the browser-side gate
   /// cross-checks (CEF-10 re-verifies with trusted input).
-  std::optional<MediaObservation> FindEligible(std::uint64_t navigation_id) const;
+  std::optional<MediaObservation>
+  FindEligible(std::uint64_t navigation_id) const;
 
   std::uint64_t navigation_id() const { return navigation_id_; }
   std::size_t tracked_count() const { return elements_.size(); }
   bool torn_down() const { return torn_down_; }
 
- private:
+private:
   std::uint64_t frame_id_ = 0;
   std::uint64_t navigation_id_ = 0;
   bool torn_down_ = false;
@@ -95,6 +110,11 @@ class MediaObserver final {
 
 /// Classifies a source URL into the closed kind set; oversize or
 /// malformed inputs yield kUnknown with an empty normalized URL.
-MediaSourceKind ClassifySourceUrl(const std::string& url, std::string* normalized);
+MediaSourceKind ClassifySourceUrl(const std::string &url,
+                                  std::string *normalized);
 
-}  // namespace crayon::cef_shell::renderer
+// Unsupported geometry is canonical only when every numeric field is zero.
+// Supported geometry is restricted to ordinary videos in a bounded viewport.
+bool HasCanonicalMediaGeometry(const MediaObservation &observation);
+
+} // namespace crayon::cef_shell::renderer

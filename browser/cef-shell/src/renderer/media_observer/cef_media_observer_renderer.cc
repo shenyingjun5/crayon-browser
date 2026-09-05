@@ -12,12 +12,14 @@ namespace crayon::browser::cef_shell::renderer {
 namespace {
 
 using ::crayon::cef_shell::renderer::ClassifySourceUrl;
+using ::crayon::cef_shell::renderer::HasCanonicalMediaGeometry;
+using ::crayon::cef_shell::renderer::MediaElementKind;
 using ::crayon::cef_shell::renderer::MediaObservation;
 using ::crayon::cef_shell::renderer::MediaPlaybackState;
 using ::crayon::cef_shell::renderer::MediaSourceKind;
 using ::crayon::cef_shell::renderer::ObserveResult;
 
-constexpr char kExtensionName[] = "crayon/media-observer-v2";
+constexpr char kExtensionName[] = "crayon/media-observer-v4";
 constexpr char kNativeFunction[] = "crayonMediaObservationNative";
 constexpr char kExtensionCode[] =
     "native function crayonMediaObservationNative();";
@@ -40,14 +42,38 @@ constexpr char kCollectorScript[] = R"JS(
   const maxTracked = 16;
   const maxIdentity = 2147483647;
   const maxSourceUrlLength = 2048;
-  const visibleFraction = (element) => {
+  const measure = (element) => {
     const rect = element.getBoundingClientRect();
-    if (!(rect.width > 0 && rect.height > 0)) return 0;
+    const unsupported = fraction => [fraction, false, 0, 0, 0, 0, 0, 0];
+    if (![rect.left, rect.top, rect.width, rect.height, innerWidth, innerHeight]
+          .every(Number.isFinite) || !(rect.width > 0 && rect.height > 0) ||
+        !(innerWidth > 0 && innerHeight > 0) ||
+        rect.width > 32768 || rect.height > 32768 ||
+        Math.abs(rect.left) > 1000000 || Math.abs(rect.top) > 1000000 ||
+        innerWidth > 32768 || innerHeight > 32768)
+      return unsupported(0);
     const style = globalThis.getComputedStyle(element);
-    if (style.display === 'none' || style.visibility === 'hidden') return 0;
-    const width = Math.max(0, Math.min(rect.right, innerWidth) - Math.max(rect.left, 0));
-    const height = Math.max(0, Math.min(rect.bottom, innerHeight) - Math.max(rect.top, 0));
-    return Math.max(0, Math.min(1, (width * height) / (rect.width * rect.height)));
+    if (style.display === 'none' || style.visibility === 'hidden' ||
+        Number(style.opacity) === 0)
+      return unsupported(0);
+    const width = Math.max(0, Math.min(rect.left + rect.width, innerWidth) -
+      Math.max(rect.left, 0));
+    const height = Math.max(0, Math.min(rect.top + rect.height, innerHeight) -
+      Math.max(rect.top, 0));
+    const fraction = Math.max(0, Math.min(1, (width * height) / (rect.width * rect.height)));
+    const centerX = Math.max(0, Math.min(innerWidth - 1, rect.left + rect.width / 2));
+    const centerY = Math.max(0, Math.min(innerHeight - 1, rect.top + rect.height / 2));
+    const hit = typeof document.elementFromPoint === 'function'
+      ? document.elementFromPoint(centerX, centerY) : null;
+    const ordinary = element instanceof HTMLVideoElement &&
+      typeof element.getRootNode === 'function' && element.getRootNode() === document &&
+      !document.fullscreenElement && document.pictureInPictureElement !== element &&
+      style.pointerEvents !== 'none' && fraction > 0 &&
+      (hit === element || (hit && element.contains(hit)));
+    return ordinary
+      ? [fraction, true, rect.left, rect.top, rect.width, rect.height,
+         innerWidth, innerHeight]
+      : unsupported(fraction);
   };
   const remove = (element) => {
     const entry = active.get(element);
@@ -56,7 +82,8 @@ constexpr char kCollectorScript[] = R"JS(
     refillPending = true;
     for (const [name, listener] of entry.listeners)
       element.removeEventListener(name, listener);
-    emitNative(entry.id, 0, 0, '', 0, 0, false, entry.epoch, true);
+    emitNative(entry.id, 0, 0, '', 0, 0, false, entry.epoch, true,
+               entry.video ? 0 : 1, false, 0, 0, 0, 0, 0, 0);
   };
   const sourceOf = element => {
     const url = String(element.currentSrc || element.src || '');
@@ -83,14 +110,17 @@ constexpr char kCollectorScript[] = R"JS(
     const stream = typeof globalThis.MediaStream === 'function' &&
                    element.srcObject instanceof globalThis.MediaStream;
     const source = stream ? '' : (sourceNow.url || '');
+    const geometry = measure(element);
     emitNative(entry.id, state, stream ? 2 : 0, source,
-               visibleFraction(element), Number(element.currentTime) || 0,
-               Boolean(encrypted), entry.epoch, false);
+               geometry[0], Number(element.currentTime) || 0,
+               Boolean(encrypted), entry.epoch, false, entry.video ? 0 : 1,
+               ...geometry.slice(1));
   };
   const attach = (element) => {
     if (!element.isConnected || active.has(element) || exhausted.has(element) ||
         active.size >= maxTracked || nextId > maxIdentity) return;
-    const entry = {id: nextId++, epoch: 1, source: sourceOf(element), listeners: []};
+    const entry = {id: nextId++, epoch: 1, source: sourceOf(element),
+                   video: element instanceof HTMLVideoElement, listeners: []};
     active.set(element, entry);
     for (const name of ['play', 'playing', 'pause', 'ended', 'timeupdate',
                         'loadedmetadata', 'durationchange', 'loadstart',
@@ -139,23 +169,24 @@ bool IsNumber(CefRefPtr<CefV8Value> value) {
   return value && (value->IsDouble() || value->IsInt() || value->IsUInt());
 }
 
-}  // namespace
+} // namespace
 
 class CefMediaObserverRenderer::NativeHandler final : public CefV8Handler {
- public:
-  explicit NativeHandler(CefMediaObserverRenderer* owner) : owner_(owner) {}
+public:
+  explicit NativeHandler(CefMediaObserverRenderer *owner) : owner_(owner) {}
 
-  bool Execute(const CefString& name, CefRefPtr<CefV8Value> object,
-               const CefV8ValueList& arguments, CefRefPtr<CefV8Value>& retval,
-               CefString& exception) override {
+  bool Execute(const CefString &name, CefRefPtr<CefV8Value> object,
+               const CefV8ValueList &arguments, CefRefPtr<CefV8Value> &retval,
+               CefString &exception) override {
     static_cast<void>(object);
     static_cast<void>(retval);
-    if (name != kNativeFunction || !owner_) return false;
+    if (name != kNativeFunction || !owner_)
+      return false;
     return owner_->HandleNativeObservation(arguments, &exception);
   }
 
- private:
-  CefMediaObserverRenderer* owner_;
+private:
+  CefMediaObserverRenderer *owner_;
 
   IMPLEMENT_REFCOUNTING(NativeHandler);
   DISALLOW_COPY_AND_ASSIGN(NativeHandler);
@@ -173,7 +204,8 @@ void CefMediaObserverRenderer::OnWebKitInitialized() {
 void CefMediaObserverRenderer::OnContextCreated(CefRefPtr<CefBrowser> browser,
                                                 CefRefPtr<CefFrame> frame) {
   CEF_REQUIRE_RENDERER_THREAD();
-  if (!browser || !frame || !frame->IsMain()) return;
+  if (!browser || !frame || !frame->IsMain())
+    return;
   browsers_.try_emplace(browser->GetIdentifier());
   InstallCollector(frame);
 }
@@ -192,7 +224,8 @@ void CefMediaObserverRenderer::OnContextReleased(CefRefPtr<CefBrowser> browser,
 void CefMediaObserverRenderer::OnBrowserDestroyed(
     CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_RENDERER_THREAD();
-  if (browser) browsers_.erase(browser->GetIdentifier());
+  if (browser)
+    browsers_.erase(browser->GetIdentifier());
 }
 
 bool CefMediaObserverRenderer::OnProcessMessageReceived(
@@ -206,7 +239,8 @@ bool CefMediaObserverRenderer::OnProcessMessageReceived(
     return true;
   }
   const auto navigation_id = media_ipc::ReadAdvanceMessage(message);
-  if (!navigation_id) return true;
+  if (!navigation_id)
+    return true;
   auto [iterator, inserted] = browsers_.try_emplace(browser->GetIdentifier());
   if (!inserted && iterator->second.observer.torn_down()) {
     iterator->second = BrowserState{};
@@ -218,20 +252,26 @@ bool CefMediaObserverRenderer::OnProcessMessageReceived(
 }
 
 bool CefMediaObserverRenderer::HandleNativeObservation(
-    const CefV8ValueList& arguments, CefString* exception) {
+    const CefV8ValueList &arguments, CefString *exception) {
   CEF_REQUIRE_RENDERER_THREAD();
-  if (arguments.size() != 9 || !IsInt(arguments[0]) || !IsInt(arguments[1]) ||
+  if (arguments.size() != 17 || !IsInt(arguments[0]) || !IsInt(arguments[1]) ||
       !IsInt(arguments[2]) || !arguments[3]->IsString() ||
       !IsNumber(arguments[4]) || !IsNumber(arguments[5]) ||
       !arguments[6]->IsBool() || !IsInt(arguments[7]) ||
-      !arguments[8]->IsBool()) {
-    if (exception) *exception = "invalid media observation";
+      !arguments[8]->IsBool() || !IsInt(arguments[9]) ||
+      !arguments[10]->IsBool() || !IsNumber(arguments[11]) ||
+      !IsNumber(arguments[12]) || !IsNumber(arguments[13]) ||
+      !IsNumber(arguments[14]) || !IsNumber(arguments[15]) ||
+      !IsNumber(arguments[16])) {
+    if (exception)
+      *exception = "invalid media observation";
     return true;
   }
   CefRefPtr<CefV8Context> context = CefV8Context::GetCurrentContext();
   CefRefPtr<CefBrowser> browser = context ? context->GetBrowser() : nullptr;
   CefRefPtr<CefFrame> frame = context ? context->GetFrame() : nullptr;
-  if (!browser || !frame || !frame->IsMain()) return true;
+  if (!browser || !frame || !frame->IsMain())
+    return true;
   const auto found = browsers_.find(browser->GetIdentifier());
   if (found == browsers_.end() || found->second.navigation_id == 0 ||
       found->second.observer.torn_down()) {
@@ -242,12 +282,14 @@ bool CefMediaObserverRenderer::HandleNativeObservation(
   const int source_tag = arguments[2]->GetIntValue();
   const int source_epoch = arguments[7]->GetIntValue();
   const bool removed = arguments[8]->GetBoolValue();
+  const int element_kind = arguments[9]->GetIntValue();
   const double visible = arguments[4]->GetDoubleValue();
   const double current_time = arguments[5]->GetDoubleValue();
   if (element_id <= 0 || source_epoch <= 0 ||
       playback < static_cast<int>(MediaPlaybackState::kIdle) ||
       playback > static_cast<int>(MediaPlaybackState::kEnded) ||
-      (source_tag != 0 && source_tag != 2) || !std::isfinite(visible) ||
+      (source_tag != 0 && source_tag != 2) ||
+      (element_kind != 0 && element_kind != 1) || !std::isfinite(visible) ||
       !std::isfinite(current_time) || current_time < 0.0) {
     return true;
   }
@@ -279,6 +321,16 @@ bool CefMediaObserverRenderer::HandleNativeObservation(
   observation.source_url = std::move(source_url);
   observation.visible_fraction = visible;
   observation.current_time_seconds = current_time;
+  observation.element_kind = static_cast<MediaElementKind>(element_kind);
+  observation.geometry_supported = arguments[10]->GetBoolValue();
+  observation.geometry_x = arguments[11]->GetDoubleValue();
+  observation.geometry_y = arguments[12]->GetDoubleValue();
+  observation.geometry_width = arguments[13]->GetDoubleValue();
+  observation.geometry_height = arguments[14]->GetDoubleValue();
+  observation.viewport_width = arguments[15]->GetDoubleValue();
+  observation.viewport_height = arguments[16]->GetDoubleValue();
+  if (!HasCanonicalMediaGeometry(observation))
+    return true;
   if (removed) {
     found->second.observer.Remove(observation.navigation_id,
                                   observation.element_id);
@@ -305,4 +357,4 @@ void CefMediaObserverRenderer::InstallCollector(CefRefPtr<CefFrame> frame) {
   }
 }
 
-}  // namespace crayon::browser::cef_shell::renderer
+} // namespace crayon::browser::cef_shell::renderer

@@ -522,6 +522,10 @@ void MdvEditController::PushState(CefRefPtr<CefBrowser> browser) {
   if (!browser || !browser->GetMainFrame()) {
     return;
   }
+  CefRefPtr<CefFrame> frame = browser->GetMainFrame();
+  if (frame->GetURL().ToString().rfind(kViewerPrefix, 0) != 0) {
+    return;
+  }
   const auto snapshot = state_->snapshot();
   // The preview body is data, not code: ship it as a JSON string.
   CefRefPtr<CefValue> root = CefValue::Create();
@@ -535,7 +539,7 @@ void MdvEditController::PushState(CefRefPtr<CefBrowser> browser) {
   }
   CefString json = CefWriteJSON(root, JSON_WRITER_DEFAULT);
   std::string script = "window.mdvPush(" + json.ToString() + ");";
-  browser->GetMainFrame()->ExecuteJavaScript(script, CefString(), 0);
+  frame->ExecuteJavaScript(script, CefString(), 0);
 }
 
 void MdvEditController::ReleasePendingNavigation(

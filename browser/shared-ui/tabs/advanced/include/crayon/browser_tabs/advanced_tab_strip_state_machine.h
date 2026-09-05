@@ -44,6 +44,8 @@ class AdvancedTabStripStateMachine final {
 
   // --- Duplicate ---
   bool DuplicateTab(const std::string& tab_id);
+  bool CopyTabState(const std::string& source_tab_id,
+                    const std::string& target_tab_id);
 
   // --- Mute ---
   bool MuteTab(const std::string& tab_id);

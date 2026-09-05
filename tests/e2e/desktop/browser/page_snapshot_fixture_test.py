@@ -9,10 +9,11 @@ class ScenarioSelectionTest(unittest.TestCase):
     def test_macos_keeps_its_ui_and_all_shared_scenarios(self):
         expected = tuple(
             name for name in fixture.AUTOMATED_SCENARIOS
-            if name != "media-cast-ui-win"
+            if name not in ("media-cast-ui-win", "media-geometry-win")
         )
         self.assertEqual(fixture.select_scenarios("darwin"), expected)
         self.assertIn("media-cast-ui", expected)
+        self.assertNotIn("media-geometry-win", expected)
 
     def test_windows_keeps_its_physical_input_scenario(self):
         expected = tuple(
@@ -25,6 +26,7 @@ class ScenarioSelectionTest(unittest.TestCase):
 
     def test_wrong_platform_and_unknown_requests_are_rejected(self):
         self.assertIsNone(fixture.select_scenarios("darwin", "media-cast-ui-win"))
+        self.assertIsNone(fixture.select_scenarios("darwin", "media-geometry-win"))
         self.assertIsNone(fixture.select_scenarios("win32", "media-cast-ui"))
         self.assertIsNone(fixture.select_scenarios("win32", "media-navigation"))
         self.assertIsNone(fixture.select_scenarios("win32", "media-source-reload"))

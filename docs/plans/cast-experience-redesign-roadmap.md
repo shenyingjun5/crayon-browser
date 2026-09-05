@@ -122,16 +122,16 @@ CEF 官方 [CefWindow 接口](https://raw.githubusercontent.com/chromiumembedded
 | PLT-CAST-R02cW/R02cM | TODO | 对应 PLT-SHELL-24W/24M VERIFIED | 对应平台真实宿主装配总验收的映射项，不重复领取 | 窗口/标签/导航/IME/读屏/缩放/关闭取消；R08 已移至候选宿主验证，不反向等待本项 |
 | PLT-CAST-R03 | TODO | R01 VERIFIED | 预检原因分层汇总；拆为 a 内部事实、b 协议/UI 投影，不作领取项 | 内部事实不能冒充产品错误提示已修复 |
 | PLT-CAST-R03a | VERIFIED | R01 VERIFIED | probe/runtime：保留本机预检失败原因，不改变 Direct 资格 | 确定性 Fake-IP、超时、拒绝、Unknown 不变 Clear；runtime/probe unit + clippy |
-| PLT-CAST-R03b | TODO | R03a、R04 的 MHV2、R07 VERIFIED | 原因枚举投影到新协议与共享面板模型 | 无 URL/原始错误、旧 MHV1 不变；平台显示在 R08 验收 |
-| PLT-CAST-R04 | TODO | R01 VERIFIED | Browser/runtime/媒体 host：多播放器候选有界投影与 per-candidate proof | 双播放器/同 URL/manifest 子流/换源/淘汰/旧 generation；协议 current/previous 与 reject vectors |
+| PLT-CAST-R03b | VERIFIED | R03a、R04 的 MHV2、R07 VERIFIED | 原因枚举投影到新协议与共享面板模型 | 无 URL/原始错误、旧 MHV1 不变；平台显示在 R08 验收 |
+| PLT-CAST-R04 | VERIFIED | R01 VERIFIED | Browser/runtime/媒体 host：多播放器候选有界投影与 per-candidate proof | Windows 双播放器/同 URL/manifest 子流/换源/淘汰/旧 generation；MHV1/current MHV2 与 reject vectors |
 | PLT-CAST-R00b | VERIFIED | 用户本轮范围调整 | 撤出代理专项与接收端代检前置，拆出独立显式开始修复 | current/计划一致、链接、repo-guard、diff check |
-| PLT-CAST-R07 | TODO | R07a、R07b VERIFIED | 多视频/设备草稿与统一面板汇总；不作领取项 | 独立连接、显式开始、取消/替换确认 |
+| PLT-CAST-R07 | VERIFIED | R07a、R07b VERIFIED | 多视频/设备草稿与统一面板汇总；不作领取项 | 独立连接、显式开始、取消/替换确认 |
 | PLT-CAST-R07a | VERIFIED | R01 VERIFIED | 旧 MHV1 入口先去除投屏码解析成功后的自动播放 | 解析零 start、取消/迟到/失败不播放；三语言文案；Mac Debug/Release 各 92/92，含原生 UI + controller |
-| PLT-CAST-R07b | TODO | R04、R07a VERIFIED | 新协议多视频/设备草稿、独立连接与显式提交 | 唯一 runtime owner、版本/失效/取消/替换 |
-| PLT-CAST-R08W | TODO | PLT-SHELL-07W/15W/20、R03b、R04、R07 VERIFIED | Windows Alloy 候选宿主网址栏按钮与选择/播控面板，对应 SHELL-21W | Debug/Release build/CTest、720 DIP/缩放/键盘/Narrator、真实多视频/设备选择 |
+| PLT-CAST-R07b | VERIFIED | R04、R07a VERIFIED | 新协议多视频/设备草稿、独立连接与显式提交 | 唯一 runtime owner、版本/失效/取消/替换 |
+| PLT-CAST-R08W | VERIFIED | PLT-SHELL-07W/15W/20、R03b、R04、R07 VERIFIED | Windows Alloy 候选宿主网址栏按钮与选择/播控面板，对应 SHELL-21W | Debug/Release build/CTest、720 DIP/缩放/键盘/Narrator、真实多视频/设备选择 |
 | PLT-CAST-R08M | TODO | PLT-SHELL-07M/15M/20、R03b、R04、R07 VERIFIED | macOS Alloy 候选宿主同等入口，对应 SHELL-21M；承接 b3c 视觉与 picker | Debug/Release build/CTest、缩放/IME/VoiceOver、完整错误截图、真实多视频/设备选择 |
-| PLT-CAST-R09 | TODO | R04、R07 VERIFIED | 观察管线增加受限元素几何与候选绑定，不绘制按钮 | 主 frame/换源/滚动/缩放/裁剪/销毁与消息预算；不扩大播放证明 |
-| PLT-CAST-R10W | TODO | R08W、R09 VERIFIED | Windows 普通视频 Browser-owned 悬浮快捷入口 | 遮挡/键盘/焦点/伪造页面/过期位置无错投；unsupported surface 无 overlay |
+| PLT-CAST-R09 | VERIFIED | R04、R07 VERIFIED | 观察管线增加受限元素几何与候选绑定，不绘制按钮 | 主 frame/换源/滚动/缩放/裁剪/销毁与消息预算；不扩大播放证明 |
+| PLT-CAST-R10W | VERIFIED | R08W、R09 VERIFIED | Windows 普通视频 Browser-owned 悬浮快捷入口 | 遮挡/键盘/焦点/伪造页面/过期位置无错投；unsupported surface 无 overlay |
 | PLT-CAST-R10M | TODO | R08M、R09 VERIFIED | macOS 对称悬浮快捷入口 | 同矩阵，真实 CEF 截图与点击目标，不能用 AX 元素存在代替视觉可用 |
 | PLT-CAST-R11W | TODO | R08W、R10W VERIFIED | Windows 产品整链回归、证据与 Review | 对应 PLT-W05 Direct/Relay/拒绝/生命周期门禁；真实设备，未闭合不得 DONE |
 | PLT-CAST-R11M | TODO | R08M、R10M VERIFIED | macOS 产品整链回归、证据与 Review | 普通 Direct/Relay 与 Release 真机；代理特殊环境不阻塞；Keychain 最后 |
@@ -349,7 +349,7 @@ R02cM/W 只聚合对应宿主验收；R08 再交付最终投屏面板。R04 多�
 
 R04 拆为 a Browser 逐播放器证明隔离、b Browser 分配实例/换源 revision 与移除、c MHV2 字节/双语言 codec、d runtime 实例集合/分页与 host 装配；b/c/d 领取前冻结各自完整输入/字段/验收。汇总仍 TODO，不用 a 替代完整多视频 UI。
 
-- R04a：IMPLEMENTED（2026-09-04 §17 更新：原生 unit 已恢复执行且通过，不再归因为历史审批/加载阻塞；完整媒体导航集成仍失败，未 VERIFIED。§16 保留此前启动失败的历史证据）。单一目标是在 Browser 观察入口按当前 tab/navigation/element/source 保存独立输入/进度基线，禁止播放器 A 的暂停、进度或旧源证明影响 B。依赖 R01 VERIFIED；与 R02b1 布局代码不重叠。
+- R04a：VERIFIED（2026-09-05 Windows 收口；§16/§17 保留此前 macOS 启动与媒体导航失败的历史证据，不再代表当前 Windows 结果）。单一目标是在 Browser 观察入口按当前 tab/navigation/element/source 保存独立输入/进度基线，禁止播放器 A 的暂停、进度或旧源证明影响 B。依赖 R01 VERIFIED；与 R02b1 布局代码不重叠。
 - 输入：`InputProofGate`、`CefObservationBridge`、renderer 媒体 DTO/collector、既有输入/观察测试；当前 collector 实际上限为 16，不是 128。128 是后续目标上限，本切片不提高现有采集数量。
 - 允许：`browser/cef-shell/src/browser/input_proof/player_input_proof.{h,cc}` 与独立 `_test.cc`、该目录 CMake；`input_proof_gate.h` 仅撤销输入且保留进度的接口；`browser/observation_gateway/cef_observation_bridge.{h,cc}` 接入/导航/关闭清理；本计划/索引/current cast。
 - 冻结边界：沿用现有封闭 ProofResult 和真实输入入口；每页最多 16、全局最多 256，满载拒绝新项并计数，URL 使用现有 2048 字节上限且仅在内存。未观察过的元素不继承历史点击；已知源改变撤销输入。标签切换撤销输入但保留进度基线；导航/关页清理。只支持已验证主 frame，网络事实不进入播放证明。
@@ -526,13 +526,168 @@ R04c1 最终补证：只读系统日志出现对应测试程序的 syspolicyd �
 
 ### R04b2 页面生命周期失效信号领取
 
-- 状态：IMPLEMENTED，媒体双配置整链已通过，完整回归等待下述独立 surface Harness 修复；单一目标是将当前主 frame 的换源 epoch/移除信号接到既有 Browser 证明 owner，消除 collector 生命周期 16 项永久占满及 URL-less 源变化无法撤销的问题。依赖 b1 VERIFIED；不依赖待决的产品地址栏宿主。
+- 状态：VERIFIED（2026-09-05 Windows 收口；后文 macOS surface Harness 阻塞保留为平台历史，不再阻塞共享生命周期契约）；单一目标是将当前主 frame 的换源 epoch/移除信号接到既有 Browser 证明 owner，消除 collector 生命周期 16 项永久占满及 URL-less 源变化无法撤销的问题。依赖 b1 VERIFIED；不依赖产品地址栏宿主。
 - 允许：`renderer/media_observer/media_observer.{h,cc}`/`cef_media_observer_renderer.cc`，`ipc/media_observation_cef_message.{h,cc}`，`browser/observation_gateway/cef_observation_bridge.cc`；对应独立 unit、Node collector 行为测试、CEF codec 检查文件与测试 target/fixture 接线；本计划/current/索引。生产文件预计 6 个，不增加第二个状态 owner。
 - 冻结 CEF 私有消息：新 `crayon.media.observation.v2`，固定 10 项 = 既有 8 项 + 非零 source epoch 十进制字符串 + removed bool；此为 renderer→Browser CEF 消息，不是 MHV2。移除只允许 idle/unknown/空 URL/零时间与可见度/无 EME 的规范记录。旧 v1 不重解释、不降级，新旧 Helper 必须配套。主 frame/真实 sender/navigation 校验不变，epoch 只收紧/撤销，不授权；MHV1 完全不改。
 - Collector：最多 16 个活跃元素，单调正 int32 element ID 不复用；源对象/原始源变化及 loadstart/emptied 递增 epoch，溢出撤销该元素；脱离文档后解除事件监听、发送删除、释放名额。只观察，不调用 play/click/seek/rate。轮询仅遍历有界活跃集合，DOM 变动后补入空位，不新增全页高频遍历。
 - 验收：Node VM 运行真实 collector 脚本覆盖同 URL 双元素、加载/Blob/stream 换源、删除/迟到事件/重新插入/容量回收与零页面命令；独立 observer unit；真实 CEF 初始化下 codec round-trip/非法类型/超限/移除规范/旧版拒绝；已有 CEF 播放与拒绝 fixture、双配置 build/完整 CTest、格式/guard/diff check。新增测试先运行红灯；测试工具不进入产品。
 - 不做：MHV2/runtime 候选删除/草稿/分页与设备投送、iframe/Shadow/播放器几何、默认窗口迁移、CEF/SDK/依赖更新或发布。旧 runtime URL store 暂仍按其原 TTL 工作，不把 Browser 证明撤销宣称为最终 UI 候选删除。
 - 开工边界 Review：封闭消息只增加失效语义，保持既有主 frame 与用户输入信任边界；容量与 listener 释放明确，旧 MHV1 bytes 不变。APPROVE 进入实现，不等于代码或产品验收。
+
+### R04b3 可信播放器引用进入 Gateway（2026-09-04）
+
+- 状态：VERIFIED；依赖 R04b1 VERIFIED 与 R04b2 已实现的换源/移除信号。单一目标是把同一次 `PlayerInputProof::Observe` 已判定 eligible 的非零 `instance_id/source_revision` 附着到媒体 `GatewayEvent`，供后续 MHV2 候选投影使用；Gateway 不生成、推断或持有第二套播放器身份。
+- 允许：`browser/input_proof/player_input_proof.h` 的既有值类型引用；`browser/observation_gateway/{observation_gateway,cef_observation_bridge}.{h,cc}`；既有 gateway/bridge 行为测试与必要 CMake 测试接线；本计划/current/索引。禁止 MHV1/MHV2 wire、Rust runtime、SDK、窗口/UI、草稿、设备连接、授权策略和依赖改动。
+- 边界：只有当前主 frame、当前导航、真实 renderer sender、playing/visible 且同次 proof eligible 后才可读取并提交引用；引用缺失/零值必须拒绝，网络事件永远无引用。换源后的旧 revision、remove、导航和关闭沿用 proof owner 的撤销/清理，不能因 URL 相同重新授权；Gateway generation fencing 与 256 队列预算不变。
+- 验收：先补 gateway fail-first，覆盖有效引用、零引用拒绝、网络无引用和 generation/backpressure 不变；bridge/真实 CEF 既有媒体矩阵证明 eligible 才外发、换源/移除/导航后旧证明不流出；Windows x64 Debug/Release build、相关 CTest、改动文件格式、repo-guard、diff check。真实 MHV2 字节、runtime 候选集合和 UI 留给 R04c2/R04d/R07b，不以本项通过替代。
+
+- 实现：`GatewayEvent` 对媒体事件携带可选 `PlayerReference`，`SubmitMedia` 强制接收并验证两个非零字段，非法引用在入队前拒绝且有独立有界计数；网络事件保持 `nullopt`。CEF bridge 仅在当前主 frame/导航校验、playing/visible 与同次 `Observe` eligible 后读取 proof owner 的引用，缺失时按证明拒绝且不通知消费者。未改 MHV1 wire、URL 判定、队列容量、generation 或授权分支。
+- Windows x64 验证：`cmake --build .cache/build/windows-cef-debug --config Debug -- /nr:false` PASS/0、87.9s；同一多配置树 `--config Release` PASS/0、114s。`ctest --test-dir .cache/build/windows-cef-debug -C Debug --output-on-failure -R '^(player_input_proof|observation_gateway|page_snapshot_cef_integration_windows)$'` PASS/0、3/3、72.41s；Release 同命令 PASS/0、3/3、46.60s。真实 CEF aggregate 覆盖现有媒体导航、换源/替换、证明拒绝与 host 场景；自动测试输入不冒充真人或接收端首帧。
+- 质量门禁：`git diff --check` PASS/0；`cargo run --quiet -p repo-guard -- scan --root .` PASS/0（RG003/004 既有 warning、RG006 N/A）。Windows 环境未找到 `clang-format`，格式独立工具 NOT_RUN；MSVC `/W4 /WX /permissive-` 双配置编译通过。按 v0.9 顺序独立 Review，需求/边界、正确性、API/所有权、生命周期、安全/隐私、性能、测试、维护与供应链均未发现问题，P0/P1/P2/P3=0/0/0/0，APPROVE，最高 VERIFIED。
+- 未覆盖与风险：MHV2 candidate/remove/current/previous 字节、Rust runtime 多播放器集合、草稿与 UI 尚未实现；这些属于 R04c2/R04d/R07b。R04 汇总继续 TODO，不因本段 identity plumbing 通过而提升。
+
+### R04c2 MHV2 播放器事实与移除字节（2026-09-04）
+
+- 状态：VERIFIED；依赖 R04c1 握手 codec VERIFIED 与 R04b3 可信引用 VERIFIED。单一目标是在独立 MHV2 codec 中冻结并实现 Browser→host 的 `PlayerUpsert`/`PlayerRemove`，表达可信实例/source revision、完整 tab/navigation/generation 上下文和有界媒体事实；不实现握手 owner、列表/草稿/设备或投送副作用。
+- 允许：`crates/crayon-ipc-schema/src/media_host_v2.rs` 与独立 contract；C++ `ipc/media_host_v2_codec` 及独立测试；共享 `tests/contracts/media_host_v2_player.golden`；current/cast-interaction、本计划/索引。禁止 MHV1 任意字节/枚举、runtime/host 进程、MediaHostAdapter、SDK、UI、默认宿主、网络或依赖变更。
+- 冻结 wire：沿用 8-byte `MHV2` header，kind 3=`PlayerUpsert`、4=`PlayerRemove`、flags=0；两者依次含 session u64、host generation u64、tab u32、navigation u64、tab generation u32、instance u64、source revision u64（均非零）。Upsert 后续为 observed-at u64 非零、source kind u8（HTTP/Blob/MediaStream）、position u64、duration-present bool + duration u64、live/video/audio/visible/EME bool、visible fraction ppm u32（0..1,000,000）、page URL 及可空 media URL（各 u32 长度 + UTF-8）；HTTP 必须有 media URL，URL-less 两类必须为空。Remove 到 identity tuple 结束。frame 仍最多 16 KiB、URL 各最多 2048 bytes，只接受 http/https page/media URL；控制字符、非法 UTF-8/enum/bool/零身份、截断、尾字节、错版本全部拒绝。
+- 验收：Rust/C++ 共用固定 golden，current/previous MHV1 双向隔离；合法边界 round-trip；对每个身份、enum/bool、URL、长度、截断、尾字节、frame 上限做拒绝向量；Rust tests + Windows Debug/Release C++ codec target、格式/guard/diff。codec 通过仅到 VERIFIED，不广告 `CAP_MEDIA_READ`，R04d owner 接线前产品行为不变。
+
+- 实现：Rust 与 C++ 分别增加独立 `PlayerMessage`/`PlayerFact`/`PlayerContext` codec API，握手 API 与 MHV1 API/枚举/字节未改。两端共用 `media_host_v2_player.golden` 的 upsert/remove 精确向量；HTTP 必须有媒体 URL，Blob/MediaStream 必须无媒体 URL，所有上下文身份非零。codec 不维护连接状态、不自动协商、不访问网络，也没有生产调用方，因此 capability 仍未广告。
+- 验证：`rustfmt --edition 2021 --check crates/crayon-ipc-schema/src/media_host_v2.rs crates/crayon-ipc-schema/tests/media_host_v2_contract.rs` PASS/0；`cargo test -p crayon-ipc-schema --test media_host_v2_contract` PASS/0、7/7。`cmake --build .cache/build/windows-cef-debug --target crayon_media_host_v2_codec_test --config Debug -- /nr:false` 与 Release 同命令均 PASS/0；对应 `ctest ... -C Debug/Release -R '^media_host_v2_codec$'` 各 PASS/0、1/1、0.05s/0.06s。C++ 使用 Windows LLVM clang-format 实际格式化后编译；`git diff --check` PASS/0。全量 repo-guard 复用紧邻 b3/c2 的本工作树扫描，PASS/0（RG003/004 既有 warning、RG006 N/A）。
+- Fail-first：新增 C++ contract 首次构建 FAIL/1，分别命中缺少 `<algorithm>` 与 `/W4 /WX` 的窄化初始化；补齐显式 include/类型后双配置通过。没有放宽 decoder 或测试向量。按 v0.9 独立 Review：字段/字节边界、双端对称、旧版隔离、错误关闭、无副作用、容量与供应链均通过，P0/P1/P2/P3=0/0/0/0，APPROVE，最高 VERIFIED。
+- 未覆盖与风险：R04d 仍需实现一次握手 owner、能力复核、断连失效及把 b3 Gateway 事实送入本 codec；列表/草稿/设备 kind 未冻结。R04 汇总继续 TODO，产品行为与 MHV1 保持不变。
+
+### R04d1 Windows media-host 一次握手 owner（2026-09-04）
+
+- 状态：VERIFIED；依赖 R04c1/c2 VERIFIED。单一目标是在 Windows Browser→child 已有受限 stdin/stdout pipe 上建立每次子进程 generation 一次的 MHV2 Hello/Welcome owner，并在握手完成前不将 transport 标为 healthy；本项协商能力固定为 0，不发送 player 消息、不改变旧 MHV1 产品行为。
+- 允许：Windows `media_host_process_win.{h,cc}`、共享 transport 必要只读状态；`crayon-media-host/src/main.rs` reader/main loop；对应 Windows process/fixture 测试和本计划/current/索引。禁止 macOS adapter、MediaHostAdapter 业务消息、runtime 候选、SDK/UI、MHV1 codec、系统 IPC 权限和依赖改动。
+- 边界：Browser 每次 spawn 使用非零 session 与即将发布的 process generation；Hello 只发一次，Welcome 必须 kind/identity/generation 回显且 capability/budget 为子集。未知/重复/错序握手、超时、尾字节或 child 先发其他 frame 均使本次 spawn 失败并走既有有界 supervisor backoff；Stop/崩溃清空握手，旧 Welcome 不能使新 generation healthy。session 不是秘密，身份边界仍由既有受限 child pipe/health endpoint 提供。
+- 验收：Rust host loop unit/进程 fixture 覆盖成功、重复/Welcome-first/错 generation/旧 MHV1 legacy；Windows process 真子进程验证 healthy 只在匹配 Welcome 后成立及 crash/restart 新 generation；Debug/Release build/CTest、格式/guard/diff。能力 0 是刻意 fail-closed，R04d2 player registry 接好后才可广告 media-read。
+
+- 实现：Windows worker 在 health endpoint 成功后、发布 `healthy=true` 前，用每次 spawn nonce 与即将发布的 process generation 发送一次 Hello；有界 5s 内只接受匹配的 Welcome，失败沿用 supervisor backoff。Rust reader 在相同 length framing 内区分 MHV2 handshake 与 MHV1，主循环只接受首个 Hello并回显 identity/budget；重复或 Welcome-first 在普通及 active decision 两条路径均 fail closed。当前双方 capability=0，现有 MHV1 控制仍按 legacy 路径运行。
+- 验证：`cargo test -p crayon-media-host --bin crayon-media-host` PASS/0、6/6（含握手 2 cases 与既有 probe 取消/预算 4 cases）。`cmake --build ... --target crayon_media_host_process_win_test --config Debug/Release -- /nr:false` 均 PASS/0（Release 128.1s，含 bundled Rust child）；`ctest ... -C Debug/Release -R '^media_host_process_win$'` 各 PASS/0、1/1、1.30s/1.27s。最终 `ctest ... -R '^(media_host_process_win|media_host_adapter_win)$'` 双配置各 PASS/0、2/2、1.32s/1.29s；真实 child 测试在 Welcome 后执行 MHV1 请求，Shutdown 后等待新 generation 再次 healthy，证明旧代不会直接复活。
+- 质量/Review：Rust/C++ 已用 rustfmt/Windows clang-format 格式化；双配置 MSVC `/W4 /WX` 通过。按 v0.9 检查握手顺序、超时、退出/重启、锁外 pipe I/O、队列预算、旧版兼容与无能力广告，P0/P1/P2/P3=0/0/0/0，APPROVE，最高 VERIFIED。最终 repo-guard/diff check 随连续 R04d2 收口统一重跑。
+- 未覆盖与风险：测试没有恶意 fake child 注入错 generation Welcome 的独立 executable，但 `MatchesHello` 的共享 codec 拒绝向量已双端验证，生产只以该函数置 healthy。macOS transport 尚未握手（按 Windows-first 后续验证）；media-read 仍为 0，player registry/发送接线属于 R04d2。
+
+### R04d2 Windows MHV2 player registry 与发送接线（2026-09-04）
+
+- 状态：VERIFIED；依赖 R04b3/c2/d1 VERIFIED。单一目标是让 Rust app-runtime 成为 MHV2 player tuple 的有界唯一 owner，并让 Windows transport 在协商 media-read 后把 Browser Gateway 的当前媒体事实发到该 owner；不实现列表、草稿、设备连接或 UI。
+- 允许：app-runtime 独立 player registry 模块/测试与必要 lib 接线；Rust host MHV2 event dispatch；共享 transport 增加封闭 v2 player enqueue/capability 查询；Windows process 与 MediaHostAdapter 消费媒体分支；对应 Fake/真子进程/CEF 测试、本计划/current/索引。macOS 实现可保持 capability 0；禁止 MHV1 bytes、SDK、投送命令、UI 和默认宿主。
+- 边界：registry key 是完整 session/host generation/tab/navigation/tab generation/instance/source revision，不以 URL 作为身份；同 instance 新 revision 原子替换旧项，旧 revision/remove/导航/断连不能污染当前集合。最多 16/page、256/global，满载拒绝且计数；HTTP URL 仅存在 host 私有记录，公开快照只含 tuple/能力与脱敏 origin。transport 只有匹配 Welcome 选中 media-read 才接受 player frame，重启先清空旧 registry；网络观察继续走 MHV1，不获得播放器引用。
+- 验收：fail-first registry unit 覆盖同 URL 双实例、revision、remove/stale/session-generation/navigation/capacity；host reader/loop player dispatch 与断连；FakeTransport adapter 精确 frame；Windows Debug/Release 真 child 及真实 CEF 媒体回归、格式/guard/diff。没有 list/draft wire 时 UI 仍不读取该集合，R04 不提前 DONE。
+
+- 实现：app-runtime 新增唯一 `MediaPlayerRegistry`，完整 session/host/tab/navigation/generation/instance/revision tuple fencing；同 instance 的新 revision 原子替换，精确 remove 不会借更高 generation 清空当前集合，导航换代清理旧项。公开 projection 仅含能力、tuple 与脱敏 origin。Windows transport 在匹配 Welcome 选中 media-read 后才接受 player frame；Gateway 的 eligible upsert 与 proof owner 已确认的 remove 均送入 host，host 在普通循环和 active probe 两条输入路径应用 registry。重启清空 capability/session 并由新握手创建 registry。player 队列背压只增加饱和诊断计数，旧 MHV1 候选主链继续；remove 不再误生成 MHV1 URL-less 候选。
+- 自动验证：`cargo fmt --all -- --check` PASS/0；`cargo test -p crayon-ipc-schema --test media_host_v2_contract` PASS/0、7/7；`cargo test -p crayon-app-runtime media_player_registry` PASS/0、3/3；`cargo test -p crayon-media-host --bin crayon-media-host` PASS/0、6/6。Windows x64 Debug 四个相关 target 构建 PASS；`ctest --test-dir .cache/build/windows-cef-debug -C Debug -R '^(page_snapshot_gateway|media_host_v2_codec|media_host_process_win|media_host_adapter_win|page_snapshot_cef_integration_windows)$' --timeout 120 --output-on-failure` PASS/0、5/5、66.89s（真实 CEF 65.51s）。Release 四 target 构建 PASS/0、157.8s；同一 CTest 矩阵 PASS/0、5/5、52.82s（真 child 8.19s、真实 CEF 44.55s）。C++ 改动由 Windows LLVM clang-format 格式化，MSVC `/W4 /WX /permissive-` 双配置通过。
+- Fail-first/Review：新增 remove/背压用例首次暴露测试保存 `vector<variant>` 元素裸指针跨扩容的未定义行为，5 秒有界复现停在 `Tick()` 前；改为扩容前复制 request ID 后 Debug 单测 1/1、0.04s。首次 repo-guard 又以 RG-002 FAIL 指出两个握手测试体位于生产 `main.rs`；测试体迁至 `tests/support/handshake.rs`，生产源只保留 crate 内可见握手 owner 与外置 test module 接线，复验 Rust 6/6、repo-guard PASS。迁移后真 child Debug/Release 重建与 CTest 各 1/1 PASS、1.21s。按 v0.9 重新检查需求边界、wire exactness、唯一 owner、generation/revision/remove fencing、断连重启、锁外 pipe I/O、URL 隐私、容量/背压、生产/测试隔离、测试引用生命周期与供应链；P0/P1/P2/P3=`0/0/0/0`，APPROVE，最高 VERIFIED。
+- 未覆盖与风险：host 私有 registry 尚无 MHV2 分页读取协议，UI 不能读取或选择播放器；草稿、独立设备连接、显式提交和错误原因投影仍归 R04 后续/R07b/R03b。真实 CEF aggregate 证明 Browser 链和 child 存活，不读取 child 内部集合；集合行为由独立 unit 覆盖。macOS transport 按 Windows-first 政策保持零 MHV2 能力。R04 汇总继续 TODO。
+
+### R04c3 MHV2 播放器分页读取字节（2026-09-05）
+
+- 状态：VERIFIED；依赖 R04c2/d2 VERIFIED。单一目标是在独立 MHV2 codec 冻结 Browser→host `PlayerListRequest` 与 host→Browser `PlayerPageReply`，让后续 runtime/adapter 能按当前 tab/navigation/generation 有界读取无 URL 的播放器投影；本项不接 transport、registry 查询、UI、草稿、设备或投送。
+- 允许：Rust/C++ `media_host_v2` codec、独立 contract tests、共享 `tests/contracts/media_host_v2_player_page.golden`、current/本计划。禁止 MHV1、host loop、MediaHostAdapter、app-runtime、SDK、Alloy UI、授权和依赖变更。
+- 冻结 wire：kind 5=`PlayerListRequest`，含非零 session/host generation/request/tab/navigation/tab generation、snapshot revision（0 表示领取当前快照）、offset u16、max items u16（1..16）；kind 6=`PlayerPageReply` 回显相同 session/host/request/tab/navigation/tab generation，含非零 snapshot revision、status（Ok/Stale）、offset、可选 next offset 与 0..16 项。每项仅含非零 instance/source revision、source kind、video/audio/visible/EME 与最长 2048-byte 脱敏 origin；不得含 page/media URL、播放位置或证明。Ok 页的 count 不超过请求预算由后续 owner 校验；Stale 必须零项、无 next。未知 enum/bool、零身份、非法 UTF-8/控制字符、截断/尾字节、超 frame 全拒绝。
+- 验收：Rust/C++ 共用 request/ok/stale 固定 golden；合法边界 round-trip；非法身份、预算、status、next/count/origin/UTF-8、截断、尾字节与错 kind 拒绝；Windows Debug/Release codec target、Rust tests、格式/guard/diff。codec 通过最高 VERIFIED，只有后续 d3 接入 registry/transport 后 R04 才可提升。
+
+- 实现：Rust/C++ 增加对称 `PlayerPageContext`、list/page/status/projection 类型与独立 encode/decode。request 支持 revision 0 领取当前快照，reply revision 非零；Stale 零项，Ok next 精确等于 offset+count。投影 origin 可空（URL-less）或必须是 canonical ASCII http/https origin：双端拒绝路径、userinfo、大写 host、显式默认端口、控制字符与非法 UTF-8；wire 不含原始 page/media URL、position 或 proof。握手、player upsert/remove 与 MHV1 API/bytes 均未改。
+- 验证：`cargo test -p crayon-ipc-schema --test media_host_v2_contract` PASS/0、10/10；`cmake --build --preset windows-cef-debug --config Debug/Release --target crayon_media_host_v2_codec_test -- /nr:false` 均 PASS/0；对应 CTest Debug/Release 各 1/1 PASS（0.02s/0.02s）。Rust/C++ 共用 `media_host_v2_player_page.golden` 三向量并互相拒绝 handshake/player/MHV1；`cargo fmt --all -- --check` 与 Windows LLVM clang-format PASS。
+- Fail-first/Review：首轮 Rust 9/10，精确指出手写 Ok page golden 末尾多 1 个零字节，修正向量后 10/10；首轮 C++ `/W4 /WX` FAIL，指出 `optional<uint16_t>` 的 int 字面量窄化，改显式 u16 后双配置通过。独立 Review 又发现 Rust canonical origin 与 C++ 接受集合不一致，补大写/default-port 双端拒绝并收紧 C++。按 v0.9 检查 wire、长度/溢出、分页状态、跨语言对称、隐私最小化、旧版隔离、无副作用与供应链，P0/P1/P2/P3=`0/0/0/0`，APPROVE，最高 VERIFIED。
+- 未覆盖与风险：codec 不维护 snapshot、不会查询 d2 registry，Windows transport 也尚未收发 list/page；这些属于 R04d3。草稿、设备、显式提交、Alloy UI 和 macOS 均未覆盖，R04 汇总继续 TODO。
+
+### R04d3 Windows player registry 分页查询接线（2026-09-05）
+
+- 状态：VERIFIED；依赖 R04c3、R04d2 VERIFIED。单一目标是让 Windows Browser 通过已协商 media-read 的 MHV2 pipe 查询 app-runtime 唯一 registry，并获得当前 tab/navigation/generation 的有界无 URL page；不实现草稿、设备连接、投送或 Alloy 视觉面板。
+- 允许：app-runtime registry 查询/测试；media-host list dispatch/page reply；Windows transport 封闭 enqueue/drain page；MediaHostAdapter 当前上下文请求/回复投影；对应 Fake/真 child/CEF 测试、current/本计划/索引。禁止 MHV1 字节、Cast-SDK、窗口布局、默认宿主、授权策略和依赖变更。
+- owner/边界：registry mutation revision 非零单调，成功 upsert/remove/navigation purge 才递增；request revision 0 领取当前 revision，非零不匹配返回 Stale 空页。查询必须完整匹配 session/host/tab/navigation/tab generation，offset/max 受 16 限制；投影稳定排序，reply count 不超过请求预算。transport/adapter 绑定 request ID 与 process generation，迟到/重复/错 tab page 丢弃并计数；断连清空 pending/page。原始 page/media URL 永不回 Browser page DTO。
+- 验收：registry unit 覆盖稳定分页、mutation stale、上下文错配、offset 边界；host unit/真 child request→reply；FakeTransport adapter request correlation、迟到/重复/背压；Windows Debug/Release build 与相关 CTest、真实 CEF 双播放器/移除/换源存活回归、格式/guard/diff。无 UI 时最高 VERIFIED，R04 汇总是否提升须另做全链 Review。
+
+- 实现：app-runtime registry 使用非零单调 revision，为当前完整 tab/navigation/generation 提供稳定排序分页；mutation 后旧 revision 返回 Stale 空页。Rust host 在普通循环和 active probe 都处理 list request 并写回 page。Windows transport 只在匹配 session/host generation 且协商 media-read 后接收 list，独立有界保存 reply；Browser adapter 以最多 64 个 pending request 精确关联上下文、offset/max 和 request ID，重复、迟到、错代、错 tab 与输出背压均丢弃并饱和计数。Browser DTO 仅含播放器 tuple/能力和脱敏 origin，不回传原始 URL。
+- 验证：`cargo test -p crayon-app-runtime media_player_registry` PASS/0、4/4；`cargo test -p crayon-media-host --bin crayon-media-host` PASS/0、6/6；R04c3 Rust schema 10/10。Windows x64 Debug/Release `page_snapshot_gateway|media_host_v2_codec|media_host_process_win|media_host_adapter_win|page_snapshot_cef_integration_windows` 各 5/5 PASS（91.69s/46.27s）；最终 Review 修正 transport session/generation 入队前与持锁后的双重校验后，真 child Debug/Release 各 1/1 PASS（1.22s/1.28s），adapter 各 1/1 PASS（0.02s/0.01s），真实 CEF aggregate 各 1/1 PASS（65.74s/44.35s）。初次 Debug build 因测试对仅定义 `operator==` 的 C++17 DTO 使用 `!=` 而失败，改为等值取反后通过；未改变生产比较语义。
+- Code Review：按 v0.9 检查协议关联、registry 唯一 owner、revision/上下文 fencing、队列预算、断连/重启清理、锁外 pipe I/O、URL 隐私和 MHV1 兼容。Review 中关闭 wrong-generation Browser 请求可能污染 child health 的 P1：transport 在入队前与持锁后都复核当前 session/generation，回归证明拒绝后 child 仍 healthy。P0/P1/P2/P3=`0/0/0/0`，APPROVE，最高 VERIFIED。
+- 未覆盖与风险：R04d3 没有设备、草稿、连接、prepare/commit 或 UI；它们属于 R07b/R08W。macOS transport 仍广告零 MHV2 capability，按 Windows-first 政策留后续平台 addendum。
+
+#### R04 Windows 聚合 Review（2026-09-05）
+
+- 阶段结论：R04a/b1/b2/b3、c1/c2/c3、d1/d2/d3 的 Windows 证据已闭合；R07b3 接线 Review 随后发现 PlayerFact 把 video/audio 固定为 false，新增 R04e 修复并将聚合暂回 IN_PROGRESS。Browser proof 以 instance/source revision 隔离同 URL 与换源，renderer 生命周期释放容量并拒绝迟到 epoch；Gateway 只转发 eligible 引用；MHV2 保留旧 MHV1 bytes，以共享 golden 冻结 current player/list/page；host registry 和 Browser page adapter 共同执行 session/generation/revision/context fencing。
+- 证据边界：逐播放器 unit 覆盖双实例同 URL、source epoch、manifest/current source、换源、容量、移除重建与旧 generation；Node collector 6/6 覆盖新增子树、移除/重插、Blob/MediaStream 和无关 DOM 变化不全页重扫；Windows 双配置真实 CEF aggregate 证明观察→Gateway→真 child 主链仍存活，真 child/list 和 Fake adapter 独立证明分页内容、remove 后 Stale、错误上下文、重复/迟到与背压。各层证据不互相冒充物理真人点击或设备播放。
+- Review：首轮按 v0.9 结果被 R07b3 消费方 Review 推翻，媒体类型投影 P1 已由 R04e 关闭；聚合复核 P0/P1/P2/P3=`0/0/0/0`、APPROVE，恢复 VERIFIED。macOS MHV2 addendum、真实产品多视频选择和设备投送仍分别由后续平台任务及 R07b/R08P/R11P 收口。
+
+### R04e PlayerFact 媒体种类真实投影（2026-09-05）
+
+- 状态：VERIFIED；依赖 R04d3 VERIFIED。稳定复现：`MediaHostAdapter::Consume` 对所有 renderer media observation 固定编码 `has_video=false/has_audio=false`，导致 Alloy 候选页无法识别真实 `<video>`，阻塞 R07b3。单一目标是让 renderer collector 在内部版本化 CEF IPC 中闭合传递 Video/Audio kind，并精确映射 MHV2 flags；不改变播放证明、URL、草稿或 SDK。
+- 允许：media observation model/collector、CEF observation message 的新内部版本、Browser adapter 映射、相邻 unit/CEF/source contract、本计划/current/索引。禁止兼容重解释旧消息名、页面信任授权、R07b 状态机、Cast-SDK、UI 布局和默认宿主。
+- 验收：先补 adapter 失败断言；JS collector video/audio/remove，CEF codec v3 类型/非法值/旧 v2 拒绝，Browser validation，Debug/Release media observer/gateway/adapter/真实 CEF aggregate、format/guard/diff。修复后重做 R04 聚合 Review。
+
+- 实现：renderer `MediaObservation` 新增封闭 Video/Audio kind；collector 只从实际 `HTMLVideoElement`/其余已筛选 `HTMLMediaElement` 生成该字段，remove 保留原 kind。CEF renderer→Browser 内部消息与 extension 显式升到 v3，11 字段严格验证，旧 v2 名称不再接受，避免同名重解释。Browser adapter 将 Video 精确投影为 `has_video=true/has_audio=false`，Audio 反向投影；字段不参与 input proof 或授权。
+- 验证：fail-first Node 先因测试 DOM 缺 `HTMLVideoElement` 及 removal 仍为 9 字段而 0/6、随后 5/6；更新 v3 替身/期望后 `node --test browser/cef-shell/tests/media_collector.test.mjs` PASS/0、6/6。首次 Debug CEF build 因 renderer namespace 缺 `MediaElementKind` using 而 FAIL，修正且 extension 改名 v3 后 build PASS。Windows x64 Debug `media_observer|observation_gateway|media_host_adapter_win|page_snapshot_cef_integration_windows` PASS/0、4/4、73.32s（真实 CEF 73.19s）；Release build PASS，同矩阵 4/4、47.02s（真实 CEF 46.84s）。CEF codec 测试覆盖 Audio round-trip、非法 kind、错误 size、旧 v1/v2 名称拒绝；adapter 直接断言 Video flags。
+- Code Review：按 v0.9 检查内部版本升级、旧消息拒绝、DOM kind 来源、remove/lifecycle、proof 不变、page DTO 与热路径；未增加页面授权或 URL。P0/P1/P2/P3=`0/0/0/0`，APPROVE，R04 聚合恢复 VERIFIED。未覆盖：`<video>` 是否实际包含音轨无法由当前 DOM 事实可靠得知，因此只声明 video capability，不猜测 audio track；后续 receiver prepare 仍按真实媒体探测决定能力。
+
+### R07b1 MHV2 草稿 command/state 字节（2026-09-05）
+
+- 状态：VERIFIED；依赖 R04、R07a VERIFIED。单一目标是在独立 MHV2 codec 冻结 Browser→host 的草稿命令及 host→Browser 的脱敏状态回复，为后续唯一 runtime owner 提供严格字节边界；本项不维护草稿、不发现或连接设备、不 prepare/commit、不调用 Cast-SDK 或改变 UI。
+- 允许：Rust/C++ `media_host_v2` codec、独立 contract tests、一个共享 draft golden、current/本计划/索引。禁止 MHV1、host loop、MediaHostAdapter、CastUsecase/SDK、Alloy surface、默认宿主、授权和依赖变更。
+- wire/预算：kind 7=`DraftCommand`、kind 8=`DraftStateReply`；共同上下文绑定非零 session/host/request、最长 128-byte 非空 profile ID、tab/navigation/tab generation。命令 action 为 Open/SelectMedia/SelectDevice/Connect/Prepare/ConfirmReplacement/Commit/Cancel，除 Open 外绑定非零 draft ID/revision；只有 SelectMedia 携带非零 instance/source revision，只有 SelectDevice 携带最长 128-byte device ID。回复回显完整上下文，携带非零 draft ID/revision、Choosing/Connecting/Preparing/Prepared/Committing/Failed/Expired/Cancelled phase、封闭错误、可选媒体引用/设备 ID、connected/replacement 标志、None/Direct/Relay route 与可选 prepared-until；Prepared 必须有完整选择、已连接设备、非 None route 和非零 expiry，其他 phase 不得携带 expiry。所有字符串拒绝非法 UTF-8、控制字符和双向覆盖；frame 仍限 16 KiB，未知 enum/bool、字段组合、截断/尾字节全拒绝。
+- 验收：Rust/C++ 共用 command/state golden，合法动作/phase round-trip 与全部非法组合/reject vectors；Windows Debug/Release codec target、Rust contract、format/guard/diff。codec 通过最高 VERIFIED；R07b 只有 runtime owner、transport、真实设备连接与显式 commit 后才能提升。
+
+- 实现/验证：Rust/C++ 增加对称 DraftContext、8 个 action、8 个 phase、7 个封闭 error、3 个 route 与 command/state codec，共用 `media_host_v2_draft.golden` 两个固定向量。`cargo test -p crayon-ipc-schema --test media_host_v2_contract` PASS/0、13/13；Windows x64 Debug/Release codec target build PASS，`ctest ... -C Debug/Release -R '^media_host_v2_codec$'` 各 PASS/0、1/1、0.02s。双端覆盖全部动作/phase round-trip、旧 MHV1/握手/player/page 隔离、截断/尾字节/非法 UTF-8/双向覆盖/动作字段混用/准备状态组合拒绝。
+- Code Review：按 v0.9 检查 wire exactness、跨语言接受集、上下文/身份、隐私最小化、旧协议隔离与字段组合。Review 中收紧已连接无设备、非 prepared/committing route、仍需替换确认却 prepared 三类不可能状态，双端复验通过。P0/P1/P2/P3=`0/0/0/0`，APPROVE，最高 VERIFIED。
+- 未覆盖与风险：codec 不维护草稿或 capability，不连接设备、不 prepare/commit、不触发 SDK；R07b2+ 继续实现唯一 runtime owner 与 Windows transport/adapter，任何产品调用前仍必须复验当前 player registry、设备与 15 秒 deadline。
+
+### R07b2 app-runtime 唯一草稿 owner（2026-09-05）
+
+- 状态：VERIFIED；依赖 R07b1 VERIFIED。单一目标是在 app-runtime 建立唯一、有界、平台无关的 cast draft 状态机，消费已验证的 player/device 存在性并产生 Connect/Prepare/Commit 副作用意图；本项不执行网络、Cast-SDK、pipe 或 UI。
+- 允许：app-runtime 独立 draft 模块/测试与必要 lib 接线、本计划/索引。禁止修改协议字节、media-host loop、CEF/transport、Cast-SDK adapter、旧 MHV1 和默认宿主。
+- owner/边界：每个 profile/tab 当前上下文最多一个草稿，全局最多 64；Open 分配非零单调 draft ID/revision。SelectMedia/SelectDevice 只接受调用方已在当前 registry/page 验证存在的稳定引用，选择改变递增 revision、撤销 prepare 与旧异步结果。Connect/Prepare/Commit 仅返回绑定 draft/revision 的一次 effect；complete 必须匹配当前 pending generation。Prepare deadline 固定 15 秒；Commit 仅对已连接、完整选择、无需替换确认、未到期的 Prepared 草稿产生一次 effect。Cancel/导航/播放器撤销/设备撤销使旧 effect 与 reply 失效；计数与容量饱和，不保存 URL、route override、SDK handle 或 grant。
+- 验收：fail-first unit 覆盖设备/媒体先后选择、连接零播放、prepare/commit 单次、15 秒边界、选择变化、导航、换源、设备消失、替换确认、取消/迟到、容量/ID/revision 上限；`cargo test -p crayon-app-runtime media_cast_draft`、clippy/fmt、guard/diff。最高 VERIFIED，不广告 MHV2 capability。
+
+- 实现：新增 `MediaCastDraftOwner`，每个 profile/tab 只保留当前 scope 草稿，全局 64；Open 使用非零单调 ID，所有选择/阶段使用非零 revision。设备可先独立 Connect，选择媒体/设备只产生状态变化；Connect/Prepare/Commit 仅产生绑定 scope/draft/revision/media/device 的一次 effect，外部完成必须精确匹配。Prepare 成功设置固定 15 秒 deadline，恰到 deadline 即 Expired；Commit effect 只产生一次。取消、重开、scope/media/device 撤销和选择变化清除 pending/prepare，迟到完成返回 Stale。所有 mutation 在 ID/revision/deadline 上限预检后才改状态。
+- 验证：`cargo test -p crayon-app-runtime media_cast_draft` PASS/0、5/5，覆盖先设备后媒体、连接零提交、prepare/commit 单次、deadline-1/恰到期、替换确认、取消/迟到、媒体/scope 撤销、64 容量与非法 ID；`cargo fmt --all -- --check` PASS；`cargo clippy -p crayon-app-runtime --all-targets --no-deps -- -D warnings` PASS。完整依赖 clippy 曾被未改动的 `crayon-page-data/src/snapshot.rs:506` 既有 `nonminimal_bool` 阻塞，未夹带修改，不计本 crate 通过。
+- Fail-first/Review：首轮编译因 Connect effect 改为可选 media 后关联比较仍多包一层 `Some` 而 FAIL，修正后行为 5/5。独立 Review 发现 ID 耗尽先删旧草稿、revision/deadline 溢出可能部分修改，以及 Commit 完成保留 route 会生成非法 wire state；改为所有变更先预检、deadline 先计算、终态清 route 并复验。按 v0.9 复核状态唯一 owner、异步 fencing、取消/导航、无隐式播放、容量、隐私和热路径，P0/P1/P2/P3=`0/0/0/0`，APPROVE，最高 VERIFIED。
+- 未覆盖与风险：effect 尚未连接 CastUsecase/SDK，也未通过 pipe；player/device 的 `available` 只能由后续 host 接线从当前 registry/SDK owner提供，调用方布尔值不是授权。R07b3 负责真实 runtime 复验和副作用，R07b4 负责 Windows transport/adapter/Alloy 投影。
+
+### R07b3 media-host 草稿与 CastUsecase 接线（2026-09-05）
+
+- 状态：VERIFIED；依赖 R07b1/b2、R04 VERIFIED。单一目标是在 Rust media-host 内由唯一草稿 owner 处理 MHV2 command，并复用现有 player registry、MediaPlanningRuntime 与 CastUsecase 完成独立 Connect、Prepare 和显式 Commit；不接 Windows C++ UI。
+- 允许：player registry 的当前事实窄查询；candidate store/planner 的内部精确 source→opaque ID 查询；MediaHostCastRuntime 独立 connect/active-session 窄 API；media-host draft dispatch/测试；必要 current/计划。禁止新协议字段、复制 SDK/路由/授权、CEF/Alloy、旧 MHV1 行为和默认宿主。
+- 边界：SelectMedia 必须从当前 session/host/tab/navigation/generation registry 精确取得 instance/source；只允许 HTTP source 进入 prepare，URL 保持 host 私有。SelectDevice/Connect 每次复核当前 SDK snapshot；Connect 只调用 facade connection，不播放。Prepare 精确映射同一 tab/navigation/full URL 的既有 planner candidate，运行原 selected-device preflight并暂存不可 Clone 的 one-shot ready；任何 draft revision/context/player/device/active-session 变化撤销 ready。Commit 只消费匹配且未过 15 秒的 ready 并调用现有 `commit_start_cast`；不接受 Browser URL/route。已有活动会话必须先显式 ConfirmReplacement。所有 pending/ready 有界 64，断连/导航/Shutdown 清空。
+- 验收：Fake Cast facade/runtime 覆盖设备先连接、零 Start，精确 player 选择、prepare 零 Start、commit 一次、Direct/Relay/拒绝、替换确认、导航/换源/设备消失/取消/迟到/容量；Rust host 相关完整 unit、clippy/fmt/guard/diff。最高 VERIFIED，不广告 capability，Windows pipe 属 R07b4。
+
+- 实现与验证：新增 `MediaCastDraftRuntime`，只用当前 registry 的 `(tab,navigation,generation,instance,source-revision)` 精确事实映射既有 planner opaque candidate；URL 不进入 draft/UI。Connect 独立调用 facade 且不投送；Prepare 运行既有 selected preflight，以当前 capability/policy 只读投影 Direct/Relay，Relay 分配与 receiver 命令均延至一次 Commit。导航、播放器移除、选择变化、取消、设备或活动会话变化撤销 ready；同 player ref 跨标签不误删。替换确认只授权一次 Prepare；Commit 只有真实 `Casting` outcome 才成功。
+- 实际命令：`cargo test -p crayon-app-runtime --lib` PASS/0、77/77；定向 `media_cast_draft` 最终 PASS/0、6/6；`cargo test -p crayon-media-host` PASS/0、7/7；`cargo clippy -p crayon-app-runtime --all-targets --no-deps -- -D warnings` PASS/0；`cargo check -p crayon-media-host` PASS/0。Fake 整链证明 Connect/Prepare 后 CastMedia=0、Commit=1、重复/旧 revision 不二次投送；Direct/Relay/拒绝 preview 无 Connect/CastMedia。
+- Review：关闭替换确认循环、旧 revision 误删 ready、跨 tab 相同 media ref 误撤销、非 Casting reply 被当成功四个 P1；最终 P0/P1/P2/P3=`0/0/0/0`，APPROVE。
+
+### R07b4 Windows MHV2 Draft transport 与 Browser adapter（2026-09-05）
+
+- 状态：VERIFIED；依赖 R07b3 VERIFIED。Windows 私有子进程真实协商 `MEDIA_READ|DRAFT|CONNECT`；Draft command/state 使用 16 KiB frame 和双向 64 队列，复核 session/host generation/request/tab/navigation/tab-generation，Connect 另受 `CAP_CONNECT` 门禁；重启、导航、关闭和 Stop 清空关联。Browser adapter 只关联当前 tab 的闭合请求/回复，不创建草稿、不选择默认项、不回退旧 MHV1 StartCast。
+- 验证：Windows Debug/Release 分别构建 `crayon_media_host_adapter_win_test crayon_media_host_process_win_test` PASS/0；对应 CTest 均 2/2 PASS（Debug 1.32s，Release 1.29s）。真实双进程覆盖能力位、错误 generation 拒绝、Open→Choosing；Fake adapter 覆盖 request 关联。首次误用不存在 target `crayon_media_host_adapter_test` FAIL/1，修正后通过。本机未找到 `clang-format`，格式工具项 NOT_RUN；MSVC 构建通过不能替代格式检查。
+- Review：P0/P1/P2/P3=`0/0/0/0`，APPROVE。R03b 原因枚举、Alloy 产品 surface/真机选择仍由后续任务验收；预检中命令有界排队，取消/导航会在 Commit 前撤销 ready，不产生 SDK 播放。
+
+### R03b MHV2 原因枚举与共享面板投影（2026-09-05）
+
+- 状态：VERIFIED；依赖 R03a、R04、R07 VERIFIED。单一目标是把 host 内已保留的封闭预检原因投影到向后可解码的 MHV2 Draft state 和共享 Cast 面板模型；不改变 Direct/Relay 判定、授权、超时或投送行为。
+- 允许：`crayon-ipc-schema` MHV2 capability/codec/golden；app-runtime draft state 的封闭原因映射；Windows media-host codec/transport/adapter；共享 Cast selection presentation 与三语言资源；对应 unit/contract/Roadmap。禁止 URL、DNS 名、原始错误文本、凭证或页面内容进入协议/UI；禁止修改 MHV1、SDK、路由和默认宿主。
+- 兼容边界：保留既有 reasonless DraftState kind/字节向量；新增 `CAP_REASON` 与增强 state kind。只有双方协商原因能力时才启用 Draft/Connect，避免同一 MHV2 版本的旧客户端静默错读。未知枚举、非法 phase/reason 组合、截断和 trailing bytes 必须 fail closed。
+- 验收：Rust/C++ 同一 golden 与拒绝向量；app-runtime 原因映射/不泄露测试；Windows Debug/Release codec、process、adapter 与共享 surface 相关 CTest；三语言键生成检查；完整适用 Rust tests/clippy/fmt、repo-guard、diff check。R03b 最高 VERIFIED；真实产品显示、Narrator/IME/DPI 和设备选择由 R08W 验收。
+- 完成：保留旧 kind 8 reasonless DraftState，新增协商式 `CAP_REASON`/kind 9 封闭原因；Review 进一步发现 Commit 成功仍与普通 choosing 状态不可区分，新增独立 `CAP_SESSION`/kind 10、`Committed` phase 与仅在 committed 合法的非零 `session_generation`，旧 MHV1 和旧 golden 均不变。Windows host 只有同时协商 reason/session 才启用 Draft/Connect，Browser adapter 只绑定 host 返回的 generation；三语言面板仅显示闭集 key，不含 URL、DNS 名或原始错误。
+- 验证与 Review：Rust fmt PASS；MHV2 contract 15/15、app-runtime 79/79、media-host 7/7、三 crate Clippy `-D warnings` PASS。Windows Debug/Release codec/process/adapter/controller/selection/localization/真实 CEF/source 矩阵各 14/14 PASS；真实 CEF 简中 timeout 与可重试链通过。`git diff --check`、repo-guard PASS。P0/P1/P2/P3=`0/0/0/0`，APPROVE；Narrator 朗读 NOT_RUN，不影响 R03b 协议最高 VERIFIED，平台剩余风险见 SHELL §41。
+
+### R09 主 frame 受限视频几何（2026-09-05）
+
+- 状态：VERIFIED；依赖 R04、R07 VERIFIED。单一目标是在既有 renderer media collector→固定 CEF IPC→Browser main-frame 校验→player proof/gateway 唯一链上，为已绑定 `(instance_id, source_revision)` 的普通视频附带短期、受限的 viewport 几何事实；本项只产生投影，不创建或绘制按钮，不改变播放证明和投送授权。
+- 允许：`renderer/media_observer` 的几何 DTO/collector 最小增量、`ipc/media_observation_cef_message.*` 内部消息版本与 reject vectors、`cef_observation_bridge`/gateway 的绑定透传、对应 Node/C++ unit/真实本地 CEF fixture、source contract、本计划。禁止 MHV2 wire、media-host/Cast-SDK、shared surface/overlay、默认宿主、页面点击或任意 JS API。
+- owner 与边界：页面几何始终不可信，只能在 Browser 已验证当前 Browser、主 frame、navigation、element 和 player reference 后成为 UI placement hint；不得参与 input proof、候选资格、route、grant 或 session。仅普通 document-root `<video>` 且非 fullscreen/PiP、可见可命中时标 `supported`；iframe、Shadow DOM、audio、遮挡、隐藏与异常数值 fail closed。消息仍复用既有每 250ms/最多 16 元素采样和 256 队列，不新增 timer/队列/公网请求；导航、换源、移除和 renderer/browser 关闭使旧几何随现有 generation/reference 失效。
+- 预算与验收：生产净新增低于 250 行，不新增依赖。冻结 `crayon.media.observation.v4` 字段/旧 v1..v3 拒绝；Node 覆盖滚动、viewport/缩放比例事实、裁剪、遮挡、Shadow/fullscreen/PiP、移除零化与无额外全树扫描；C++ 覆盖 finite/range/canonical unsupported、audio 和旧 schema 拒绝；gateway 证明几何与 player reference 同事件绑定。Windows Debug/Release renderer/ipc/gateway/product 与真实 CEF 适用测试、diff/guard，按 v0.9 Review；22W 才允许绘制/点击 overlay。
+- 完成与验证：collector 只为 document-root、可见且命中测试通过的普通 `<video>` 生成有界 finite viewport DIP；audio、Shadow DOM、fullscreen、PiP、遮挡、隐藏和异常尺寸统一输出 canonical unsupported。内部消息升级为固定 `crayon.media.observation.v4`/18 fields，旧 v1..v3、trailing field、非法 supported/zero 组合均拒绝；Browser bridge 与 gateway 在同一事件中绑定当前 player reference 和 geometry，移除必须零化。Node collector `7/7` PASS；Windows x64 Debug/Release `media_collector_lifecycle|media_observer|observation_gateway|media_geometry_windows|windows_cef_shell_source_contract` 各 `5/5` PASS（5.31s/4.34s），真实 CEF 场景分别 4.83s/3.84s；两配置相关 target build PASS。
+- Code Review：按 v0.9 检查不可信几何边界、main-frame/element/player generation 绑定、finite/range/canonical 校验、消息预算、导航/移除失效、无新增 timer/队列/公网请求。审查中补齐 gateway 对非法几何的二次防线、旧 schema/trailing reject vectors、真实 Windows CEF 内 codec contract 调用及同事件 reference+geometry 断言；P0/P1/P2/P3=`0/0/0/0`，APPROVE，最高 VERIFIED。几何仍仅是 UI placement hint，不参与播放证明、候选资格、route、grant 或 session；绘制与点击只归 R10W/M。
+
+### R10W Windows Browser-owned 视频悬浮入口（2026-09-05）
+
+- 状态：VERIFIED；依赖 R08W、R09 VERIFIED。单一目标是在 Windows Alloy 候选窗口中，用 Browser-owned 原生 HWND 把当前普通主 frame 视频的受限几何投影为可见、可键盘访问的快捷投屏入口，并把点击重新送回既有 `AlloyCastController`/`CastEntrySurface` intent 校验；页面只提供位置事实，不能触发 intent 或选择播放器。
+- 允许：一个 Windows-only overlay owner/adapter、Alloy window coordinator 的窄接线、controller 的当前 player-ref intent seam、真实 CEF fixture/unit/source contract、本计划与 SHELL 22W。禁止 DOM/JS 注入按钮、旧 Chrome LOCATION view、MHV2/Cast-SDK/runtime、自动选择/连接/播放、默认入口和 macOS 实现。
+- 边界与验收：最多 16 个按钮；只接受当前 tab/navigation/player reference 且采样不超过 500ms 的 R09 supported geometry，按实际 Alloy browser child/client 尺寸换算并裁剪，unsupported、遮挡、fullscreen/PiP、导航、换源、失焦、隐藏或销毁立即撤销。按钮必须位于页面 HWND 之上、具有三语言 accessible name/tooltip、鼠标与键盘可达；回调只携带 opaque player reference，由 controller 在当前 context/view revision 上重新构造并验证 `OpenForMedia`。Windows x64 Debug/Release build/CTest 和真实 CEF 覆盖布局、缩放、滚动、遮挡、旧几何、导航、焦点、伪造与点击目标；diff/guard，按 v0.9 独立 Review。
+- 完成与验证：新增 Windows-only `AlloyCastOverlayWin`，在真实 Alloy `root==browser HWND` 或合法 descendant 两种 host 形态下创建最多 16 个标准 Win32 BUTTON/tooltip，以 R09 viewport→实际 client 比例换算、裁剪并持续 `HWND_TOP`；失焦、picker/busy、重复 player ref、非法缩放、unsupported、旧 context/revision、超过 500ms、窗口销毁均 fail closed。标准按钮提供原生 accessible name、tooltip、Tab/Space 行为；点击立即隐藏并只返回 opaque player ref，`AlloyCastController::OpenForMedia` 再按当前 snapshot 构造闭集 intent。Windows x64 Debug/Release product/integration/adapter/controller build PASS；`alloy_cast_controller_win|alloy_cast_overlay_win|alloy_cast_overlay_windows|windows_cef_shell_source_contract` 各 4/4 PASS（4.87s/4.45s），真实 CEF 为 4.44s/4.03s。
+- 真实 CEF 证据：离线 640×360 视频经 renderer v4→Browser proof/gateway 产生 supported geometry；200% device scale 下原生简中“投屏此视频”按钮实际可见，窗口失焦隐藏/恢复、501ms 过期隐藏。页面随后插入覆盖视频的真实高 z-index 元素，下一次 collector 事实变为 unsupported 且按钮隐藏；移除遮挡后重新显示。原生按钮取得 focus 后以 Space 触发，Fake transport 观测到 Open，owner ack 后自动 SelectMedia 携带同一 `(instance_id, source_revision)`；导航 context 更新后旧 ref 拒绝。fixture 全程 loopback，禁止 CSP/resource/公网请求错误由 runner 检查。
+- Code Review：按 v0.9 检查 HWND owner/subclass 销毁、回调重入、DPI/resize、标准辅助功能、容量/重复项、current context/revision、过期和页面伪造边界；审查中关闭 Alloy 真实宿主 `CefWindow` 与 `CefBrowserHost` 返回同一 root HWND 时误拒绝、部分列表失败可能遗留首个可见按钮、picker 打开仍显示 overlay、root 销毁后 visible 计数残留四项。P0/P1/P2/P3=`0/0/0/0`，APPROVE，最高 VERIFIED。`clang-format` 本机 NOT_FOUND；MSVC 双配置、`git diff --check` 与 source contract 覆盖格式/编译边界。未启动 Narrator 朗读，三语言/读屏综合矩阵归 23W。
 
 #### R04b2 阶段证据
 

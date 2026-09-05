@@ -14,6 +14,7 @@ using crayon::browser::cef_shell::media_host::MediaHostAdapter;
 using crayon::browser::cef_shell::media_host::MediaHostTransport;
 using crayon::browser::cef_shell::media_host::MediaPlanningEventKind;
 namespace mh = crayon::browser::cef_shell::media_host::media_host_ipc;
+namespace mh2 = crayon::browser::cef_shell::media_host::ipc_v2;
 
 class FakeTransport final : public MediaHostTransport {
 public:
@@ -29,6 +30,50 @@ public:
     sent.push_back(std::move(message));
     return true;
   }
+  bool EnqueuePlayer(mh2::PlayerMessage message) override {
+    if (!healthy_ || !accept_players_ || !player_messages_)
+      return false;
+    sent_players.push_back(std::move(message));
+    return true;
+  }
+  bool EnqueuePlayerList(mh2::PlayerListRequest request) override {
+    if (!healthy_ || !accept_player_lists_ || !player_messages_)
+      return false;
+    sent_player_lists.push_back(std::move(request));
+    return true;
+  }
+  std::vector<mh2::PlayerPageReply>
+  DrainPlayerPages(std::size_t maximum) override {
+    const std::size_t count = std::min(maximum, inbound_player_pages.size());
+    std::vector<mh2::PlayerPageReply> result;
+    for (std::size_t index = 0; index < count; ++index) {
+      result.push_back(std::move(inbound_player_pages.front()));
+      inbound_player_pages.erase(inbound_player_pages.begin());
+    }
+    return result;
+  }
+  bool EnqueueDraft(mh2::DraftCommand command) override {
+    if (!healthy_ || !accept_drafts_ || !draft_messages_)
+      return false;
+    sent_drafts.push_back(std::move(command));
+    return true;
+  }
+  std::vector<mh2::DraftStateReply>
+  DrainDraftStates(std::size_t maximum) override {
+    const std::size_t count = std::min(maximum, inbound_drafts.size());
+    std::vector<mh2::DraftStateReply> result;
+    for (std::size_t index = 0; index < count; ++index) {
+      result.push_back(std::move(inbound_drafts.front()));
+      inbound_drafts.erase(inbound_drafts.begin());
+    }
+    return result;
+  }
+  bool supports_player_messages() const noexcept override {
+    return player_messages_;
+  }
+  bool supports_drafts() const noexcept override { return draft_messages_; }
+  bool supports_connect() const noexcept override { return connect_messages_; }
+  std::uint64_t player_session_id() const noexcept override { return 77; }
   std::vector<mh::Message> Drain(std::size_t maximum) override {
     const std::size_t count = std::min(maximum, inbound.size());
     std::vector<mh::Message> result;
@@ -40,9 +85,17 @@ public:
   }
   bool healthy() const noexcept override { return healthy_; }
   std::uint64_t generation() const noexcept override { return generation_; }
-  bool healthy_ = false, accept_ = true;
+  bool healthy_ = false, accept_ = true, accept_players_ = true,
+       accept_player_lists_ = true, accept_drafts_ = true,
+       player_messages_ = true, draft_messages_ = true,
+       connect_messages_ = true;
   std::uint64_t generation_ = 0;
   std::vector<mh::Message> sent, inbound;
+  std::vector<mh2::PlayerMessage> sent_players;
+  std::vector<mh2::PlayerListRequest> sent_player_lists;
+  std::vector<mh2::PlayerPageReply> inbound_player_pages;
+  std::vector<mh2::DraftCommand> sent_drafts;
+  std::vector<mh2::DraftStateReply> inbound_drafts;
 };
 
 bool RunObservationMapping() {
@@ -58,13 +111,29 @@ bool RunObservationMapping() {
   media.tab_id = 42;
   media.navigation_id = 7;
   media.generation = 3;
+  media.player_reference =
+      crayon::cef_shell::input_proof::PlayerReference{5, 2};
   media.media.navigation_id = 7;
   media.media.source_kind =
       crayon::cef_shell::renderer::MediaSourceKind::kHttpUrl;
   media.media.source_url = "https://media.example/video.mp4";
   media.media.current_time_seconds = 1.25;
   media.media.visible_fraction = 0.5;
+  media.media.element_kind =
+      crayon::cef_shell::renderer::MediaElementKind::kVideo;
   adapter.Consume({BrowserMediaFact{media, "https://page.example/watch", 123}});
+  if (fake->sent_players.size() != 1)
+    return false;
+  const auto *player = std::get_if<mh2::PlayerFact>(&fake->sent_players[0]);
+  if (!player || player->context.session_id != 77 ||
+      player->context.host_generation != fake->generation_ ||
+      player->context.tab_id != 42 || player->context.navigation_id != 7 ||
+      player->context.tab_generation != 3 || player->context.instance_id != 5 ||
+      player->context.source_revision != 2 || player->position_ms != 1250 ||
+      player->visible_fraction_ppm != 500000 || !player->has_video ||
+      player->has_audio ||
+      player->media_url != "https://media.example/video.mp4")
+    return false;
   if (fake->sent.size() != 2 ||
       !std::holds_alternative<mh::Navigation>(fake->sent[0]))
     return false;
@@ -75,8 +144,89 @@ bool RunObservationMapping() {
       !ingest->playback || ingest->playback->position_ms != 1250 ||
       ingest->playback->visible_area_px != 500000)
     return false;
+  const std::string ingest_request_id = ingest->request_id;
+
+  const auto page_request = adapter.RequestPlayerPage(42, 7, 3, 0, 0, 2);
+  if (!page_request || fake->sent_player_lists.size() != 1 ||
+      fake->sent_player_lists[0].context.request_id != *page_request)
+    return false;
+  const auto page_context = fake->sent_player_lists[0].context;
+  fake->inbound_player_pages.push_back(
+      {page_context,
+       3,
+       mh2::PlayerPageStatus::kOk,
+       0,
+       std::nullopt,
+       {{5, 2, mh2::PlayerSourceKind::kHttpUrl, true, true, true, false,
+         "https://media.example"}}});
+  adapter.Tick();
+  const auto pages = adapter.DrainPlayerPages(2);
+  if (pages.size() != 1 || pages[0].request_id != *page_request ||
+      pages[0].snapshot_revision != 3 || pages[0].players.size() != 1 ||
+      pages[0].players[0].instance_id != 5 ||
+      pages[0].players[0].redacted_origin != "https://media.example")
+    return false;
+  fake->inbound_player_pages.push_back(
+      {page_context, 3, mh2::PlayerPageStatus::kOk, 0, std::nullopt, {}});
+  adapter.Tick();
+  if (adapter.dropped_player_pages_total() != 1)
+    return false;
+  const auto wrong_request = adapter.RequestPlayerPage(42, 7, 3, 3, 0, 2);
+  if (!wrong_request || fake->sent_player_lists.size() != 2)
+    return false;
+  auto wrong_context = fake->sent_player_lists.back().context;
+  ++wrong_context.tab_id;
+  fake->inbound_player_pages.push_back(
+      {wrong_context, 3, mh2::PlayerPageStatus::kOk, 0, std::nullopt, {}});
+  adapter.Tick();
+  if (adapter.dropped_player_pages_total() != 2)
+    return false;
+
+  const auto draft_request = adapter.RequestDraft(
+      mh2::DraftAction::kOpen, "default", 42, 7, 3, 0, 0);
+  if (!draft_request || fake->sent_drafts.size() != 1 ||
+      fake->sent_drafts.front().context.request_id != *draft_request)
+    return false;
+  const auto draft_context = fake->sent_drafts.front().context;
+  fake->inbound_drafts.push_back(
+      {draft_context, 91, 1, mh2::DraftPhase::kChoosing,
+       mh2::DraftError::kNone, std::nullopt, {}, false, false,
+       mh2::DraftRoute::kNone, std::nullopt, mh2::DraftReason::kNone,
+       std::nullopt});
+  const auto draft_states = adapter.DrainDraftStates(2);
+  if (draft_states.size() != 1 || draft_states.front().draft_id != 91 ||
+      draft_states.front().context.request_id != *draft_request)
+    return false;
+  fake->accept_player_lists_ = false;
+  if (adapter.RequestPlayerPage(42, 7, 3, 0, 0, 2) ||
+      adapter.dropped_player_pages_total() != 3)
+    return false;
+  fake->accept_player_lists_ = true;
+
+  crayon::cef_shell::gateway::GatewayEvent removed = media;
+  removed.player_removed = true;
+  adapter.Consume(
+      {BrowserMediaFact{removed, "https://page.example/watch", 124}});
+  if (fake->sent_players.size() != 2 || fake->sent.size() != 2)
+    return false;
+  const auto *removed_context =
+      std::get_if<mh2::PlayerContext>(&fake->sent_players[1]);
+  if (!removed_context || removed_context->session_id != 77 ||
+      removed_context->host_generation != fake->generation_ ||
+      removed_context->tab_id != 42 || removed_context->navigation_id != 7 ||
+      removed_context->tab_generation != 3 ||
+      removed_context->instance_id != 5 ||
+      removed_context->source_revision != 2)
+    return false;
+
+  fake->accept_players_ = false;
+  adapter.Consume({BrowserMediaFact{media, "https://page.example/watch", 125}});
+  if (adapter.dropped_player_messages_total() != 1 ||
+      fake->sent_players.size() != 2 || fake->sent.size() != 3)
+    return false;
+  fake->accept_players_ = true;
   fake->inbound.push_back(
-      mh::CandidateReply{ingest->request_id, 9, "https://media.example"});
+      mh::CandidateReply{ingest_request_id, 9, "https://media.example"});
   adapter.Tick();
   const auto planning = adapter.DrainPlanning(2);
   if (planning.size() != 1 ||
@@ -118,7 +268,17 @@ bool RunObservationMapping() {
   if (!std::holds_alternative<mh::DecideUrlLess>(fake->sent.back()))
     return false;
 
+  const auto late_request = adapter.RequestPlayerPage(42, 7, 3, 3, 0, 2);
+  if (!late_request || fake->sent_player_lists.size() != 3)
+    return false;
+  const auto late_context = fake->sent_player_lists.back().context;
   if (!adapter.AdvanceNavigation(42, 8, 4))
+    return false;
+  fake->inbound_player_pages.push_back(
+      {late_context, 3, mh2::PlayerPageStatus::kOk, 0, std::nullopt, {}});
+  adapter.Tick();
+  if (adapter.dropped_player_pages_total() != 4 ||
+      !adapter.DrainPlayerPages(2).empty())
     return false;
   const std::size_t sent_before_stale = fake->sent.size();
   adapter.Consume({BrowserMediaFact{media, "https://page.example/watch", 126}});
@@ -175,8 +335,7 @@ bool RunCastCommandPump() {
       !std::holds_alternative<mh::DevicePageReply>(cast.front()))
     return false;
 
-  const auto resolve_request_id =
-      adapter.RequestResolveCastCode("AB1 CD2");
+  const auto resolve_request_id = adapter.RequestResolveCastCode("AB1 CD2");
   if (!resolve_request_id)
     return false;
   const auto resolve = std::get<mh::ResolveCastCode>(fake->sent.back());
@@ -385,9 +544,28 @@ bool RunStaleStartCleanup() {
   return cleaned;
 }
 
+bool RunPlayerPageCapacity() {
+  auto transport = std::make_unique<FakeTransport>();
+  MediaHostAdapter adapter(std::move(transport));
+  if (!adapter.Start("/test/media-host"))
+    return false;
+  adapter.Tick();
+  if (!adapter.AdvanceNavigation(42, 1, 1))
+    return false;
+  for (std::size_t index = 0; index < 64; ++index) {
+    if (!adapter.RequestPlayerPage(42, 1, 1, 0, 0, 1))
+      return false;
+  }
+  if (adapter.RequestPlayerPage(42, 1, 1, 0, 0, 1) ||
+      adapter.dropped_player_pages_total() != 1)
+    return false;
+  adapter.Stop();
+  return true;
+}
+
 bool Run() {
   if (!RunObservationMapping() || !RunCastCommandPump() ||
-      !RunStaleStartCleanup())
+      !RunStaleStartCleanup() || !RunPlayerPageCapacity())
     return false;
   auto transport = std::make_unique<FakeTransport>();
   FakeTransport *fake = transport.get();
@@ -488,8 +666,42 @@ bool Run() {
   return !adapter.healthy();
 }
 
+bool DraftCommitBindsSessionControls() {
+  auto transport = std::make_unique<FakeTransport>();
+  FakeTransport* fake = transport.get();
+  MediaHostAdapter adapter(std::move(transport));
+  if (!adapter.Start("/test/media-host"))
+    return false;
+  adapter.Tick();
+  if (!adapter.AdvanceNavigation(42, 7, 3))
+    return false;
+  const auto request = adapter.RequestDraft(mh2::DraftAction::kCommit,
+                                            "default", 42, 7, 3, 91, 8);
+  if (!request || fake->sent_drafts.empty())
+    return false;
+  const auto context = fake->sent_drafts.back().context;
+  fake->inbound_drafts.push_back(
+      {context,
+       91,
+       9,
+       mh2::DraftPhase::kCommitted,
+       mh2::DraftError::kNone,
+       mh2::DraftMediaRef{5, 2},
+       "device-1",
+       true,
+       false,
+       mh2::DraftRoute::kNone,
+       std::nullopt,
+       mh2::DraftReason::kNone,
+       47});
+  const auto states = adapter.DrainDraftStates(1);
+  if (states.size() != 1 || states.front().session_generation != 47 ||
+      !adapter.RequestStopCast(47))
+    return false;
+  return std::holds_alternative<mh::StopCast>(fake->sent.back()) &&
+         std::get<mh::StopCast>(fake->sent.back()).session_generation == 47;
+}
+
 } // namespace
 
-int main() {
-  return Run() ? 0 : 1;
-}
+int main() { return Run() && DraftCommitBindsSessionControls() ? 0 : 1; }

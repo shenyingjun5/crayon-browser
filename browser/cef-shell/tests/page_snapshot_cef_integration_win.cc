@@ -16,6 +16,22 @@
 #include <variant>
 #include <vector>
 
+#include "alloy_content_view_host_probe.h"
+#include "alloy_cast_bridge_probe.h"
+#include "alloy_cast_overlay_probe.h"
+#include "alloy_builtin_content_probe.h"
+#include "alloy_interactions_probe.h"
+#include "alloy_navigation_probe.h"
+#include "alloy_omnibox_probe.h"
+#include "alloy_page_markdown_probe.h"
+#include "alloy_page_tools_probe.h"
+#include "alloy_profile_context_probe.h"
+#include "alloy_security_probe.h"
+#include "alloy_tab_controller_probe.h"
+#include "alloy_tab_strip_probe.h"
+#include "alloy_window_coordinator_probe.h"
+#include "cast_entry_surface_probe.h"
+#include "media_observation_cef_message_checks.h"
 #include "browser/media_host/cast_shell_controller.h"
 #include "browser/media_host/media_host_adapter.h"
 #include "browser/new_tab/cef_new_tab_handler.h"
@@ -25,6 +41,7 @@
 #include "include/cef_sandbox_win.h"
 #include "include/cef_task.h"
 #include "include/cef_version_info.h"
+#include "include/test/cef_test_helpers.h"
 #include "include/wrapper/cef_closure_task.h"
 #include "include/wrapper/cef_helpers.h"
 #include "windows/cast_chrome_win.h"
@@ -76,15 +93,15 @@ std::uint64_t MonotonicMilliseconds() {
           .count());
 }
 
-HWND FindThreadWindow(const wchar_t* title) {
+HWND FindThreadWindow(const wchar_t *title) {
   struct Search final {
-    const wchar_t* title;
+    const wchar_t *title;
     HWND result = nullptr;
   } search{title};
   EnumThreadWindows(
       GetCurrentThreadId(),
       [](HWND window, LPARAM value) -> BOOL {
-        auto* search = reinterpret_cast<Search*>(value);
+        auto *search = reinterpret_cast<Search *>(value);
         wchar_t text[128]{};
         GetWindowTextW(window, text, static_cast<int>(std::size(text)));
         if (std::wstring(text) == search->title) {
@@ -97,22 +114,25 @@ HWND FindThreadWindow(const wchar_t* title) {
   return search.result;
 }
 
-HWND FindChild(HWND parent, const wchar_t* class_name, const wchar_t* text) {
+HWND FindChild(HWND parent, const wchar_t *class_name, const wchar_t *text) {
   HWND child = nullptr;
   while ((child = FindWindowExW(parent, child, class_name, nullptr)) !=
          nullptr) {
     wchar_t value[128]{};
     GetWindowTextW(child, value, static_cast<int>(std::size(value)));
-    if (std::wstring(value) == text) return child;
+    if (std::wstring(value) == text)
+      return child;
   }
   return nullptr;
 }
 
-std::string WideToUtf8(const wchar_t* value) {
-  if (!value || !*value) return {};
+std::string WideToUtf8(const wchar_t *value) {
+  if (!value || !*value)
+    return {};
   const int required = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, value,
                                            -1, nullptr, 0, nullptr, nullptr);
-  if (required <= 1) return {};
+  if (required <= 1)
+    return {};
   std::string result(static_cast<std::size_t>(required), '\0');
   if (WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, value, -1,
                           result.data(), required, nullptr,
@@ -123,7 +143,7 @@ std::string WideToUtf8(const wchar_t* value) {
   return result;
 }
 
-std::string SiblingUrl(const std::string& url, const char* filename) {
+std::string SiblingUrl(const std::string &url, const char *filename) {
   const std::size_t slash = url.rfind('/');
   return slash == std::string::npos ? std::string{}
                                     : url.substr(0, slash + 1) + filename;
@@ -131,7 +151,7 @@ std::string SiblingUrl(const std::string& url, const char* filename) {
 
 class SnapshotFixtureApp final : public CefApp,
                                  public CefBrowserProcessHandler {
- public:
+public:
   SnapshotFixtureApp(std::string fixture_url, std::string scenario)
       : fixture_url_(std::move(fixture_url)),
         recovery_url_(SiblingUrl(fixture_url_, "recovery.html")),
@@ -146,7 +166,7 @@ class SnapshotFixtureApp final : public CefApp,
   }
 
   void OnBeforeCommandLineProcessing(
-      const CefString& process_type,
+      const CefString &process_type,
       CefRefPtr<CefCommandLine> command_line) override {
     static_cast<void>(process_type);
     command_line->AppendSwitchWithValue("enable-logging", "stderr");
@@ -156,7 +176,7 @@ class SnapshotFixtureApp final : public CefApp,
     command_line->AppendSwitch("disable-sync");
     command_line->AppendSwitch("metrics-recording-only");
     command_line->AppendSwitch("no-proxy-server");
-    if (scenario_ == "media-cast-ui-win") {
+    if (IsWindowsMediaScenario()) {
       command_line->AppendSwitchWithValue("autoplay-policy",
                                           "no-user-gesture-required");
     }
@@ -164,10 +184,16 @@ class SnapshotFixtureApp final : public CefApp,
 
   void OnContextInitialized() override {
     CEF_REQUIRE_UI_THREAD();
+    if (!CheckMediaObservationCefMessages()) {
+      std::cerr << "Windows media observation IPC contract failed\n";
+      finished_ = true;
+      CefQuitMessageLoop();
+      return;
+    }
     auto process = std::make_unique<ContentHostProcess>();
     process_ = process.get();
     content_host_ = std::make_unique<ContentHostAdapter>(std::move(process));
-    if (scenario_ == "media-cast-ui-win") {
+    if (IsWindowsMediaScenario()) {
       media_host_ = std::make_unique<MediaHostAdapter>(
           std::make_unique<MediaHostProcess>());
       cast_shell_ = std::make_unique<CastShellController>(CastCommandPort{
@@ -190,7 +216,7 @@ class SnapshotFixtureApp final : public CefApp,
               [this] { return cast_shell_->ActivateCastButton(); },
               [this] { return cast_shell_->RefreshReceivers(); },
               [this] { cast_shell_->CancelReceiverPicker(); },
-              [this](const std::string& device_id) {
+              [this](const std::string &device_id) {
                 return cast_shell_->SelectReceiver(device_id);
               }});
       trusted_input_monitor_ = std::make_unique<TrustedInputMonitorWin>();
@@ -236,11 +262,15 @@ class SnapshotFixtureApp final : public CefApp,
     controller_->SetBrowsersClosedCallback([this] {
       tick_active_ = false;
       browser_ = nullptr;
-      if (trusted_input_monitor_) trusted_input_monitor_->Stop();
-      if (cast_shell_) cast_shell_->Shutdown();
-      if (cast_chrome_) cast_chrome_->Close();
+      if (trusted_input_monitor_)
+        trusted_input_monitor_->Stop();
+      if (cast_shell_)
+        cast_shell_->Shutdown();
+      if (cast_chrome_)
+        cast_chrome_->Close();
       content_host_->Stop();
-      if (media_host_) media_host_->Stop();
+      if (media_host_)
+        media_host_->Stop();
       if (scenario_ == "close" && close_requested_) {
         passed_ = true;
         std::cout << "snapshot_fixture platform=windows scenario=close"
@@ -263,7 +293,8 @@ class SnapshotFixtureApp final : public CefApp,
     CEF_REQUIRE_UI_THREAD();
     browser_ = nullptr;
     controller_ = nullptr;
-    if (trusted_input_monitor_) trusted_input_monitor_->Stop();
+    if (trusted_input_monitor_)
+      trusted_input_monitor_->Stop();
     trusted_input_monitor_.reset();
     cast_chrome_.reset();
     cast_shell_.reset();
@@ -272,7 +303,7 @@ class SnapshotFixtureApp final : public CefApp,
     process_ = nullptr;
   }
 
- private:
+private:
   void ScheduleStartupCheck() {
     CefPostDelayedTask(TID_UI,
                        CefCreateClosureTask(
@@ -309,7 +340,8 @@ class SnapshotFixtureApp final : public CefApp,
 
   void Tick() {
     CEF_REQUIRE_UI_THREAD();
-    if (!tick_active_) return;
+    if (!tick_active_)
+      return;
     const auto now = std::chrono::steady_clock::now();
     if (last_tick_) {
       max_tick_delay_ =
@@ -333,7 +365,8 @@ class SnapshotFixtureApp final : public CefApp,
         cast_chrome_->SetActiveWindow(browser_->GetIdentifier());
       }
       cast_chrome_->Render(cast_shell_->coordinator());
-      if (AdvanceCastUiScenario()) return;
+      if (AdvanceCastUiScenario())
+        return;
       if (media_checks_ > 0 && --media_checks_ == 0) {
         HWND root = browser_ ? browser_->GetHost()->GetWindowHandle() : nullptr;
         HWND button =
@@ -341,6 +374,7 @@ class SnapshotFixtureApp final : public CefApp,
         HWND picker = FindThreadWindow(L"Cast to device");
         const auto diagnostics = controller_->media_observation_diagnostics();
         std::cout << "cast_ui_diag actual_media=" << saw_actual_media_
+                  << " geometry=" << saw_media_geometry_
                   << " candidate=" << saw_media_candidate_
                   << " received=" << diagnostics.received_total
                   << " accepted=" << diagnostics.accepted_current_total
@@ -378,25 +412,29 @@ class SnapshotFixtureApp final : public CefApp,
 
   void OnPageLoaded(CefRefPtr<CefBrowser> browser) {
     CEF_REQUIRE_UI_THREAD();
-    if (finished_ || !browser || !browser->GetMainFrame()) return;
+    if (finished_ || !browser || !browser->GetMainFrame())
+      return;
     const std::string loaded_url = browser->GetMainFrame()->GetURL();
     if (loaded_url == recovery_url_) {
-      if (scenario_ == "media-cast-ui-win") cast_ui_navigated_ = true;
+      if (IsWindowsMediaScenario())
+        cast_ui_navigated_ = true;
       if ((scenario_ == "navigation" || scenario_ == "crash") &&
           recovery_requested_ && !recovery_started_) {
-        if (!WaitForSnapshotAdmission(browser)) return;
+        if (!WaitForSnapshotAdmission(browser))
+          return;
         recovery_started_ = true;
         StartSnapshot(browser);
       }
       return;
     }
-    if (loaded_url != fixture_url_ || initial_started_) return;
-    if (scenario_ != "media-cast-ui-win" &&
+    if (loaded_url != fixture_url_ || initial_started_)
+      return;
+    if (!IsWindowsMediaScenario() &&
         !WaitForSnapshotAdmission(browser)) {
       return;
     }
     initial_started_ = true;
-    if (scenario_ == "media-cast-ui-win") {
+    if (IsWindowsMediaScenario()) {
       media_checks_ = kCastUiChecks;
       CefPostDelayedTask(TID_UI,
                          CefCreateClosureTask(base::BindOnce(
@@ -406,7 +444,8 @@ class SnapshotFixtureApp final : public CefApp,
       return;
     }
     StartSnapshot(browser);
-    if (!active_request_) return;
+    if (!active_request_)
+      return;
 
     if (scenario_ == "cancel") {
       const auto result = controller_->CancelPageSnapshot(*active_request_);
@@ -459,7 +498,8 @@ class SnapshotFixtureApp final : public CefApp,
 
   void StartCastMediaPlayback(CefRefPtr<CefBrowser> browser) {
     CEF_REQUIRE_UI_THREAD();
-    if (finished_ || !browser || !browser->GetMainFrame()) return;
+    if (finished_ || !browser || !browser->GetMainFrame())
+      return;
     CefKeyEvent key_down{};
     key_down.type = KEYEVENT_RAWKEYDOWN;
     key_down.windows_key_code = VK_F24;
@@ -472,18 +512,19 @@ class SnapshotFixtureApp final : public CefApp,
 
   void BeginCastMediaPlayback(CefRefPtr<CefBrowser> browser) {
     CEF_REQUIRE_UI_THREAD();
-    if (finished_ || !browser || !browser->GetMainFrame()) return;
-    CefPostDelayedTask(
-        TID_UI,
-        CefCreateClosureTask(base::BindOnce(
-            &SnapshotFixtureApp::TriggerCastMediaPlayback,
-            CefRefPtr<SnapshotFixtureApp>(this), browser)),
-        kTickMilliseconds);
+    if (finished_ || !browser || !browser->GetMainFrame())
+      return;
+    CefPostDelayedTask(TID_UI,
+                       CefCreateClosureTask(base::BindOnce(
+                           &SnapshotFixtureApp::TriggerCastMediaPlayback,
+                           CefRefPtr<SnapshotFixtureApp>(this), browser)),
+                       kTickMilliseconds);
   }
 
   void TriggerCastMediaPlayback(CefRefPtr<CefBrowser> browser) {
     CEF_REQUIRE_UI_THREAD();
-    if (finished_ || !browser || !browser->GetMainFrame()) return;
+    if (finished_ || !browser || !browser->GetMainFrame())
+      return;
     CefMouseEvent click{};
     click.x = 400;
     click.y = 300;
@@ -511,7 +552,8 @@ class SnapshotFixtureApp final : public CefApp,
 
   void OnSnapshotEventsReady() {
     CEF_REQUIRE_UI_THREAD();
-    if (finished_) return;
+    if (finished_)
+      return;
     ++events_ready_count_;
     if (scenario_ == "backpressure" && !backpressure_released_) {
       if (events_ready_count_ >=
@@ -543,8 +585,8 @@ class SnapshotFixtureApp final : public CefApp,
   void ConsumeGatewayEvents() {
     std::vector<SnapshotGatewayEvent> events =
         controller_->DrainPageSnapshots(16);
-    for (const auto& event : events) {
-      const auto* terminal = std::get_if<SnapshotTerminal>(&event);
+    for (const auto &event : events) {
+      const auto *terminal = std::get_if<SnapshotTerminal>(&event);
       if (terminal && terminal->status == SnapshotTerminalStatus::kRejected &&
           terminal->error == EngineErrorCode::kCapacityExceeded) {
         saw_capacity_terminal_ = true;
@@ -554,12 +596,22 @@ class SnapshotFixtureApp final : public CefApp,
   }
 
   void ConsumeMediaEvents() {
-    if (!controller_ || !media_host_) return;
+    if (!controller_ || !media_host_)
+      return;
     std::vector<BrowserMediaFact> facts;
-    for (GatewayEvent& event : controller_->DrainMediaObservations(64)) {
+    for (GatewayEvent &event : controller_->DrainMediaObservations(64)) {
       if (event.source == EventSource::kMedia) {
         cast_shell_->OnBrowserVerifiedMedia();
         saw_actual_media_ = true;
+        if (event.player_reference && event.media.geometry_supported &&
+            event.media.element_kind ==
+                crayon::cef_shell::renderer::MediaElementKind::kVideo &&
+            event.media.geometry_width > 0 &&
+            event.media.geometry_height > 0 &&
+            event.media.viewport_width > 0 &&
+            event.media.viewport_height > 0) {
+          saw_media_geometry_ = true;
+        }
       }
       auto page_url =
           controller_->TrustedPageUrl(event.tab_id, event.navigation_id);
@@ -575,7 +627,7 @@ class SnapshotFixtureApp final : public CefApp,
     static_cast<void>(media_host_->Drain(64));
     auto events = media_host_->DrainPlanning(64);
     cast_shell_->ConsumePlanning(events);
-    for (const auto& event : events) {
+    for (const auto &event : events) {
       std::cout << "cast_planning kind=" << static_cast<int>(event.kind)
                 << " candidate=" << event.candidate_id.value_or(0) << " error="
                 << (event.error ? static_cast<int>(*event.error) : -1)
@@ -587,8 +639,13 @@ class SnapshotFixtureApp final : public CefApp,
     }
   }
 
+  bool IsWindowsMediaScenario() const {
+    return scenario_ == "media-cast-ui-win" ||
+           scenario_ == "media-geometry-win";
+  }
+
   bool AdvanceCastUiScenario() {
-    if (scenario_ != "media-cast-ui-win" || !browser_ || finished_)
+    if (!IsWindowsMediaScenario() || !browser_ || finished_)
       return false;
     HWND root = browser_->GetHost()->GetWindowHandle();
     HWND button = FindChild(root, L"BUTTON", L"Choose cast device");
@@ -602,7 +659,8 @@ class SnapshotFixtureApp final : public CefApp,
     if (cast_ui_opened_ && !cast_ui_cancelled_ && picker &&
         IsWindowVisible(picker)) {
       HWND cancel = FindChild(picker, L"BUTTON", L"Cancel");
-      if (!cancel) return false;
+      if (!cancel)
+        return false;
       SendMessageW(cancel, BM_CLICK, 0, 0);
       cast_ui_cancelled_ = true;
       browser_->GetMainFrame()->LoadURL(recovery_url_);
@@ -610,7 +668,9 @@ class SnapshotFixtureApp final : public CefApp,
     }
     if (cast_ui_cancelled_ && cast_ui_navigated_ && button &&
         !IsWindowVisible(button) && (!picker || !IsWindowVisible(picker))) {
-      Finish(saw_actual_media_ && saw_media_candidate_,
+      const bool geometry_ok = scenario_ != "media-geometry-win" ||
+                               saw_media_geometry_;
+      Finish(saw_actual_media_ && geometry_ok && saw_media_candidate_,
              "CEF cast chrome picker cancel and navigation cleanup");
       return true;
     }
@@ -618,10 +678,10 @@ class SnapshotFixtureApp final : public CefApp,
   }
 
   void ConsumeReplies() {
-    for (host::Message& message : content_host_->Drain(64)) {
-      const auto* chunk = std::get_if<host::MarkdownChunk>(&message);
+    for (host::Message &message : content_host_->Drain(64)) {
+      const auto *chunk = std::get_if<host::MarkdownChunk>(&message);
       if (!chunk) {
-        const auto* error = std::get_if<host::ErrorReply>(&message);
+        const auto *error = std::get_if<host::ErrorReply>(&message);
         if (scenario_ == "crash" && error &&
             error->request_id == abandoned_request_) {
           continue;
@@ -705,8 +765,9 @@ class SnapshotFixtureApp final : public CefApp,
     }
   }
 
-  void Finish(bool passed, const char* detail) {
-    if (finished_) return;
+  void Finish(bool passed, const char *detail) {
+    if (finished_)
+      return;
     finished_ = true;
     passed_ = passed;
     tick_active_ = false;
@@ -726,8 +787,10 @@ class SnapshotFixtureApp final : public CefApp,
     if (controller_) {
       controller_->CloseAllBrowsers(true);
     } else {
-      if (content_host_) content_host_->Stop();
-      if (media_host_) media_host_->Stop();
+      if (content_host_)
+        content_host_->Stop();
+      if (media_host_)
+        media_host_->Stop();
       CefQuitMessageLoop();
     }
   }
@@ -742,7 +805,7 @@ class SnapshotFixtureApp final : public CefApp,
   std::unique_ptr<CastShellController> cast_shell_;
   std::unique_ptr<CastChromeWin> cast_chrome_;
   std::unique_ptr<TrustedInputMonitorWin> trusted_input_monitor_;
-  ContentHostProcess* process_ = nullptr;
+  ContentHostProcess *process_ = nullptr;
   std::optional<SnapshotRequestId> active_request_;
   std::string abandoned_request_;
   std::string markdown_;
@@ -768,6 +831,7 @@ class SnapshotFixtureApp final : public CefApp,
   bool unexpected_reply_ = false;
   bool close_requested_ = false;
   bool saw_actual_media_ = false;
+  bool saw_media_geometry_ = false;
   bool saw_media_candidate_ = false;
   bool cast_ui_opened_ = false;
   bool cast_ui_cancelled_ = false;
@@ -779,31 +843,37 @@ class SnapshotFixtureApp final : public CefApp,
   DISALLOW_COPY_AND_ASSIGN(SnapshotFixtureApp);
 };
 
-}  // namespace
+} // namespace
 
 CEF_BOOTSTRAP_EXPORT int RunWinMain(HINSTANCE instance, LPTSTR command_line,
-                                    int show_command, void* sandbox_info,
-                                    cef_version_info_t* version_info) {
+                                    int show_command, void *sandbox_info,
+                                    cef_version_info_t *version_info) {
   UNREFERENCED_PARAMETER(command_line);
   UNREFERENCED_PARAMETER(show_command);
-  if (!version_info || !sandbox_info) return 2;
+  if (!version_info || !sandbox_info)
+    return 2;
 
   CefMainArgs main_args(instance);
   const int child_exit_code = CefExecuteProcess(
       main_args, crayon::browser::cef_shell::new_tab::CreateNewTabProcessApp(),
       sandbox_info);
-  if (child_exit_code >= 0) return child_exit_code;
+  if (child_exit_code >= 0)
+    return child_exit_code;
 
   int argument_count = 0;
-  LPWSTR* arguments = CommandLineToArgvW(GetCommandLineW(), &argument_count);
+  LPWSTR *arguments = CommandLineToArgvW(GetCommandLineW(), &argument_count);
   if (!arguments || argument_count != 3) {
-    if (arguments) LocalFree(arguments);
+    if (arguments)
+      LocalFree(arguments);
     return 2;
   }
   const std::string fixture_url = WideToUtf8(arguments[1]);
   const std::string scenario = WideToUtf8(arguments[2]);
+  const std::filesystem::path executable_directory =
+      std::filesystem::absolute(arguments[0]).parent_path();
   LocalFree(arguments);
-  if (fixture_url.empty() || scenario.empty()) return 2;
+  if (fixture_url.empty() || scenario.empty())
+    return 2;
 
   const std::filesystem::path cache_path =
       std::filesystem::temp_directory_path() /
@@ -812,9 +882,219 @@ CEF_BOOTSTRAP_EXPORT int RunWinMain(HINSTANCE instance, LPTSTR command_line,
   CefSettings settings;
   settings.log_severity = LOGSEVERITY_WARNING;
   CefString(&settings.root_cache_path).FromWString(cache_path.wstring());
+  if (scenario == "alloy-host") {
+    auto result = std::make_shared<AlloyContentViewHostProbeResult>();
+    CefRefPtr<CefApp> app = CreateAlloyContentViewHostProbe(result);
+    if (!CefInitialize(main_args, settings, app, sandbox_info))
+      return 4;
+    CefRunMessageLoop();
+    const bool passed = result->behavior_passed && result->browsers_closed &&
+                        result->window_closed;
+    app = nullptr;
+    CefShutdown();
+    return passed ? 0 : 1;
+  }
+  if (scenario == "alloy-tabs") {
+    auto result = std::make_shared<AlloyTabControllerProbeResult>();
+    CefRefPtr<CefApp> app = CreateAlloyTabControllerProbe(fixture_url, result);
+    if (!CefInitialize(main_args, settings, app, sandbox_info))
+      return 4;
+    CefRunMessageLoop();
+    const bool passed = result->behavior_passed && result->close_cancelled &&
+                        result->late_create_closed &&
+                        result->renderer_crash_closed && result->window_closed;
+    app = nullptr;
+    CefShutdown();
+    return passed ? 0 : 1;
+  }
+  if (scenario == "alloy-tab-strip") {
+    auto result = std::make_shared<AlloyTabStripProbeResult>();
+    CefRefPtr<CefApp> app = CreateAlloyTabStripProbe(result);
+    if (!CefInitialize(main_args, settings, app, sandbox_info))
+      return 4;
+    CefRunMessageLoop();
+    const bool passed = result->behavior_passed && result->real_clicks_passed &&
+                        result->capacity_passed && result->layout_passed &&
+                        result->window_closed;
+    app = nullptr;
+    CefShutdown();
+    return passed ? 0 : 1;
+  }
+  if (scenario == "alloy-omnibox") {
+    auto result = std::make_shared<AlloyOmniboxProbeResult>();
+    CefRefPtr<CefApp> app = CreateAlloyOmniboxProbe(result);
+    if (!CefInitialize(main_args, settings, app, sandbox_info))
+      return 4;
+    CefRunMessageLoop();
+    const bool passed = result->behavior_passed && result->real_input_passed &&
+                        result->generation_passed &&
+                        result->display_safety_passed && result->window_closed;
+    app = nullptr;
+    CefShutdown();
+    return passed ? 0 : 1;
+  }
+  if (scenario == "alloy-navigation") {
+    auto result = std::make_shared<AlloyNavigationProbeResult>();
+    CefRefPtr<CefApp> app = CreateAlloyNavigationProbe(fixture_url, result);
+    if (!CefInitialize(main_args, settings, app, sandbox_info))
+      return 4;
+    CefRunMessageLoop();
+    const bool passed = result->behavior_passed &&
+                        result->real_navigation_passed &&
+                        result->identity_passed && result->fencing_passed &&
+                        result->bookmark_passed && result->history_passed &&
+                        result->download_passed && result->window_closed;
+    app = nullptr;
+    CefShutdown();
+    return passed ? 0 : 1;
+  }
+  if (scenario == "alloy-profiles") {
+    auto result = std::make_shared<AlloyProfileContextProbeResult>();
+    CefRefPtr<CefApp> app = CreateAlloyProfileContextProbe(fixture_url, result);
+    if (!CefInitialize(main_args, settings, app, sandbox_info))
+      return 4;
+    CefRunMessageLoop();
+    const bool passed = result->context_isolation_passed &&
+                        result->cookie_isolation_passed &&
+                        result->browsers_closed && result->window_closed;
+    app = nullptr;
+    CefShutdown();
+    return passed ? 0 : 1;
+  }
+  if (scenario == "alloy-page-tools") {
+    auto result = std::make_shared<AlloyPageToolsProbeResult>();
+    CefRefPtr<CefApp> app = CreateAlloyPageToolsProbe(fixture_url, result);
+    if (!CefInitialize(main_args, settings, app, sandbox_info))
+      return 4;
+    CefRunMessageLoop();
+    const bool passed = result->find_passed && result->zoom_passed &&
+                        result->fullscreen_passed && result->pdf_passed &&
+                        result->pdf_fencing_passed &&
+                        result->capability_passed && result->browser_closed &&
+                        result->window_closed;
+    app = nullptr;
+    CefShutdown();
+    return passed ? 0 : 1;
+  }
+  if (scenario == "alloy-security") {
+    CefSetDataDirectoryForTests(
+        (executable_directory / L"ceftests_files").wstring());
+    auto result = std::make_shared<AlloySecurityProbeResult>();
+    CefRefPtr<CefApp> app = CreateAlloySecurityProbe(fixture_url, result);
+    if (!CefInitialize(main_args, settings, app, sandbox_info))
+      return 4;
+    CefRunMessageLoop();
+    const bool passed =
+        result->certificate_deny_passed && result->certificate_once_passed &&
+        result->permission_prompt_passed && result->external_protocol_blocked &&
+        result->external_protocol_denied && result->browser_closed &&
+        result->window_closed;
+    app = nullptr;
+    CefShutdown();
+    return passed ? 0 : 1;
+  }
+
+  if (scenario == "alloy-interactions") {
+    auto result = std::make_shared<AlloyInteractionsProbeResult>();
+    CefRefPtr<CefApp> app = CreateAlloyInteractionsProbe(result);
+    if (!CefInitialize(main_args, settings, app, sandbox_info))
+      return 4;
+    CefRunMessageLoop();
+    const bool passed = result->menu_passed && result->command_passed &&
+                        result->drag_passed && result->context_menu_passed &&
+                        result->lifecycle_passed &&
+                        result->browser_closed && result->window_closed;
+    app = nullptr;
+    CefShutdown();
+    return passed ? 0 : 1;
+  }
+  if (scenario == "alloy-builtins") {
+    auto result = std::make_shared<AlloyBuiltinContentProbeResult>();
+    CefRefPtr<CefApp> app = CreateAlloyBuiltinContentProbe(result);
+    if (!CefInitialize(main_args, settings, app, sandbox_info))
+      return 4;
+    CefRunMessageLoop();
+    const bool passed = result->new_tab_passed && result->mdv_runtime_passed &&
+                        result->edit_save_passed && result->conflict_passed &&
+                        result->browser_closed && result->window_closed;
+    app = nullptr;
+    CefShutdown();
+    return passed ? 0 : 1;
+  }
+  if (scenario == "alloy-page-markdown") {
+    auto result = std::make_shared<AlloyPageMarkdownProbeResult>();
+    CefRefPtr<CefApp> app = CreateAlloyPageMarkdownProbe(fixture_url, result);
+    if (!CefInitialize(main_args, settings, app, sandbox_info))
+      return 4;
+    CefRunMessageLoop();
+    const bool passed =
+        result->context_menu_passed && result->cancellation_passed &&
+        result->preview_passed && result->export_passed &&
+        result->lifecycle_passed && result->window_closed;
+    app = nullptr;
+    CefShutdown();
+    return passed ? 0 : 1;
+  }
+  if (scenario == "alloy-cast-entry") {
+    auto result = std::make_shared<CastEntrySurfaceProbeResult>();
+    CefRefPtr<CefApp> app = CreateCastEntrySurfaceProbe(result);
+    if (!CefInitialize(main_args, settings, app, sandbox_info))
+      return 4;
+    CefRunMessageLoop();
+    const bool passed = result->behavior_passed && result->browser_closed &&
+                        result->window_closed;
+    app = nullptr;
+    CefShutdown();
+    return passed ? 0 : 1;
+  }
+  if (scenario == "alloy-cast-bridge") {
+    auto result = std::make_shared<AlloyCastBridgeProbeResult>();
+    CefRefPtr<CefApp> app = CreateAlloyCastBridgeProbe(result);
+    if (!CefInitialize(main_args, settings, app, sandbox_info))
+      return 4;
+    CefRunMessageLoop();
+    const bool passed = result->selection_passed &&
+                        result->connection_passed && result->session_passed &&
+                        result->reason_passed && result->accessibility_passed &&
+                        result->browser_closed &&
+                        result->window_closed;
+    app = nullptr;
+    CefShutdown();
+    return passed ? 0 : 1;
+  }
+  if (scenario == "alloy-cast-overlay") {
+    auto result = std::make_shared<AlloyCastOverlayProbeResult>();
+    CefRefPtr<CefApp> app = CreateAlloyCastOverlayProbe(fixture_url, result);
+    if (!CefInitialize(main_args, settings, app, sandbox_info))
+      return 4;
+    CefRunMessageLoop();
+    const bool passed =
+        result->geometry_passed && result->native_surface_passed &&
+        result->keyboard_intent_passed && result->stale_and_focus_passed &&
+        result->occlusion_and_navigation_passed && result->browser_closed &&
+        result->window_closed;
+    app = nullptr;
+    CefShutdown();
+    return passed ? 0 : 1;
+  }
+  if (scenario == "alloy-windows") {
+    auto result = std::make_shared<AlloyWindowCoordinatorProbeResult>();
+    CefRefPtr<CefApp> app =
+        CreateAlloyWindowCoordinatorProbe(fixture_url, result);
+    if (!CefInitialize(main_args, settings, app, sandbox_info))
+      return 4;
+    CefRunMessageLoop();
+    const bool passed = result->behavior_passed && result->real_popup_passed &&
+                        result->policy_passed && result->isolation_passed &&
+                        result->windows_closed;
+    app = nullptr;
+    CefShutdown();
+    return passed ? 0 : 1;
+  }
   CefRefPtr<SnapshotFixtureApp> app(
       new SnapshotFixtureApp(fixture_url, scenario));
-  if (!CefInitialize(main_args, settings, app, sandbox_info)) return 4;
+  if (!CefInitialize(main_args, settings, app, sandbox_info))
+    return 4;
   CefRunMessageLoop();
   const bool passed = app->passed();
   app->PrepareForShutdown();

@@ -48,6 +48,27 @@ void OmniboxStateMachine::OnSuggestionsUpdated(
   }
 }
 
+bool OmniboxStateMachine::SelectNextSuggestion() noexcept {
+  if (!active_ || state_ != OmniboxState::kSuggesting || suggestions_.empty()) {
+    return false;
+  }
+  selected_index_ = selected_index_.has_value()
+                        ? (*selected_index_ + 1) % suggestions_.size()
+                        : 0;
+  return true;
+}
+
+bool OmniboxStateMachine::SelectPreviousSuggestion() noexcept {
+  if (!active_ || state_ != OmniboxState::kSuggesting || suggestions_.empty()) {
+    return false;
+  }
+  selected_index_ = selected_index_.has_value()
+                        ? (*selected_index_ + suggestions_.size() - 1) %
+                              suggestions_.size()
+                        : suggestions_.size() - 1;
+  return true;
+}
+
 void OmniboxStateMachine::OnSubmit() noexcept {
   if (!active_) return;
   switch (state_) {

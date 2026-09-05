@@ -1,5 +1,6 @@
 add_library(crayon-browser-session STATIC
   src/session_restore.cc
+  src/session_snapshot.cc
 )
 add_library(crayon::browser-session ALIAS crayon-browser-session)
 

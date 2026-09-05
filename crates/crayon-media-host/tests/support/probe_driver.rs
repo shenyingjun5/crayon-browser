@@ -28,6 +28,7 @@ async fn cancelling_an_active_probe_drops_its_work() {
         std::future::pending::<Result<(), MediaHostRuntimeError>>().await
     };
     let mut pending = MediaHostPendingQueue::default();
+    let mut players = None;
     let mut output = Vec::new();
     let run = drive_probe(
         probe,
@@ -35,6 +36,7 @@ async fn cancelling_an_active_probe_drops_its_work() {
         true,
         &mut receiver,
         &mut pending,
+        &mut players,
         &mut output,
     );
     let cancel = async {
@@ -65,12 +67,14 @@ async fn queued_navigation_wins_over_a_simultaneously_ready_probe() {
         .await
         .unwrap();
     let mut pending = MediaHostPendingQueue::default();
+    let mut players = None;
     let result = drive_probe(
         async { Ok(()) },
         "active",
         true,
         &mut receiver,
         &mut pending,
+        &mut players,
         &mut Vec::new(),
     )
     .await
@@ -83,6 +87,7 @@ async fn queued_navigation_wins_over_a_simultaneously_ready_probe() {
 async fn queued_stop_from_an_earlier_probe_prevents_any_new_probe_poll() {
     let (_sender, mut receiver) = mpsc::channel(2);
     let mut pending = MediaHostPendingQueue::default();
+    let mut players = None;
     pending
         .accept_during_preflight(
             "old",
@@ -103,6 +108,7 @@ async fn queued_stop_from_an_earlier_probe_prevents_any_new_probe_poll() {
         true,
         &mut receiver,
         &mut pending,
+        &mut players,
         &mut Vec::new(),
     )
     .await
@@ -123,12 +129,14 @@ async fn input_flood_has_a_bounded_processing_budget() {
             .unwrap();
     }
     let mut pending = MediaHostPendingQueue::default();
+    let mut players = None;
     let result = drive_probe(
         async { Ok(()) },
         "active",
         true,
         &mut receiver,
         &mut pending,
+        &mut players,
         &mut Vec::new(),
     )
     .await

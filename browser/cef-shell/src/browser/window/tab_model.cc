@@ -24,6 +24,33 @@ std::optional<TabId> TabModel::CreateTab() {
   return id;
 }
 
+std::optional<TabId> TabModel::AdoptTransferred(TabSnapshot snapshot,
+                                                bool preserve_id) {
+  if (tabs_.size() >= kMaximumTabsPerWindow || snapshot.browser_id <= 0 ||
+      snapshot.lifecycle != TabLifecycle::kReady ||
+      FindByBrowser(snapshot.browser_id)) {
+    return std::nullopt;
+  }
+  TabId id = snapshot.id;
+  if (!preserve_id) {
+    if (next_tab_id_ == 0) {
+      return std::nullopt;
+    }
+    id = next_tab_id_++;
+  } else {
+    if (id == 0 || Find(id)) {
+      return std::nullopt;
+    }
+    if (id >= next_tab_id_) {
+      next_tab_id_ = id == UINT64_MAX ? 0 : id + 1;
+    }
+  }
+  snapshot.id = id;
+  tabs_.push_back(std::move(snapshot));
+  active_tab_ = id;
+  return id;
+}
+
 bool TabModel::BindBrowser(TabId tab_id, int browser_id) {
   if (browser_id <= 0 || FindByBrowser(browser_id)) {
     return false;
@@ -43,6 +70,18 @@ bool TabModel::Activate(TabId tab_id) {
     return false;
   }
   active_tab_ = tab_id;
+  return true;
+}
+
+bool TabModel::MoveTab(std::size_t from_index, std::size_t to_index) {
+  if (from_index >= tabs_.size() || to_index >= tabs_.size() ||
+      from_index == to_index) {
+    return false;
+  }
+  auto tab = std::move(tabs_[from_index]);
+  tabs_.erase(tabs_.begin() + static_cast<std::ptrdiff_t>(from_index));
+  tabs_.insert(tabs_.begin() + static_cast<std::ptrdiff_t>(to_index),
+               std::move(tab));
   return true;
 }
 
@@ -70,6 +109,16 @@ bool TabModel::RequestClose(TabId tab_id) {
     return true;
   }
   tab->lifecycle = TabLifecycle::kClosing;
+  return true;
+}
+
+bool TabModel::CancelClose(TabId tab_id) {
+  TabSnapshot *tab = FindMutable(tab_id);
+  if (!tab || tab->lifecycle != TabLifecycle::kClosing ||
+      tab->browser_id <= 0) {
+    return false;
+  }
+  tab->lifecycle = TabLifecycle::kReady;
   return true;
 }
 

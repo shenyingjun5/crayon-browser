@@ -108,6 +108,17 @@ impl MediaPlanningRuntime {
         }
     }
 
+    #[must_use]
+    pub(crate) fn candidate_for_source(
+        &self,
+        tab_id: &TabId,
+        navigation_id: u64,
+        media_url: &str,
+    ) -> Option<CandidateId> {
+        self.candidates
+            .find_id(tab_id, NavigationId::new(navigation_id), media_url)
+    }
+
     /// Ingests a current-navigation URL fact. Only facts carrying a verified
     /// playback proof become user-visible candidates; network facts enrich
     /// the same candidate without granting eligibility.

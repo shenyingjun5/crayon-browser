@@ -69,9 +69,15 @@ bool IsDomainLike(std::string_view text) noexcept {
   return true;
 }
 
-bool StartsWith(std::string_view text, std::string_view prefix) noexcept {
-  return text.size() >= prefix.size() &&
-         text.compare(0, prefix.size(), prefix) == 0;
+bool StartsWithAsciiCaseInsensitive(std::string_view text,
+                                    std::string_view prefix) noexcept {
+  if (text.size() < prefix.size()) return false;
+  for (std::size_t index = 0; index < prefix.size(); ++index) {
+    const auto left = static_cast<unsigned char>(text[index]);
+    const auto right = static_cast<unsigned char>(prefix[index]);
+    if (std::tolower(left) != std::tolower(right)) return false;
+  }
+  return true;
 }
 
 }  // namespace
@@ -92,14 +98,14 @@ OmniboxParseResult ParseOmniboxInput(const OmniboxInput& input) noexcept {
 
   // 1. Dangerous schemes
   for (std::string_view scheme : kDangerousSchemes) {
-    if (StartsWith(text, scheme)) {
+    if (StartsWithAsciiCaseInsensitive(text, scheme)) {
       return OmniboxParseResult::kDangerous;
     }
   }
 
   // 2. Allowed schemes
   for (std::string_view scheme : kAllowedSchemes) {
-    if (StartsWith(text, scheme)) {
+    if (StartsWithAsciiCaseInsensitive(text, scheme)) {
       return OmniboxParseResult::kValidUrl;
     }
   }

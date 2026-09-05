@@ -31,7 +31,7 @@
 | MRT | [markdown-runtime-roadmap.md](markdown-runtime-roadmap.md) | Markdown Runtime Extension Framework：闭合扩展 API、Highlight/KaTeX 与后续图表/演示门禁 | `MRT-01..09 DONE`（09 为 Windows 首发口径，macOS addendum 待补）；`MRT-10..19` 属第二期 |
 | SDK | [cast-sdk-integration-roadmap.md](cast-sdk-integration-roadmap.md) | 固定源码 Cast-SDK facade、发现、连接和控制；后续 Partner Cast facade | `SDK-01..14 DONE`；`SDK-15/16` 等 HUB/外部已批准 API |
 | PLT | [desktop-platform-adapters-roadmap.md](desktop-platform-adapters-roadmap.md) | Windows/macOS 存储、网络、生命周期、更新和客户端交接 | `PLT-01/02/W04/M04 DONE`；`PLT-M05 IN_PROGRESS`（macOS 后续切片暂缓），`PLT-W05a/W05b/W05c0 DONE`、`W05c BLOCKED` |
-| PLT 内部切片 | [desktop-shell-roadmap.md](desktop-shell-roadmap.md) | 自定义外壳＋Alloy；一期全功能迁移、可替换内容视图与双平台门禁 | `PLT-SHELL-00/01 VERIFIED、02 READY`；默认产品未切换，不重复计入顶层总数 |
+| PLT 内部切片 | [desktop-shell-roadmap.md](desktop-shell-roadmap.md) | 自定义外壳＋Alloy；一期全功能迁移、可替换内容视图与双平台门禁 | 共享 `00..02`、Windows `03W..21W` VERIFIED；下一原子项为 Cast R09 几何，不重复计入顶层总数 |
 | PRV | [privacy-security-roadmap.md](privacy-security-roadmap.md) | Profile、隐私、安全、日志和删除语义 | `PRV-01..12` 已完成或 VERIFIED；一期核心 `PRV-13A`、第二期扩展 `PRV-13B` |
 | CNT | [content-intelligence-roadmap.md](content-intelligence-roadmap.md) | 页面数据/Markdown 与第二阶段模型总结 | C1 数据面 `CNT-01..10 DONE/VERIFIED`；一期产品装配 `CNT-17..20 DONE`，`CNT-21W` 等 `PRV-13AW` 后总 Review；`CNT-11..16` 第二期 |
 | AGT | [agent-access-roadmap.md](agent-access-roadmap.md) | CAAP、tool registry、CLI/MCP、高性能读页和授权操作 | A0 完成；`AGT-07/15 VERIFIED`，`AGT-12C/13/14` 按装配依赖后续推进 |
@@ -48,7 +48,7 @@
 
 ### 自定义外壳＋Alloy（2026-09-04 最新决策）
 
-- 用户批准长期自定义 Shell＋Alloy，一期同步调整；[PLT-SHELL](desktop-shell-roadmap.md) 是当前宿主迁移队列，REL §5 是一期总依赖。00 方案与 01 命令 owner VERIFIED：Debug/Release 无 GUI 契约各 1/1、Debug 连续 3 次、ASan/UBSan 通过；关闭重入修复与启动超时原始证据见 §9。下一步 02 内容视图契约 READY、03M 本地 Alloy 宿主与复用窗口 Harness，再逐项接线。默认产品未切换，Windows 独立验收与首发政策不变。
+- 用户批准长期自定义 Shell＋Alloy，一期同步调整；[PLT-SHELL](desktop-shell-roadmap.md) 是当前宿主迁移队列，REL §5 是一期总依赖。共享 00..02、Windows 03W..22W 与 PLT-CAST-R09/R10W 已 VERIFIED；真实 Alloy 候选 window 已接入网页 Markdown→MDV、投屏选择/播控、受限媒体几何和 Browser-owned 悬浮入口。23W 的 Debug/Release ALL_BUILD、各 125 项 CTest（含用户真实物理点击）、三语言生成与 Release artifact/guard 已闭合，当前只被真实系统语言/IME/Narrator/原生 200% DPI 矩阵阻塞；24W 默认切换不得越过，默认产品仍为 Chrome-style。Windows 首发政策不变，macOS 特有迁移与验证后续保留。
 - 原 R02b/b2 LOCATION 多 Chrome view 方案及“等待选择宿主”由本决定取代；旧记录保留为历史，不标完成、不继续原路线。R08 候选宿主接线不等待最终默认切换，防止循环依赖。
 - 浏览器日用基线、三闭环、三语言和原隐私/设备/发布门禁全部保留。新增宿主相关证据不能复用旧 Chrome UI 通过结论；其他 WebView/Chrome 特殊容器只预留边界，不在一期伪造多引擎支持。
 - 测试先无 GUI，后续 Alloy Harness 同进程/专用窗口复用标签；不接管用户日用窗口，不默认抢焦点。需要前台输入/重启新原生二进制的例外须提前说明。
@@ -60,7 +60,7 @@
 - 2026-09-04 续测：R08u2r 测试就绪修正后 Debug/Release 原生入口专项各连续 8 次通过；本轮 Debug 无界面定向 8/8，Release 定向 4/8、4 项启动超时，采样的 observer 停在 `_dyld_start`。最终完整回归仍未闭合，R08u2r/R04a/R04b2 保留 IMPLEMENTED，详见重设计 Roadmap §18；R04b2 已接 renderer 换源/删除的私有 CEF v2，并非 MHV2/runtime 或默认三入口产品装配完成。
 - 2026-09-04 用户明确要求入口代码先做：R08u1 共享多视频选择与 R08u2 原生三入口组件 VERIFIED；新旧原生 unit 已能执行，历史 `_dyld_start` 启动阻塞不再是本次结论。新两专项在 Debug/Release 各连续 3 次通过，两套完整回归各 95/96，剩余媒体导航播放资格失败；状态/Review/完整证据见重设计 Roadmap §17。默认产品 Views 宿主与 MHV2/runtime 接线仍未完成，不把组件通过当作产品上线。
 - 用户新增要求由[投屏体验重设计 Roadmap](cast-experience-redesign-roadmap.md)统一承接：代理环境域名 Direct、网址框后常驻灰态入口、多视频/设备显式选择、播放器悬浮快捷入口。
-- `PLT-CAST-R00/R01/R02a/R03a/R00b/R07a VERIFIED`（方案/契约、Mac CEF 独立宿主原语、内部预检原因保留、范围调整、投屏码解析不再自动播放）；R07a 的 Mac Debug/Release 各 92/92，查找设备后须明确开始。§18 新发现：固定 CEF 单窗口最多一个 Chrome BrowserView，R02b 多 view 设计回退 IMPLEMENTED/REQUEST_CHANGES，R02b2 BLOCKED 等待替代宿主范围决定；默认窗口未改变。R04a 已修复导航/Blob/MSE/重启 fixture 时序，R04b1 实例/source 身份已实现，完整双配置复验与后续 renderer/MHV2/runtime 接线分别记录。用户明确不处理代理专项，R05/R06 撤出队列，不等待接收端代检接口。
+- `PLT-CAST-R00/R01/R02a/R03a/R03b/R00b/R04/R07/R08W VERIFIED`。R07b1..b4 已闭合草稿 codec、唯一 runtime owner、CastUsecase 显式 Connect/Prepare/Commit 与 Windows MHV2 transport/Browser adapter；R03b 保留旧 kind 8/MHV1，新增协商式 `CAP_REASON`/kind 9 与 `CAP_SESSION`/kind 10；21W/R08W 已在真实 Windows Alloy surface 验证多视频、设备、连接零播放、超时重试、显式提交和 generation 播控。下一切片为 R09 受限几何；默认产品与 Direct/Relay 真机仍未上线。用户明确不处理代理专项，R05/R06 撤出队列，不等待接收端代检接口。
 - 这些是既有 PLT 的内部切片，不增加顶层 297 项统计，不覆盖下列平台剩余门禁；原 LAN b4 公网阻塞仍保留，b3c 视觉/picker 核对由 R08M 承接。
 
 ### 第一期可直接领取

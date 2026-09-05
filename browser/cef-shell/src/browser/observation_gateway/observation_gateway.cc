@@ -8,17 +8,18 @@ namespace {
 
 constexpr std::size_t kMaxTrackedTabs = 64;
 
-}  // namespace
+} // namespace
 
 std::size_t ObservationGateway::AdvanceGeneration(std::uint32_t tab_id,
                                                   std::uint64_t navigation_id) {
-  auto it = std::find_if(tabs_.begin(), tabs_.end(),
-                         [tab_id](const std::pair<std::uint32_t, TabState>& entry) {
-                           return entry.first == tab_id;
-                         });
+  auto it =
+      std::find_if(tabs_.begin(), tabs_.end(),
+                   [tab_id](const std::pair<std::uint32_t, TabState> &entry) {
+                     return entry.first == tab_id;
+                   });
   if (it == tabs_.end()) {
     if (tabs_.size() >= kMaxTrackedTabs) {
-      return 0;  // bounded map; untracked tabs cannot fence
+      return 0; // bounded map; untracked tabs cannot fence
     }
     tabs_.emplace_back(tab_id, TabState{});
     it = std::prev(tabs_.end());
@@ -29,7 +30,7 @@ std::size_t ObservationGateway::AdvanceGeneration(std::uint32_t tab_id,
   // Drop every queued event of an older generation for this tab.
   const auto before = queue_.size();
   queue_.erase(std::remove_if(queue_.begin(), queue_.end(),
-                              [tab_id, generation](const GatewayEvent& event) {
+                              [tab_id, generation](const GatewayEvent &event) {
                                 return event.tab_id == tab_id &&
                                        event.generation < generation;
                               }),
@@ -39,11 +40,11 @@ std::size_t ObservationGateway::AdvanceGeneration(std::uint32_t tab_id,
 }
 
 std::uint32_t ObservationGateway::GenerationOf(std::uint32_t tab_id) const {
-  const auto it = std::find_if(
-      tabs_.begin(), tabs_.end(),
-      [tab_id](const std::pair<std::uint32_t, TabState>& entry) {
-        return entry.first == tab_id;
-      });
+  const auto it =
+      std::find_if(tabs_.begin(), tabs_.end(),
+                   [tab_id](const std::pair<std::uint32_t, TabState> &entry) {
+                     return entry.first == tab_id;
+                   });
   return it == tabs_.end() ? 0 : it->second.generation;
 }
 
@@ -51,11 +52,11 @@ GatewayResult ObservationGateway::Submit(GatewayEvent event) {
   // Fence first: events stamped with an older generation than the
   // tab's current one are stale (BR-007-shaped stragglers).
   event.generation = GenerationOf(event.tab_id);
-  const auto tab_it = std::find_if(
-      tabs_.begin(), tabs_.end(),
-      [&event](const std::pair<std::uint32_t, TabState>& entry) {
-        return entry.first == event.tab_id;
-      });
+  const auto tab_it =
+      std::find_if(tabs_.begin(), tabs_.end(),
+                   [&event](const std::pair<std::uint32_t, TabState> &entry) {
+                     return entry.first == event.tab_id;
+                   });
   // Precheck (CEF-12 review follow-up): reject stragglers carrying a
   // navigation id other than the tab's current one before queueing,
   // instead of relying on downstream navigation matching.
@@ -74,19 +75,54 @@ GatewayResult ObservationGateway::Submit(GatewayEvent event) {
 
 GatewayResult ObservationGateway::SubmitMedia(
     std::uint32_t tab_id, std::uint64_t navigation_id,
-    const renderer::MediaObservation& observation, bool eme_encrypted) {
+    const renderer::MediaObservation &observation,
+    input_proof::PlayerReference player_reference, bool eme_encrypted) {
+  if (player_reference.instance_id == 0 ||
+      player_reference.source_revision == 0) {
+    ++dropped_invalid_player_reference_total_;
+    return GatewayResult::kDroppedInvalidPlayerReference;
+  }
+  if (!renderer::HasCanonicalMediaGeometry(observation)) {
+    ++dropped_invalid_geometry_total_;
+    return GatewayResult::kDroppedInvalidGeometry;
+  }
   GatewayEvent event;
   event.source = EventSource::kMedia;
   event.tab_id = tab_id;
   event.navigation_id = navigation_id;
   event.media = observation;
+  event.player_reference = player_reference;
   event.eme_encrypted = eme_encrypted;
+  return Submit(event);
+}
+
+GatewayResult ObservationGateway::SubmitPlayerRemoved(
+    std::uint32_t tab_id, std::uint64_t navigation_id,
+    const renderer::MediaObservation &observation,
+    input_proof::PlayerReference player_reference) {
+  if (player_reference.instance_id == 0 ||
+      player_reference.source_revision == 0) {
+    ++dropped_invalid_player_reference_total_;
+    return GatewayResult::kDroppedInvalidPlayerReference;
+  }
+  if (observation.geometry_supported ||
+      !renderer::HasCanonicalMediaGeometry(observation)) {
+    ++dropped_invalid_geometry_total_;
+    return GatewayResult::kDroppedInvalidGeometry;
+  }
+  GatewayEvent event;
+  event.source = EventSource::kMedia;
+  event.tab_id = tab_id;
+  event.navigation_id = navigation_id;
+  event.media = observation;
+  event.player_reference = player_reference;
+  event.player_removed = true;
   return Submit(event);
 }
 
 GatewayResult ObservationGateway::SubmitNetwork(
     std::uint32_t tab_id, std::uint64_t navigation_id,
-    const network::NetworkObservation& observation) {
+    const network::NetworkObservation &observation) {
   GatewayEvent event;
   event.source = EventSource::kNetwork;
   event.tab_id = tab_id;
@@ -101,8 +137,10 @@ std::vector<GatewayEvent> ObservationGateway::Drain(std::size_t max_events) {
     return drained;
   }
   const std::size_t count = std::min(max_events, queue_.size());
-  drained.assign(queue_.begin(), queue_.begin() + static_cast<std::ptrdiff_t>(count));
-  queue_.erase(queue_.begin(), queue_.begin() + static_cast<std::ptrdiff_t>(count));
+  drained.assign(queue_.begin(),
+                 queue_.begin() + static_cast<std::ptrdiff_t>(count));
+  queue_.erase(queue_.begin(),
+               queue_.begin() + static_cast<std::ptrdiff_t>(count));
   return drained;
 }
 
@@ -111,7 +149,10 @@ GatewayStats ObservationGateway::stats() const {
   stats.queued = queue_.size();
   stats.dropped_stale_total = dropped_stale_total_;
   stats.dropped_backpressure_total = dropped_backpressure_total_;
+  stats.dropped_invalid_player_reference_total =
+      dropped_invalid_player_reference_total_;
+  stats.dropped_invalid_geometry_total = dropped_invalid_geometry_total_;
   return stats;
 }
 
-}  // namespace crayon::cef_shell::gateway
+} // namespace crayon::cef_shell::gateway

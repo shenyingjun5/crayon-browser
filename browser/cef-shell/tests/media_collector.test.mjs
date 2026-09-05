@@ -16,8 +16,13 @@ function fixture(count = 1) {
       this.paused = true;
       this.ended = false;
       this.listeners = new Map();
+      this.rect = {left: 0, top: 0, right: 320, bottom: 180, width: 320, height: 180};
+      this.rootNode = null;
+      this.occluded = false;
     }
-    getBoundingClientRect() { return {left: 0, top: 0, right: 320, bottom: 180, width: 320, height: 180}; }
+    getBoundingClientRect() { return this.rect; }
+    getRootNode() { return this.rootNode ?? document; }
+    contains(value) { return value === this; }
     addEventListener(name, fn) {
       const list = this.listeners.get(name) ?? new Set();
       list.add(fn);
@@ -33,21 +38,29 @@ function fixture(count = 1) {
   let documentQueries = 0;
   let mutation;
   let tick;
-  const context = vm.createContext({
-    HTMLMediaElement: Media,
-    MediaStream: class {},
-    innerWidth: 800, innerHeight: 600,
-    document: {querySelectorAll: () => {
+  const document = {
+    fullscreenElement: null,
+    pictureInPictureElement: null,
+    elementFromPoint: () => elements.find(e => e.isConnected && !e.occluded) ?? null,
+    querySelectorAll: () => {
       documentQueries += 1;
       return elements.filter(e => e.isConnected);
-    }},
-    getComputedStyle: () => ({display: 'block', visibility: 'visible'}),
+    },
+  };
+  const context = vm.createContext({
+    HTMLMediaElement: Media,
+    HTMLVideoElement: Media,
+    MediaStream: class {},
+    innerWidth: 800, innerHeight: 600,
+    document,
+    getComputedStyle: () => ({display: 'block', visibility: 'visible',
+      opacity: '1', pointerEvents: 'auto'}),
     MutationObserver: class { constructor(fn) { mutation = fn; } observe() {} },
     setInterval: fn => { tick = fn; },
     crayonMediaObservationNative: (...args) => messages.push(args),
   });
   vm.runInContext(script, context);
-  return {elements, messages, tick: () => tick(),
+  return {document, elements, messages, tick: () => tick(),
     queries: () => documentQueries,
     mutate: () => mutation([{addedNodes: elements, removedNodes: elements.filter(e => !e.isConnected)}]),
     stream: () => vm.runInContext('new MediaStream()', context),
@@ -58,7 +71,8 @@ test('same URL players keep distinct identity and stable progression epoch', () 
   const f = fixture(2);
   assert.equal(f.messages.length, 2);
   assert.notEqual(f.messages[0][0], f.messages[1][0]);
-  assert.equal(f.messages[0].length, 9);
+  assert.equal(f.messages[0].length, 17);
+  assert.equal(f.messages[0][9], 0);
   assert.equal(f.messages[0][7], 1);
   f.elements[0].currentTime = 2;
   f.elements[0].event('timeupdate');
@@ -97,7 +111,9 @@ test('removal detaches listeners, frees capacity and never reuses identity', () 
   removed.isConnected = false;
   f.mutate();
   const removal = f.messages.find(m => m[8]);
-  assert.deepEqual(removal, [firstId, 0, 0, '', 0, 0, false, 1, true]);
+  assert.deepEqual(removal,
+    [firstId, 0, 0, '', 0, 0, false, 1, true, 0,
+      false, 0, 0, 0, 0, 0, 0]);
   assert.equal(f.messages.filter(m => !m[8]).length, 17);
   assert.equal([...removed.listeners.values()].reduce((n, s) => n + s.size, 0), 0);
   const before = f.messages.length;
@@ -141,4 +157,39 @@ test('ordinary DOM changes and polling do not rescan the whole document', () => 
   f.elements[0].isConnected = false;
   f.mutate();
   assert.equal(f.queries(), 2);
+});
+
+test('geometry is bounded, refreshed, and closed for unsupported surfaces', () => {
+  const f = fixture();
+  const e = f.elements[0];
+  assert.deepEqual(f.messages.at(-1).slice(10),
+    [true, 0, 0, 320, 180, 800, 600]);
+  e.rect = {left: -20, top: 40, right: 300, bottom: 220,
+    width: 320, height: 180};
+  f.tick();
+  assert.deepEqual(f.messages.at(-1).slice(10),
+    [true, -20, 40, 320, 180, 800, 600]);
+
+  e.occluded = true;
+  f.tick();
+  assert.deepEqual(f.messages.at(-1).slice(10),
+    [false, 0, 0, 0, 0, 0, 0]);
+  e.occluded = false;
+  e.rootNode = {};
+  f.tick();
+  assert.equal(f.messages.at(-1)[10], false);
+  e.rootNode = null;
+  f.document.fullscreenElement = e;
+  f.tick();
+  assert.equal(f.messages.at(-1)[10], false);
+  f.document.fullscreenElement = null;
+  f.document.pictureInPictureElement = e;
+  f.tick();
+  assert.equal(f.messages.at(-1)[10], false);
+  f.document.pictureInPictureElement = null;
+  e.rect = {left: 0, top: 0, right: 40000, bottom: 180,
+    width: 40000, height: 180};
+  f.tick();
+  assert.deepEqual(f.messages.at(-1).slice(10),
+    [false, 0, 0, 0, 0, 0, 0]);
 });

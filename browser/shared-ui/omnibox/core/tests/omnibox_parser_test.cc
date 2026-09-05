@@ -61,6 +61,12 @@ bool DangerousSchemesAreBlocked() {
         OmniboxParseResult::kDangerous);
   CHECK(ParseOmniboxInput(*OmniboxInput::TryCreate("vbscript:msgbox(1)")) ==
         OmniboxParseResult::kDangerous);
+  CHECK(ParseOmniboxInput(*OmniboxInput::TryCreate("JaVaScRiPt:alert(1)")) ==
+        OmniboxParseResult::kDangerous);
+  CHECK(ParseOmniboxInput(*OmniboxInput::TryCreate("DATA:text/plain,x")) ==
+        OmniboxParseResult::kDangerous);
+  CHECK(ParseOmniboxInput(*OmniboxInput::TryCreate("HTTPS://example.test")) ==
+        OmniboxParseResult::kValidUrl);
   return true;
 }
 

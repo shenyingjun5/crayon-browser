@@ -10,13 +10,13 @@ using crayon::browser::cef_shell::context::BuildProfileCachePath;
 using crayon::browser::cef_shell::context::IsValidProfileId;
 using crayon::browser::cef_shell::context::MapProfileIdToDirectoryName;
 
-#define CHECK(condition)                                    \
-  do {                                                      \
-    if (!(condition)) {                                     \
-      std::cerr << __FILE__ << ':' << __LINE__              \
-                << " CHECK failed: " << #condition << '\n'; \
-      return false;                                         \
-    }                                                       \
+#define CHECK(condition)                                                       \
+  do {                                                                         \
+    if (!(condition)) {                                                        \
+      std::cerr << __FILE__ << ':' << __LINE__                                 \
+                << " CHECK failed: " << #condition << '\n';                    \
+      return false;                                                            \
+    }                                                                          \
   } while (false)
 
 bool EmptyProfileIdRejected() {
@@ -46,7 +46,7 @@ bool ProfileIdWithSpaceRejected() {
 }
 
 bool ProfileIdWithUnicodeRejected() {
-  CHECK(!IsValidProfileId("\xe4\xb8\xad"));  // UTF-8 "中"
+  CHECK(!IsValidProfileId("\xe4\xb8\xad")); // UTF-8 "中"
   return true;
 }
 
@@ -63,7 +63,7 @@ bool MappingIsDeterministic() {
   const auto a1 = MapProfileIdToDirectoryName("default");
   const auto a2 = MapProfileIdToDirectoryName("default");
   CHECK(a1 == a2);
-  CHECK(a1.size() == 32);  // 16 bytes as hex
+  CHECK(a1.size() == 32); // 16 bytes as hex
   return true;
 }
 
@@ -82,9 +82,9 @@ bool ProfileIdNotInHashOutput() {
 
 bool BuildProfileCachePathStructure() {
   const auto path = BuildProfileCachePath("/tmp/crayon", "default");
-  CHECK(path.find("/tmp/crayon/profiles/") == 0);
+  CHECK(path.find("/tmp/crayon/profile-") == 0);
   CHECK(path.back() == '/');
-  CHECK(path.find("default") == std::string::npos);  // ID not literal
+  CHECK(path.find("default") == std::string::npos); // ID not literal
   return true;
 }
 
@@ -100,19 +100,14 @@ bool EmptyBasePathReturnsEmpty() {
   return true;
 }
 
-}  // namespace
+} // namespace
 
 int main() {
-  if (!EmptyProfileIdRejected() ||
-      !TooLongProfileIdRejected() ||
-      !ProfileIdWithPathSeparatorRejected() ||
-      !ProfileIdWithDotRejected() ||
-      !ProfileIdWithSpaceRejected() ||
-      !ProfileIdWithUnicodeRejected() ||
-      !ValidProfileIdAccepted() ||
-      !MappingIsDeterministic() ||
-      !DifferentIdsMapDifferently() ||
-      !ProfileIdNotInHashOutput() ||
+  if (!EmptyProfileIdRejected() || !TooLongProfileIdRejected() ||
+      !ProfileIdWithPathSeparatorRejected() || !ProfileIdWithDotRejected() ||
+      !ProfileIdWithSpaceRejected() || !ProfileIdWithUnicodeRejected() ||
+      !ValidProfileIdAccepted() || !MappingIsDeterministic() ||
+      !DifferentIdsMapDifferently() || !ProfileIdNotInHashOutput() ||
       !BuildProfileCachePathStructure() ||
       !BuildProfileCachePathHandlesTrailingSlash() ||
       !EmptyBasePathReturnsEmpty()) {

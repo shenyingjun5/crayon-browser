@@ -8,6 +8,9 @@ target_include_directories(crayon-cef-shell-observation-gateway
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../..>
 )
 target_compile_features(crayon-cef-shell-observation-gateway PUBLIC cxx_std_17)
+target_link_libraries(crayon-cef-shell-observation-gateway
+  PUBLIC crayon::cef-shell-media-observer
+)
 set_target_properties(crayon-cef-shell-observation-gateway PROPERTIES
   CXX_EXTENSIONS OFF
 )

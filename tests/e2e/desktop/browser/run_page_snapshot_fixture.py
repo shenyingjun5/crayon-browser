@@ -45,6 +45,11 @@ PERF_FIXTURE = f"""<!doctype html><meta charset=utf-8><title>Performance fixture
 <main><h1>Performance fixture heading</h1>{PERF_PARAGRAPHS}</main>"""
 RECOVERY_FIXTURE = """<!doctype html><meta charset=utf-8><title>Recovery fixture</title>
 <main><h1>Recovery fixture heading</h1><p>Recovered after lifecycle fence.</p></main>"""
+ALLOY_WINDOW_FIXTURE = """<!doctype html><meta charset=utf-8><title>Alloy window fixture</title>
+<button id=open style='position:fixed;inset:0'>Open popup</button>
+<script>window.open('/programmatic-popup.html');
+document.querySelector('#open').addEventListener('click', () =>
+  window.open('/nav-final.html'), {once:true});</script>"""
 MEDIA_FIXTURE = """<!doctype html><meta charset=utf-8><title>Media fixture</title>
 <main><h1>Media fixture</h1><audio controls src=/tone.wav></audio></main>"""
 MEDIA_CAST_UI_WIN_FIXTURE = """<!doctype html><meta charset=utf-8><title>Media fixture</title>
@@ -53,6 +58,15 @@ MEDIA_CAST_UI_WIN_FIXTURE = """<!doctype html><meta charset=utf-8><title>Media f
 <script>const startPlayback=document.querySelector('#start-playback');
 startPlayback.addEventListener('click', () => {
   const media=document.querySelector('audio'); media.muted=true; media.play();
+  startPlayback.remove();
+}, {once:true});</script>"""
+MEDIA_GEOMETRY_WIN_FIXTURE = """<!doctype html><meta charset=utf-8><title>Video geometry fixture</title>
+<main><h1>Video geometry fixture</h1>
+<video width=640 height=360 controls src=/clear.mp4></video>
+<button id=start-playback style='position:fixed;inset:0;z-index:10'>Start playback</button></main>
+<script>const startPlayback=document.querySelector('#start-playback');
+startPlayback.addEventListener('click', () => {
+  const media=document.querySelector('video'); media.muted=true; media.play();
   startPlayback.remove();
 }, {once:true});</script>"""
 MEDIA_MP4_FIXTURE = """<!doctype html><meta charset=utf-8><title>MP4 fixture</title>
@@ -95,6 +109,7 @@ AUTOMATED_SCENARIOS = (
     "media-player-replace",
     "media-cast-ui",
     "media-cast-ui-win",
+    "media-geometry-win",
     "media-hls",
     "media-dash",
     "media-credential",
@@ -119,12 +134,24 @@ CONTENT_SCENARIOS = (
     "perf",
 )
 MANUAL_SCENARIOS = ("media-manual",)
+ALLOY_SCENARIOS = (
+    "alloy-tabs",
+    "alloy-page-markdown",
+    "alloy-navigation",
+    "alloy-page-tools",
+    "alloy-profiles",
+    "alloy-security",
+    "alloy-windows",
+    "alloy-cast-overlay",
+)
 PLATFORM_SCENARIOS = {
     "media-navigation": "darwin",
     "media-source-reload": "darwin",
     "media-player-replace": "darwin",
     "media-cast-ui": "darwin",
     "media-cast-ui-win": "win32",
+    "media-geometry-win": "win32",
+    "alloy-cast-overlay": "win32",
 }
 PERF_SAMPLES = 20
 FORBIDDEN_CEF_ERROR = re.compile(
@@ -349,9 +376,77 @@ class FixtureServer(http.server.ThreadingHTTPServer):
 
     def handle_error(self, request, client_address):
         _, error, _ = sys.exc_info()
-        if isinstance(error, (BrokenPipeError, ConnectionResetError)):
+        if isinstance(
+            error, (BrokenPipeError, ConnectionAbortedError, ConnectionResetError)
+        ):
             return
         super().handle_error(request, client_address)
+
+
+class FixtureHandler(http.server.SimpleHTTPRequestHandler):
+    """Loopback-only deterministic routes used by Alloy navigation tests."""
+
+    def do_GET(self):
+        if self.path == "/nav-redirect":
+            self.send_response(302)
+            self.send_header("Location", "/nav-final.html")
+            self.end_headers()
+            return
+        if self.path == "/nav-slow":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            chunk = b"<p>loading</p>" * 256
+            try:
+                for _ in range(500):
+                    self.wfile.write(chunk)
+                    self.wfile.flush()
+                    if self.server.stop_event.wait(0.01):
+                        break
+            except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+                pass
+            return
+        if self.path == "/download-safe":
+            payload = b"crayon-alloy-download-fixture\n"
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header(
+                "Content-Disposition", 'attachment; filename="alloy-safe.txt"'
+            )
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
+        profile_cookie_values = {
+            "/profile-cookie-set-a": "a",
+            "/profile-cookie-set-b": "b",
+            "/profile-cookie-set-private": "private",
+        }
+        if self.path in profile_cookie_values:
+            value = profile_cookie_values[self.path]
+            payload = (
+                "<!doctype html><meta charset=utf-8><script>"
+                f"document.cookie='profile_cookie={value}; Path=/; SameSite=Lax';"
+                "document.title='set:'+document.cookie;</script>"
+            ).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
+        if self.path == "/profile-cookie-read":
+            payload = (
+                b"<!doctype html><meta charset=utf-8><script>"
+                b"document.title='read:'+document.cookie;</script>"
+            )
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
+        super().do_GET()
 
 
 def select_scenarios(
@@ -366,7 +461,7 @@ def select_scenarios(
         return automated
     if selection == "content":
         return CONTENT_SCENARIOS
-    if selection in automated + MANUAL_SCENARIOS:
+    if selection in automated + MANUAL_SCENARIOS + ALLOY_SCENARIOS:
         return (selection,)
     return None
 
@@ -391,6 +486,29 @@ def main() -> int:
         root_path.joinpath("recovery.html").write_text(
             RECOVERY_FIXTURE, encoding="utf-8"
         )
+        root_path.joinpath("nav-final.html").write_text(
+            "<!doctype html><title>Secure</title><main>redirect target</main>",
+            encoding="utf-8",
+        )
+        root_path.joinpath("alloy-window.html").write_text(
+            ALLOY_WINDOW_FIXTURE, encoding="utf-8"
+        )
+        root_path.joinpath("alloy-security.html").write_text(
+            "<!doctype html><meta charset=utf-8>"
+            "<title>permission:pending</title><script>"
+            "Notification.requestPermission().then(result => "
+            "document.title='permission:'+result).catch(() => "
+            "document.title='permission:error');</script>",
+            encoding="utf-8",
+        )
+        root_path.joinpath("alloy-page-tools.html").write_text(
+            "<!doctype html><meta charset=utf-8><title>Alloy page tools</title>"
+            "<main>alloyneedle one <b>alloyneedle</b> two alloyneedle three</main>",
+            encoding="utf-8",
+        )
+        root_path.joinpath("programmatic-popup.html").write_text(
+            "<!doctype html><title>denied</title>", encoding="utf-8"
+        )
         root_path.joinpath("security.html").write_text(
             SECURITY_FIXTURE, encoding="utf-8"
         )
@@ -401,6 +519,9 @@ def main() -> int:
         root_path.joinpath("media.html").write_text(MEDIA_FIXTURE, encoding="utf-8")
         root_path.joinpath("media-cast-ui-win.html").write_text(
             MEDIA_CAST_UI_WIN_FIXTURE, encoding="utf-8"
+        )
+        root_path.joinpath("media-geometry-win.html").write_text(
+            MEDIA_GEOMETRY_WIN_FIXTURE, encoding="utf-8"
         )
         root_path.joinpath("media-mp4.html").write_text(MEDIA_MP4_FIXTURE, encoding="utf-8")
         root_path.joinpath("media-hls.html").write_text(MEDIA_HLS_FIXTURE, encoding="utf-8")
@@ -458,10 +579,11 @@ def main() -> int:
                 "AAAAIGZ0eXBpc281AAACAGlzbzVpc282YXYwMW1wNDEAAALbbW9vdgAAAGxtdmhkAAAAAAAAAAAAAAAAAAAD6AAAAAAAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAd10cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAEAAAABAAAAAAAF5bWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAAAoAAAAAABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABJG1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAORzdGJsAAAAmHN0c2QAAAAAAAAAAQAAAIhhdjAxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAEAAQABIAAAASAAAAAAAAAABF0xhdmM2Mi4yOC4xMDAgbGlic3Z0YXYxAAAAAAAAAAAAGP//AAAAGGF2MUOBAAwACgoAAAACr/+AXwAIAAAACmZpZWwBAAAAABBwYXNwAAAAAQAAAAEAAAAQc3R0cwAAAAAAAAAAAAAAEHN0c2MAAAAAAAAAAAAAABRzdHN6AAAAAAAAAAAAAAAAAAAAEHN0Y28AAAAAAAAAAAAAAChtdmV4AAAAIHRyZXgAAAAAAAAAAQAAAAEAAAAAAAAAAAAAAAAAAABidWR0YQAAAFptZXRhAAAAAAAAACFoZGxyAAAAAAAAAABtZGlyYXBwbAAAAAAAAAAAAAAAAC1pbHN0AAAAJal0b28AAAAdZGF0YQAAAAEAAAAATGF2ZjYyLjEyLjEwMAAAAJBtb29mAAAAEG1maGQAAAAAAAAAAQAAAHh0cmFmAAAAHHRmaGQAAgA4AAAAAQAACAAAAAAcAQEAAAAAABR0ZmR0AQAAAAAAAAAAAAAAAAAAQHRydW4AAAIFAAAACgAAAJgCAAAAAAAAHAAAAEwAAAADAAAAEwAAAAMAAAAmAAAAAwAAABMAAAADAAAAEgAAANptZGF0CgoAAAACr/+JXyAIMg4QANkCG2zTQgAACJQQpjIRKAgAJJJJGbYAAAEAAYAAnBAyESgEAQSSABG2AAABAAGAAJzoMhEoAoQEkm2RtgAAAQABgACaoDIRMAMACSVtI5AAAAIAAwAAmEAaAdgyETAGABba2yOQAAACAAMAAJhAGgG4MhEoBgQG2wARtgAAAQABgACaoDIRMAsADbdtI5AAAAIAAwAAmEAaAdgyETAOABbaACOQAAACAAMAAJhAGgGIMhAwEgIAAAAjkAAAAgAAAJfAAAAAQ21mcmEAAAArdGZyYQEAAAAAAAABAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAL7AQEBAAAAEG1mcm8AAAAAAAAAQw=="
             )
         )
-        handler = lambda *args, **kwargs: http.server.SimpleHTTPRequestHandler(
+        handler = lambda *args, **kwargs: FixtureHandler(
             *args, directory=root, **kwargs
         )
         server = FixtureServer(("127.0.0.1", 0), handler)
+        server.stop_event = threading.Event()
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
@@ -483,6 +605,8 @@ def main() -> int:
                     "media-player-replace": "media-mp4.html",
                     "media-cast-ui": "media-mp4.html",
                     "media-cast-ui-win": "media-cast-ui-win.html",
+                    "media-geometry-win": "media-geometry-win.html",
+                    "alloy-cast-overlay": "media-geometry-win.html",
                     "media-hls": "media-hls.html",
                     "media-dash": "media-dash.html",
                     "media-credential": "media-credential.html",
@@ -494,6 +618,9 @@ def main() -> int:
                     "media-hidden": "media-hidden.html",
                     "media-cross-frame": "media-cross-frame.html",
                     "media-forged": "media-forged.html",
+                    "alloy-security": "alloy-security.html",
+                    "alloy-page-tools": "alloy-page-tools.html",
+                    "alloy-windows": "alloy-window.html",
                 }.get(scenario, "index.html")
                 url = f"http://127.0.0.1:{server.server_port}/{fixture}"
                 runs = PERF_SAMPLES if scenario == "perf" else 1
@@ -527,7 +654,18 @@ def main() -> int:
                             file=sys.stderr,
                         )
                         return process.returncode
-                    if FORBIDDEN_CEF_ERROR.search(stdout + "\n" + stderr):
+                    audit_output = stdout + "\n" + stderr
+                    if (
+                        scenario == "alloy-navigation"
+                        and "alloy_navigation_windows expected_ssl_error=-107"
+                        in stdout
+                    ):
+                        audit_output = "\n".join(
+                            line
+                            for line in audit_output.splitlines()
+                            if "net::ERR_SSL_PROTOCOL_ERROR" not in line
+                        )
+                    if FORBIDDEN_CEF_ERROR.search(audit_output):
                         print(
                             f"snapshot_fixture_forbidden_cef_error scenario={scenario}",
                             file=sys.stderr,
@@ -580,6 +718,7 @@ def main() -> int:
                 ):
                     return 1
         finally:
+            server.stop_event.set()
             server.shutdown()
             thread.join(timeout=5)
     return 0

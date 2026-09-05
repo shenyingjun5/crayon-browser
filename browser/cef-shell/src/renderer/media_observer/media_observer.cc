@@ -1,6 +1,8 @@
 #include "renderer/media_observer/media_observer.h"
 
 #include <algorithm>
+#include <cmath>
+#include <iterator>
 
 namespace crayon::cef_shell::renderer {
 namespace {
@@ -16,6 +18,35 @@ bool HasAsciiControl(const std::string& url) {
 }
 
 }  // namespace
+
+bool HasCanonicalMediaGeometry(const MediaObservation& observation) {
+  const double values[] = {observation.geometry_x,
+                           observation.geometry_y,
+                           observation.geometry_width,
+                           observation.geometry_height,
+                           observation.viewport_width,
+                           observation.viewport_height};
+  if (!std::all_of(std::begin(values), std::end(values),
+                   [](double value) { return std::isfinite(value); })) {
+    return false;
+  }
+  if (!observation.geometry_supported) {
+    return std::all_of(std::begin(values), std::end(values),
+                       [](double value) { return value == 0.0; });
+  }
+  return observation.element_kind == MediaElementKind::kVideo &&
+         observation.visible_fraction > 0.0 &&
+         std::abs(observation.geometry_x) <= kMaxMediaGeometryOffsetDip &&
+         std::abs(observation.geometry_y) <= kMaxMediaGeometryOffsetDip &&
+         observation.geometry_width > 0.0 &&
+         observation.geometry_width <= kMaxMediaGeometryDip &&
+         observation.geometry_height > 0.0 &&
+         observation.geometry_height <= kMaxMediaGeometryDip &&
+         observation.viewport_width > 0.0 &&
+         observation.viewport_width <= kMaxMediaGeometryDip &&
+         observation.viewport_height > 0.0 &&
+         observation.viewport_height <= kMaxMediaGeometryDip;
+}
 
 MediaSourceKind ClassifySourceUrl(const std::string& url,
                                   std::string* normalized) {
@@ -81,6 +112,9 @@ ObserveResult MediaObserver::Observe(MediaObservation observation) {
   if (observation.source_kind != MediaSourceKind::kHttpUrl &&
       !observation.source_url.empty()) {
     return ObserveResult::kDroppedInvalidUrl;
+  }
+  if (!HasCanonicalMediaGeometry(observation)) {
+    return ObserveResult::kDroppedInvalidGeometry;
   }
   observation.source_url = url_less_source ? std::string{} : normalized;
   observation.frame_id = frame_id_;

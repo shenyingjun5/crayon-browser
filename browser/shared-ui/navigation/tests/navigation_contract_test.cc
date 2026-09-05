@@ -12,13 +12,13 @@ using crayon::browser_navigation::IsValid;
 using crayon::browser_navigation::NavigationController;
 using crayon::browser_navigation::SiteIdentity;
 
-#define CHECK(condition)                                    \
-  do {                                                      \
-    if (!(condition)) {                                     \
-      std::cerr << __FILE__ << ':' << __LINE__              \
-                << " CHECK failed: " << #condition << '\n'; \
-      return false;                                         \
-    }                                                       \
+#define CHECK(condition)                                                       \
+  do {                                                                         \
+    if (!(condition)) {                                                        \
+      std::cerr << __FILE__ << ':' << __LINE__                                 \
+                << " CHECK failed: " << #condition << '\n';                    \
+      return false;                                                            \
+    }                                                                          \
   } while (false)
 
 // ---------- SiteIdentity ----------
@@ -35,6 +35,18 @@ bool HttpsIsSecure() {
   return true;
 }
 
+bool HttpsRequiresTrustedCompletion() {
+  CHECK(EvaluateSiteIdentity("HTTPS://example.test", false, false) ==
+        SiteIdentity::kSecurePending);
+  CHECK(EvaluateSiteIdentity("https://example.test", true, false) ==
+        SiteIdentity::kSecure);
+  CHECK(EvaluateSiteIdentity("https://example.test", true, true) ==
+        SiteIdentity::kCertificateError);
+  CHECK(EvaluateSiteIdentity("http://example.test", false, true) ==
+        SiteIdentity::kInsecure);
+  return true;
+}
+
 bool HttpIsInsecure() {
   CHECK(EvaluateSiteIdentity("http://example.test") == SiteIdentity::kInsecure);
   return true;
@@ -48,7 +60,8 @@ bool FileAndCrayonAreLocal() {
 }
 
 bool DangerousSchemesAreBlocked() {
-  CHECK(EvaluateSiteIdentity("javascript:alert(1)") == SiteIdentity::kDangerous);
+  CHECK(EvaluateSiteIdentity("javascript:alert(1)") ==
+        SiteIdentity::kDangerous);
   CHECK(EvaluateSiteIdentity("data:text/html,<script>") ==
         SiteIdentity::kDangerous);
   CHECK(EvaluateSiteIdentity("vbscript:msgbox(1)") == SiteIdentity::kDangerous);
@@ -121,7 +134,7 @@ bool LateEventsAreIgnored() {
   ctrl.SetCanGoBack("tab-1", true);
   // Event for old navigation ID 1 should be ignored
   ctrl.OnNavigationCompleted("tab-1", 1);
-  CHECK(ctrl.IsLoading("tab-1"));  // still loading from nav 2
+  CHECK(ctrl.IsLoading("tab-1")); // still loading from nav 2
   return true;
 }
 
@@ -147,7 +160,7 @@ bool CommandsRespectCapability() {
 
   CHECK(ctrl.GoBack("tab-1"));
   CHECK(ctrl.GoForward("tab-1"));
-  CHECK(!ctrl.Stop("tab-1"));  // no longer loading
+  CHECK(!ctrl.Stop("tab-1")); // no longer loading
   return true;
 }
 
@@ -208,32 +221,24 @@ bool DuplicateTabCreationIgnored() {
   NavigationController ctrl;
   ctrl.OnTabCreated("tab-1");
   ctrl.OnNavigationStarted("tab-1", 1);
-  ctrl.OnTabCreated("tab-1");  // duplicate
-  CHECK(ctrl.CurrentNavigationId("tab-1") == 1);  // original state preserved
+  ctrl.OnTabCreated("tab-1");                    // duplicate
+  CHECK(ctrl.CurrentNavigationId("tab-1") == 1); // original state preserved
   return true;
 }
 
-}  // namespace
+} // namespace
 
 int main() {
-  if (!EmptyUrlIsUnknown() ||
-      !HttpsIsSecure() ||
-      !HttpIsInsecure() ||
-      !FileAndCrayonAreLocal() ||
-      !DangerousSchemesAreBlocked() ||
-      !UnknownSchemeIsUnknown() ||
-      !IsValidCoversAllIdentities() ||
-      !NewTabHasNoNavigation() ||
-      !NavigationStartedSetsLoading() ||
+  if (!EmptyUrlIsUnknown() || !HttpsIsSecure() ||
+      !HttpsRequiresTrustedCompletion() || !HttpIsInsecure() ||
+      !FileAndCrayonAreLocal() || !DangerousSchemesAreBlocked() ||
+      !UnknownSchemeIsUnknown() || !IsValidCoversAllIdentities() ||
+      !NewTabHasNoNavigation() || !NavigationStartedSetsLoading() ||
       !NavigationCompletedClearsLoading() ||
-      !NavigationFailedAlsoClearsLoading() ||
-      !LateEventsAreIgnored() ||
-      !CommandsRespectCapability() ||
-      !TabCloseRemovesState() ||
-      !UnknownTabIsUnavailable() ||
-      !ShutdownClearsAll() ||
-      !MultipleTabsIndependent() ||
-      !NavigationIdZeroIsIgnored() ||
+      !NavigationFailedAlsoClearsLoading() || !LateEventsAreIgnored() ||
+      !CommandsRespectCapability() || !TabCloseRemovesState() ||
+      !UnknownTabIsUnavailable() || !ShutdownClearsAll() ||
+      !MultipleTabsIndependent() || !NavigationIdZeroIsIgnored() ||
       !DuplicateTabCreationIgnored()) {
     return 1;
   }

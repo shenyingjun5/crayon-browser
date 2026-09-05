@@ -17,33 +17,35 @@ using ::crayon::cef_shell::network::NetworkObservation;
 using ::crayon::cef_shell::network::NetworkObserveResult;
 using ::crayon::cef_shell::network::ResourceKind;
 using ::crayon::cef_shell::renderer::ClassifySourceUrl;
+using ::crayon::cef_shell::renderer::HasCanonicalMediaGeometry;
 using ::crayon::cef_shell::renderer::MediaObservation;
 using ::crayon::cef_shell::renderer::MediaPlaybackState;
 using ::crayon::cef_shell::renderer::MediaSourceKind;
 
-bool ValidateMediaObservation(MediaObservation* observation) {
+bool ValidateMediaObservation(MediaObservation *observation) {
   if (!observation || observation->navigation_id == 0 ||
-      observation->element_id == 0) {
+      observation->element_id == 0 ||
+      !HasCanonicalMediaGeometry(*observation)) {
     return false;
   }
   std::string normalized;
   switch (observation->source_kind) {
-    case MediaSourceKind::kHttpUrl:
-      if (ClassifySourceUrl(observation->source_url, &normalized) !=
-          MediaSourceKind::kHttpUrl) {
-        return false;
-      }
-      observation->source_url = std::move(normalized);
-      return true;
-    case MediaSourceKind::kBlobUrl:
-    case MediaSourceKind::kMediaStream:
-    case MediaSourceKind::kUnknown:
-      return observation->source_url.empty();
+  case MediaSourceKind::kHttpUrl:
+    if (ClassifySourceUrl(observation->source_url, &normalized) !=
+        MediaSourceKind::kHttpUrl) {
+      return false;
+    }
+    observation->source_url = std::move(normalized);
+    return true;
+  case MediaSourceKind::kBlobUrl:
+  case MediaSourceKind::kMediaStream:
+  case MediaSourceKind::kUnknown:
+    return observation->source_url.empty();
   }
   return false;
 }
 
-}  // namespace
+} // namespace
 
 CefObservationBridge::CefObservationBridge() = default;
 
@@ -51,7 +53,8 @@ void CefObservationBridge::AdvanceNavigation(CefRefPtr<CefBrowser> browser,
                                              std::uint32_t tab_id,
                                              std::uint64_t navigation_id) {
   CEF_REQUIRE_UI_THREAD();
-  if (!browser || tab_id == 0 || navigation_id == 0) return;
+  if (!browser || tab_id == 0 || navigation_id == 0)
+    return;
   auto [iterator, inserted] = bindings_.try_emplace(browser->GetIdentifier());
   static_cast<void>(inserted);
   static_cast<void>(iterator->second.network_observer.Drain());
@@ -74,7 +77,8 @@ void CefObservationBridge::AdvanceNavigation(CefRefPtr<CefBrowser> browser,
 
 void CefObservationBridge::BindCurrentMainFrame(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
-  if (!browser) return;
+  if (!browser)
+    return;
   const auto found = bindings_.find(browser->GetIdentifier());
   if (found == bindings_.end())
     return;
@@ -96,7 +100,8 @@ void CefObservationBridge::BindCurrentMainFrame(CefRefPtr<CefBrowser> browser) {
 void CefObservationBridge::CloseBrowser(CefRefPtr<CefBrowser> browser,
                                         std::uint32_t tab_id) {
   CEF_REQUIRE_UI_THREAD();
-  if (!browser) return;
+  if (!browser)
+    return;
   static_cast<void>(tab_id);
   const auto found = bindings_.find(browser->GetIdentifier());
   if (found != bindings_.end()) {
@@ -123,9 +128,11 @@ void CefObservationBridge::SetActiveTab(std::uint32_t tab_id) {
 
 void CefObservationBridge::NoteTrustedUserInput(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
-  if (!browser) return;
+  if (!browser)
+    return;
   const auto found = bindings_.find(browser->GetIdentifier());
-  if (found == bindings_.end()) return;
+  if (found == bindings_.end())
+    return;
   input_proof_.NoteUserInput(found->second.tab_id, found->second.navigation_id);
 }
 
@@ -155,8 +162,16 @@ bool CefObservationBridge::OnProcessMessageReceived(
   const std::uint64_t navigation_id = found->second.navigation_id;
   const MediaObservation &observation = envelope->observation;
   if (envelope->removed) {
-    input_proof_.Remove(tab_id, navigation_id, observation.element_id,
-                        envelope->source_epoch);
+    const auto player_reference =
+        input_proof_.Reference(tab_id, navigation_id, observation.element_id);
+    if (player_reference &&
+        input_proof_.Remove(tab_id, navigation_id, observation.element_id,
+                            envelope->source_epoch) &&
+        gateway_.SubmitPlayerRemoved(tab_id, navigation_id, observation,
+                                     *player_reference) ==
+            GatewayResult::kAccepted) {
+      NotifyEventsReady();
+    }
     return true;
   }
   const ProofResult playback_proof =
@@ -188,8 +203,15 @@ bool CefObservationBridge::OnProcessMessageReceived(
     ++diagnostics_.proof_denied_total;
     return true;
   }
+  const auto player_reference =
+      input_proof_.Reference(tab_id, navigation_id, observation.element_id);
+  if (!player_reference) {
+    ++diagnostics_.input_proof_denied_total;
+    ++diagnostics_.proof_denied_total;
+    return true;
+  }
   if (gateway_.SubmitMedia(tab_id, navigation_id, observation,
-                           found->second.eme_encrypted) ==
+                           *player_reference, found->second.eme_encrypted) ==
       GatewayResult::kAccepted) {
     ++diagnostics_.eligible_total;
     NotifyEventsReady();
@@ -203,9 +225,11 @@ CefObservationBridge::CreateResourceRequestHandler(
     CefNetworkResourceCallback callback,
     CefRefPtr<CefBaseRefCounted> callback_owner) {
   CEF_REQUIRE_IO_THREAD();
-  if (!browser) return nullptr;
+  if (!browser)
+    return nullptr;
   const auto binding = BindingForIo(browser->GetIdentifier());
-  if (!binding) return nullptr;
+  if (!binding)
+    return nullptr;
   return CreateNetworkResourceObserver(browser, request, binding->navigation_id,
                                        std::move(callback),
                                        std::move(callback_owner));
@@ -221,15 +245,17 @@ void CefObservationBridge::OnNetworkResourceFact(CefNetworkResourceFact fact) {
   const auto result = found->second.network_observer.Observe(
       std::move(fact.observation), fact.present_header_name,
       fact.observed_at_ms);
-  if (result == NetworkObserveResult::kAccepted) NotifyEventsReady();
+  if (result == NetworkObserveResult::kAccepted)
+    NotifyEventsReady();
 }
 
 std::vector<GatewayEvent> CefObservationBridge::Drain(std::size_t max_events) {
   CEF_REQUIRE_UI_THREAD();
-  if (max_events == 0) return {};
-  for (auto& entry : bindings_) {
-    Binding& binding = entry.second;
-    for (auto& observation : binding.network_observer.Drain()) {
+  if (max_events == 0)
+    return {};
+  for (auto &entry : bindings_) {
+    Binding &binding = entry.second;
+    for (auto &observation : binding.network_observer.Drain()) {
       static_cast<void>(gateway_.SubmitNetwork(
           binding.tab_id, observation.navigation_id, observation));
     }
@@ -267,7 +293,8 @@ CefObservationBridge::BindingForIo(int browser_id) const {
 }
 
 void CefObservationBridge::NotifyEventsReady() {
-  if (events_ready_callback_) events_ready_callback_();
+  if (events_ready_callback_)
+    events_ready_callback_();
 }
 
-}  // namespace crayon::browser::cef_shell::observation
+} // namespace crayon::browser::cef_shell::observation

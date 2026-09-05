@@ -18,13 +18,13 @@ using crayon::browser_downloads::kMaxFileNameLength;
 using crayon::browser_downloads::ResolveUniqueDownloadPath;
 using crayon::browser_downloads::SanitizeDownloadFileName;
 
-#define CHECK(condition)                                    \
-  do {                                                      \
-    if (!(condition)) {                                     \
-      std::cerr << __FILE__ << ':' << __LINE__              \
-                << " CHECK failed: " << #condition << '\n'; \
-      return false;                                         \
-    }                                                       \
+#define CHECK(condition)                                                       \
+  do {                                                                         \
+    if (!(condition)) {                                                        \
+      std::cerr << __FILE__ << ':' << __LINE__                                 \
+                << " CHECK failed: " << #condition << '\n';                    \
+      return false;                                                            \
+    }                                                                          \
   } while (false)
 
 // ---------- Danger classification ----------
@@ -66,7 +66,7 @@ bool DangerousItemRequiresConfirmation() {
   CHECK(!item.MarkFailed());
   CHECK(item.ConfirmDangerous());
   CHECK(item.state() == DownloadState::kInProgress);
-  CHECK(!item.ConfirmDangerous());  // already confirmed
+  CHECK(!item.ConfirmDangerous()); // already confirmed
   return true;
 }
 
@@ -94,7 +94,7 @@ bool ProgressIsBounded() {
 
 bool UnknownTotalCompletes() {
   auto item = DownloadItem::Create(5, "stream.bin");
-  CHECK(item.OnProgress(10, 0));  // total unknown
+  CHECK(item.OnProgress(10, 0)); // total unknown
   CHECK(item.Complete());
   CHECK(item.terminal());
   return true;
@@ -104,8 +104,8 @@ bool PauseResumeCycle() {
   auto item = DownloadItem::Create(6, "movie.mkv");
   CHECK(item.Pause());
   CHECK(item.state() == DownloadState::kPaused);
-  CHECK(!item.Pause());            // already paused
-  CHECK(!item.OnProgress(1, 10));  // paused items take no progress
+  CHECK(!item.Pause());           // already paused
+  CHECK(!item.OnProgress(1, 10)); // paused items take no progress
   CHECK(item.Resume());
   CHECK(item.state() == DownloadState::kInProgress);
   CHECK(!item.Resume());
@@ -150,7 +150,7 @@ bool OpenActionsRequireCompletion() {
   item.Complete();
   CHECK(item.CanOpenItem());
   CHECK(item.CanOpenLocation());
-  CHECK(!item.Cancel());  // completed is terminal
+  CHECK(!item.Cancel()); // completed is terminal
   return true;
 }
 
@@ -171,7 +171,8 @@ bool SanitizeStripsSeparatorsAndControls() {
   const auto clean = SanitizeDownloadFileName("../etc/passwd\x01.txt");
   CHECK(clean.has_value());
   CHECK(*clean == "..etcpasswd.txt");
-  CHECK(SanitizeDownloadFileName("a/b\\c.txt") == std::optional<std::string>("abc.txt"));
+  CHECK(SanitizeDownloadFileName("a/b\\c.txt") ==
+        std::optional<std::string>("abc.txt"));
   return true;
 }
 
@@ -180,6 +181,13 @@ bool SanitizeRejectsEmptyAndDotOnly() {
   CHECK(!SanitizeDownloadFileName("/").has_value());
   CHECK(!SanitizeDownloadFileName("...").has_value());
   CHECK(!SanitizeDownloadFileName("..").has_value());
+  CHECK(!SanitizeDownloadFileName("report.txt:secret").has_value());
+  CHECK(!SanitizeDownloadFileName("bad?.txt").has_value());
+  CHECK(!SanitizeDownloadFileName("CON").has_value());
+  CHECK(!SanitizeDownloadFileName("nul.txt").has_value());
+  CHECK(!SanitizeDownloadFileName("COM1.log").has_value());
+  CHECK(!SanitizeDownloadFileName("lpt9").has_value());
+  CHECK(SanitizeDownloadFileName("company.txt").has_value());
   return true;
 }
 
@@ -200,7 +208,7 @@ bool SanitizeEnforcesLengthBound() {
 // ---------- Unique path resolution ----------
 
 bool g_exists_result = false;
-bool FakePathExists(const std::string&) { return g_exists_result; }
+bool FakePathExists(const std::string &) { return g_exists_result; }
 
 bool UniquePathResolvesWithoutCollision() {
   g_exists_result = false;
@@ -211,9 +219,8 @@ bool UniquePathResolvesWithoutCollision() {
 }
 
 bool UniquePathDedupesCollisions() {
-  g_exists_result = true;  // everything exists -> eventually exhausts
-  CHECK(!ResolveUniqueDownloadPath("/downloads", "report.pdf",
-                                   &FakePathExists)
+  g_exists_result = true; // everything exists -> eventually exhausts
+  CHECK(!ResolveUniqueDownloadPath("/downloads", "report.pdf", &FakePathExists)
              .has_value());
   return true;
 }
@@ -226,7 +233,7 @@ bool UniquePathRejectsInvalidInput() {
   return true;
 }
 
-}  // namespace
+} // namespace
 
 int main() {
   if (!DangerClassificationMatrix() || !SafeItemStartsInProgress() ||

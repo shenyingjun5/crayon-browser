@@ -67,6 +67,27 @@ file(READ
      "${CRAYON_CEF_SHELL_SOURCE}/src/browser/media_host/cast_shell_controller.cc"
      cast_shell_controller)
 file(READ
+     "${CRAYON_CEF_SHELL_SOURCE}/src/browser/media_host/cast_entry_surface.cc"
+     cast_entry_surface)
+file(READ
+     "${CRAYON_CEF_SHELL_SOURCE}/src/browser/media_host/alloy_cast_controller.cc"
+     alloy_cast_controller)
+file(READ
+     "${CRAYON_CEF_SHELL_SOURCE}/src/windows/alloy_cast_overlay_win.cc"
+     alloy_cast_overlay)
+file(READ
+     "${CRAYON_CEF_SHELL_SOURCE}/src/browser/window/alloy_interactions.cc"
+     alloy_interactions)
+file(READ
+     "${CRAYON_CEF_SHELL_SOURCE}/src/browser/window/alloy_builtin_content.cc"
+     alloy_builtin_content)
+file(READ
+     "${CRAYON_CEF_SHELL_SOURCE}/src/browser/window/alloy_page_markdown.cc"
+     alloy_page_markdown)
+file(READ
+     "${CRAYON_CEF_SHELL_SOURCE}/src/browser/mdv/cef_mdv_entries.cc"
+     mdv_entries)
+file(READ
      "${CRAYON_CEF_SHELL_SOURCE}/src/windows/page_markdown_platform_win.cc"
      windows_page_markdown)
 set(windows_markdown_dialog_path
@@ -210,6 +231,169 @@ foreach(required_cast_controller_token
   if(token_index EQUAL -1)
     message(FATAL_ERROR
             "Shared Cast controller is missing lifecycle token ${required_cast_controller_token}")
+  endif()
+endforeach()
+foreach(forbidden_cast_entry_token
+        "chrome_location_bar"
+        "ChromeLocationBar"
+        "GetChromeToolbar"
+        "CEF_CTT_LOCATION"
+        "SuspendLocation"
+        "RestoreLocation")
+  string(FIND "${cast_entry_surface}" "${forbidden_cast_entry_token}"
+         token_index)
+  if(NOT token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Alloy Cast entry contains LOCATION dependency ${forbidden_cast_entry_token}")
+  endif()
+endforeach()
+foreach(required_interaction_token
+        "CefMenuButton::CreateMenuButton"
+        "HandleAccelerator"
+        "OnBeforeContextMenu"
+        "OnContextMenuDismissed"
+        "OnDragEnter"
+        "chrome://credits/"
+        "kAboutBrowserUrl")
+  string(FIND "${alloy_interactions}" "${required_interaction_token}"
+         token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Alloy interactions are missing ${required_interaction_token}")
+  endif()
+endforeach()
+foreach(forbidden_interaction_token
+        "IDC_OPEN_FILE"
+        "ExecuteChromeCommand"
+        "javascript:")
+  string(FIND "${alloy_interactions}" "${forbidden_interaction_token}"
+         token_index)
+  if(NOT token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Alloy interactions contain forbidden Chrome/page token ${forbidden_interaction_token}")
+  endif()
+endforeach()
+foreach(required_builtin_token
+        "RegisterAlloyBuiltinContentFactories"
+        "CefMessageRouterBrowserSide::Create"
+        "InterceptWhileDirty"
+        "CancelTransientEntries"
+        "OnRenderProcessTerminated")
+  string(FIND "${alloy_builtin_content}" "${required_builtin_token}"
+         token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Alloy built-in content is missing ${required_builtin_token}")
+  endif()
+endforeach()
+foreach(forbidden_builtin_token
+        "ExecuteChromeCommand"
+        "IDC_"
+        "javascript:")
+  string(FIND "${alloy_builtin_content}" "${forbidden_builtin_token}"
+         token_index)
+  if(NOT token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Alloy built-in content contains forbidden token ${forbidden_builtin_token}")
+  endif()
+endforeach()
+foreach(required_alloy_cast_token
+        "RequestPlayerPage"
+        "RequestDevicePage"
+        "RequestDraft"
+        "RequestResolveCastCode"
+        "RequestStopCast"
+        "RequestControlCast"
+        "AdvanceNavigation"
+        "CloseTab")
+  string(FIND "${alloy_cast_controller}" "${required_alloy_cast_token}"
+         token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Alloy Cast controller is missing ${required_alloy_cast_token}")
+  endif()
+endforeach()
+foreach(forbidden_alloy_cast_token
+        "RequestStartCast"
+        "page_url"
+        "media_url"
+        "Authorization"
+        "Cookie"
+        "ExecuteJavaScript"
+        "Cast-SDK")
+  string(FIND "${alloy_cast_controller}" "${forbidden_alloy_cast_token}"
+         token_index)
+  if(NOT token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Alloy Cast controller contains forbidden token ${forbidden_alloy_cast_token}")
+  endif()
+endforeach()
+foreach(required_alloy_overlay_token
+        "CreateWindowExW"
+        "SetWindowSubclass"
+        "SetWindowPos"
+        "TTM_ADDTOOLW"
+        "kCastSelectionPageSize"
+        "PlaceOverlay"
+        "kFirstControlId"
+        "BN_CLICKED")
+  string(FIND "${alloy_cast_overlay}" "${required_alloy_overlay_token}"
+         token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Windows Alloy Cast overlay is missing ${required_alloy_overlay_token}")
+  endif()
+endforeach()
+foreach(forbidden_alloy_overlay_token
+        "ExecuteJavaScript"
+        "RequestStartCast"
+        "StartCast"
+        "Authorization"
+        "Cookie"
+        "http://"
+        "https://")
+  string(FIND "${alloy_cast_overlay}" "${forbidden_alloy_overlay_token}"
+         token_index)
+  if(NOT token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Windows Alloy Cast overlay contains forbidden token ${forbidden_alloy_overlay_token}")
+  endif()
+endforeach()
+foreach(required_page_markdown_token
+        "PageMarkdownSnapshotHost"
+        "StartSnapshot"
+        "AdvanceNavigation"
+        "RendererGone"
+        "CloseBrowser"
+        "ShutDown"
+        "OnBuiltinContextMenuCommand")
+  string(FIND "${alloy_page_markdown}" "${required_page_markdown_token}"
+         token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Alloy page Markdown is missing ${required_page_markdown_token}")
+  endif()
+endforeach()
+foreach(forbidden_page_markdown_token
+        "ExecuteChromeCommand"
+        "IDC_"
+        "javascript:"
+        "GetSource"
+        "GetText")
+  string(FIND "${alloy_page_markdown}" "${forbidden_page_markdown_token}"
+         token_index)
+  if(NOT token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Alloy page Markdown contains forbidden token ${forbidden_page_markdown_token}")
+  endif()
+endforeach()
+foreach(required_mdv_entry_token
+        "HandleOpenFileCommand"
+        "CancelTransientEntries")
+  string(FIND "${mdv_entries}" "${required_mdv_entry_token}" token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "MDV entries must expose ${required_mdv_entry_token}")
   endif()
 endforeach()
 foreach(required_host_token

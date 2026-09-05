@@ -90,6 +90,41 @@ void DuplicateAndStaleClose() {
   Check(model.active_tab() == second, "active tab moves to replacement");
 }
 
+void CloseCancellationRestoresBoundTab() {
+  TabModel model;
+  const TabId tab_id = model.CreateTab().value();
+  Check(model.BindBrowser(tab_id, 13), "bind cancellable tab");
+  Check(model.RequestClose(tab_id), "begin cancellable close");
+  Check(model.CancelClose(tab_id), "cancel bound close");
+  Check(RequireTab(model, tab_id).lifecycle == TabLifecycle::kReady,
+        "cancel restores ready state");
+  Check(model.Activate(tab_id), "restored tab can activate");
+  Check(!model.CancelClose(tab_id), "duplicate cancel is rejected");
+
+  const TabId creating = model.CreateTab().value();
+  Check(model.RequestClose(creating), "creating close removes tab");
+  Check(!model.CancelClose(creating), "removed creating tab cannot restore");
+  Check(!model.CancelClose(9999), "unknown cancel is rejected");
+}
+
+void MoveTabsPreservesIdentityAndActiveTab() {
+  TabModel model;
+  const TabId first = model.CreateTab().value();
+  const TabId second = model.CreateTab().value();
+  const TabId third = model.CreateTab().value();
+  Check(model.Activate(second), "activate middle tab before reorder");
+  Check(model.MoveTab(2, 0), "move last tab to front");
+  const std::vector<TabId> order = model.ordered_tabs();
+  Check(order.size() == 3 && order[0] == third && order[1] == first &&
+            order[2] == second,
+        "model order reflects reorder");
+  Check(model.active_tab() == second, "reorder preserves active tab identity");
+  Check(!model.MoveTab(3, 0), "out-of-range source is rejected");
+  Check(!model.MoveTab(0, 3), "out-of-range destination is rejected");
+  Check(!model.MoveTab(1, 1), "no-op reorder is rejected");
+  Check(model.ordered_tabs() == order, "rejected reorder preserves order");
+}
+
 void CloseLastTabEmptiesModel() {
   TabModel model;
   const TabId only = model.CreateTab().value();
@@ -255,6 +290,40 @@ void BindBrowserContract() {
         "browser id lookup finds bound tab");
 }
 
+void TransferAdoptionPreservesStateAndFencesIdentity() {
+  TabModel source;
+  const TabId original = source.CreateTab().value();
+  Check(source.BindBrowser(original, 91), "bind transferable browser");
+  Check(source.UpdateAddress(91, "https://example.test/form"),
+        "record transferable address");
+  Check(source.UpdateLoading(91, false, true, false),
+        "record transferable history state");
+  Check(source.SetZoom(original, 1.5), "record transferable zoom");
+  const TabSnapshot snapshot = RequireTab(source, original);
+  Check(source.DetachBrowser(91), "source releases transferred browser");
+
+  TabModel target;
+  const auto adopted = target.AdoptTransferred(snapshot, false);
+  Check(adopted.has_value(), "target adopts transferred tab");
+  const auto& moved = RequireTab(target, *adopted);
+  Check(moved.browser_id == 91 && moved.url == snapshot.url &&
+            moved.can_go_back && moved.zoom_factor == 1.5 &&
+            moved.lifecycle == TabLifecycle::kReady,
+        "adoption preserves browser-facing state");
+  Check(!target.AdoptTransferred(snapshot, false),
+        "duplicate browser identity is rejected");
+
+  TabModel rollback;
+  const auto restored = rollback.AdoptTransferred(snapshot, true);
+  Check(restored == original, "rollback can preserve original tab identity");
+  Check(!rollback.AdoptTransferred(snapshot, true),
+        "duplicate preserved identity is rejected");
+  TabSnapshot invalid = snapshot;
+  invalid.browser_id = 0;
+  Check(!rollback.AdoptTransferred(invalid, false),
+        "unbound transfer is rejected");
+}
+
 }  // namespace
 
 
@@ -296,6 +365,15 @@ void PopupSchemeAndShapeMatrix() {
         "over-length popup URL must be denied");
 }
 
+void PopupRejectsCredentialsAndAcceptsSchemeCase() {
+  Check(popup::EvaluatePopupTarget("https://user:pass@example.com/", true, 0,
+                                  false) == PopupTargetAction::kDeny,
+        "popup URL credentials must be denied");
+  Check(popup::EvaluatePopupTarget("HTTPS://example.com/", true, 0, false) ==
+            PopupTargetAction::kOpenInNewTab,
+        "popup scheme matching must be ASCII case-insensitive");
+}
+
 void PopupCapacityDenied() {
   Check(popup::EvaluatePopupTarget("https://example.com/x", true, 4, false) ==
             PopupTargetAction::kDeny,
@@ -329,6 +407,10 @@ int main() {
       {"CreateActivateAndOrder", &CreateActivateAndOrder},
       {"CapacityLimit", &CapacityLimit},
       {"DuplicateAndStaleClose", &DuplicateAndStaleClose},
+      {"CloseCancellationRestoresBoundTab",
+       &CloseCancellationRestoresBoundTab},
+      {"MoveTabsPreservesIdentityAndActiveTab",
+       &MoveTabsPreservesIdentityAndActiveTab},
       {"CloseLastTabEmptiesModel", &CloseLastTabEmptiesModel},
       {"ActiveReplacementPrefersNextThenPrevious",
        &ActiveReplacementPrefersNextThenPrevious},
@@ -341,9 +423,13 @@ int main() {
       {"CloseCreatingTabRemovesItImmediately",
        &CloseCreatingTabRemovesItImmediately},
       {"BindBrowserContract", &BindBrowserContract},
+      {"TransferAdoptionPreservesStateAndFencesIdentity",
+       &TransferAdoptionPreservesStateAndFencesIdentity},
       {"PopupUserGestureOpensInNewTab", &PopupUserGestureOpensInNewTab},
       {"PopupProgrammaticDenied", &PopupProgrammaticDenied},
       {"PopupSchemeAndShapeMatrix", &PopupSchemeAndShapeMatrix},
+      {"PopupRejectsCredentialsAndAcceptsSchemeCase",
+       &PopupRejectsCredentialsAndAcceptsSchemeCase},
       {"PopupCapacityDenied", &PopupCapacityDenied},
       {"AboutDestinationUsesBoundedUserNavigation",
        &AboutDestinationUsesBoundedUserNavigation},

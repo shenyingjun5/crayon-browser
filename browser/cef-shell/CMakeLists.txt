@@ -52,6 +52,8 @@ if(OS_WINDOWS)
       src/browser/media_host/media_host_adapter.cc
       src/browser/media_host/media_host_adapter.h
       src/browser/media_host/media_host_transport.h
+      src/browser/media_host/alloy_cast_controller.cc
+      src/browser/media_host/alloy_cast_controller.h
       src/browser/media_host/cast_shell_controller.cc
       src/browser/media_host/cast_shell_controller.h
       src/browser/page_markdown/cef_page_markdown_preview.cc
@@ -84,12 +86,46 @@ if(OS_WINDOWS)
       src/browser/permission/site_origin.h
       src/browser/window/tab_controller.cc
       src/browser/window/tab_model.cc
+      src/browser/window/alloy_bookmarks.cc
+      src/browser/window/alloy_bookmarks.h
+      src/browser/window/alloy_history.cc
+      src/browser/window/alloy_history.h
+      src/browser/window/alloy_downloads.cc
+      src/browser/window/alloy_downloads.h
+      src/browser/window/alloy_content_view_host.cc
+      src/browser/window/alloy_content_view_host.h
+      src/browser/window/alloy_builtin_content.cc
+      src/browser/window/alloy_builtin_content.h
+      src/browser/window/alloy_page_markdown.cc
+      src/browser/window/alloy_page_markdown.h
+      src/browser/window/alloy_interactions.cc
+      src/browser/window/alloy_interactions.h
+      src/browser/window/alloy_tab_controller.cc
+      src/browser/window/alloy_tab_controller.h
+      src/browser/window/alloy_tab_strip.cc
+      src/browser/window/alloy_tab_strip.h
+      src/browser/window/alloy_omnibox.cc
+      src/browser/window/alloy_omnibox.h
+      src/browser/window/alloy_navigation.cc
+      src/browser/window/alloy_navigation.h
+      src/browser/window/alloy_page_tools.cc
+      src/browser/window/alloy_page_tools.h
+      src/browser/window/alloy_profile_settings.cc
+      src/browser/window/alloy_profile_settings.h
+      src/browser/window/alloy_site_controls.cc
+      src/browser/window/alloy_site_controls.h
+      src/browser/window/alloy_session_restore.cc
+      src/browser/window/alloy_session_restore.h
+      src/browser/window/alloy_window_coordinator.cc
+      src/browser/window/alloy_window_coordinator.h
       src/process/windows/bootstrap_entry.cc
       src/process/windows/bootstrap_entry.h
       src/process/windows/ui_language_win.cc
       src/process/windows/ui_language_win.h
       src/windows/app.cc
       src/windows/app.h
+      src/windows/alloy_cast_overlay_win.cc
+      src/windows/alloy_cast_overlay_win.h
       src/windows/cast_chrome_win.cc
       src/windows/cast_chrome_win.h
       src/windows/content_host_adapter_win.cc
@@ -160,6 +196,14 @@ if(OS_WINDOWS)
             crayon::cef-shell-observation-gateway
             crayon::cef-shell-core-client crayon::cef-shell-ipc
             crayon::browser-cast-view crayon::browser-page-tools
+            crayon::browser-omnibox-core crayon::browser-omnibox-provider
+            crayon::browser-navigation crayon::browser-tabs-advanced
+            crayon::browser-bookmarks crayon::browser-bookmarks-view
+            crayon::browser-history crayon::browser-history-view
+            crayon::browser-downloads crayon::browser-downloads-view
+            crayon::browser-preferences crayon::browser-profiles-view
+            crayon::browser-settings-view crayon::browser-site-controls
+            crayon::browser-session
             crayon::browser-shared-shell crayon::browser-windows
             crayon_libcef libcef_dll_wrapper
             ${CEF_STANDARD_LIBS} comctl32 comdlg32)
@@ -308,6 +352,39 @@ if(OS_WINDOWS)
                          PROPERTIES LABELS "cef;shell;windows;cast")
 
     add_executable(
+      crayon_alloy_cast_controller_win_test
+      tests/alloy_cast_controller_test.cc
+      src/browser/media_host/alloy_cast_controller.cc
+      src/browser/media_host/media_host_adapter.cc)
+    target_compile_features(crayon_alloy_cast_controller_win_test PRIVATE cxx_std_17)
+    target_include_directories(crayon_alloy_cast_controller_win_test
+                               PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(
+      crayon_alloy_cast_controller_win_test
+      PRIVATE crayon::browser-cast-view crayon::cef-shell-core-client
+              crayon::cef-shell-ipc)
+    add_test(NAME alloy_cast_controller_win
+             COMMAND crayon_alloy_cast_controller_win_test)
+    set_tests_properties(alloy_cast_controller_win
+                         PROPERTIES LABELS "cef;shell;windows;cast;alloy")
+
+    add_executable(
+      crayon_alloy_cast_overlay_win_test
+      tests/alloy_cast_overlay_win_test.cc
+      src/windows/alloy_cast_overlay_win.cc)
+    target_compile_features(crayon_alloy_cast_overlay_win_test PRIVATE cxx_std_17)
+    target_compile_definitions(crayon_alloy_cast_overlay_win_test
+                               PRIVATE UNICODE _UNICODE)
+    target_include_directories(crayon_alloy_cast_overlay_win_test
+                               PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(crayon_alloy_cast_overlay_win_test
+                          PRIVATE crayon::browser-cast-view comctl32)
+    add_test(NAME alloy_cast_overlay_win
+             COMMAND crayon_alloy_cast_overlay_win_test)
+    set_tests_properties(alloy_cast_overlay_win
+                         PROPERTIES LABELS "cef;shell;windows;cast;alloy;overlay")
+
+    add_executable(
       crayon_cast_shell_controller_win_test
       tests/cast_shell_controller_test.cc
       src/browser/media_host/cast_shell_controller.cc)
@@ -348,19 +425,207 @@ if(OS_WINDOWS)
                            PRIVATE /W4 /WX)
     add_test(NAME trusted_input_monitor_win
              COMMAND crayon_trusted_input_monitor_win_test)
+    add_executable(
+      crayon_alloy_session_restore_win_test
+      tests/alloy_session_restore_win_test.cc
+      src/browser/window/alloy_session_restore.cc
+      src/browser/window/alloy_session_restore.h)
+    target_compile_features(crayon_alloy_session_restore_win_test
+                            PRIVATE cxx_std_17)
+    target_include_directories(crayon_alloy_session_restore_win_test
+                               PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_definitions(crayon_alloy_session_restore_win_test
+                               PRIVATE UNICODE _UNICODE)
+    target_compile_options(crayon_alloy_session_restore_win_test
+                           PRIVATE /W4 /WX /permissive-)
+    target_link_libraries(crayon_alloy_session_restore_win_test
+                          PRIVATE crayon::browser-session)
+    add_test(NAME alloy_session_restore_windows
+             COMMAND crayon_alloy_session_restore_win_test)
+    add_executable(
+      crayon_alloy_bookmarks_test
+      tests/alloy_bookmarks_test.cc
+      src/browser/window/alloy_bookmarks.cc
+      src/browser/window/alloy_bookmarks.h)
+    target_compile_features(crayon_alloy_bookmarks_test PRIVATE cxx_std_17)
+    target_include_directories(crayon_alloy_bookmarks_test
+                               PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_options(crayon_alloy_bookmarks_test
+                           PRIVATE /W4 /WX /permissive-)
+    target_link_libraries(crayon_alloy_bookmarks_test
+                          PRIVATE crayon::browser-bookmarks
+                                  crayon::browser-bookmarks-view
+                                  crayon::browser-engine-api)
+    add_test(NAME alloy_bookmarks_contract COMMAND crayon_alloy_bookmarks_test)
+    add_executable(
+      crayon_alloy_history_test
+      tests/alloy_history_test.cc
+      src/browser/window/alloy_history.cc
+      src/browser/window/alloy_history.h)
+    target_compile_features(crayon_alloy_history_test PRIVATE cxx_std_17)
+    target_include_directories(crayon_alloy_history_test
+                               PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_options(crayon_alloy_history_test
+                           PRIVATE /W4 /WX /permissive-)
+    target_link_libraries(crayon_alloy_history_test
+                          PRIVATE crayon::browser-history
+                                  crayon::browser-history-view
+                                  crayon::browser-engine-api)
+    add_test(NAME alloy_history_contract COMMAND crayon_alloy_history_test)
+    add_executable(
+      crayon_alloy_downloads_test
+      tests/alloy_downloads_test.cc
+      src/browser/window/alloy_downloads.cc
+      src/browser/window/alloy_downloads.h
+      src/browser/permission/download_observer.h)
+    target_compile_features(crayon_alloy_downloads_test PRIVATE cxx_std_17)
+    target_include_directories(crayon_alloy_downloads_test
+                               PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_options(crayon_alloy_downloads_test
+                           PRIVATE /W4 /WX /permissive-)
+    target_link_libraries(crayon_alloy_downloads_test
+                          PRIVATE crayon::browser-downloads
+                                  crayon::browser-downloads-view)
+    add_test(NAME alloy_downloads_contract COMMAND crayon_alloy_downloads_test)
+    add_executable(
+      crayon_alloy_profile_settings_test
+      tests/alloy_profile_settings_test.cc
+      src/browser/window/alloy_profile_settings.cc
+      src/browser/window/alloy_profile_settings.h)
+    target_compile_features(crayon_alloy_profile_settings_test
+                            PRIVATE cxx_std_17)
+    target_include_directories(crayon_alloy_profile_settings_test
+                               PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_options(crayon_alloy_profile_settings_test
+                           PRIVATE /W4 /WX /permissive-)
+    target_link_libraries(crayon_alloy_profile_settings_test
+                          PRIVATE crayon::browser-engine-api
+                                  crayon::browser-preferences
+                                  crayon::browser-profiles-view
+                                  crayon::browser-settings-view)
+    add_test(NAME alloy_profile_settings_contract
+             COMMAND crayon_alloy_profile_settings_test)
+    add_executable(
+      crayon_alloy_site_controls_test
+      tests/alloy_site_controls_test.cc
+      src/browser/window/alloy_site_controls.cc
+      src/browser/window/alloy_site_controls.h
+      src/browser/permission/permission_store.cc
+      src/browser/permission/permission_store.h)
+    target_compile_features(crayon_alloy_site_controls_test PRIVATE cxx_std_17)
+    target_include_directories(crayon_alloy_site_controls_test
+                               PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_options(crayon_alloy_site_controls_test
+                           PRIVATE /W4 /WX /permissive-)
+    target_link_libraries(crayon_alloy_site_controls_test
+                          PRIVATE crayon::browser-site-controls)
+    add_test(NAME alloy_site_controls_contract
+             COMMAND crayon_alloy_site_controls_test)
     set_tests_properties(cast_shell_controller_win cast_chrome_win
                          trusted_input_monitor_win
                          PROPERTIES LABELS "cef;shell;windows;cast")
+    set_tests_properties(alloy_session_restore_windows
+                         PROPERTIES LABELS "cef;shell;windows;session;alloy")
+    set_tests_properties(alloy_bookmarks_contract
+                         PROPERTIES LABELS "shell;windows;bookmarks;alloy")
+    set_tests_properties(alloy_history_contract
+                         PROPERTIES LABELS "shell;windows;history;alloy")
+    set_tests_properties(alloy_downloads_contract
+                         PROPERTIES LABELS "shell;windows;downloads;alloy")
+    set_tests_properties(
+      alloy_profile_settings_contract
+      PROPERTIES LABELS "shell;windows;profiles;settings;alloy")
+    set_tests_properties(
+      alloy_site_controls_contract
+      PROPERTIES LABELS "shell;windows;permission;security;alloy")
 
     find_program(CRAYON_PYTHON3_EXECUTABLE NAMES python python3 REQUIRED)
     add_library(
       crayon_page_snapshot_cef_integration_win SHARED
       tests/page_snapshot_cef_integration_win.cc
+      tests/media_observation_cef_message_checks.cc
+      tests/media_observation_cef_message_checks.h
+      tests/alloy_content_view_host_probe.cc
+      tests/alloy_content_view_host_probe.h
+      tests/alloy_builtin_content_probe.cc
+      tests/alloy_builtin_content_probe.h
+      tests/alloy_page_markdown_probe.cc
+      tests/alloy_page_markdown_probe.h
+      tests/alloy_interactions_probe.cc
+      tests/alloy_interactions_probe.h
+      tests/alloy_tab_controller_probe.cc
+      tests/alloy_tab_controller_probe.h
+      tests/alloy_tab_strip_probe.cc
+      tests/alloy_tab_strip_probe.h
+      tests/alloy_omnibox_probe.cc
+      tests/alloy_omnibox_probe.h
+      tests/alloy_page_tools_probe.cc
+      tests/alloy_page_tools_probe.h
+      tests/alloy_profile_context_probe.cc
+      tests/alloy_profile_context_probe.h
+      tests/alloy_security_probe.cc
+      tests/alloy_security_probe.h
+      tests/cast_entry_surface_probe.cc
+      tests/cast_entry_surface_probe.h
+      tests/alloy_cast_bridge_probe.cc
+      tests/alloy_cast_bridge_probe.h
+      tests/alloy_cast_overlay_probe.cc
+      tests/alloy_cast_overlay_probe.h
+      tests/alloy_navigation_probe.cc
+      tests/alloy_navigation_probe.h
+      tests/alloy_window_coordinator_probe.cc
+      tests/alloy_window_coordinator_probe.h
+      src/browser/window/alloy_content_view_host.cc
+      src/browser/window/alloy_content_view_host.h
+      src/browser/window/alloy_builtin_content.cc
+      src/browser/window/alloy_builtin_content.h
+      src/browser/window/alloy_page_markdown.cc
+      src/browser/window/alloy_page_markdown.h
+      src/browser/window/alloy_interactions.cc
+      src/browser/window/alloy_interactions.h
+      src/browser/window/alloy_tab_controller.cc
+      src/browser/window/alloy_tab_controller.h
+      src/browser/window/alloy_tab_strip.cc
+      src/browser/window/alloy_tab_strip.h
+      src/browser/window/alloy_omnibox.cc
+      src/browser/window/alloy_omnibox.h
+      src/browser/window/alloy_navigation.cc
+      src/browser/window/alloy_navigation.h
+      src/browser/window/alloy_page_tools.cc
+      src/browser/window/alloy_page_tools.h
+      src/browser/window/alloy_site_controls.cc
+      src/browser/window/alloy_site_controls.h
+      src/browser/window/alloy_bookmarks.cc
+      src/browser/window/alloy_bookmarks.h
+      src/browser/window/alloy_history.cc
+      src/browser/window/alloy_history.h
+      src/browser/window/alloy_downloads.cc
+      src/browser/window/alloy_downloads.h
+      src/browser/window/alloy_window_coordinator.cc
+      src/browser/window/alloy_window_coordinator.h
+      src/browser/context/profile_context_factory.cc
+      src/browser/context/profile_context_factory.h
+      src/browser/context/profile_id_validator.cc
+      src/browser/context/profile_id_validator.h
       src/browser/media_host/cast_shell_controller.cc
+      src/browser/media_host/cast_entry_surface.cc
+      src/browser/media_host/cast_entry_surface.h
+      src/browser/media_host/alloy_cast_controller.cc
+      src/browser/media_host/alloy_cast_controller.h
       src/browser/media_host/media_host_adapter.cc
       src/browser/new_tab/cef_new_tab_handler.cc
+      src/browser/mdv/cef_mdv_editing.cc
+      src/browser/mdv/cef_mdv_editing.h
+      src/browser/mdv/cef_mdv_entries.cc
+      src/browser/mdv/cef_mdv_entries.h
+      src/browser/mdv/cef_mdv_handler.cc
+      src/browser/mdv/cef_mdv_handler.h
       src/browser/network_observer/cef_network_observer_adapter.cc
       src/browser/observation_gateway/cef_observation_bridge.cc
+      src/browser/page_markdown/cef_page_markdown_preview.cc
+      src/browser/page_markdown/cef_page_markdown_preview.h
+      src/browser/page_markdown/page_markdown_preview.cc
+      src/browser/page_markdown/page_markdown_preview.h
       src/browser/page_snapshot_gateway/cef_page_snapshot_bridge.cc
       src/browser/permission/cef_download_handler.cc
       src/browser/permission/cef_permission_handler.cc
@@ -376,7 +641,8 @@ if(OS_WINDOWS)
       src/windows/content_host_process_win.cc)
     target_sources(
       crayon_page_snapshot_cef_integration_win
-      PRIVATE src/windows/cast_chrome_win.cc
+      PRIVATE src/windows/alloy_cast_overlay_win.cc
+              src/windows/cast_chrome_win.cc
               src/windows/trusted_input_monitor_win.cc
               src/windows/media_host_process_win.cc)
     SET_LIBRARY_TARGET_PROPERTIES(crayon_page_snapshot_cef_integration_win)
@@ -392,7 +658,7 @@ if(OS_WINDOWS)
                             PRIVATE cxx_std_17)
     target_compile_definitions(
       crayon_page_snapshot_cef_integration_win
-      PRIVATE UNICODE _UNICODE
+      PRIVATE UNICODE _UNICODE UNIT_TEST
               CRAYON_CONTENT_HOST_TEST_PATH="$<TARGET_FILE_DIR:crayon_page_snapshot_cef_integration_win>/crayon-content-host.exe"
               CRAYON_MEDIA_HOST_TEST_PATH="$<TARGET_FILE_DIR:crayon_page_snapshot_cef_integration_win>/crayon-media-host.exe")
     target_include_directories(
@@ -401,7 +667,23 @@ if(OS_WINDOWS)
     target_link_libraries(
       crayon_page_snapshot_cef_integration_win
       PRIVATE crayon::browser-new-tab
+              crayon::browser-mdv
+              crayon::browser-product-strings
+              crayon::browser-localization
               crayon::browser-cast-view
+              crayon::browser-omnibox-core
+              crayon::browser-omnibox-provider
+              crayon::browser-navigation
+              crayon::browser-bookmarks
+              crayon::browser-bookmarks-view
+              crayon::browser-history
+              crayon::browser-history-view
+              crayon::browser-downloads
+              crayon::browser-downloads-view
+              crayon::browser-tabs-advanced
+              crayon::browser-site-controls
+              crayon::browser-page-tools
+              crayon::browser-session
               crayon::browser-windows
               crayon::browser-page-snapshot-gateway
               crayon::cef-page-snapshot-collector
@@ -426,6 +708,17 @@ if(OS_WINDOWS)
       "crayon_page_snapshot_cef_integration_win" "${CEF_RESOURCE_FILES}"
       "${CEF_RESOURCE_DIR}"
       "$<TARGET_FILE_DIR:crayon_page_snapshot_cef_integration_win>")
+    set(crayon_cef_test_certificate_resources
+        resources/net/data/ssl/certificates/expired_cert.pem
+        resources/net/data/ssl/certificates/localhost_cert.pem
+        resources/net/data/ssl/certificates/ok_cert.pem
+        resources/net/data/ssl/certificates/root_ca_cert.pem)
+    set(crayon_cef_test_resource_prefixes "resources/")
+    COPY_RESOURCES(
+      "crayon_page_snapshot_cef_integration_win"
+      "${crayon_cef_test_certificate_resources}"
+      "${crayon_cef_test_resource_prefixes}" "${CEF_ROOT}/tests/ceftests"
+      "$<TARGET_FILE_DIR:crayon_page_snapshot_cef_integration_win>/ceftests_files")
     add_custom_command(
       TARGET crayon_page_snapshot_cef_integration_win POST_BUILD
       COMMAND "${CMAKE_COMMAND}" -E copy_if_different
@@ -453,6 +746,151 @@ if(OS_WINDOWS)
     set_tests_properties(
       cast_cef_integration_windows
       PROPERTIES LABELS "cef;shell;windows;cast;integration" TIMEOUT 120)
+    add_test(
+      NAME media_geometry_windows
+      COMMAND "${CRAYON_PYTHON3_EXECUTABLE}"
+              "${PROJECT_SOURCE_DIR}/tests/e2e/desktop/browser/run_page_snapshot_fixture.py"
+              "$<TARGET_FILE_DIR:crayon_page_snapshot_cef_integration_win>/CrayonPageSnapshotIntegrationTest.exe"
+              media-geometry-win)
+    set_tests_properties(
+      media_geometry_windows
+      PROPERTIES LABELS "cef;shell;windows;media;geometry;integration"
+                 TIMEOUT 120)
+    add_test(
+      NAME alloy_content_view_host_windows
+      COMMAND
+        "$<TARGET_FILE_DIR:crayon_page_snapshot_cef_integration_win>/CrayonPageSnapshotIntegrationTest.exe"
+        about:blank alloy-host)
+    set_tests_properties(
+      alloy_content_view_host_windows
+      PROPERTIES LABELS "cef;shell;windows;alloy;integration" TIMEOUT 30)
+    add_test(
+      NAME alloy_builtin_content_windows
+      COMMAND
+        "$<TARGET_FILE_DIR:crayon_page_snapshot_cef_integration_win>/CrayonPageSnapshotIntegrationTest.exe"
+        about:blank alloy-builtins)
+    set_tests_properties(
+      alloy_builtin_content_windows
+      PROPERTIES LABELS "cef;shell;windows;alloy;newtab;mdv;integration"
+                 TIMEOUT 60)
+    add_test(
+      NAME alloy_page_markdown_windows
+      COMMAND "${CRAYON_PYTHON3_EXECUTABLE}"
+              "${PROJECT_SOURCE_DIR}/tests/e2e/desktop/browser/run_page_snapshot_fixture.py"
+              "$<TARGET_FILE_DIR:crayon_page_snapshot_cef_integration_win>/CrayonPageSnapshotIntegrationTest.exe"
+              alloy-page-markdown)
+    set_tests_properties(
+      alloy_page_markdown_windows
+      PROPERTIES LABELS "cef;shell;windows;alloy;content;mdv;integration"
+                 TIMEOUT 90)
+    add_test(
+      NAME alloy_tab_controller_windows
+      COMMAND "${CRAYON_PYTHON3_EXECUTABLE}"
+              "${PROJECT_SOURCE_DIR}/tests/e2e/desktop/browser/run_page_snapshot_fixture.py"
+              "$<TARGET_FILE_DIR:crayon_page_snapshot_cef_integration_win>/CrayonPageSnapshotIntegrationTest.exe"
+              alloy-tabs)
+    set_tests_properties(
+      alloy_tab_controller_windows
+      PROPERTIES LABELS "cef;shell;windows;alloy;integration" TIMEOUT 45)
+    add_test(
+      NAME alloy_tab_strip_windows
+      COMMAND
+        "$<TARGET_FILE_DIR:crayon_page_snapshot_cef_integration_win>/CrayonPageSnapshotIntegrationTest.exe"
+        about:blank alloy-tab-strip)
+    set_tests_properties(
+      alloy_tab_strip_windows
+      PROPERTIES LABELS "cef;shell;windows;alloy;integration" TIMEOUT 30)
+    add_test(
+      NAME alloy_omnibox_windows
+      COMMAND
+        "$<TARGET_FILE_DIR:crayon_page_snapshot_cef_integration_win>/CrayonPageSnapshotIntegrationTest.exe"
+        about:blank alloy-omnibox)
+    set_tests_properties(
+      alloy_omnibox_windows
+      PROPERTIES LABELS "cef;shell;windows;alloy;omnibox;integration" TIMEOUT 30)
+    add_test(
+      NAME alloy_navigation_windows
+      COMMAND "${CRAYON_PYTHON3_EXECUTABLE}"
+              "${PROJECT_SOURCE_DIR}/tests/e2e/desktop/browser/run_page_snapshot_fixture.py"
+              "$<TARGET_FILE_DIR:crayon_page_snapshot_cef_integration_win>/CrayonPageSnapshotIntegrationTest.exe"
+              alloy-navigation)
+    set_tests_properties(
+      alloy_navigation_windows
+      PROPERTIES LABELS "cef;shell;windows;alloy;navigation;integration" TIMEOUT 45)
+    add_test(
+      NAME alloy_profile_context_windows
+      COMMAND "${CRAYON_PYTHON3_EXECUTABLE}"
+              "${PROJECT_SOURCE_DIR}/tests/e2e/desktop/browser/run_page_snapshot_fixture.py"
+              "$<TARGET_FILE_DIR:crayon_page_snapshot_cef_integration_win>/CrayonPageSnapshotIntegrationTest.exe"
+              alloy-profiles)
+    set_tests_properties(
+      alloy_profile_context_windows
+      PROPERTIES LABELS "cef;shell;windows;alloy;profiles;privacy;integration"
+                 TIMEOUT 45)
+    add_test(
+      NAME alloy_security_windows
+      COMMAND "${CRAYON_PYTHON3_EXECUTABLE}"
+              "${PROJECT_SOURCE_DIR}/tests/e2e/desktop/browser/run_page_snapshot_fixture.py"
+              "$<TARGET_FILE_DIR:crayon_page_snapshot_cef_integration_win>/CrayonPageSnapshotIntegrationTest.exe"
+              alloy-security)
+    set_tests_properties(
+      alloy_security_windows
+      PROPERTIES LABELS "cef;shell;windows;alloy;permission;certificate;protocol;integration"
+                 TIMEOUT 60)
+    add_test(
+      NAME alloy_page_tools_windows
+      COMMAND "${CRAYON_PYTHON3_EXECUTABLE}"
+              "${PROJECT_SOURCE_DIR}/tests/e2e/desktop/browser/run_page_snapshot_fixture.py"
+              "$<TARGET_FILE_DIR:crayon_page_snapshot_cef_integration_win>/CrayonPageSnapshotIntegrationTest.exe"
+              alloy-page-tools)
+    set_tests_properties(
+      alloy_page_tools_windows
+      PROPERTIES LABELS "cef;shell;windows;alloy;page-tools;integration"
+                 TIMEOUT 60)
+    add_test(
+      NAME alloy_interactions_windows
+      COMMAND
+        "$<TARGET_FILE_DIR:crayon_page_snapshot_cef_integration_win>/CrayonPageSnapshotIntegrationTest.exe"
+        about:blank alloy-interactions)
+    set_tests_properties(
+      alloy_interactions_windows
+      PROPERTIES LABELS "cef;shell;windows;alloy;menu;files;integration"
+                 TIMEOUT 45)
+    add_test(
+      NAME alloy_cast_entry_surface_windows
+      COMMAND
+        "$<TARGET_FILE_DIR:crayon_page_snapshot_cef_integration_win>/CrayonPageSnapshotIntegrationTest.exe"
+        about:blank alloy-cast-entry)
+    set_tests_properties(
+      alloy_cast_entry_surface_windows
+      PROPERTIES LABELS "cef;shell;windows;alloy;cast;integration" TIMEOUT 45)
+    add_test(
+      NAME alloy_cast_bridge_windows
+      COMMAND
+        "$<TARGET_FILE_DIR:crayon_page_snapshot_cef_integration_win>/CrayonPageSnapshotIntegrationTest.exe"
+        about:blank alloy-cast-bridge)
+    set_tests_properties(
+      alloy_cast_bridge_windows
+      PROPERTIES LABELS "cef;shell;windows;alloy;cast;integration;dpi" TIMEOUT 45)
+    add_test(
+      NAME alloy_cast_overlay_windows
+      COMMAND "${CRAYON_PYTHON3_EXECUTABLE}"
+              "${PROJECT_SOURCE_DIR}/tests/e2e/desktop/browser/run_page_snapshot_fixture.py"
+              "$<TARGET_FILE_DIR:crayon_page_snapshot_cef_integration_win>/CrayonPageSnapshotIntegrationTest.exe"
+              alloy-cast-overlay)
+    set_tests_properties(
+      alloy_cast_overlay_windows
+      PROPERTIES LABELS "cef;shell;windows;alloy;cast;overlay;geometry;integration;dpi"
+                 TIMEOUT 60)
+    add_test(
+      NAME alloy_window_coordinator_windows
+      COMMAND "${CRAYON_PYTHON3_EXECUTABLE}"
+              "${PROJECT_SOURCE_DIR}/tests/e2e/desktop/browser/run_page_snapshot_fixture.py"
+              "$<TARGET_FILE_DIR:crayon_page_snapshot_cef_integration_win>/CrayonPageSnapshotIntegrationTest.exe"
+              alloy-windows)
+    set_tests_properties(
+      alloy_window_coordinator_windows
+      PROPERTIES LABELS "cef;shell;windows;alloy;popup;integration" TIMEOUT 45)
     add_test(
       NAME windows_cef_shell_source_contract
       COMMAND "${CMAKE_COMMAND}"
@@ -1053,7 +1491,7 @@ if(CRAYON_BUILD_TESTS)
                          LABELS "integration;cef;cast")
     set_tests_properties(cast_toolbar_host_probe
                          PROPERTIES LABELS "cef;shell;cast;integration"
-                                    TIMEOUT 30)
+                 TIMEOUT 30)
     add_test(NAME cast_toolbar_close_probe
              COMMAND crayon_page_snapshot_cef_integration_test
                      --cast-toolbar-close-probe)

@@ -6,6 +6,7 @@ option(CRAYON_ENGINE_API_BUILD_TESTS "Build browser engine API contract tests" O
 
 add_library(crayon-browser-engine-api STATIC
   src/action_discovery.cc
+  src/content_view.cc
   src/snapshot.cc
   src/types.cc
 )

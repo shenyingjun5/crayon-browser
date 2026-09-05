@@ -150,3 +150,27 @@ fn store_capacity_is_bounded() {
     let entry = store.get(id).unwrap();
     assert!(entry.evidence().len() <= MAX_EVIDENCE);
 }
+
+#[test]
+fn trusted_lookup_requires_exact_tab_navigation_and_full_source() {
+    let mut store = CandidateStore::new();
+    let url = "https://cdn.example.com/v.mp4?token=one";
+    let id = store
+        .ingest(&obs(url, ObservationSource::CurrentSrc))
+        .unwrap();
+    let tab = TabId::new("tab-01").unwrap();
+    assert_eq!(store.find_id(&tab, NavigationId::INITIAL, url), Some(id));
+    assert_eq!(
+        store.find_id(
+            &tab,
+            NavigationId::INITIAL,
+            "https://cdn.example.com/v.mp4?token=two"
+        ),
+        None
+    );
+    assert_eq!(
+        store.find_id(&TabId::new("tab-02").unwrap(), NavigationId::INITIAL, url),
+        None
+    );
+    assert_eq!(store.find_id(&tab, NavigationId::new(2), url), None);
+}

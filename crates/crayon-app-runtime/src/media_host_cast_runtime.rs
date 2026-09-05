@@ -10,14 +10,15 @@ use crayon_cast_adapter::{
     CastCode, CastError, CastFacade, CastPlaybackState, CastSessionPhase, CastTerminalReason,
     DeliveryRoute, DeviceState, DiscoveredDevice, ReceiverCapabilityCache,
 };
+use crayon_cast_policy::{decide, PolicyContext};
 use crayon_domain::DeviceId;
 use crayon_ipc_schema::{
-    MediaHostCastControlAction, MediaHostCastControlOutcome, MediaHostCastErrorCode,
-    MediaHostCastStartOutcome, MediaHostDeliveryRoute, MediaHostDevice, MediaHostDeviceState,
-    MediaHostDiscoveryAction, MediaHostMessage, MediaHostResolveCastCodeOutcome,
-    MediaHostSessionEvent, MediaHostSessionPhase, MediaHostSessionPlayback,
-    MediaHostTerminalReason, MAX_MEDIA_HOST_DEVICES, MAX_MEDIA_HOST_DEVICE_NAME_BYTES,
-    MAX_MEDIA_HOST_DEVICE_PAGE, MAX_MEDIA_HOST_SESSION_EVENTS,
+    CastPolicyDecision, CastPolicyInput, MediaHostCastControlAction, MediaHostCastControlOutcome,
+    MediaHostCastErrorCode, MediaHostCastStartOutcome, MediaHostDeliveryRoute, MediaHostDevice,
+    MediaHostDeviceState, MediaHostDiscoveryAction, MediaHostMessage,
+    MediaHostResolveCastCodeOutcome, MediaHostSessionEvent, MediaHostSessionPhase,
+    MediaHostSessionPlayback, MediaHostTerminalReason, MAX_MEDIA_HOST_DEVICES,
+    MAX_MEDIA_HOST_DEVICE_NAME_BYTES, MAX_MEDIA_HOST_DEVICE_PAGE, MAX_MEDIA_HOST_SESSION_EVENTS,
 };
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -31,6 +32,7 @@ struct RuntimeState {
 /// Single Cast execution owner embedded in the Rust media-host process.
 pub struct MediaHostCastRuntime {
     facade: Arc<dyn CastFacade>,
+    capabilities: Arc<ReceiverCapabilityCache>,
     usecase: Arc<CastUsecase>,
     state: Mutex<RuntimeState>,
 }
@@ -45,12 +47,13 @@ impl MediaHostCastRuntime {
     ) -> Self {
         let usecase = Arc::new(CastUsecase::new(
             Arc::clone(&facade),
-            capabilities,
+            Arc::clone(&capabilities),
             backend,
             revocation,
         ));
         Self {
             facade,
+            capabilities,
             usecase,
             state: Mutex::new(RuntimeState {
                 devices: Vec::new(),
@@ -114,6 +117,55 @@ impl MediaHostCastRuntime {
             .devices
             .iter()
             .any(|known| known.device_id() == device)
+    }
+
+    pub async fn connect_device(&self, device: DeviceId) -> Result<(), MediaHostRuntimeError> {
+        if !self.has_device(&device) {
+            return Err(MediaHostRuntimeError::CandidateUnavailable);
+        }
+        let facade = Arc::clone(&self.facade);
+        tokio::task::spawn_blocking(move || facade.connect(&device))
+            .await
+            .map_err(|_| MediaHostRuntimeError::HostUnavailable)?
+            .map_err(map_command_error)
+    }
+
+    #[must_use]
+    pub fn has_active_session(&self) -> bool {
+        self.usecase.active_session().is_some()
+    }
+
+    /// Returns the current policy route without connecting or delivering.
+    /// Relay allocation and receiver-facing effects remain deferred to the
+    /// one-shot commit path.
+    pub fn preview_route(
+        &self,
+        request: &DeliveryRequest,
+    ) -> Result<DeliveryRoute, MediaHostRuntimeError> {
+        let capabilities = self
+            .capabilities
+            .capabilities(&request.receiver)
+            .map_err(map_command_error)?;
+        let input = CastPolicyInput::new(
+            request.input.page().clone(),
+            request.input.playback(),
+            request.input.candidate().clone(),
+            capabilities,
+        );
+        match decide(
+            &input,
+            &PolicyContext {
+                observation: request.observation,
+                protection: request.protection,
+                external_client_handoff: request.external_client_handoff,
+            },
+        ) {
+            CastPolicyDecision::Direct => Ok(DeliveryRoute::Direct),
+            CastPolicyDecision::Relay => Ok(DeliveryRoute::Relay),
+            CastPolicyDecision::ExternalClientHandoff(_) | CastPolicyDecision::Reject { .. } => {
+                Err(MediaHostRuntimeError::CandidateUnavailable)
+            }
+        }
     }
 
     pub async fn start_cast(

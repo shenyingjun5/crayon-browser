@@ -35,6 +35,10 @@ class MdvEntryController
   /// the dialog was started (swallows the pass-through default).
   bool HandleChromeCommand(CefRefPtr<CefBrowser> browser, int command_id);
 
+  /// Runtime-neutral Alloy/menu entry. Starts the same controlled single-file
+  /// Markdown dialog without depending on a Chrome command identifier.
+  bool HandleOpenFileCommand(CefRefPtr<CefBrowser> browser);
+
  private:
   class MdvFileDialogCallback;
 
@@ -67,6 +71,9 @@ class MdvEntryController
   /// E4 command dispatch: true when `command_id` is the viewer-open
   /// item and the load was initiated.
   bool HandleContextMenuCommand(CefRefPtr<CefBrowser> browser, int command_id);
+
+  /// Clears context-menu-only path authority on navigation or host shutdown.
+  void CancelTransientEntries() noexcept;
 
   /// MDV-10: invoked after a successful gated load so the editing
   /// controller can arm its models (path, normalized bytes, size,

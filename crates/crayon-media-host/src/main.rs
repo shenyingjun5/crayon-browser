@@ -2,14 +2,19 @@
 mod desktop {
     use crayon_app_runtime::cast_usecase::RelayRevocation;
     use crayon_app_runtime::delivery::CoreSessionBackend;
+    use crayon_app_runtime::media_cast_draft_runtime::MediaCastDraftRuntime;
     use crayon_app_runtime::media_host_cast_runtime::MediaHostCastRuntime;
     use crayon_app_runtime::media_host_runtime::{
         error_reply, message_request_id, MediaHostInterruptAction, MediaHostPendingQueue,
         MediaHostRuntime, MediaHostRuntimeError,
     };
+    use crayon_app_runtime::media_player_registry::MediaPlayerRegistry;
     use crayon_cast_adapter::{
         CapabilityCacheConfig, CastFacade, ReceiverCapabilityCache, SenderCastFacade,
         SenderCastFacadeConfig,
+    };
+    use crayon_ipc_schema::media_host_v2::{
+        self, DraftCommand, DraftMessage, Handshake as V2Handshake, Kind as V2Kind,
     };
     use crayon_ipc_schema::{
         decode_media_host_message, encode_media_host_message, MediaHostMessage,
@@ -21,10 +26,15 @@ mod desktop {
     use std::io::{self, Read, Write};
     use std::sync::Arc;
     use std::thread::{self, JoinHandle};
+    use std::time::{Instant, SystemTime, UNIX_EPOCH};
     use tokio::sync::mpsc;
 
     pub(super) enum ReaderEvent {
         Message(MediaHostMessage),
+        Handshake(V2Handshake),
+        Player(media_host_v2::PlayerMessage),
+        PlayerList(media_host_v2::PlayerListRequest),
+        Draft(DraftCommand),
         Eof,
         Failed,
     }
@@ -68,6 +78,10 @@ mod desktop {
             Arc::clone(&services.runtime),
         );
         let mut pending = MediaHostPendingQueue::default();
+        let mut negotiated = None;
+        let mut players = None;
+        let mut drafts = MediaCastDraftRuntime::new();
+        let clock = HostClock::new()?;
         loop {
             let event = match pending.pop_front() {
                 Some(message) => ReaderEvent::Message(message),
@@ -75,9 +89,39 @@ mod desktop {
             };
             let message = match event {
                 ReaderEvent::Message(message) => message,
+                ReaderEvent::Handshake(handshake) => {
+                    let welcome = accept_handshake(&mut negotiated, handshake)?;
+                    players = Some(
+                        MediaPlayerRegistry::new(welcome.session_id, welcome.generation)
+                            .map_err(|_| HostProcessError::InvalidState)?,
+                    );
+                    write_handshake(&mut output, welcome)?;
+                    continue;
+                }
+                ReaderEvent::Player(message) => {
+                    invalidate_removed_player(&mut drafts, &message);
+                    apply_player(&mut players, message)?;
+                    continue;
+                }
+                ReaderEvent::PlayerList(request) => {
+                    write_player_page(&players, request, &mut output)?;
+                    continue;
+                }
+                ReaderEvent::Draft(command) => {
+                    if !draft_context_matches(negotiated, &command) {
+                        return Err(HostProcessError::InvalidFrame);
+                    }
+                    let registry = players.as_ref().ok_or(HostProcessError::InvalidFrame)?;
+                    let state = drafts
+                        .dispatch(command, registry, &mut host, clock.now_ms()?)
+                        .await;
+                    write_draft(&mut output, state)?;
+                    continue;
+                }
                 ReaderEvent::Eof => return Err(HostProcessError::UnexpectedEof),
                 ReaderEvent::Failed => return Err(HostProcessError::InvalidFrame),
             };
+            invalidate_drafts_for_message(&mut drafts, &message);
             if matches!(message, MediaHostMessage::Shutdown) {
                 host.shutdown_cast()
                     .await
@@ -106,6 +150,7 @@ mod desktop {
                     false,
                     receiver,
                     &mut pending,
+                    &mut players,
                     &mut output,
                 )
                 .await?
@@ -157,6 +202,7 @@ mod desktop {
                         true,
                         receiver,
                         &mut pending,
+                        &mut players,
                         &mut output,
                     )
                     .await?
@@ -260,6 +306,7 @@ mod desktop {
         selected_preflight: bool,
         receiver: &mut mpsc::Receiver<ReaderEvent>,
         pending: &mut MediaHostPendingQueue,
+        players: &mut Option<MediaPlayerRegistry>,
         output: &mut impl Write,
     ) -> Result<DecisionOutcome<T>, HostProcessError> {
         if selected_preflight && pending.has_preflight_revocation() {
@@ -277,6 +324,16 @@ mod desktop {
                     };
                     let message = match event {
                         ReaderEvent::Message(message) => message,
+                        ReaderEvent::Handshake(_) => return Err(HostProcessError::InvalidFrame),
+                        ReaderEvent::Player(message) => {
+                            apply_player(players, message)?;
+                            continue;
+                        }
+                        ReaderEvent::PlayerList(request) => {
+                            write_player_page(players, request, output)?;
+                            continue;
+                        }
+                        ReaderEvent::Draft(_) => return Err(HostProcessError::InvalidFrame),
                         ReaderEvent::Eof => return Ok(DecisionOutcome::InputClosed),
                         ReaderEvent::Failed => return Err(HostProcessError::InvalidFrame),
                     };
@@ -348,6 +405,161 @@ mod desktop {
         Ok(())
     }
 
+    fn write_handshake(
+        output: &mut impl Write,
+        message: V2Handshake,
+    ) -> Result<(), HostProcessError> {
+        let payload =
+            media_host_v2::encode(message).map_err(|_| HostProcessError::InvalidMessage)?;
+        let length = u32::try_from(payload.len()).map_err(|_| HostProcessError::FrameTooLarge)?;
+        output.write_all(&length.to_be_bytes())?;
+        output.write_all(&payload)?;
+        output.flush()?;
+        Ok(())
+    }
+
+    fn write_player_page(
+        players: &Option<MediaPlayerRegistry>,
+        request: media_host_v2::PlayerListRequest,
+        output: &mut impl Write,
+    ) -> Result<(), HostProcessError> {
+        let registry = players.as_ref().ok_or(HostProcessError::InvalidFrame)?;
+        let reply = registry
+            .page(request)
+            .map_err(|_| HostProcessError::InvalidFrame)?;
+        let payload = media_host_v2::encode_player_page_message(
+            &media_host_v2::PlayerPageMessage::Page(reply),
+        )
+        .map_err(|_| HostProcessError::InvalidMessage)?;
+        let length = u32::try_from(payload.len()).map_err(|_| HostProcessError::FrameTooLarge)?;
+        output.write_all(&length.to_be_bytes())?;
+        output.write_all(&payload)?;
+        output.flush()?;
+        Ok(())
+    }
+
+    fn write_draft(
+        output: &mut impl Write,
+        state: media_host_v2::DraftStateReply,
+    ) -> Result<(), HostProcessError> {
+        let payload = media_host_v2::encode_draft_message(&DraftMessage::State(state))
+            .map_err(|_| HostProcessError::InvalidMessage)?;
+        let length = u32::try_from(payload.len()).map_err(|_| HostProcessError::FrameTooLarge)?;
+        output.write_all(&length.to_be_bytes())?;
+        output.write_all(&payload)?;
+        output.flush()?;
+        Ok(())
+    }
+
+    pub(super) fn draft_context_matches(
+        negotiated: Option<V2Handshake>,
+        command: &DraftCommand,
+    ) -> bool {
+        negotiated.is_some_and(|handshake| {
+            handshake.capabilities & media_host_v2::CAP_DRAFT != 0
+                && handshake.capabilities & media_host_v2::CAP_REASON != 0
+                && handshake.capabilities & media_host_v2::CAP_SESSION != 0
+                && command.context.session_id == handshake.session_id
+                && command.context.host_generation == handshake.generation
+        })
+    }
+
+    struct HostClock {
+        epoch_ms: u64,
+        started: Instant,
+    }
+
+    impl HostClock {
+        fn new() -> Result<Self, HostProcessError> {
+            let value = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_err(|_| HostProcessError::Runtime)?
+                .as_millis();
+            Ok(Self {
+                epoch_ms: u64::try_from(value).map_err(|_| HostProcessError::Runtime)?,
+                started: Instant::now(),
+            })
+        }
+
+        fn now_ms(&self) -> Result<u64, HostProcessError> {
+            let elapsed = u64::try_from(self.started.elapsed().as_millis())
+                .map_err(|_| HostProcessError::Runtime)?;
+            self.epoch_ms
+                .checked_add(elapsed)
+                .ok_or(HostProcessError::Runtime)
+        }
+    }
+
+    pub(super) fn accept_handshake(
+        negotiated: &mut Option<V2Handshake>,
+        hello: V2Handshake,
+    ) -> Result<V2Handshake, HostProcessError> {
+        if negotiated.is_some() || hello.kind != V2Kind::Hello {
+            return Err(HostProcessError::InvalidFrame);
+        }
+        let mut selected = hello.capabilities
+            & (media_host_v2::CAP_MEDIA_READ
+                | media_host_v2::CAP_DRAFT
+                | media_host_v2::CAP_CONNECT
+                | media_host_v2::CAP_REASON
+                | media_host_v2::CAP_SESSION);
+        if selected & media_host_v2::CAP_REASON == 0 || selected & media_host_v2::CAP_SESSION == 0 {
+            selected &= !(media_host_v2::CAP_DRAFT | media_host_v2::CAP_CONNECT);
+        }
+        let welcome = V2Handshake {
+            kind: V2Kind::Welcome,
+            capabilities: selected,
+            max_frame_bytes: hello.max_frame_bytes,
+            max_page_items: hello.max_page_items,
+            ..hello
+        };
+        if !media_host_v2::matches_hello(hello, welcome) {
+            return Err(HostProcessError::InvalidFrame);
+        }
+        *negotiated = Some(welcome);
+        Ok(welcome)
+    }
+
+    fn apply_player(
+        players: &mut Option<MediaPlayerRegistry>,
+        message: media_host_v2::PlayerMessage,
+    ) -> Result<(), HostProcessError> {
+        let registry = players.as_mut().ok_or(HostProcessError::InvalidFrame)?;
+        let _ = registry.apply(message);
+        Ok(())
+    }
+
+    fn invalidate_removed_player(
+        drafts: &mut MediaCastDraftRuntime,
+        message: &media_host_v2::PlayerMessage,
+    ) {
+        if let media_host_v2::PlayerMessage::Remove(context) = message {
+            drafts.invalidate_player(
+                context.tab_id,
+                context.navigation_id,
+                context.tab_generation,
+                media_host_v2::DraftMediaRef {
+                    instance_id: context.instance_id,
+                    source_revision: context.source_revision,
+                },
+            );
+        }
+    }
+
+    fn invalidate_drafts_for_message(
+        drafts: &mut MediaCastDraftRuntime,
+        message: &MediaHostMessage,
+    ) {
+        let tab_id = match message {
+            MediaHostMessage::Navigation { tab_id, .. }
+            | MediaHostMessage::CloseTab { tab_id, .. } => tab_id,
+            _ => return,
+        };
+        if let Some(value) = tab_id.strip_prefix("cef-").and_then(|id| id.parse().ok()) {
+            drafts.invalidate_tab(value);
+        }
+    }
+
     fn spawn_reader(sender: mpsc::Sender<ReaderEvent>) -> Result<JoinHandle<()>, HostProcessError> {
         thread::Builder::new()
             .name("media-host-reader".to_owned())
@@ -356,17 +568,36 @@ mod desktop {
                 let mut input = stdin.lock();
                 loop {
                     match read_frame(&mut input) {
-                        Ok(Some(payload)) => match decode_media_host_message(&payload) {
-                            Ok(message) => {
-                                if sender.blocking_send(ReaderEvent::Message(message)).is_err() {
-                                    return;
+                        Ok(Some(payload)) => {
+                            let event = if payload.starts_with(b"MHV2") {
+                                if let Ok(handshake) = media_host_v2::decode(&payload) {
+                                    ReaderEvent::Handshake(handshake)
+                                } else if let Ok(player) =
+                                    media_host_v2::decode_player_message(&payload)
+                                {
+                                    ReaderEvent::Player(player)
+                                } else if let Ok(DraftMessage::Command(command)) =
+                                    media_host_v2::decode_draft_message(&payload)
+                                {
+                                    ReaderEvent::Draft(command)
+                                } else {
+                                    match media_host_v2::decode_player_page_message(&payload) {
+                                        Ok(media_host_v2::PlayerPageMessage::List(request)) => {
+                                            ReaderEvent::PlayerList(request)
+                                        }
+                                        _ => ReaderEvent::Failed,
+                                    }
                                 }
-                            }
-                            Err(_) => {
-                                let _ = sender.blocking_send(ReaderEvent::Failed);
+                            } else {
+                                decode_media_host_message(&payload)
+                                    .map(ReaderEvent::Message)
+                                    .unwrap_or(ReaderEvent::Failed)
+                            };
+                            let failed = matches!(event, ReaderEvent::Failed);
+                            if sender.blocking_send(event).is_err() || failed {
                                 return;
                             }
-                        },
+                        }
                         Ok(None) => {
                             let _ = sender.blocking_send(ReaderEvent::Eof);
                             return;
@@ -659,6 +890,10 @@ fn main() {
     eprintln!("crayon-media-host is supported on Windows and macOS");
     std::process::exit(78);
 }
+
+#[cfg(all(test, any(target_os = "macos", target_os = "windows")))]
+#[path = "../tests/support/handshake.rs"]
+mod handshake_tests;
 
 #[cfg(all(test, any(target_os = "macos", target_os = "windows")))]
 #[path = "../tests/support/probe_driver.rs"]

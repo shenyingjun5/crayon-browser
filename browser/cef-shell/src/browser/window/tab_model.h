@@ -33,9 +33,13 @@ struct TabSnapshot final {
 class TabModel final {
 public:
   std::optional<TabId> CreateTab();
+  std::optional<TabId> AdoptTransferred(TabSnapshot snapshot,
+                                        bool preserve_id);
   bool BindBrowser(TabId tab_id, int browser_id);
   bool Activate(TabId tab_id);
+  bool MoveTab(std::size_t from_index, std::size_t to_index);
   bool RequestClose(TabId tab_id);
+  bool CancelClose(TabId tab_id);
   bool DetachBrowser(int browser_id);
   bool MarkCrashed(int browser_id);
 

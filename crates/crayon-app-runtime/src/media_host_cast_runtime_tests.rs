@@ -4,8 +4,8 @@ use super::media_host_cast_runtime::MediaHostCastRuntime;
 use super::media_host_runtime::{MediaHostRuntime, MediaHostRuntimeError};
 use crayon_cast_adapter::{
     AssessmentStatus, CastCode, CastError, CastFacade, CastMediaKind, CastPlaybackState,
-    CastSessionPhase, CastSessionSnapshot, DeviceState, DiscoveredDevice, ReceiverCapabilityCache,
-    SenderCastFacade, SenderCastFacadeConfig,
+    CastSessionPhase, CastSessionSnapshot, DeliveryRoute, DeviceState, DiscoveredDevice,
+    ReceiverCapabilityCache, SenderCastFacade, SenderCastFacadeConfig,
 };
 use crayon_cast_policy::HandoffAvailability;
 use crayon_domain::{CoreError, DeviceId, ReceiverCapabilities, TabId};
@@ -564,6 +564,39 @@ fn request_for(
         receiver: device.clone(),
         receiver_ip: None,
     }
+}
+
+#[test]
+fn route_preview_is_closed_and_has_no_connection_or_delivery_side_effect() {
+    let h = harness();
+    initial_page(&h.runtime);
+    let before = h.facade.calls();
+    assert_eq!(
+        h.runtime
+            .preview_route(&request(&h.device, Protection::Clear))
+            .unwrap(),
+        DeliveryRoute::Direct
+    );
+    assert_eq!(
+        h.runtime
+            .preview_route(&request_for(
+                &h.device,
+                Protection::Clear,
+                ProtocolKind::Hls,
+                HeadersClass::RefererAndUa,
+            ))
+            .unwrap(),
+        DeliveryRoute::Relay
+    );
+    assert!(matches!(
+        h.runtime
+            .preview_route(&request(&h.device, Protection::DrmProtected)),
+        Err(MediaHostRuntimeError::CandidateUnavailable)
+    ));
+    let new_calls = &h.facade.calls()[before.len()..];
+    assert!(!new_calls
+        .iter()
+        .any(|call| matches!(call, FakeCall::Connect(_) | FakeCall::CastMedia { .. })));
 }
 
 fn initial_page(runtime: &MediaHostCastRuntime) -> (u64, Vec<String>, Option<u16>) {

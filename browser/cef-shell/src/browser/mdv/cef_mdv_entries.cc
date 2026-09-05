@@ -150,6 +150,15 @@ bool MdvEntryController::HandleChromeCommand(CefRefPtr<CefBrowser> browser,
   if (open_file_id <= 0 || command_id != open_file_id || !browser) {
     return false;
   }
+  return HandleOpenFileCommand(std::move(browser));
+}
+
+bool MdvEntryController::HandleOpenFileCommand(
+    CefRefPtr<CefBrowser> browser) {
+  CEF_REQUIRE_UI_THREAD();
+  if (!browser || !browser->GetHost()) {
+    return false;
+  }
   CefString title(strings_.document_title);
   // Filter list: one ".md" pattern (MDV-01 §3 E1).
   std::vector<CefString> filters{CefString(".md")};
@@ -242,6 +251,10 @@ bool MdvEntryController::HandleContextMenuCommand(CefRefPtr<CefBrowser> browser,
   context_menu_target_path_.clear();
   LoadAndShow(browser, path, EntrySource::kUserCommand);
   return true;
+}
+
+void MdvEntryController::CancelTransientEntries() noexcept {
+  context_menu_target_path_.clear();
 }
 
 void MdvEntryController::LoadAndShow(CefRefPtr<CefBrowser> browser,

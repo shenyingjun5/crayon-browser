@@ -197,6 +197,10 @@ bool FileRoundTripAndMissingFile() {
   const auto loaded = LoadHistoryFromFile(path, &error);
   CHECK(loaded.has_value());
   CHECK(loaded->entries().size() == 1);
+  store.RecordVisit("https://replacement.test/", "replacement", 8);
+  CHECK(SaveHistoryToFile(store, path, &error));
+  const auto replaced = LoadHistoryFromFile(path, &error);
+  CHECK(replaced && replaced->entries().size() == 2);
   std::ifstream staging(path + ".tmp");
   CHECK(!staging.good());
   std::remove(path.c_str());

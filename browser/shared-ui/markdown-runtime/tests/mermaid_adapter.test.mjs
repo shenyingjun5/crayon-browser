@@ -4,6 +4,7 @@ import {
   attributeAllowed,
   MermaidRenderScheduler,
   parseMermaidSvgCandidate,
+  rebaseMermaidRenderId,
   rebuildCssRules
 } from "../assets/mermaid-adapter.js";
 
@@ -215,6 +216,13 @@ test("gate rebuilds benign mermaid output and scopes every reference", () => {
   const edge = rebuilt.childNodes[1].childNodes[1];
   assert.equal(edge.getAttribute("marker-end"),
     "url(#" + RENDER_ID + "-flowchart-pointEnd)");
+  const reboundId = "mdv-mermaid-fedcba9876543210fedcba9876543210";
+  assert.equal(rebaseMermaidRenderId(rebuilt, RENDER_ID, reboundId), rebuilt);
+  assert.equal(rebuilt.getAttribute("id"), reboundId);
+  assert.equal(marker.getAttribute("id"), reboundId + "-flowchart-pointEnd");
+  assert.equal(edge.getAttribute("marker-end"),
+    "url(#" + reboundId + "-flowchart-pointEnd)");
+  assert.equal(rebuilt.childNodes[2].textContent, "A to B");
 });
 
 test("gate rejects active content and escaping references", () => {
@@ -245,6 +253,10 @@ test("gate rejects active content and escaping references", () => {
   // Oversized candidates fail regardless of content.
   const oversized = "<svg>" + "<g/>".repeat(1200000) + "</svg>";
   assert.equal(parseMermaidSvgCandidate(oversized, RENDER_ID), null);
+  // Captured Mermaid CSS shares the same bounded candidate budget.
+  const oversizedStyle = "x".repeat(4 * 1024 * 1024);
+  assert.equal(
+    parseMermaidSvgCandidate(benign, RENDER_ID, oversizedStyle), null);
 });
 
 test("scheduler bounds concurrency and queue, coalesces and caches", async () => {
@@ -262,7 +274,7 @@ test("scheduler bounds concurrency and queue, coalesces and caches", async () =>
     peak = Math.max(peak, running);
     releases.push(() => {
       running -= 1;
-      resolve({value, bytes: value.length});
+      resolve({value, bytes: value.length, prepared: {value}});
     });
   });
 
@@ -289,10 +301,13 @@ test("scheduler bounds concurrency and queue, coalesces and caches", async () =>
   assert.equal(produced, 5);
   assert.equal(results[0].value, "cached");
   assert.equal(results[1].value, "cached");
+  assert.deepEqual(results[0].prepared, {value: "cached"});
+  assert.deepEqual(results[1].prepared, {value: "cached"});
   const hit = await scheduler.schedule("queued3", producer("miss"));
   assert.equal(hit.status, "ready");
   assert.equal(hit.cacheHit, true);
   assert.equal(hit.value, "five");
+  assert.equal(hit.prepared, undefined);
   assert.equal(produced, 5);
   assert.ok(scheduler.stats().cacheEntries <= 2);
   assert.ok(scheduler.stats().cacheBytes <= 48);

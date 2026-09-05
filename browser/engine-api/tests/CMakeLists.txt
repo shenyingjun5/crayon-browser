@@ -21,10 +21,19 @@ target_link_libraries(browser-engine-discovery PRIVATE crayon::browser-engine-ap
 crayon_engine_api_enable_warnings(browser-engine-discovery)
 add_test(NAME browser_engine_discovery COMMAND browser-engine-discovery)
 
+add_executable(browser-engine-content-view
+  content_view_test.cc
+)
+target_link_libraries(browser-engine-content-view PRIVATE crayon::browser-engine-api)
+crayon_engine_api_enable_warnings(browser-engine-content-view)
+add_test(NAME browser_engine_content_view_contract
+         COMMAND browser-engine-content-view)
+
 add_executable(browser-engine-headers
   headers/action_discovery.cc
   headers/adapter.cc
   headers/browser_engine.cc
+  headers/content_view.cc
   headers/event_sink.cc
   headers/ids.cc
   headers/main.cc

@@ -10,6 +10,7 @@ namespace {
 
 using crayon::cef_shell::renderer::ClassifySourceUrl;
 using crayon::cef_shell::renderer::kMaxMediaElements;
+using crayon::cef_shell::renderer::MediaElementKind;
 using crayon::cef_shell::renderer::MediaObservation;
 using crayon::cef_shell::renderer::MediaObserver;
 using crayon::cef_shell::renderer::MediaPlaybackState;
@@ -175,6 +176,30 @@ bool RemovalIsFencedAndReleasesCapacity() {
   return true;
 }
 
+bool GeometryIsCanonicalAndNeverChangesEligibility() {
+  MediaObserver observer(1);
+  observer.AdvanceNavigation(1);
+  auto sample = Playing(1, 1, "https://a.example/v.mp4",
+                        MediaSourceKind::kHttpUrl, 0.8);
+  sample.geometry_width = 1;
+  CHECK(observer.Observe(sample) == ObserveResult::kDroppedInvalidGeometry);
+  sample.geometry_width = 0;
+  sample.geometry_supported = true;
+  sample.geometry_x = -20;
+  sample.geometry_y = 40;
+  sample.geometry_width = 320;
+  sample.geometry_height = 180;
+  sample.viewport_width = 800;
+  sample.viewport_height = 600;
+  CHECK(observer.Observe(sample) == ObserveResult::kAccepted);
+  const auto eligible = observer.FindEligible(1);
+  CHECK(eligible && eligible->geometry_supported &&
+        eligible->geometry_x == -20 && eligible->viewport_width == 800);
+  sample.element_kind = MediaElementKind::kAudio;
+  CHECK(observer.Observe(sample) == ObserveResult::kDroppedInvalidGeometry);
+  return true;
+}
+
 /// No auto-interaction by construction: the observer exposes no command
 /// surface — this compile-time check pins the API shape.
 bool ApiExposesNoInteractionSurface() {
@@ -195,7 +220,8 @@ int main() {
       SourceClassificationMatrix() && StaleNavigationDropped() &&
       NoFabricatedUrlsForBlobAndStream() && TeardownBlocksLateEvents() &&
       CapacityBounded() && EligibilityPrefersVisiblePlaying() &&
-      ApiExposesNoInteractionSurface() && RemovalIsFencedAndReleasesCapacity();
+      ApiExposesNoInteractionSurface() && RemovalIsFencedAndReleasesCapacity() &&
+      GeometryIsCanonicalAndNeverChangesEligibility();
   if (!ok) {
     return EXIT_FAILURE;
   }

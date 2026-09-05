@@ -10,11 +10,13 @@
 namespace crayon::browser::cef_shell::media_ipc {
 namespace {
 
+using ::crayon::cef_shell::renderer::MediaElementKind;
+using ::crayon::cef_shell::renderer::HasCanonicalMediaGeometry;
 using ::crayon::cef_shell::renderer::MediaObservation;
 using ::crayon::cef_shell::renderer::MediaPlaybackState;
 using ::crayon::cef_shell::renderer::MediaSourceKind;
 
-constexpr std::size_t kObservationSize = 10;
+constexpr std::size_t kObservationSize = 18;
 constexpr std::size_t kMaxIdentityTextLength = 20;
 
 std::optional<std::uint64_t> ParseNavigation(const CefString &value) {
@@ -32,17 +34,21 @@ std::optional<std::uint64_t> ParseNavigation(const CefString &value) {
 }
 
 bool HasObservationTypes(CefRefPtr<CefListValue> values) {
-  if (!values || values->GetSize() != kObservationSize) return false;
+  if (!values || values->GetSize() != kObservationSize)
+    return false;
   constexpr CefValueType kTypes[kObservationSize] = {
-      VTYPE_STRING, VTYPE_INT,    VTYPE_INT,  VTYPE_INT,    VTYPE_STRING,
-      VTYPE_DOUBLE, VTYPE_DOUBLE, VTYPE_BOOL, VTYPE_STRING, VTYPE_BOOL};
+      VTYPE_STRING, VTYPE_INT,    VTYPE_INT,    VTYPE_INT,    VTYPE_STRING,
+      VTYPE_DOUBLE, VTYPE_DOUBLE, VTYPE_BOOL,   VTYPE_STRING, VTYPE_BOOL,
+      VTYPE_INT,    VTYPE_BOOL,   VTYPE_DOUBLE, VTYPE_DOUBLE, VTYPE_DOUBLE,
+      VTYPE_DOUBLE, VTYPE_DOUBLE, VTYPE_DOUBLE};
   for (std::size_t index = 0; index < kObservationSize; ++index) {
-    if (values->GetType(index) != kTypes[index]) return false;
+    if (values->GetType(index) != kTypes[index])
+      return false;
   }
   return true;
 }
 
-}  // namespace
+} // namespace
 
 CefRefPtr<CefProcessMessage> CreateAdvanceMessage(std::uint64_t navigation_id) {
   auto message = CefProcessMessage::Create(kAdvanceMessageName);
@@ -52,8 +58,8 @@ CefRefPtr<CefProcessMessage> CreateAdvanceMessage(std::uint64_t navigation_id) {
   return message;
 }
 
-CefRefPtr<CefProcessMessage> CreateObservationMessage(
-    const MediaObservationEnvelope& envelope) {
+CefRefPtr<CefProcessMessage>
+CreateObservationMessage(const MediaObservationEnvelope &envelope) {
   auto message = CefProcessMessage::Create(kObservationMessageName);
   auto values = message->GetArgumentList();
   values->SetSize(kObservationSize);
@@ -67,11 +73,19 @@ CefRefPtr<CefProcessMessage> CreateObservationMessage(
   values->SetBool(7, envelope.eme_encrypted);
   values->SetString(8, std::to_string(envelope.source_epoch));
   values->SetBool(9, envelope.removed);
+  values->SetInt(10, static_cast<int>(envelope.observation.element_kind));
+  values->SetBool(11, envelope.observation.geometry_supported);
+  values->SetDouble(12, envelope.observation.geometry_x);
+  values->SetDouble(13, envelope.observation.geometry_y);
+  values->SetDouble(14, envelope.observation.geometry_width);
+  values->SetDouble(15, envelope.observation.geometry_height);
+  values->SetDouble(16, envelope.observation.viewport_width);
+  values->SetDouble(17, envelope.observation.viewport_height);
   return message;
 }
 
-std::optional<std::uint64_t> ReadAdvanceMessage(
-    CefRefPtr<CefProcessMessage> message) {
+std::optional<std::uint64_t>
+ReadAdvanceMessage(CefRefPtr<CefProcessMessage> message) {
   if (!message || message->GetName() != kAdvanceMessageName) {
     return std::nullopt;
   }
@@ -82,13 +96,14 @@ std::optional<std::uint64_t> ReadAdvanceMessage(
   return ParseNavigation(values->GetString(0));
 }
 
-std::optional<MediaObservationEnvelope> ReadObservationMessage(
-    CefRefPtr<CefProcessMessage> message) {
+std::optional<MediaObservationEnvelope>
+ReadObservationMessage(CefRefPtr<CefProcessMessage> message) {
   if (!message || message->GetName() != kObservationMessageName) {
     return std::nullopt;
   }
   auto values = message->GetArgumentList();
-  if (!HasObservationTypes(values)) return std::nullopt;
+  if (!HasObservationTypes(values))
+    return std::nullopt;
   const auto navigation_id = ParseNavigation(values->GetString(0));
   const auto source_epoch = ParseNavigation(values->GetString(8));
   const int element_id = values->GetInt(1);
@@ -96,13 +111,16 @@ std::optional<MediaObservationEnvelope> ReadObservationMessage(
   const int source_kind = values->GetInt(3);
   const double visible = values->GetDouble(5);
   const double current_time = values->GetDouble(6);
+  const int element_kind = values->GetInt(10);
   if (!navigation_id || !source_epoch || element_id <= 0 ||
       playback < static_cast<int>(MediaPlaybackState::kIdle) ||
       playback > static_cast<int>(MediaPlaybackState::kEnded) ||
       source_kind < static_cast<int>(MediaSourceKind::kHttpUrl) ||
       source_kind > static_cast<int>(MediaSourceKind::kUnknown) ||
       !std::isfinite(visible) || visible < 0.0 || visible > 1.0 ||
-      !std::isfinite(current_time) || current_time < 0.0) {
+      !std::isfinite(current_time) || current_time < 0.0 ||
+      element_kind < static_cast<int>(MediaElementKind::kVideo) ||
+      element_kind > static_cast<int>(MediaElementKind::kAudio)) {
     return std::nullopt;
   }
   const std::string source_url = values->GetString(4).ToString();
@@ -123,8 +141,18 @@ std::optional<MediaObservationEnvelope> ReadObservationMessage(
   observation.source_url = source_url;
   observation.visible_fraction = visible;
   observation.current_time_seconds = current_time;
+  observation.element_kind = static_cast<MediaElementKind>(element_kind);
+  observation.geometry_supported = values->GetBool(11);
+  observation.geometry_x = values->GetDouble(12);
+  observation.geometry_y = values->GetDouble(13);
+  observation.geometry_width = values->GetDouble(14);
+  observation.geometry_height = values->GetDouble(15);
+  observation.viewport_width = values->GetDouble(16);
+  observation.viewport_height = values->GetDouble(17);
+  if (!HasCanonicalMediaGeometry(observation))
+    return std::nullopt;
   return MediaObservationEnvelope{std::move(observation), values->GetBool(7),
                                   *source_epoch, removed};
 }
 
-}  // namespace crayon::browser::cef_shell::media_ipc
+} // namespace crayon::browser::cef_shell::media_ipc

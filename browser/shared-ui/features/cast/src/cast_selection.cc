@@ -94,6 +94,7 @@ bool Valid(const CastSelectionSnapshot &s) {
   case CastDraftPhase::kPreparing:
   case CastDraftPhase::kPrepared:
   case CastDraftPhase::kCommitting:
+  case CastDraftPhase::kCommitted:
   case CastDraftPhase::kFailed:
   case CastDraftPhase::kExpired:
     break;
@@ -108,6 +109,31 @@ bool Valid(const CastSelectionSnapshot &s) {
   default:
     return false;
   }
+  switch (s.reason) {
+  case CastFailureReason::kNone:
+  case CastFailureReason::kCredentials:
+  case CastFailureReason::kProtection:
+  case CastFailureReason::kRecognized:
+  case CastFailureReason::kUnrecognized:
+  case CastFailureReason::kRedirectRefused:
+  case CastFailureReason::kUpstreamRejected:
+  case CastFailureReason::kAddressRejected:
+  case CastFailureReason::kDns:
+  case CastFailureReason::kConnect:
+  case CastFailureReason::kTimeout:
+  case CastFailureReason::kTransport:
+  case CastFailureReason::kInvalidTarget:
+    break;
+  default:
+    return false;
+  }
+  if (s.reason != CastFailureReason::kNone &&
+      s.phase != CastDraftPhase::kPrepared &&
+      s.phase != CastDraftPhase::kFailed)
+    return false;
+  if (s.session_generation.has_value() !=
+      (s.phase == CastDraftPhase::kCommitted))
+    return false;
   for (std::size_t i = 0; i < s.media.size(); ++i) {
     if (!Valid(s.media[i]))
       return false;
@@ -225,7 +251,37 @@ const char *CastSelectionPresentation::StatusKey(std::uint64_t now) const {
     return "cast.planning";
   case CastDraftPhase::kCommitting:
     return "cast.selection.submitting";
+  case CastDraftPhase::kCommitted:
+    return "cast.selection.connected";
   case CastDraftPhase::kFailed:
+    switch (s.reason) {
+    case CastFailureReason::kCredentials:
+      return "cast.reason.credentials";
+    case CastFailureReason::kProtection:
+      return "cast.reason.protection";
+    case CastFailureReason::kRecognized:
+      return "cast.reason.policy";
+    case CastFailureReason::kUnrecognized:
+      return "cast.reason.unrecognized";
+    case CastFailureReason::kRedirectRefused:
+      return "cast.reason.redirect_refused";
+    case CastFailureReason::kUpstreamRejected:
+      return "cast.reason.upstream_rejected";
+    case CastFailureReason::kAddressRejected:
+      return "cast.reason.address_rejected";
+    case CastFailureReason::kDns:
+      return "cast.reason.dns";
+    case CastFailureReason::kConnect:
+      return "cast.reason.connect";
+    case CastFailureReason::kTimeout:
+      return "cast.reason.timeout";
+    case CastFailureReason::kTransport:
+      return "cast.reason.transport";
+    case CastFailureReason::kInvalidTarget:
+      return "cast.reason.invalid_target";
+    case CastFailureReason::kNone:
+      return "cast.rejected";
+    }
     return "cast.rejected";
   case CastDraftPhase::kExpired:
     return "cast.selection.expired";
@@ -281,7 +337,7 @@ bool CastSelectionPresentation::Allows(const CastSelectionIntent &i,
   case CastIntentKind::kResume:
     return s.session_generation && s.playback_paused;
   case CastIntentKind::kOpen:
-    return EntryEnabled() && !Busy();
+    return EntryEnabled() && !Busy() && !PickerVisible();
   case CastIntentKind::kOpenForMedia: {
     const auto *m = i.media ? FindMedia(*i.media) : nullptr;
     return m && m->selectable && !Busy();

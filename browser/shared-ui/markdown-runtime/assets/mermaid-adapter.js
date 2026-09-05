@@ -173,7 +173,10 @@ export class MermaidRenderScheduler {
           return;
         }
         this.insertCached(job.key, result.value, result.bytes);
-        job.resolve({status: "ready", value: result.value, cacheHit: false});
+        job.resolve({
+          status: "ready", value: result.value, cacheHit: false,
+          prepared: result.prepared
+        });
       }, () => job.resolve({status: "failed"})).finally(() => {
         this.active -= 1;
         if (this.active === 0) this.activeGeneration = 0;
@@ -562,16 +565,23 @@ function applyCssRules(svg, rules) {
 /// Parses a mermaid.render() SVG candidate and rebuilds it inside the closed
 /// SVG policy: unknown tags/attributes, active content, external references
 /// and cross-block fragment targets make the whole candidate fail.
-export function parseMermaidSvgCandidate(candidate, renderId) {
+export function parseMermaidSvgCandidate(candidate, renderId,
+                                         capturedStyleText = "") {
   if (typeof candidate !== "string" || !candidate ||
-      new TextEncoder().encode(candidate).byteLength > MAX_CANDIDATE_BYTES ||
+      typeof capturedStyleText !== "string" ||
       typeof DOMParser !== "function" || !ID_PATTERN.test(renderId)) {
+    return null;
+  }
+  const encoder = new TextEncoder();
+  if (encoder.encode(candidate).byteLength +
+      encoder.encode(capturedStyleText).byteLength > MAX_CANDIDATE_BYTES) {
     return null;
   }
   // Style elements are pulled out before parsing: parsing a style element
   // would trip the page CSP for no benefit, and the CSS is applied through
   // CSSOM property assignment instead.
   const styleTexts = [];
+  if (capturedStyleText) styleTexts.push(capturedStyleText);
   const stripped = candidate.replace(
     /<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi, (_, css) => {
       styleTexts.push(css);
@@ -597,6 +607,25 @@ export function parseMermaidSvgCandidate(candidate, renderId) {
   return rebuilt;
 }
 
+export function rebaseMermaidRenderId(root, fromRenderId, toRenderId) {
+  if (!root || !ID_PATTERN.test(fromRenderId) ||
+      !ID_PATTERN.test(toRenderId)) return null;
+  if (fromRenderId === toRenderId) return root;
+  const pending = [root];
+  while (pending.length > 0) {
+    const element = pending.pop();
+    for (const attribute of Array.from(element.attributes || [])) {
+      if (attribute.value.includes(fromRenderId)) {
+        attribute.value = attribute.value.replaceAll(fromRenderId, toRenderId);
+      }
+    }
+    for (const child of Array.from(element.childNodes || [])) {
+      if (child.nodeType === Node.ELEMENT_NODE) pending.push(child);
+    }
+  }
+  return root;
+}
+
 /// Applies the requested color scheme. initialize() may be called again
 /// between renders; the theme only changes when it actually differs.
 let currentTheme = null;
@@ -604,6 +633,8 @@ let currentTheme = null;
 function ensureTheme(mermaid, theme) {
   if (currentTheme === theme) return;
   mermaid.initialize({
+    // Keep Mermaid's strict upstream sanitization. The Browser-owned closed
+    // SVG/CSS rebuild below remains the final and mandatory security boundary.
     startOnLoad: false, securityLevel: "strict", htmlLabels: false,
     flowchart: {htmlLabels: false}, class: {htmlLabels: false},
     theme: theme === "dark" ? "dark" : "default"
@@ -691,6 +722,91 @@ export function mermaidSessionStats() {
   return renderScheduler.stats();
 }
 
+const capturedRenderStyles = new Map();
+const capturedStyleNodes = new WeakSet();
+let captureRenderCount = 0;
+let originalCreateElement = null;
+let originalInsertBefore = null;
+let originalAppendChild = null;
+
+function innerHtmlDescriptor(element) {
+  let prototype = element;
+  while (prototype) {
+    const descriptor = Object.getOwnPropertyDescriptor(prototype, "innerHTML");
+    if (descriptor && descriptor.get && descriptor.set) return descriptor;
+    prototype = Object.getPrototypeOf(prototype);
+  }
+  return null;
+}
+
+async function renderCapturingStyles(mermaid, renderId, source) {
+  capturedRenderStyles.set(renderId, {parts: [], bytes: 0, overflow: false});
+  if (captureRenderCount === 0) {
+    originalCreateElement = document.createElement;
+    originalInsertBefore = Node.prototype.insertBefore;
+    originalAppendChild = Node.prototype.appendChild;
+    Node.prototype.insertBefore = function(newNode, referenceNode) {
+      if (capturedStyleNodes.has(newNode)) return newNode;
+      return originalInsertBefore.call(this, newNode, referenceNode);
+    };
+    Node.prototype.appendChild = function(newNode) {
+      if (capturedStyleNodes.has(newNode)) return newNode;
+      return originalAppendChild.call(this, newNode);
+    };
+    document.createElement = function(name, options) {
+      const element = originalCreateElement.call(this, name, options);
+      if (typeof name === "string" && name.toLowerCase() === "style") {
+        const nativeInnerHtml = innerHtmlDescriptor(element);
+        if (nativeInnerHtml) {
+          Object.defineProperty(element, "innerHTML", {
+            configurable: true,
+            get() { return nativeInnerHtml.get.call(this); },
+            set(value) {
+              const text = String(value);
+              for (const [activeId, capture] of capturedRenderStyles) {
+                if (text.includes("#" + activeId)) {
+                  const bytes = encoder.encode(text).byteLength;
+                  if (bytes > MAX_CSS_BYTES - capture.bytes) {
+                    capture.overflow = true;
+                  } else {
+                    capture.parts.push(text);
+                    capture.bytes += bytes;
+                  }
+                  capturedStyleNodes.add(this);
+                  return;
+                }
+              }
+              nativeInnerHtml.set.call(this, value);
+            }
+          });
+        }
+      }
+      return element;
+    };
+  }
+  captureRenderCount += 1;
+  try {
+    const rendered = await mermaid.render(renderId, source);
+    const capture = capturedRenderStyles.get(renderId);
+    if (!capture || capture.overflow) throw new Error("style capacity");
+    return {
+      rendered,
+      styleText: capture.parts.join("")
+    };
+  } finally {
+    capturedRenderStyles.delete(renderId);
+    captureRenderCount -= 1;
+    if (captureRenderCount === 0 && originalCreateElement) {
+      document.createElement = originalCreateElement;
+      Node.prototype.insertBefore = originalInsertBefore;
+      Node.prototype.appendChild = originalAppendChild;
+      originalCreateElement = null;
+      originalInsertBefore = null;
+      originalAppendChild = null;
+    }
+  }
+}
+
 export async function renderMermaid(container, nodeId, theme) {
   const scheme = theme === "dark" ? "dark" : "light";
   if (!container || typeof nodeId !== "string" || !nodeId ||
@@ -705,24 +821,36 @@ export async function renderMermaid(container, nodeId, theme) {
   }
   try {
     const cacheKey = await sourceCacheKey(source, scheme);
-    if (staleResult(container, nodeId)) return false;
+    if (staleResult(container, nodeId)) {
+      return false;
+    }
     renderSequence += 1;
     const renderId = "mdv-mermaid-" + nodeId + "-r" + renderSequence;
     const requestKey = cacheKey ?? renderId;
     const scheduled = await renderScheduler.schedule(requestKey, async () => {
       const mermaid = await withDeadline(loadMermaid());
       ensureTheme(mermaid, scheme);
-      const rendered = await withDeadline(mermaid.render(renderId, source));
-      const candidate = rendered && typeof rendered.svg === "string"
-        ? rendered.svg : "";
+      // Capture Mermaid's render-id-scoped style as text before it reaches a
+      // DOM. It is accepted only after the same closed CSS/SVG rebuild below.
+      const captured = await withDeadline(
+        renderCapturingStyles(mermaid, renderId, source));
+      const candidate = captured && captured.rendered &&
+        typeof captured.rendered.svg === "string" ? captured.rendered.svg : "";
+      const styleText = captured ? captured.styleText : "";
       // Cache only output that has already passed the Browser-owned gate.
       // Every consumer rebuilds it again with a new block-scoped render id.
-      if (!parseMermaidSvgCandidate(candidate, renderId)) return null;
-      const utf8Bytes = encoder.encode(candidate).byteLength;
+      const gated = parseMermaidSvgCandidate(candidate, renderId, styleText);
+      if (!gated) return null;
+      const packedValue = JSON.stringify({
+        candidate, styleText, renderId
+      });
+      const utf8Bytes = encoder.encode(packedValue).byteLength;
+      if (utf8Bytes > MAX_CANDIDATE_BYTES) return null;
       // V8 may retain a one-byte or two-byte string. Account the conservative
       // representation so the 16 MiB cap is an upper bound, not wishful math.
-      const retainedBytes = Math.max(utf8Bytes, candidate.length * 2);
-      return {value: candidate, bytes: retainedBytes};
+      const retainedBytes = Math.max(
+        utf8Bytes, packedValue.length * 2);
+      return {value: packedValue, bytes: retainedBytes, prepared: gated};
     });
     if (scheduled.status === "capacity_exceeded" ||
         scheduled.status === "failed") {
@@ -731,14 +859,37 @@ export async function renderMermaid(container, nodeId, theme) {
       return false;
     }
     if (scheduled.status !== "ready") return false;
-    const candidate = scheduled.value;
+    let cached;
+    try {
+      cached = JSON.parse(scheduled.value);
+    } catch (_) {
+      markFailure(container);
+      return false;
+    }
+    if (!cached || typeof cached.candidate !== "string" ||
+        typeof cached.styleText !== "string" ||
+        typeof cached.renderId !== "string" ||
+        !ID_PATTERN.test(cached.renderId)) {
+      markFailure(container);
+      return false;
+    }
+    const candidate = cached.candidate;
+    const styleText = cached.styleText;
+    const sourceRenderId = cached.renderId;
     if (staleResult(container, nodeId)) return false;
-    const rebuilt = parseMermaidSvgCandidate(candidate, renderId);
+    const prepared = scheduled.prepared &&
+        typeof scheduled.prepared.cloneNode === "function"
+      ? scheduled.prepared.cloneNode(true)
+      : parseMermaidSvgCandidate(candidate, sourceRenderId, styleText);
+    const rebuilt = rebaseMermaidRenderId(
+      prepared, sourceRenderId, renderId);
     if (!rebuilt) {
       markFailure(container);
       return false;
     }
-    if (staleResult(container, nodeId)) return false;
+    if (staleResult(container, nodeId)) {
+      return false;
+    }
     // The escaped DSL is preserved as hidden text so "view source" works
     // without re-reading anything outside this block.
     const sourceText = document.createElement("span");

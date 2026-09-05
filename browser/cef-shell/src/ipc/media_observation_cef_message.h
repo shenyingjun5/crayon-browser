@@ -9,7 +9,7 @@
 namespace crayon::browser::cef_shell::media_ipc {
 
 inline constexpr char kAdvanceMessageName[] = "crayon.media.advance.v1";
-inline constexpr char kObservationMessageName[] = "crayon.media.observation.v2";
+inline constexpr char kObservationMessageName[] = "crayon.media.observation.v4";
 
 struct MediaObservationEnvelope {
   ::crayon::cef_shell::renderer::MediaObservation observation;
@@ -19,12 +19,12 @@ struct MediaObservationEnvelope {
 };
 
 CefRefPtr<CefProcessMessage> CreateAdvanceMessage(std::uint64_t navigation_id);
-CefRefPtr<CefProcessMessage> CreateObservationMessage(
-    const MediaObservationEnvelope& envelope);
+CefRefPtr<CefProcessMessage>
+CreateObservationMessage(const MediaObservationEnvelope &envelope);
 
-std::optional<std::uint64_t> ReadAdvanceMessage(
-    CefRefPtr<CefProcessMessage> message);
-std::optional<MediaObservationEnvelope> ReadObservationMessage(
-    CefRefPtr<CefProcessMessage> message);
+std::optional<std::uint64_t>
+ReadAdvanceMessage(CefRefPtr<CefProcessMessage> message);
+std::optional<MediaObservationEnvelope>
+ReadObservationMessage(CefRefPtr<CefProcessMessage> message);
 
-}  // namespace crayon::browser::cef_shell::media_ipc
+} // namespace crayon::browser::cef_shell::media_ipc

@@ -7,13 +7,24 @@ namespace crayon::browser_navigation {
 namespace {
 
 bool StartsWith(std::string_view text, std::string_view prefix) noexcept {
-  return text.size() >= prefix.size() &&
-         text.compare(0, prefix.size(), prefix) == 0;
+  if (text.size() < prefix.size()) {
+    return false;
+  }
+  for (std::size_t index = 0; index < prefix.size(); ++index) {
+    char character = text[index];
+    if (character >= 'A' && character <= 'Z') {
+      character = static_cast<char>(character - 'A' + 'a');
+    }
+    if (character != prefix[index]) {
+      return false;
+    }
+  }
+  return true;
 }
 
-}  // namespace
+} // namespace
 
-SiteIdentity EvaluateSiteIdentity(const std::string& url) noexcept {
+SiteIdentity EvaluateSiteIdentity(const std::string &url) noexcept {
   if (url.empty()) {
     return SiteIdentity::kUnknown;
   }
@@ -36,4 +47,18 @@ SiteIdentity EvaluateSiteIdentity(const std::string& url) noexcept {
   return SiteIdentity::kUnknown;
 }
 
-}  // namespace crayon::browser_navigation
+SiteIdentity EvaluateSiteIdentity(const std::string &url,
+                                  bool navigation_succeeded,
+                                  bool certificate_error) noexcept {
+  const SiteIdentity scheme_identity = EvaluateSiteIdentity(url);
+  if (scheme_identity != SiteIdentity::kSecure) {
+    return scheme_identity;
+  }
+  if (certificate_error) {
+    return SiteIdentity::kCertificateError;
+  }
+  return navigation_succeeded ? SiteIdentity::kSecure
+                              : SiteIdentity::kSecurePending;
+}
+
+} // namespace crayon::browser_navigation

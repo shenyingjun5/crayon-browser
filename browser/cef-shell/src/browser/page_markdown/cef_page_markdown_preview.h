@@ -21,12 +21,36 @@ struct PageMarkdownStrings final {
   std::string save_cancelled_status;
 };
 
+struct PageMarkdownTabState final {
+  int browser_id = -1;
+  std::uint64_t tab_id = 0;
+  std::uint64_t navigation_id = 0;
+  std::string url;
+  bool ready = false;
+  bool loading = false;
+};
+
+// Runtime-neutral access to the active shell's tab facts and Browser-owned
+// snapshot command. The controller never owns or mutates the shell tab model.
+struct PageMarkdownSnapshotHost final {
+  std::function<std::optional<PageMarkdownTabState>(int)> lookup;
+  std::function<std::optional<browser_engine::SnapshotRequestId>(
+      CefRefPtr<CefBrowser>)>
+      start;
+  std::function<void(const browser_engine::SnapshotRequestId&)> cancel;
+};
+
 // UI-thread owner for the explicit context-menu request -> Markdown preview
 // flow. Page content cannot invoke this controller.
 class CefPageMarkdownPreviewController final {
  public:
   CefPageMarkdownPreviewController(
       window::TabController* tabs,
+      std::shared_ptr<mdv::MdvEditController> mdv_editing,
+      PageMarkdownStrings strings,
+      std::function<bool(const std::string&)> clipboard_write);
+  CefPageMarkdownPreviewController(
+      PageMarkdownSnapshotHost host,
       std::shared_ptr<mdv::MdvEditController> mdv_editing,
       PageMarkdownStrings strings,
       std::function<bool(const std::string&)> clipboard_write);
@@ -44,7 +68,7 @@ class CefPageMarkdownPreviewController final {
   void Reset();
   bool SameNavigation() const;
 
-  window::TabController* tabs_;
+  PageMarkdownSnapshotHost host_;
   std::shared_ptr<mdv::MdvEditController> mdv_editing_;
   PageMarkdownStrings strings_;
   std::function<bool(const std::string&)> clipboard_write_;

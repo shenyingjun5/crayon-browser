@@ -113,7 +113,7 @@ bool ProjectionIsClosedAndExact() {
 }
 
 bool CatalogIsClosedAndDoesNotFallback() {
-  CHECK(LocaleCatalog::Size() == 180);
+  CHECK(LocaleCatalog::Size() == 197);
   CHECK(LocaleCatalog::Version() == "desktop-localization-v1");
   const LocaleCatalog english(AppLocale::kEnUs);
   const LocaleCatalog simplified(AppLocale::kZhCn);
@@ -125,6 +125,9 @@ bool CatalogIsClosedAndDoesNotFallback() {
   CHECK(simplified.Find("app.about") == "关于蜡笔浏览器");
   CHECK(traditional.Find("app.about") == "關於蠟筆瀏覽器");
   CHECK(traditional.Find("mdv.view_source") == "原始碼");
+  CHECK(english.Find("cast.reason.timeout") == "The media check timed out");
+  CHECK(simplified.Find("cast.reason.timeout") == "媒体检查超时");
+  CHECK(traditional.Find("cast.reason.timeout") == "媒體檢查逾時");
   CHECK(!english.Find("missing.key").has_value());
   CHECK(!simplified.Find("").has_value());
   return true;

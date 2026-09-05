@@ -6,6 +6,7 @@
 #include <string>
 
 #include "crayon/browser_session/session_restore.h"
+#include "crayon/browser_session/session_snapshot.h"
 
 namespace {
 
@@ -14,6 +15,12 @@ using crayon::browser_session::RestoreDecision;
 using crayon::browser_session::SessionRestoreCoordinator;
 using crayon::browser_session::StartupPolicy;
 using crayon::browser_session::WindowKind;
+using crayon::browser_session::DecodeSessionSnapshot;
+using crayon::browser_session::EncodeSessionSnapshotV2;
+using crayon::browser_session::SessionProfileSnapshot;
+using crayon::browser_session::SessionSnapshotError;
+using crayon::browser_session::SessionTabSnapshot;
+using crayon::browser_session::SessionWindowSnapshot;
 
 #define CHECK(condition)                                    \
   do {                                                      \
@@ -119,12 +126,72 @@ bool BoundedStores() {
   return true;
 }
 
+bool SnapshotV2RoundTrip() {
+  SessionProfileSnapshot profile{
+      "p1",
+      {SessionWindowSnapshot{
+          "w1",
+          {SessionTabSnapshot{"https://example.test/a", true, false,
+                              std::string("group-a")},
+           SessionTabSnapshot{"crayon://mdv/app.html", false, true,
+                              std::nullopt}},
+          1}}};
+  SessionSnapshotError error = SessionSnapshotError::kMalformed;
+  const auto encoded = EncodeSessionSnapshotV2(profile, &error);
+  CHECK(encoded.has_value());
+  CHECK(error == SessionSnapshotError::kNone);
+  const auto decoded = DecodeSessionSnapshot(*encoded, &error);
+  CHECK(decoded.has_value());
+  CHECK(error == SessionSnapshotError::kNone);
+  CHECK(decoded->profile_id == "p1" && decoded->windows.size() == 1);
+  const auto& window = decoded->windows.front();
+  CHECK(window.window_id == "w1" && window.active_index == 1 &&
+        window.tabs.size() == 2);
+  CHECK(window.tabs[0].pinned && !window.tabs[0].muted &&
+        window.tabs[0].group == std::optional<std::string>("group-a"));
+  CHECK(window.tabs[1].url == "crayon://mdv/app.html" &&
+        window.tabs[1].muted);
+  return true;
+}
+
+bool SnapshotV1CompatibilityAndCorruption() {
+  SessionSnapshotError error = SessionSnapshotError::kNone;
+  const auto legacy = DecodeSessionSnapshot(
+      "CRAYON_SESSION_V1\r\nP\t7031\r\nW\t7731\t2\r\n", &error);
+  CHECK(legacy.has_value());
+  CHECK(legacy->windows.size() == 1 &&
+        legacy->windows[0].tabs.size() == 2);
+  CHECK(legacy->windows[0].tabs[0].url == "crayon://newtab/");
+  CHECK(!DecodeSessionSnapshot("CRAYON_SESSION_V9\nP\t7031\n", &error));
+  CHECK(error == SessionSnapshotError::kUnsupportedVersion);
+  CHECK(!DecodeSessionSnapshot(
+      "CRAYON_SESSION_V1\nP\t7031\nW\t7731\t1\nW\t7731\t1\n",
+      &error));
+  CHECK(error == SessionSnapshotError::kDuplicateIdentity);
+  CHECK(!DecodeSessionSnapshot(
+      "CRAYON_SESSION_V2\nP\t7031\nW\t7731\t0\t1\n"
+      "T\t68747470733a2f2f757365723a70617373406578616d706c652e746573742f"
+      "\t0\t0\t\n",
+      &error));
+  CHECK(error == SessionSnapshotError::kInvalidValue);
+  SessionWindowSnapshot too_many_groups{"w1", {}, 0};
+  for (std::size_t index = 0;
+       index <= crayon::browser_session::kMaxSessionGroupsPerWindow; ++index) {
+    too_many_groups.tabs.push_back(
+        {"https://example.test/" + std::to_string(index), false, false,
+         "group-" + std::to_string(index)});
+  }
+  CHECK(!crayon::browser_session::IsValid(too_many_groups));
+  return true;
+}
+
 }  // namespace
 
 int main() {
   const bool ok = IdValidation() && IncognitoNeverRecorded() && PolicyDrivenRestore() &&
                   CrashRecoveryDropsTail() && StaleEpochRejected() && CrossProfileIsolation() &&
-                  BoundedStores();
+                  BoundedStores() && SnapshotV2RoundTrip() &&
+                  SnapshotV1CompatibilityAndCorruption();
   if (!ok) {
     return EXIT_FAILURE;
   }

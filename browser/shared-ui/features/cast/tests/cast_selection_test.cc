@@ -3,6 +3,7 @@
 #include <iostream>
 #include <limits>
 #include <string>
+#include <utility>
 
 namespace {
 using namespace crayon::browser_cast_view;
@@ -116,14 +117,47 @@ bool CommitCancelAndSession() {
   p = Presentation(s);
   CHECK(!p.EntryEnabled());
   s.session_generation = 7;
+  s.phase = CastDraftPhase::kCommitted;
   ++s.view_revision;
   CHECK(p.Apply(s) && p.EntryEnabled());
+  CHECK(std::string(p.StatusKey(100)) == "cast.selection.connected");
   CHECK(p.TakeIntent(p.Intent(CastIntentKind::kStop), 100));
   CHECK(p.TakeIntent(p.Intent(CastIntentKind::kPause), 100));
   CHECK(!p.TakeIntent(p.Intent(CastIntentKind::kResume), 100));
   auto stop = p.Intent(CastIntentKind::kStop);
   stop.session_generation = 6;
   CHECK(!p.TakeIntent(stop, 100));
+  return true;
+}
+bool FailureReasons() {
+  const std::pair<CastFailureReason, const char *> cases[] = {
+      {CastFailureReason::kCredentials, "cast.reason.credentials"},
+      {CastFailureReason::kProtection, "cast.reason.protection"},
+      {CastFailureReason::kRecognized, "cast.reason.policy"},
+      {CastFailureReason::kUnrecognized, "cast.reason.unrecognized"},
+      {CastFailureReason::kRedirectRefused, "cast.reason.redirect_refused"},
+      {CastFailureReason::kUpstreamRejected,
+       "cast.reason.upstream_rejected"},
+      {CastFailureReason::kAddressRejected,
+       "cast.reason.address_rejected"},
+      {CastFailureReason::kDns, "cast.reason.dns"},
+      {CastFailureReason::kConnect, "cast.reason.connect"},
+      {CastFailureReason::kTimeout, "cast.reason.timeout"},
+      {CastFailureReason::kTransport, "cast.reason.transport"},
+      {CastFailureReason::kInvalidTarget, "cast.reason.invalid_target"}};
+  for (const auto &[reason, key] : cases) {
+    auto s = Snapshot();
+    s.phase = CastDraftPhase::kFailed;
+    s.reason = reason;
+    auto p = Presentation(s);
+    CHECK(std::string(p.StatusKey(100)) == key);
+    s.phase = CastDraftPhase::kChoosing;
+    ++s.view_revision;
+    CHECK(!p.Apply(s));
+  }
+  auto generic = Snapshot();
+  generic.phase = CastDraftPhase::kFailed;
+  CHECK(std::string(Presentation(generic).StatusKey(100)) == "cast.rejected");
   return true;
 }
 bool ContextAndPayload() {
@@ -242,8 +276,9 @@ bool OverlayGeometry() {
 } // namespace
 int main() {
   if (!ExplicitSelection() || !CommitCancelAndSession() ||
-      !ContextAndPayload() || !BoundsAndPages() || !OverlayGeometry())
+      !FailureReasons() || !ContextAndPayload() || !BoundsAndPages() ||
+      !OverlayGeometry())
     return 1;
-  std::cout << "cast_selection: 5 groups passed\n";
+  std::cout << "cast_selection: 6 groups passed\n";
   return 0;
 }

@@ -14,7 +14,7 @@ struct LocaleCatalogEntry {
   std::string_view zh_tw;
 };
 
-inline constexpr std::array<LocaleCatalogEntry, 180> kLocaleCatalogEntries{{
+inline constexpr std::array<LocaleCatalogEntry, 197> kLocaleCatalogEntries{{
     {"cast.selection.unavailable", "Casting is not ready in this window", "此窗口的投屏入口尚未就绪", "此視窗的投屏入口尚未就緒"},
     {"cast.selection.expired", "Selection expired. Prepare again.", "选择已过期，请重新准备", "選擇已過期，請重新準備"},
     {"cast.selection.connecting", "Connecting to device…", "正在连接设备…", "正在連線裝置…"},
@@ -36,8 +36,25 @@ inline constexpr std::array<LocaleCatalogEntry, 180> kLocaleCatalogEntries{{
     {"cast.selection.next", "Next", "下一页", "下一頁"},
     {"cast.selection.overlay", "Cast this video", "投屏此视频", "投屏此影片"},
     {"cast.selection.empty_video", "No eligible videos. Play a video first.", "暂无可投视频，请先播放视频", "暫無可投影片，請先播放影片"},
+    {"cast.reason.credentials", "Authenticated media cannot be cast directly", "需要登录凭证的媒体不能直接投屏", "需要登入憑證的媒體無法直接投影"},
+    {"cast.reason.protection", "Protected media cannot be cast", "受保护的媒体不能投屏", "受保護的媒體無法投影"},
+    {"cast.reason.policy", "The selected receiver cannot play this media", "所选接收端无法播放此媒体", "所選接收端無法播放此媒體"},
+    {"cast.reason.unrecognized", "The media format could not be recognized", "无法识别媒体格式", "無法識別媒體格式"},
+    {"cast.reason.redirect_refused", "The media redirect was refused", "媒体重定向已被拒绝", "媒體重新導向已被拒絕"},
+    {"cast.reason.upstream_rejected", "The media server rejected the request", "媒体服务器拒绝了请求", "媒體伺服器拒絕了請求"},
+    {"cast.reason.address_rejected", "The media address is not allowed", "不允许访问此媒体地址", "不允許存取此媒體位址"},
+    {"cast.reason.dns", "The media server could not be found", "找不到媒体服务器", "找不到媒體伺服器"},
+    {"cast.reason.connect", "The media server could not be reached", "无法连接媒体服务器", "無法連線媒體伺服器"},
+    {"cast.reason.timeout", "The media check timed out", "媒体检查超时", "媒體檢查逾時"},
+    {"cast.reason.transport", "The media check failed", "媒体检查失败", "媒體檢查失敗"},
+    {"cast.reason.invalid_target", "The media address is invalid", "媒体地址无效", "媒體位址無效"},
     {"app.title", "Crayon AI Agent Cast Browser", "蜡笔 AI Agent 投屏浏览器", "蠟筆 AI Agent 投影瀏覽器"},
     {"app.about", "About Crayon Browser", "关于蜡笔浏览器", "關於蠟筆瀏覽器"},
+    {"app.menu", "Menu", "菜单", "選單"},
+    {"menu.open_markdown", "Open Markdown…", "打开 Markdown…", "開啟 Markdown…"},
+    {"menu.copy", "Copy", "复制", "複製"},
+    {"menu.paste", "Paste", "粘贴", "貼上"},
+    {"menu.licenses", "Open source licenses", "开源许可", "開放原始碼授權"},
     {"nav.back", "Back", "后退", "後退"},
     {"nav.forward", "Forward", "前进", "前進"},
     {"nav.reload", "Reload", "刷新", "重新整理"},

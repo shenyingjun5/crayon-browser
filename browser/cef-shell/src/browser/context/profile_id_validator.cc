@@ -1,7 +1,6 @@
 #include "browser/context/profile_id_validator.h"
 
 #include <array>
-#include <cctype>
 #include <iomanip>
 #include <sstream>
 
@@ -26,7 +25,7 @@ inline std::uint32_t rotr(std::uint32_t x, std::uint32_t n) {
   return (x >> n) | (x << (32 - n));
 }
 
-void sha256_transform(std::array<std::uint32_t, 8>& state,
+void sha256_transform(std::array<std::uint32_t, 8> &state,
                       const std::uint8_t block[64]) {
   std::array<std::uint32_t, 64> w{};
   for (int i = 0; i < 16; ++i) {
@@ -80,7 +79,7 @@ void sha256_transform(std::array<std::uint32_t, 8>& state,
   state[7] += h;
 }
 
-std::array<std::uint8_t, 32> Sha256(const std::string& data) {
+std::array<std::uint8_t, 32> Sha256(const std::string &data) {
   std::array<std::uint32_t, 8> state = {0x6a09e667, 0xbb67ae85, 0x3c6ef372,
                                         0xa54ff53a, 0x510e527f, 0x9b05688c,
                                         0x1f83d9ab, 0x5be0cd19};
@@ -124,24 +123,27 @@ std::array<std::uint8_t, 32> Sha256(const std::string& data) {
   return hash;
 }
 
-}  // namespace
+} // namespace
 
 namespace crayon::browser::cef_shell::context {
 
-bool IsValidProfileId(const std::string& profile_id) noexcept {
+bool IsValidProfileId(const std::string &profile_id) noexcept {
   if (profile_id.size() < kMinProfileIdLength ||
       profile_id.size() > kMaxProfileIdLength) {
     return false;
   }
   for (unsigned char ch : profile_id) {
-    if (!std::isalnum(static_cast<int>(ch)) && ch != '-' && ch != '_') {
+    const bool ascii_alphanumeric = (ch >= 'a' && ch <= 'z') ||
+                                    (ch >= 'A' && ch <= 'Z') ||
+                                    (ch >= '0' && ch <= '9');
+    if (!ascii_alphanumeric && ch != '-' && ch != '_') {
       return false;
     }
   }
   return true;
 }
 
-std::string MapProfileIdToDirectoryName(const std::string& profile_id) {
+std::string MapProfileIdToDirectoryName(const std::string &profile_id) {
   const auto hash = Sha256(profile_id);
   std::ostringstream oss;
   oss << std::hex << std::setfill('0');
@@ -151,8 +153,8 @@ std::string MapProfileIdToDirectoryName(const std::string& profile_id) {
   return oss.str();
 }
 
-std::string BuildProfileCachePath(const std::string& base_cache_path,
-                                  const std::string& profile_id) {
+std::string BuildProfileCachePath(const std::string &base_cache_path,
+                                  const std::string &profile_id) {
   if (base_cache_path.empty()) {
     return "";
   }
@@ -160,10 +162,12 @@ std::string BuildProfileCachePath(const std::string& base_cache_path,
   if (path.back() != '/' && path.back() != '\\') {
     path += '/';
   }
-  path += "profiles/";
+  // CEF's Chrome runtime creates each persistent profile as an immediate
+  // child of root_cache_path. Keep the opaque hash in that direct child name.
+  path += "profile-";
   path += MapProfileIdToDirectoryName(profile_id);
   path += '/';
   return path;
 }
 
-}  // namespace crayon::browser::cef_shell::context
+} // namespace crayon::browser::cef_shell::context

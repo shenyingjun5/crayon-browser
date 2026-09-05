@@ -15,8 +15,8 @@ namespace crayon::browser::cef_shell::window {
 inline constexpr std::size_t kMaxPopupUrlBytes = 2048;
 
 enum class PopupTargetAction {
-  kOpenInNewTab = 0,  // Cancel the standalone window; open in a new tab.
-  kDeny,              // Cancel entirely; no new window and no new tab.
+  kOpenInNewTab = 0, // Cancel the standalone window; open in a new tab.
+  kDeny,             // Cancel entirely; no new window and no new tab.
 };
 
 constexpr bool IsPopupUrlAllowed(std::string_view url) noexcept {
@@ -25,8 +25,29 @@ constexpr bool IsPopupUrlAllowed(std::string_view url) noexcept {
   if (url.size() <= kHttps.size() || url.size() > kMaxPopupUrlBytes) {
     return false;
   }
-  if (url.substr(0, kHttp.size()) != kHttp &&
-      url.substr(0, kHttps.size()) != kHttps) {
+  auto matches = [url](std::string_view prefix) constexpr {
+    if (url.size() < prefix.size())
+      return false;
+    for (std::size_t index = 0; index < prefix.size(); ++index) {
+      char value = url[index];
+      if (value >= 'A' && value <= 'Z')
+        value = value - 'A' + 'a';
+      if (value != prefix[index])
+        return false;
+    }
+    return true;
+  };
+  const std::size_t authority_start =
+      matches(kHttp) ? kHttp.size() : (matches(kHttps) ? kHttps.size() : 0);
+  if (authority_start == 0) {
+    return false;
+  }
+  const std::size_t authority_end = url.find_first_of("/?#", authority_start);
+  const std::string_view authority =
+      url.substr(authority_start, authority_end == std::string_view::npos
+                                      ? std::string_view::npos
+                                      : authority_end - authority_start);
+  if (authority.empty() || authority.find('@') != std::string_view::npos) {
     return false;
   }
   for (const char character : url) {
@@ -42,9 +63,10 @@ constexpr bool IsPopupUrlAllowed(std::string_view url) noexcept {
 /// after URL validation.  `pending_popup_count` is the number of popup URLs
 /// already queued for new tabs; `tab_capacity_reached` reports a full tab
 /// strip.
-inline PopupTargetAction EvaluatePopupTarget(
-    std::string_view url, bool user_gesture, std::size_t pending_popup_count,
-    bool tab_capacity_reached) noexcept {
+inline PopupTargetAction
+EvaluatePopupTarget(std::string_view url, bool user_gesture,
+                    std::size_t pending_popup_count,
+                    bool tab_capacity_reached) noexcept {
   if (!IsPopupUrlAllowed(url)) {
     return PopupTargetAction::kDeny;
   }
@@ -58,4 +80,4 @@ inline PopupTargetAction EvaluatePopupTarget(
              : PopupTargetAction::kDeny;
 }
 
-}  // namespace crayon::browser::cef_shell::window
+} // namespace crayon::browser::cef_shell::window

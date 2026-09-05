@@ -55,10 +55,26 @@ enum class CastDraftPhase {
   kPreparing,
   kPrepared,
   kCommitting,
+  kCommitted,
   kFailed,
   kExpired
 };
 enum class CastSelectionRoute { kNone, kDirect, kRelay };
+enum class CastFailureReason {
+  kNone,
+  kCredentials,
+  kProtection,
+  kRecognized,
+  kUnrecognized,
+  kRedirectRefused,
+  kUpstreamRejected,
+  kAddressRejected,
+  kDns,
+  kConnect,
+  kTimeout,
+  kTransport,
+  kInvalidTarget
+};
 
 struct CastSelectionSnapshot {
   CastViewContext context;
@@ -70,6 +86,7 @@ struct CastSelectionSnapshot {
   std::uint64_t draft_revision = 0;
   CastDraftPhase phase = CastDraftPhase::kChoosing;
   CastSelectionRoute route = CastSelectionRoute::kNone;
+  CastFailureReason reason = CastFailureReason::kNone;
   std::uint64_t prepared_until_ms = 0;
   bool replacement_confirmation_required = false;
   bool device_connected = false;

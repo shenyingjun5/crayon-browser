@@ -92,6 +92,8 @@ class OmniboxStateMachine final {
   void OnFocus() noexcept;
   void OnEdit(std::string text) noexcept;
   void OnSuggestionsUpdated(std::vector<OmniboxSuggestion> suggestions) noexcept;
+  bool SelectNextSuggestion() noexcept;
+  bool SelectPreviousSuggestion() noexcept;
   void OnSubmit() noexcept;
   void OnCancel() noexcept;
   void OnNavigationComplete() noexcept;

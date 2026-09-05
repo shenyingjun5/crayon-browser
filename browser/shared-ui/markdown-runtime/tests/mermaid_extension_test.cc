@@ -271,7 +271,15 @@ bool EmbeddedCatalogServesTheFullClosure() {
             crayon::browser_markdown_runtime::RuntimeAssetContentType::
                 kJavaScript);
       CHECK(asset.bytes.find("securityLevel") != std::string::npos);
+      CHECK(asset.bytes.find("securityLevel: \"strict\"") !=
+            std::string::npos);
       CHECK(asset.bytes.find("parseMermaidSvgCandidate") != std::string::npos);
+      CHECK(asset.bytes.find("capturedRenderStyles") !=
+            std::string::npos);
+      CHECK(asset.bytes.find("renderCapturingStyles(mermaid, renderId, source)") !=
+            std::string::npos);
+      CHECK(asset.bytes.find("MAX_CSS_BYTES - capture.bytes") !=
+            std::string::npos);
       adapter_bytes = asset.bytes.size();
     } else {
       vendored_bytes += asset.bytes.size();

@@ -6,8 +6,10 @@ use crate::media_planning_runtime::{
     LocalPreflightStatus, MediaPlanningError, MediaPlanningRuntime, VerifiedPlayback,
     VerifiedUrlFact,
 };
+use crayon_cast_adapter::DeliveryRoute;
 use crayon_cast_policy::HandoffAvailability;
 use crayon_domain::{DeviceId, TabId};
+use crayon_ipc_schema::media_host_v2::{PlayerFact, PlayerSourceKind};
 use crayon_ipc_schema::{
     MediaHostCastControlAction, MediaHostDiscoveryAction, MediaHostErrorCode, MediaHostMessage,
     MediaHostPlayback, MediaHostSource, MediaHostUrlFact, PlaybackState,
@@ -272,6 +274,13 @@ impl ReadyMediaHostCastStart {
     pub fn preflight_status(&self) -> &LocalPreflightStatus {
         &self.preflight
     }
+
+    pub fn preview_route(
+        &self,
+        cast: &MediaHostCastRuntime,
+    ) -> Result<DeliveryRoute, MediaHostRuntimeError> {
+        cast.preview_route(&self.request)
+    }
 }
 
 /// Claimed and context-validated Cast command. It carries no URL or locator.
@@ -332,6 +341,85 @@ impl MediaHostRuntime {
     #[must_use]
     pub const fn is_shutdown(&self) -> bool {
         self.shutdown
+    }
+
+    /// Maps a current MHV2 player fact to the opaque candidate already owned
+    /// by the MHV1-compatible planner. The full URL never leaves this owner.
+    pub fn candidate_wire_id_for_player(
+        &self,
+        player: &PlayerFact,
+    ) -> Result<u64, MediaHostRuntimeError> {
+        if player.source_kind != PlayerSourceKind::HttpUrl || player.media_url.is_empty() {
+            return Err(MediaHostRuntimeError::CandidateUnavailable);
+        }
+        let tab_id = TabId::new(&format!("cef-{}", player.context.tab_id))
+            .map_err(|_| MediaHostRuntimeError::InvalidMessage)?;
+        self.require_context(
+            &tab_id,
+            player.context.navigation_id,
+            u64::from(player.context.tab_generation),
+        )?;
+        let candidate_id = self
+            .planner
+            .candidate_for_source(&tab_id, player.context.navigation_id, &player.media_url)
+            .ok_or(MediaHostRuntimeError::CandidateUnavailable)?;
+        self.candidates
+            .iter()
+            .find(|candidate| candidate.candidate_id == candidate_id)
+            .map(|candidate| candidate.wire_id)
+            .ok_or(MediaHostRuntimeError::CandidateUnavailable)
+    }
+
+    #[must_use]
+    pub fn draft_device_available(&self, device_id: &str) -> bool {
+        DeviceId::new(device_id).ok().is_some_and(|device| {
+            self.cast
+                .as_ref()
+                .is_some_and(|cast| cast.has_device(&device))
+        })
+    }
+
+    pub async fn connect_draft_device(&self, device_id: &str) -> Result<(), MediaHostRuntimeError> {
+        let device = DeviceId::new(device_id).map_err(|_| MediaHostRuntimeError::InvalidMessage)?;
+        self.cast
+            .as_ref()
+            .ok_or(MediaHostRuntimeError::InvalidState)?
+            .connect_device(device)
+            .await
+    }
+
+    #[must_use]
+    pub fn has_active_cast_session(&self) -> bool {
+        self.cast
+            .as_ref()
+            .is_some_and(|cast| cast.has_active_session())
+    }
+
+    pub async fn prepare_player_cast(
+        &mut self,
+        request_id: String,
+        player: &PlayerFact,
+        device_id: String,
+    ) -> Result<ReadyMediaHostCastStart, MediaHostRuntimeError> {
+        let candidate_id = self.candidate_wire_id_for_player(player)?;
+        let prepared = self.prepare_cast_command(MediaHostMessage::StartCast {
+            request_id,
+            candidate_id,
+            device_id,
+            handoff_available: false,
+        })?;
+        self.preflight_start_cast(prepared).await
+    }
+
+    pub fn preview_player_cast_route(
+        &self,
+        ready: &ReadyMediaHostCastStart,
+    ) -> Result<DeliveryRoute, MediaHostRuntimeError> {
+        ready.preview_route(
+            self.cast
+                .as_ref()
+                .ok_or(MediaHostRuntimeError::InvalidState)?,
+        )
     }
 
     pub fn handle_immediate(

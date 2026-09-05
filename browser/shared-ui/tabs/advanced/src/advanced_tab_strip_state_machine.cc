@@ -90,29 +90,30 @@ bool AdvancedTabStripStateMachine::DuplicateTab(
     for (int i = 2; i <= 100; ++i) {
       copy_id = tab_id + "-copy-" + std::to_string(i);
       if (base_.AddTab(copy_id)) {
-        if (IsPinned(tab_id)) {
-          PinTab(copy_id);
-        }
-        if (IsMuted(tab_id)) {
-          MuteTab(copy_id);
-        }
-        if (auto group = GetTabGroup(tab_id); group.has_value()) {
-          AddTabToGroup(copy_id, *group);
-        }
-        return true;
+        return CopyTabState(tab_id, copy_id);
       }
     }
     return false;
   }
 
-  if (IsPinned(tab_id)) {
-    PinTab(copy_id);
+  return CopyTabState(tab_id, copy_id);
+}
+
+bool AdvancedTabStripStateMachine::CopyTabState(
+    const std::string& source_tab_id, const std::string& target_tab_id) {
+  if (!base_.active() || source_tab_id == target_tab_id ||
+      !base_.FindTabIndex(source_tab_id).has_value() ||
+      !base_.FindTabIndex(target_tab_id).has_value()) {
+    return false;
   }
-  if (IsMuted(tab_id)) {
-    MuteTab(copy_id);
+  if (IsPinned(source_tab_id)) {
+    PinTab(target_tab_id);
   }
-  if (auto group = GetTabGroup(tab_id); group.has_value()) {
-    AddTabToGroup(copy_id, *group);
+  if (IsMuted(source_tab_id)) {
+    MuteTab(target_tab_id);
+  }
+  if (auto group = GetTabGroup(source_tab_id); group.has_value()) {
+    AddTabToGroup(target_tab_id, *group);
   }
   return true;
 }

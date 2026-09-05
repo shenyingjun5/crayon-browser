@@ -4,6 +4,10 @@
 #include <fstream>
 #include <string_view>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 namespace crayon::browser_history {
 
 namespace {
@@ -158,7 +162,12 @@ bool SaveHistoryToFile(const HistoryStore& store,
     SetError(error, HistoryCodecError::kEphemeralRefused);
     return false;
   }
+#ifdef _WIN32
+  const std::string staging =
+      path + ".tmp." + std::to_string(GetCurrentProcessId());
+#else
   const std::string staging = path + ".tmp";
+#endif
   {
     std::ofstream out(staging, std::ios::binary | std::ios::trunc);
     if (!out) {
@@ -171,7 +180,14 @@ bool SaveHistoryToFile(const HistoryStore& store,
       return false;
     }
   }
-  if (std::rename(staging.c_str(), path.c_str()) != 0) {
+#ifdef _WIN32
+  const bool replaced =
+      MoveFileExA(staging.c_str(), path.c_str(),
+                  MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != FALSE;
+#else
+  const bool replaced = std::rename(staging.c_str(), path.c_str()) == 0;
+#endif
+  if (!replaced) {
     std::remove(staging.c_str());
     SetError(error, HistoryCodecError::kIoFailure);
     return false;

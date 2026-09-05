@@ -11,6 +11,7 @@
 #include "include/views/cef_box_layout.h"
 #include "include/views/cef_browser_view_delegate.h"
 #include "include/views/cef_button.h"
+#include "include/views/cef_panel.h"
 #include "include/views/cef_window_delegate.h"
 #include "include/wrapper/cef_closure_task.h"
 
@@ -34,13 +35,10 @@ public:
   }
   CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
   cef_runtime_style_t GetBrowserRuntimeStyle() override {
-    return CEF_RUNTIME_STYLE_CHROME;
+    return CEF_RUNTIME_STYLE_ALLOY;
   }
   cef_runtime_style_t GetWindowRuntimeStyle() override {
-    return CEF_RUNTIME_STYLE_CHROME;
-  }
-  ChromeToolbarType GetChromeToolbarType(CefRefPtr<CefBrowserView>) override {
-    return CEF_CTT_LOCATION;
+    return CEF_RUNTIME_STYLE_ALLOY;
   }
   void
   OnBeforeCommandLineProcessing(const CefString &,
@@ -69,15 +67,25 @@ public:
     CefBoxLayoutSettings layout;
     layout.horizontal = false;
     auto box = window_->SetToBoxLayout(layout);
+    toolbar_ = CefPanel::CreatePanel(nullptr);
+    CefBoxLayoutSettings toolbar_layout_settings;
+    toolbar_layout_settings.horizontal = true;
+    auto toolbar_layout = toolbar_->SetToBoxLayout(toolbar_layout_settings);
+    spacer_ = CefPanel::CreatePanel(nullptr);
+    toolbar_->AddChildView(spacer_);
+    toolbar_layout->SetFlexForView(spacer_, 1);
+    window_->AddChildView(toolbar_);
     window_->AddChildView(view_);
     box->SetFlexForView(view_, 1);
+    if (surface_->Attach(window_, view_, nullptr) ||
+        !(attached_ = surface_->Attach(window_, view_, toolbar_))) {
+      Finish(false, "attach");
+      return;
+    }
     window_->SetSize(CefSize(kWide, kHeight));
+    window_->Layout();
     window_->Show();
     window_->Activate();
-  }
-  void OnWindowChanged(CefRefPtr<CefView> view, bool added) override {
-    if (added && view_ && view->IsSame(view_) && window_ && !attached_)
-      attached_ = surface_->Attach(window_, view_);
   }
   bool OnKeyEvent(CefRefPtr<CefWindow>, const CefKeyEvent &event) override {
     return surface_ && surface_->HandleKeyEvent(event);
@@ -90,12 +98,10 @@ public:
       surface_->LayoutChanged();
   }
   bool CanClose(CefRefPtr<CefWindow>) override {
-    surface_->SuspendLocation();
     if (!browser_ || browser_->GetHost()->TryCloseBrowser()) {
       surface_->Detach();
       return true;
     }
-    surface_->RestoreLocation();
     return false;
   }
   void OnBeforeClose(CefRefPtr<CefBrowser>) override {
@@ -105,6 +111,8 @@ public:
   void OnWindowDestroyed(CefRefPtr<CefWindow>) override {
     surface_->Detach();
     surface_.reset();
+    spacer_ = nullptr;
+    toolbar_ = nullptr;
     view_ = nullptr;
     window_ = nullptr;
     result_->window_closed = true;
@@ -145,8 +153,11 @@ private:
     auto button = Find(id);
     if (!button || !button->IsEnabled())
       return false;
+    auto target_window = button->GetWindow();
+    if (!target_window)
+      return false;
     button->RequestFocus();
-    window_->SendKeyPress(kSpaceKey, 0);
+    target_window->SendKeyPress(kSpaceKey, 0);
     return true;
   }
   bool AwaitControl(int id) {
@@ -233,10 +244,11 @@ private:
         return;
       }
       window_->Layout();
-      const auto e = entry->GetBoundsInScreen(),
-                 location = view_->GetChromeToolbar()->GetBoundsInScreen();
-      if (e.x != location.x + location.width || e.y != location.y ||
-          location.width < 160) {
+      const auto e = entry->GetBoundsInScreen();
+      const auto toolbar = toolbar_->GetBoundsInScreen();
+      if (e.x + e.width != toolbar.x + toolbar.width || e.y != toolbar.y ||
+          toolbar.width < 160 || !entry->GetParentView() ||
+          !entry->GetParentView()->IsSame(toolbar_)) {
         Finish(false, "not_adjacent");
         return;
       }
@@ -350,6 +362,36 @@ private:
       break;
     }
     case 7: {
+#if defined(_WIN32)
+      CastVideoAnchor unsupported_anchor{snapshot_.context,
+                                         snapshot_.view_revision,
+                                         snapshot_.media[0].ref,
+                                         now_ + 100,
+                                         true,
+                                         0,
+                                         0,
+                                         640,
+                                         360};
+      surface_->SetVideoAnchors({unsupported_anchor});
+      if (surface_->GetView(CastEntrySurface::kOverlayFirstId)) {
+        Finish(false, "alloy_overlay_must_fail_closed");
+        return;
+      }
+      ++snapshot_.context.navigation_id;
+      surface_->BindContext(snapshot_.context);
+      if (entry->IsEnabled()) {
+        Finish(false, "navigation_not_cleared");
+        return;
+      }
+      surface_->Detach();
+      surface_->Detach();
+      if (entry->GetParentView()) {
+        Finish(false, "entry_not_removed");
+        return;
+      }
+      Finish(true, "PASS");
+      return;
+#else
       CastVideoAnchor anchor{snapshot_.context,
                              snapshot_.view_revision,
                              snapshot_.media[0].ref,
@@ -376,6 +418,7 @@ private:
         return;
       }
       break;
+#endif
     }
     case 8:
       if (!Count(CastIntentKind::kOpenForMedia)) {
@@ -432,6 +475,10 @@ private:
       }
       surface_->Detach();
       surface_->Detach();
+      if (entry->GetParentView()) {
+        Finish(false, "entry_not_removed");
+        return;
+      }
       Finish(true, "PASS");
       return;
     default:
@@ -444,6 +491,8 @@ private:
   std::shared_ptr<CastEntrySurfaceProbeResult> result_;
   std::unique_ptr<CastEntrySurface> surface_;
   CefRefPtr<CefWindow> window_;
+  CefRefPtr<CefPanel> toolbar_;
+  CefRefPtr<CefPanel> spacer_;
   CefRefPtr<CefBrowserView> view_;
   CefRefPtr<CefBrowser> browser_;
   CastSelectionSnapshot snapshot_;

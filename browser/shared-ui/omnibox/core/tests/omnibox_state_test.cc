@@ -79,6 +79,28 @@ bool SubmitFromSuggestingGoesToLoading() {
   return true;
 }
 
+bool SuggestionSelectionCyclesAndRejectsInvalidStates() {
+  OmniboxStateMachine sm;
+  CHECK(!sm.SelectNextSuggestion());
+  sm.OnFocus();
+  sm.OnEdit("ex");
+  sm.OnSuggestionsUpdated(
+      {OmniboxSuggestion{"One", "https://one.test", SuggestionSource::kHistory},
+       OmniboxSuggestion{"Two", "https://two.test",
+                          SuggestionSource::kBookmark}});
+  CHECK(sm.SelectNextSuggestion());
+  CHECK(sm.selected_index() == 0);
+  CHECK(sm.SelectNextSuggestion());
+  CHECK(sm.selected_index() == 1);
+  CHECK(sm.SelectNextSuggestion());
+  CHECK(sm.selected_index() == 0);
+  CHECK(sm.SelectPreviousSuggestion());
+  CHECK(sm.selected_index() == 1);
+  sm.OnSubmit();
+  CHECK(!sm.SelectPreviousSuggestion());
+  return true;
+}
+
 bool SubmitFromEditingGoesToLoading() {
   OmniboxStateMachine sm;
   sm.OnFocus();
@@ -203,6 +225,7 @@ int main() {
       !SuggestionsUpdateTransitionsToSuggesting() ||
       !EmptySuggestionsStayInEditing() ||
       !SubmitFromSuggestingGoesToLoading() ||
+      !SuggestionSelectionCyclesAndRejectsInvalidStates() ||
       !SubmitFromEditingGoesToLoading() ||
       !NavigationCompleteGoesToCommitted() ||
       !NavigationFailedAlsoGoesToCommitted() ||

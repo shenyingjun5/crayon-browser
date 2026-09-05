@@ -5,6 +5,12 @@ pub mod content_host_runtime;
 #[cfg(test)]
 mod content_host_runtime_tests;
 pub mod delivery;
+pub mod media_cast_draft;
+pub mod media_cast_draft_runtime;
+#[cfg(test)]
+mod media_cast_draft_runtime_tests;
+#[cfg(test)]
+mod media_cast_draft_tests;
 pub mod media_host_cast_runtime;
 #[cfg(test)]
 mod media_host_cast_runtime_tests;
@@ -14,6 +20,9 @@ mod media_host_runtime_tests;
 pub mod media_planning_runtime;
 #[cfg(test)]
 mod media_planning_runtime_tests;
+pub mod media_player_registry;
+#[cfg(test)]
+mod media_player_registry_tests;
 pub mod navigation_usecase;
 #[cfg(test)]
 mod navigation_usecase_tests;

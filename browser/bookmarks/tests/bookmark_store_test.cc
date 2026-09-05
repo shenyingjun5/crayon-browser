@@ -16,6 +16,7 @@ using crayon::browser_bookmarks::DeserializeBookmarks;
 using crayon::browser_bookmarks::LoadBookmarksFromFile;
 using crayon::browser_bookmarks::SaveBookmarksToFile;
 using crayon::browser_bookmarks::SerializeBookmarks;
+using crayon::browser_bookmarks::kMaxSearchResults;
 
 #define CHECK(condition)                                    \
   do {                                                      \
@@ -133,8 +134,12 @@ bool SearchIsBoundedAndCaseInsensitive() {
   BookmarkStore store;
   store.AddBookmark(0, "Crayon Browser", "https://crayon.test/");
   store.AddBookmark(0, "Other", "https://other.test/crayon");
+  for (std::size_t index = 0; index < kMaxSearchResults + 5; ++index) {
+    store.AddBookmark(0, "Crayon " + std::to_string(index),
+                      "https://bounded.test/" + std::to_string(index));
+  }
   const auto matches = store.Search("CRAYON");
-  CHECK(matches.size() == 2);
+  CHECK(matches.size() == kMaxSearchResults);
   CHECK(store.Search("").empty());
   CHECK(store.Search("nothing-here").empty());
   return true;
@@ -249,6 +254,10 @@ bool SaveLoadRoundTripThroughFile() {
   const auto loaded = LoadBookmarksFromFile(path, &error);
   CHECK(loaded.has_value());
   CHECK(loaded->node_count() == store.node_count());
+  store.AddBookmark(0, "replacement", "https://replacement.test/");
+  CHECK(SaveBookmarksToFile(store, path, &error));
+  const auto replaced = LoadBookmarksFromFile(path, &error);
+  CHECK(replaced && replaced->FindByUrl("https://replacement.test/").size() == 1);
   // The staging file must not linger.
   std::ifstream staging(path + ".tmp");
   CHECK(!staging.good());

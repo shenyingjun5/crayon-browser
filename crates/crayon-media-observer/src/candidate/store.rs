@@ -162,6 +162,26 @@ impl CandidateStore {
         Self::default()
     }
 
+    /// Trusted in-memory lookup used to bind an already verified per-player
+    /// reference to the unique planning candidate without exposing its URL.
+    #[must_use]
+    pub fn find_id(
+        &self,
+        tab_id: &TabId,
+        navigation: NavigationId,
+        media_url: &str,
+    ) -> Option<CandidateId> {
+        let key = merge_key(media_url)?;
+        self.entries
+            .iter()
+            .find(|entry| {
+                entry.tab_id() == tab_id
+                    && entry.navigation() == navigation
+                    && merge_key(entry.url()).as_deref() == Some(key.as_str())
+            })
+            .map(CandidateEntry::id)
+    }
+
     /// Ingests one observation. Same normalized URL within the same
     /// tab+navigation merges into the existing candidate and records the
     /// evidence (PL-001); otherwise a new candidate is created.

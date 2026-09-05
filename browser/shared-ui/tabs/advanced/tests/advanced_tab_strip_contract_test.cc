@@ -138,6 +138,22 @@ bool DuplicateAvoidsCollision() {
   return true;
 }
 
+bool CopyTabStateUsesExistingRealIdentity() {
+  AdvancedTabStripStateMachine sm;
+  CHECK(sm.AddTab("source"));
+  CHECK(sm.AddTab("real-target"));
+  CHECK(sm.PinTab("source"));
+  CHECK(sm.MuteTab("source"));
+  CHECK(sm.AddTabToGroup("source", "group-a"));
+  CHECK(sm.CopyTabState("source", "real-target"));
+  CHECK(sm.IsPinned("real-target"));
+  CHECK(sm.IsMuted("real-target"));
+  CHECK(sm.GetTabGroup("real-target") == "group-a");
+  CHECK(!sm.CopyTabState("source", "source"));
+  CHECK(!sm.CopyTabState("missing", "real-target"));
+  return true;
+}
+
 // --- Mute ---
 
 bool MuteTabWorks() {
@@ -332,6 +348,7 @@ int main() {
       !DuplicateCopiesMuteState() ||
       !DuplicateCopiesGroupState() ||
       !DuplicateAvoidsCollision() ||
+      !CopyTabStateUsesExistingRealIdentity() ||
       !MuteTabWorks() ||
       !UnmuteTabWorks() ||
       !MuteUnknownTabFails() ||

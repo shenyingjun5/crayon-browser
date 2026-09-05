@@ -72,13 +72,35 @@ Release 只广告已装配且双端验证通过的能力；R03 可先在内部�
 
 独立 codec 的 Hello/Welcome 使用 34 字节固定消息；现有外层长度 framing 不变。前 8 字节为 ASCII `MHV2`、u16 BE 版本 2、u8 kind（1 Hello / 2 Welcome）、u8 flags 0。之后依序为 Browser session ID u64、host generation u64、capability mask u32、max frame bytes u32、max page items u16，全部大端。身份非零；frame 34..16384，page 1..16；未知 kind/flags/能力位、截断或尾字节均拒绝。
 
-能力位 0..3 分别定义实例只读、草稿、显式设备连接、停止；零能力合法。Hello 表达本端支持集合，Welcome 回显 session/generation，所选能力与预算不能超过 Hello。固定向量由 Rust/C++ 共用 [握手 golden](../../tests/contracts/media_host_v2_handshake.golden)，旧 MHV1 golden 和 codec 不变且双向拒绝错版输入。
+能力位 0..5 分别定义实例只读、草稿、显式设备连接、停止、封闭原因、提交后 session generation；零能力合法。Hello 表达本端支持集合，Welcome 回显 session/generation，所选能力与预算不能超过 Hello。Draft/Connect 必须同时协商原因与 session 能力，旧客户端只保留只读共同子集。固定向量由 Rust/C++ 共用 [握手 golden](../../tests/contracts/media_host_v2_handshake.golden)，旧 MHV1 golden 和 codec 不变且双向拒绝错版输入。
 
 这是纯字节与匹配原语，不是握手 owner 或授权状态机；连接认证、握手只接受一次、逐命令权限/能力复核、断开失效仍归 R04d/R07b。session ID 不是秘密或 bearer grant；重放隔离须由已有本机认证连接与实际 owner 实施。生产不得据 codec 存在广告任何能力，默认产品仍未切换 MHV2。后续消息另行冻结，不能把握手成功解释为允许旧 StartCast 或重试旧协议。
 
+### MHV2 播放器事实切片（R04c2）
+
+Browser→host 的播放器事实使用同一独立 MHV2 codec：kind 3 为 `PlayerUpsert`，kind 4 为 `PlayerRemove`。两者在 8-byte header 后都携带非零 session、host generation、tab、navigation、tab generation、instance 与 source revision；Upsert 再携带非零观测时间、HTTP/Blob/MediaStream source kind、播放位置/可选时长、live/video/audio/visible/EME、0..1,000,000 的可见比例 ppm、page URL 与仅 HTTP 可用的 media URL。URL 限 http/https、每项 2048 bytes，frame 仍限 16 KiB；非法 UTF-8、控制字符、空/零身份、未知 enum/bool、截断与尾字节均拒绝。固定双端向量见 [player golden](../../tests/contracts/media_host_v2_player.golden)。
+
+R04c3 增加 kind 5 `PlayerListRequest` 与 kind 6 `PlayerPageReply`。请求绑定非零 session/host/request/tab/navigation/tab-generation，可用 snapshot revision 0 领取当前快照，单页预算 1..16。回复使用非零 revision 与 Ok/Stale 状态、offset/next 和最多 16 个投影；每项只含 instance/source revision、source kind、video/audio/visible/EME 与 canonical 脱敏 origin，不含 page/media URL、播放位置或证明。Stale 必须空页且无 next，next 必须精确等于 offset+count；共享固定向量见 [player-page golden](../../tests/contracts/media_host_v2_player_page.golden)。R04d3 已在 Windows 将该 codec 接入 runtime registry、受限 pipe 和 Browser adapter；请求/回复继续受 session、host generation、tab/navigation/tab generation、request ID、revision、offset/max 与有界队列约束。
+
+R04c2 codec 只序列化已经由 Browser proof/generation 链验证的事实；它不自行认证连接、生成实例、维护候选、撤销 proof 或授权投送。旧 MHV1 完全不变。列表分页、草稿与设备命令仍需后续独立 kind/向量，不能把 Upsert 解码成功解释为选择或开始投屏。
+
+实现状态：R04c2 双端 codec 与共享 player golden 已 VERIFIED（Rust 7/7、Windows C++ Debug/Release 各 1/1）；R04d2 已在 Windows transport/host 接入有界 player registry。该状态只代表可信播放器事实进入 host 私有集合，不代表已有列表、选择或投送能力。
+
+R04d1 Windows transport/host 一次握手 owner 已 VERIFIED；R04d2 后 Windows Hello 只广告已装配的 `CAP_MEDIA_READ`，host 仅选择交集。每次 child generation 必须完成匹配 Welcome 后 transport 才 healthy，重启重新握手并创建新 registry；macOS 暂保留 legacy/零 MHV2 能力。Browser 只在当前 proof/generation 下发送 upsert/remove，队列失败饱和计数且不阻塞旧 MHV1 主链；registry 最多 16/page、256/global，公开投影不含原始 URL。R04d3 的 Browser DTO 仍不含 URL，重复、迟到、错上下文和背压 page 均拒绝并饱和计数；registry mutation 使旧 snapshot 返回 Stale 空页。
+
+R04e 修正媒体类型投影：renderer collector 只从实际 `HTMLVideoElement`/`HTMLMediaElement` 产生封闭 Video/Audio kind，内部 renderer→Browser CEF 消息显式升级为 v3 并拒绝旧 v2 同名布局；Browser 只把 Video 映射为 `has_video`、Audio 映射为 `has_audio`。kind 不参与播放证明或授权，`<video>` 是否含音轨不做页面侧猜测，最终能力仍由 prepare/receiver owner 决定。
+
+### MHV2 草稿字节切片（R07b1）
+
+kind 7 `DraftCommand` 与兼容的 kind 8 `DraftStateReply` 使用独立 MHV2 frame。两者绑定 session/host/request、非空且最长 128-byte 的 profile ID、tab/navigation/tab generation；命令只允许 Open/SelectMedia/SelectDevice/Connect/Prepare/ConfirmReplacement/Commit/Cancel，媒体引用仍为 instance/source revision，设备只用最长 128-byte 稳定 ID。状态只含 draft ID/revision、封闭 phase/error、可选媒体引用/设备 ID、连接/替换确认、None/Direct/Relay 与最多 15 秒准备期的绝对 deadline；不含 URL、SDK handle、route override、原始错误或 grant。
+
+wire 层拒绝未知 action/phase/error/route/bool、非法 UTF-8、控制字符、双向覆盖、零身份、动作字段混用和不可能状态；Prepared 必须完整选择、设备已连接、route 非空、无需替换确认且 expiry 非零，非 Prepared 不携带 expiry。共享兼容固定向量见 [draft golden](../../tests/contracts/media_host_v2_draft.golden)。R03b 新增 `CAP_REASON` 和 kind 9 增强状态：只追加 Credentials/Protection/Recognized/Unrecognized/RedirectRefused/UpstreamRejected/AddressRejected/Dns/Connect/Timeout/Transport/InvalidTarget 封闭枚举，且只允许 Prepared/Failed 携带。R07b/R08 消费方 Review 又关闭了 Commit 成功无法与 Cancel 区分、无法安全接入播控的问题：新增 `CAP_SESSION`、Committed phase 与 kind 10，只有 Committed 携带非零 session generation；既有 kind 8/9 字节保持不变。增强固定向量见 [draft reason golden](../../tests/contracts/media_host_v2_draft_reason.golden) 与 [draft session golden](../../tests/contracts/media_host_v2_draft_session.golden)。
+
+R07b2/b3/b4 已把唯一、有界草稿 owner 接入 Rust media-host、现有 player/planner/CastUsecase 和 Windows 私有 pipe。R03b 后 Windows Hello 同时声明 `MEDIA_READ|DRAFT|CONNECT|REASON|SESSION`；host 只有同时协商 `REASON|SESSION` 才保留 Draft/Connect，旧 MHV2 客户端因此保持只读而不会静默错读 kind 9/10。Connect 独立且不播放，Prepare 只保留一次 ready 与封闭 Direct/Relay 预览及原因，显式 Commit 才调用既有 StartCast；只有真实 Casting outcome 回送新 session generation，Browser adapter 随后才开放 MHV1 Stop/Pause/Resume。Browser adapter 逐请求复核 session/host/tab/navigation/generation/profile，导航、移除、取消、重启、设备或活动会话变化撤销 ready；旧 MHV1 不作为开始投屏 fallback。共享 Alloy 面板已接收同构封闭原因、Committed/session 状态并映射三语言稳定 key；产品 adapter 与真实显示由 R08W 验收。
+
 实现证据：R04c1 纯 codec 已 VERIFIED；启动延迟后的原样复核为新 Rust 3/3、新旧 C++ Debug/Release 各 2/2，详见 Roadmap §18。该结果不提升后续 runtime 或产品状态，也不把此前启动失败/超时改写为通过。
 
-2026-09-03 实施边界：R03a 已在 probe/runtime 保留 `InspectionReport`/`LocalPreflightStatus`，包含既有封闭网络错误、HTTP 拒绝、未识别和凭证/保护跳过。旧 inspect 与 MHV1 行为保持；准备结果的只读原因不参与路由授权，协议/UI 投影仍由 R03b/R08 验收，不能据此宣称代理公网投屏已修复。响应预算耗尽后的更细分类尚未提供，无法识别仍归 Unrecognized。
+2026-09-05 实施边界：R03a 在 probe/runtime 保留的 `InspectionReport`/`LocalPreflightStatus` 已由 R03b 穷尽映射到 MHV2/共享面板封闭枚举。旧 inspect、kind 8 与 MHV1 行为保持；原因不参与路由授权且不携带地址/原始错误。产品 adapter 投影与真实三语言显示仍由 R08 验收，不能据此宣称代理公网投屏已修复。响应预算耗尽后的更细分类尚未提供，无法识别仍归 Unrecognized。
 
 ## 6. 兼容/安全拒绝向量（实现前门禁）
 

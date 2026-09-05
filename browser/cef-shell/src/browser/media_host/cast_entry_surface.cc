@@ -4,7 +4,6 @@
 #include <optional>
 #include <utility>
 
-#include "browser/window/chrome_location_bar.h"
 #include "crayon/browser_localization/locale_catalog.h"
 #include "include/base/cef_callback.h"
 #include "include/cef_color_ids.h"
@@ -28,7 +27,6 @@ constexpr int kToolbarHeight = 48, kHitHeight = 36, kGap = 8;
 constexpr int kEntryWidth = 96, kPanelWidth = 464, kPanelMinWidth = 320;
 constexpr int kPanelHeight = 560, kPanelMinHeight = 280, kScrollHeight = 256;
 constexpr int kScrollBarAllowance = 20;
-constexpr int kStatusId = 0xca03, kCodeId = 0xca04;
 constexpr int kEscapeKey = 27, kTabKey = 9;
 constexpr int kEscapeCommand = 0xcac0, kTabCommand = 0xcac1,
               kBackTabCommand = 0xcac2;
@@ -126,9 +124,9 @@ struct CastEntrySurface::State final : std::enable_shared_from_this<State> {
   Clock clock;
   IntentSink sink;
   CastSelectionPresentation presentation;
-  window::ChromeLocationBar location;
   CefRefPtr<CefWindow> window;
   CefRefPtr<CefBrowserView> browser_view;
+  CefRefPtr<CefPanel> toolbar;
   CefRefPtr<CefLabelButton> entry;
   CefRefPtr<CefPanel> panel, list_content;
   CefRefPtr<CefTextfield> status, code;
@@ -389,7 +387,8 @@ struct CastEntrySurface::State final : std::enable_shared_from_this<State> {
                presentation.Intent(CastIntentKind::kLookupCode)));
     list->AddChildView(
         Button(String("cast.selection.connect"),
-               presentation.Intent(CastIntentKind::kConnectDevice)));
+               presentation.Intent(CastIntentKind::kConnectDevice),
+               kConnectId));
     if (s.selected_media)
       list->AddChildView(Text(String("cast.selection.selected") + " · " +
                               MediaName(*s.selected_media)));
@@ -414,9 +413,11 @@ struct CastEntrySurface::State final : std::enable_shared_from_this<State> {
           String(s.playback_paused ? "cast.control.resume"
                                    : "cast.control.pause"),
           presentation.Intent(s.playback_paused ? CastIntentKind::kResume
-                                                : CastIntentKind::kPause)));
+                                                : CastIntentKind::kPause),
+          kSessionControlId));
       list->AddChildView(Button(String("cast.stop"),
-                                presentation.Intent(CastIntentKind::kStop)));
+                                presentation.Intent(CastIntentKind::kStop),
+                                kStopId));
     }
   }
   void Render() {
@@ -598,9 +599,14 @@ struct CastEntrySurface::State final : std::enable_shared_from_this<State> {
     sink = {};
     ClosePicker(false);
     HideOverlays();
-    location.Detach();
+    if (toolbar && toolbar->IsValid() && entry && entry->IsValid()) {
+      const auto parent = entry->GetParentView();
+      if (parent && parent->IsSame(toolbar))
+        toolbar->RemoveChildView(entry);
+    }
     actions.clear();
     entry = nullptr;
+    toolbar = nullptr;
     browser_view = nullptr;
     window = nullptr;
     presentation.Clear();
@@ -615,25 +621,26 @@ CastEntrySurface::CastEntrySurface(localization::LocaleSnapshot locale,
 }
 CastEntrySurface::~CastEntrySurface() { Detach(); }
 bool CastEntrySurface::Attach(CefRefPtr<CefWindow> window,
-                              CefRefPtr<CefBrowserView> browser_view) {
+                              CefRefPtr<CefBrowserView> browser_view,
+                              CefRefPtr<CefPanel> toolbar) {
   CEF_REQUIRE_UI_THREAD();
   auto s = state_;
   if (s->detached || s->entry || !s->clock || !s->sink || !window ||
-      !browser_view)
+      !browser_view || !toolbar || !window->IsValid() ||
+      !browser_view->IsValid() || !toolbar->IsValid() ||
+      !browser_view->GetWindow() || !toolbar->GetWindow() ||
+      !browser_view->GetWindow()->IsSame(window) ||
+      !toolbar->GetWindow()->IsSame(window))
     return false;
   s->window = window;
   s->browser_view = browser_view;
+  s->toolbar = toolbar;
   s->entry = s->Button(s->String("cast.feature.idle"),
                        s->presentation.Intent(CastIntentKind::kOpen), kEntryId);
   s->entry->SetMinimumSize(CefSize(kEntryWidth, kToolbarHeight));
   s->entry->SetMaximumSize(CefSize(kEntryWidth, kToolbarHeight));
-  if (!s->location.Attach(window, browser_view, s->entry)) {
-    s->actions.clear();
-    s->entry = nullptr;
-    s->window = nullptr;
-    s->browser_view = nullptr;
-    return false;
-  }
+  toolbar->AddChildView(s->entry);
+  toolbar->Layout();
   s->Render();
   return true;
 }
@@ -658,7 +665,16 @@ bool CastEntrySurface::Apply(CastSelectionSnapshot snapshot) {
 }
 void CastEntrySurface::SetVideoAnchors(std::vector<CastVideoAnchor> anchors) {
   CEF_REQUIRE_UI_THREAD();
+#if defined(_WIN32)
+  // Windowed Alloy places page content in a child HWND. A Views overlay above
+  // that child is not a reliable interactive surface; PLT-SHELL-22W owns the
+  // Browser-hosted replacement. Stay fail closed until that adapter exists.
+  static_cast<void>(anchors);
+  state_->pending_anchors.clear();
+  state_->HideOverlays();
+#else
   state_->Anchors(std::move(anchors));
+#endif
 }
 void CastEntrySurface::InvalidateGeometry() {
   CEF_REQUIRE_UI_THREAD();
@@ -738,19 +754,6 @@ CefRefPtr<CefView> CastEntrySurface::GetView(int view_id) const {
   if (state_->status && state_->status->GetID() == view_id)
     return state_->status;
   return nullptr;
-}
-void CastEntrySurface::SuspendLocation() {
-  CEF_REQUIRE_UI_THREAD();
-  state_->ClosePicker(false);
-  state_->HideOverlays();
-  state_->location.SuspendLocation();
-}
-bool CastEntrySurface::RestoreLocation() {
-  CEF_REQUIRE_UI_THREAD();
-  const bool restored = state_->location.RestoreLocation();
-  if (restored)
-    state_->Render();
-  return restored;
 }
 void CastEntrySurface::Detach() {
   CEF_REQUIRE_UI_THREAD();
