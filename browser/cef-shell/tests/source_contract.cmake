@@ -94,6 +94,9 @@ file(READ
      "${CRAYON_CEF_SHELL_SOURCE}/src/windows/alloy_product_host_win.h"
      alloy_product_host_header)
 file(READ
+     "${CRAYON_CEF_SHELL_SOURCE}/src/browser/window/alloy_tab_controller.cc"
+     alloy_tab_controller)
+file(READ
      "${CRAYON_CEF_SHELL_SOURCE}/src/browser/window/alloy_interactions.cc"
      alloy_interactions)
 file(READ
@@ -348,6 +351,49 @@ foreach(required_context_scheme_token
   if(token_index EQUAL -1)
     message(FATAL_ERROR
             "Per-profile built-in scheme registration is missing ${required_context_scheme_token}")
+  endif()
+endforeach()
+foreach(required_alloy_session_token
+        "AlloySessionRestore::LoadCheckpoint"
+        "AlloySessionRestore::SaveCheckpoint"
+        "pending_session_restore_"
+        "CompleteSessionRestore"
+        "pending_restored_browsers_"
+        "OnRestoredBrowserReady"
+        "FailSessionRestore"
+        "restoring_window_ids_"
+        "session_restore_failed_"
+        "session_checkpoint_pending_"
+        "kSessionRestoreDelayMilliseconds")
+  string(FIND
+         "${alloy_product_host}${alloy_product_host_header}"
+         "${required_alloy_session_token}" token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Windows Alloy product is missing 24W2b2c session token ${required_alloy_session_token}")
+  endif()
+endforeach()
+foreach(required_alloy_session_bootstrap_token
+        "CEF-Alloy-v1"
+        "alloy-session-v2"
+        "no-startup-window")
+  string(FIND
+         "${windows_bootstrap}${windows_app}"
+         "${required_alloy_session_bootstrap_token}" token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Windows bootstrap is missing 24W2b2c token ${required_alloy_session_bootstrap_token}")
+  endif()
+endforeach()
+foreach(required_serial_close_token
+        "RequestNextClose(false)"
+        "if (!force_close)")
+  string(FIND
+         "${alloy_product_host}${alloy_tab_controller}"
+         "${required_serial_close_token}" token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Windows Alloy normal-close path is missing ${required_serial_close_token}")
   endif()
 endforeach()
 foreach(required_builtin_token

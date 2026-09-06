@@ -155,7 +155,7 @@ void WindowsWindowIcons::Apply(CefRefPtr<CefBrowser> browser) const {
 BrowserApp::BrowserApp(
     HINSTANCE resource_module,
     ::crayon::browser::localization::LocaleSnapshot locale_snapshot,
-    std::string profile_cache_root)
+    std::string profile_cache_root, std::wstring session_path)
     : window_icons_(std::make_shared<WindowsWindowIcons>(resource_module)),
       about_resources_(
           new branding::AboutBrowserResources(locale_snapshot.locale)),
@@ -252,7 +252,7 @@ BrowserApp::BrowserApp(
                     page_model, product_strings_.new_tab,
                     std::move(request_context));
               },
-              nullptr},
+               nullptr, std::move(session_path)},
           windows::AlloyProductHostWin::Callbacks{
               [this](CefRefPtr<CefBrowser> browser) {
                 window_icons_->Apply(browser);
@@ -261,6 +261,16 @@ BrowserApp::BrowserApp(
       shell_runtime_(std::make_shared<WindowsShellRuntime>(tab_controller_)) {}
 
 BrowserApp::~BrowserApp() = default;
+
+void BrowserApp::OnBeforeCommandLineProcessing(
+    const CefString& process_type, CefRefPtr<CefCommandLine> command_line) {
+  if (process_type.empty() && command_line) {
+    // Chrome runtime otherwise restores/creates a Chrome-style startup window
+    // from its private session state. The product owns startup exclusively via
+    // AlloyProductHostWin and its versioned session snapshot.
+    command_line->AppendSwitch("no-startup-window");
+  }
+}
 
 void BrowserApp::PrepareForCefShutdown() {
   CEF_REQUIRE_UI_THREAD();

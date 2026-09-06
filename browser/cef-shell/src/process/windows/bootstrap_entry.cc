@@ -37,7 +37,8 @@ std::optional<std::filesystem::path> BuildProfileCacheRoot() {
     return std::nullopt;
   }
   std::filesystem::path root =
-      std::filesystem::path(local_app_data.data()) / "CrayonBrowser" / "CEF";
+      std::filesystem::path(local_app_data.data()) / "CrayonBrowser" /
+      "CEF-Alloy-v1";
   std::error_code error;
   std::filesystem::create_directories(root, error);
   return error ? std::nullopt
@@ -110,7 +111,8 @@ int RunBrowserProcess(HINSTANCE bootstrap_instance, void *sandbox_info) {
   CefString(&settings.accept_language_list) =
       std::string(locale_snapshot.accept_language_list);
   CefRefPtr<BrowserApp> app(new BrowserApp(
-      client_module, locale_snapshot, *profile_cache_root_utf8));
+      client_module, locale_snapshot, *profile_cache_root_utf8,
+      (*profile_cache_root / "alloy-session-v2").wstring()));
   if (!app->brand_icons_valid()) {
     return static_cast<int>(ExitCode::kBrandIconMissing);
   }

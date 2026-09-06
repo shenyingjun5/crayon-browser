@@ -607,6 +607,10 @@ AlloyTabController::AdoptTransfer(TransferredTab transfer, bool preserve_id) {
 
 void AlloyTabController::CloseAll(bool force_close) {
   CEF_REQUIRE_UI_THREAD();
+  if (!force_close) {
+    static_cast<void>(RequestNextClose(false));
+    return;
+  }
   std::vector<TabId> ids;
   ids.reserve(records_.size());
   for (const auto &entry : records_) {
@@ -615,6 +619,24 @@ void AlloyTabController::CloseAll(bool force_close) {
   for (TabId id : ids) {
     RequestClose(id, force_close);
   }
+}
+
+bool AlloyTabController::RequestNextClose(bool force_close) {
+  CEF_REQUIRE_UI_THREAD();
+  const auto active = model_.active_tab();
+  if (active) {
+    const auto found = records_.find(*active);
+    if (found != records_.end() && !found->second.close_requested) {
+      return RequestClose(*active, force_close);
+    }
+  }
+  for (TabId id : model_.ordered_tabs()) {
+    const auto found = records_.find(id);
+    if (found != records_.end() && !found->second.close_requested) {
+      return RequestClose(id, force_close);
+    }
+  }
+  return false;
 }
 
 bool AlloyTabController::ReleaseAfterClosed() {

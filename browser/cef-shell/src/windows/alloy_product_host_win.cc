@@ -31,6 +31,8 @@ constexpr std::size_t kMaximumCastObservations = 16;
 constexpr std::uint64_t kCastBindRetryMilliseconds = 500;
 constexpr std::uint64_t kPermissionPromptLifetimeMilliseconds = 30'000;
 constexpr std::uint64_t kExternalProtocolInputLifetimeMilliseconds = 2'000;
+constexpr int64_t kSessionCheckpointDelayMilliseconds = 250;
+constexpr int64_t kSessionRestoreDelayMilliseconds = 250;
 constexpr std::uint32_t kMediaAccessVideo = 1U << 1;
 constexpr std::uint32_t kMediaAccessAudio = 1U << 2;
 constexpr std::uint32_t kPermissionClipboard = 1U << 4;
@@ -229,8 +231,26 @@ bool AlloyProductHostWin::Start(std::string initial_url, std::string title,
               found->second.window->Activate();
             }
           },
-          {}});
-  if (!coordinator_->CreatePrimary(kPrimaryWindowId, std::move(profile_id))) {
+          [this](const browser_session::SessionWindowSnapshot& snapshot) {
+            pending_session_restore_.push_back(snapshot);
+            restoring_window_ids_.push_back(snapshot.window_id);
+            return true;
+          }});
+  auto restored_snapshot = window::AlloySessionRestore::LoadCheckpoint(
+      dependencies_.session_path, profile_id_value_, &session_load_result_);
+  const bool restore_requested =
+      restored_snapshot && IsRestorableProductSession(*restored_snapshot);
+  if (restored_snapshot && !restore_requested) {
+    session_load_result_ = window::AlloySessionFileResult::kCorrupt;
+  }
+  session_writes_enabled_ =
+      session_load_result_ == window::AlloySessionFileResult::kNotFound ||
+      session_load_result_ == window::AlloySessionFileResult::kSuccess;
+  if (restore_requested) {
+    if (!coordinator_->RestoreSession(*restored_snapshot, profile_id)) {
+      return false;
+    }
+  } else if (!coordinator_->CreatePrimary(kPrimaryWindowId, profile_id)) {
     coordinator_.reset();
     return false;
   }
@@ -330,15 +350,34 @@ bool AlloyProductHostWin::Start(std::string initial_url, std::string title,
         if (omnibox_) static_cast<void>(omnibox_->SetAddress(address));
       }});
   if (!tab_strip_->panel() || !omnibox_->panel() || !navigation_->panel() ||
-      !CreateTab(std::move(initial_url),
-                 browser_engine::ContentPurpose::kControlledBuiltIn)) {
+      (!restore_requested &&
+       !CreateTab(std::move(initial_url),
+                  browser_engine::ContentPurpose::kControlledBuiltIn))) {
     coordinator_.reset();
     return false;
   }
-  tab_id_ = views_.begin()->first;
+  if (!restore_requested) {
+    tab_id_ = views_.begin()->first;
+  }
   title_ = std::move(title);
   started_ = true;
-  CefWindow::CreateTopLevelWindow(this);
+  if (restore_requested) {
+    // RestoreSession owns only the domain transaction. Re-entering CEF Views
+    // creation from its callback can violate Chrome runtime observer teardown
+    // on a warm profile. Materialize BrowserViews after that callback returns.
+    if (!CefPostDelayedTask(
+            TID_UI,
+            CefCreateClosureTask(base::BindOnce(
+                &AlloyProductHostWin::CompleteSessionRestore,
+                CefRefPtr<AlloyProductHostWin>(this))),
+            kSessionRestoreDelayMilliseconds)) {
+      started_ = false;
+      coordinator_.reset();
+      return false;
+    }
+  } else {
+    CefWindow::CreateTopLevelWindow(this);
+  }
   return true;
 }
 
@@ -413,6 +452,7 @@ bool AlloyProductHostWin::Close(bool force_close) {
   if (!started_ || closed_ || closing_ || !coordinator_) {
     return false;
   }
+  static_cast<void>(SaveSessionCheckpointNow());
   closing_ = true;
   if (coordinator_->has_window(kPrimaryWindowId)) {
     const auto active = controller() ? controller()->model().active_tab()
@@ -453,9 +493,20 @@ cef_runtime_style_t AlloyProductHostWin::GetWindowRuntimeStyle() {
 
 void AlloyProductHostWin::OnWindowCreated(CefRefPtr<CefWindow> window) {
   CEF_REQUIRE_UI_THREAD();
-  if (!pending_popup_windows_.empty()) {
-    const std::string window_id = std::move(pending_popup_windows_.front());
+  if (session_restore_failed_) {
+    if (window) window->Close();
+    return;
+  }
+  std::optional<std::string> pending_window_id;
+  if (!pending_restored_windows_.empty()) {
+    pending_window_id = std::move(pending_restored_windows_.front());
+    pending_restored_windows_.pop_front();
+  } else if (!pending_popup_windows_.empty()) {
+    pending_window_id = std::move(pending_popup_windows_.front());
     pending_popup_windows_.pop_front();
+  }
+  if (pending_window_id && *pending_window_id != kPrimaryWindowId) {
+    const std::string& window_id = *pending_window_id;
     const auto found = popup_windows_.find(window_id);
     auto* popup_controller =
         coordinator_ ? coordinator_->controller(window_id) : nullptr;
@@ -554,11 +605,13 @@ void AlloyProductHostWin::OnLayoutChanged(CefRefPtr<CefView>,
 
 bool AlloyProductHostWin::CanClose(CefRefPtr<CefWindow> window) {
   CEF_REQUIRE_UI_THREAD();
+  if (session_restore_failed_) return true;
   for (auto& [window_id, popup] : popup_windows_) {
     if (!popup.window || !window || !popup.window->IsSame(window)) continue;
     auto* popup_controller =
         coordinator_ ? coordinator_->controller(window_id) : nullptr;
     if (!popup.closing) {
+      static_cast<void>(SaveSessionCheckpointNow());
       if (!coordinator_ ||
           !coordinator_->BeginCloseWindow(window_id, false)) {
         return false;
@@ -571,6 +624,7 @@ bool AlloyProductHostWin::CanClose(CefRefPtr<CefWindow> window) {
     return true;
   }
   if (!primary_closing_) {
+    static_cast<void>(SaveSessionCheckpointNow());
     const auto active = controller() ? controller()->model().active_tab()
                                      : std::optional<window::TabId>{};
     const bool prepared = active && PrepareActiveChromeForClose(*active);
@@ -597,6 +651,7 @@ void AlloyProductHostWin::OnWindowDestroyed(CefRefPtr<CefWindow> window) {
     found->second.window = nullptr;
     if (!coordinator_ || !coordinator_->OnWindowClosed(window_id)) return;
     popup_windows_.erase(found);
+    ScheduleSessionCheckpoint();
     if (coordinator_->window_count() == 0 && coordinator_->Shutdown()) {
       coordinator_.reset();
       NotifyClosed();
@@ -608,6 +663,7 @@ void AlloyProductHostWin::OnWindowDestroyed(CefRefPtr<CefWindow> window) {
     return;
   }
   window_ = nullptr;
+  ScheduleSessionCheckpoint();
   if (coordinator_->window_count() == 0 && coordinator_->Shutdown()) {
     coordinator_.reset();
     NotifyClosed();
@@ -635,14 +691,24 @@ void AlloyProductHostWin::FinalizeBrowserCreated(
                              ? coordinator_->controller(*owner)
                              : nullptr;
   const auto capabilities = InitialCapabilities();
+  if (session_restore_failed_ && view && browser && tab_controller &&
+      capabilities) {
+    static_cast<void>(
+        tab_controller->OnBrowserCreated(view, browser, *capabilities));
+    return;
+  }
   std::optional<window::TabId> tab_id;
   if (owner && *owner == kPrimaryWindowId) {
     tab_id = TabForView(view);
   } else if (owner) {
     const auto popup = popup_windows_.find(*owner);
-    if (popup != popup_windows_.end() && popup->second.view && view &&
-        popup->second.view->IsSame(view)) {
-      tab_id = popup->second.tab_id;
+    if (popup != popup_windows_.end() && view) {
+      for (const auto& [id, candidate] : popup->second.views) {
+        if (candidate && candidate->IsSame(view)) {
+          tab_id = id;
+          break;
+        }
+      }
     }
   }
   if (!view || !browser || !tab_controller || !capabilities || !tab_id ||
@@ -671,7 +737,8 @@ void AlloyProductHostWin::FinalizeBrowserCreated(
   if (owner && *owner != kPrimaryWindowId) {
     auto popup = popup_windows_.find(*owner);
     if (popup != popup_windows_.end()) {
-      popup->second.browser = browser;
+      popup->second.browsers[*tab_id] = browser;
+      if (popup->second.tab_id == *tab_id) popup->second.browser = browser;
       if (popup->second.incognito && popup->second.navigation &&
           popup->second.omnibox) {
         const auto main_frame = browser->GetMainFrame();
@@ -688,8 +755,9 @@ void AlloyProductHostWin::FinalizeBrowserCreated(
         }
       }
     }
-    static_cast<void>(tab_controller->Activate(*tab_id));
     if (callbacks_.browser_created) callbacks_.browser_created(browser);
+    if (OnRestoredBrowserReady()) return;
+    static_cast<void>(tab_controller->Activate(*tab_id));
     return;
   }
   if (!dependencies_.request_context && browser->GetHost()) {
@@ -714,6 +782,7 @@ void AlloyProductHostWin::FinalizeBrowserCreated(
   if (callbacks_.browser_created) {
     callbacks_.browser_created(browser_);
   }
+  if (OnRestoredBrowserReady()) return;
   CefPostTask(TID_UI,
               base::BindOnce(&AlloyProductHostWin::ActivateCreatedTab,
                              CefRefPtr<AlloyProductHostWin>(this), *tab_id));
@@ -724,8 +793,23 @@ void AlloyProductHostWin::OnBrowserDestroyed(CefRefPtr<CefBrowserView> view,
   CEF_REQUIRE_UI_THREAD();
   for (auto& [window_id, popup] : popup_windows_) {
     static_cast<void>(window_id);
-    if (popup.view && view && popup.view->IsSame(view)) popup.view = nullptr;
-    if (popup.browser && browser && popup.browser->IsSame(browser)) {
+    for (auto found = popup.views.begin(); found != popup.views.end();) {
+      if (found->second && view && found->second->IsSame(view)) {
+        popup.browsers.erase(found->first);
+        found = popup.views.erase(found);
+      } else {
+        ++found;
+      }
+    }
+    for (auto found = popup.browsers.begin(); found != popup.browsers.end();) {
+      if (found->second && browser && found->second->IsSame(browser)) {
+        found = popup.browsers.erase(found);
+      } else {
+        ++found;
+      }
+    }
+    if (popup.view && view && popup.view->IsSame(view)) {
+      popup.view = nullptr;
       popup.browser = nullptr;
     }
   }
@@ -795,8 +879,33 @@ void AlloyProductHostWin::OnBuiltinBrowserClosing(
           : nullptr;
   const auto closing_tab = closing ? std::optional<window::TabId>(closing->id)
                                    : std::nullopt;
-  if (!Owns(browser) || !tab_controller ||
-      !tab_controller->OnBeforeClose(browser)) {
+  if (!Owns(browser) || !tab_controller) {
+    return;
+  }
+  const bool finalized = tab_controller->OnBeforeClose(browser);
+  if (!finalized &&
+      (!session_restore_failed_ || tab_controller->OwnsBrowser(browser))) {
+    return;
+  }
+  if (session_restore_failed_) {
+    if (tab_controller->pending_count() == 0 && coordinator_) {
+      if (*owner == kPrimaryWindowId && window_) {
+        window_->Close();
+        return;
+      }
+      auto popup = popup_windows_.find(*owner);
+      if (popup != popup_windows_.end() && popup->second.window) {
+        popup->second.window->Close();
+        return;
+      }
+      static_cast<void>(coordinator_->OnWindowClosed(*owner));
+      popup_windows_.erase(*owner);
+    }
+    if (coordinator_ && coordinator_->window_count() == 0 &&
+        coordinator_->Shutdown()) {
+      coordinator_.reset();
+      NotifyClosed();
+    }
     return;
   }
   if (owner && *owner == kPrimaryWindowId && closing_tab) {
@@ -819,14 +928,23 @@ void AlloyProductHostWin::OnBuiltinBrowserClosing(
   if (owner && *owner != kPrimaryWindowId) {
     auto popup = popup_windows_.find(*owner);
     if (popup == popup_windows_.end()) return;
-    popup->second.browser = nullptr;
-    if (tab_controller->pending_count() == 0) {
+    if (closing_tab) popup->second.browsers.erase(*closing_tab);
+    if (closing_tab && popup->second.tab_id == *closing_tab) {
+      popup->second.browser = nullptr;
+    }
+    if (tab_controller->pending_count() != 0 && popup->second.closing) {
+      static_cast<void>(tab_controller->RequestNextClose(false));
+    } else if (tab_controller->pending_count() == 0) {
       if (!popup->second.closing && coordinator_ &&
           coordinator_->BeginCloseWindow(*owner, false)) {
         popup->second.closing = true;
       }
       if (popup->second.window) popup->second.window->Close();
     }
+    return;
+  }
+  if (primary_closing_ && tab_controller->pending_count() != 0) {
+    static_cast<void>(tab_controller->RequestNextClose(false));
     return;
   }
   if (tab_controller->pending_count() == 0 && window_) {
@@ -882,6 +1000,7 @@ void AlloyProductHostWin::OnLoadEnd(CefRefPtr<CefBrowser> browser,
     builtin_content_->OnLoadEnd(std::move(browser), std::move(frame),
                                 http_status_code);
   }
+  ScheduleSessionCheckpoint();
 }
 
 void AlloyProductHostWin::OnLoadError(CefRefPtr<CefBrowser> browser,
@@ -1370,6 +1489,180 @@ bool AlloyProductHostWin::CreateTab(std::string url,
   return true;
 }
 
+bool AlloyProductHostWin::IsRestorableProductSession(
+    const browser_session::SessionProfileSnapshot& snapshot) const {
+  if (!browser_session::IsValid(snapshot) ||
+      snapshot.profile_id != profile_id_value_) {
+    return false;
+  }
+  std::size_t primary_count = 0;
+  for (const auto& session_window : snapshot.windows) {
+    if (session_window.window_id == kPrimaryWindowId) {
+      ++primary_count;
+    }
+    if (session_window.window_id.rfind("incognito-", 0) == 0) {
+      return false;
+    }
+  }
+  return primary_count == 1;
+}
+
+bool AlloyProductHostWin::CreateRestoredWindow(
+    const browser_session::SessionWindowSnapshot& snapshot) {
+  CEF_REQUIRE_UI_THREAD();
+  auto* restored_controller =
+      coordinator_ ? coordinator_->controller(snapshot.window_id) : nullptr;
+  const bool primary = snapshot.window_id == kPrimaryWindowId;
+  if (!restored_controller || snapshot.tabs.empty() || next_navigation_id_ == 0 ||
+      (primary && !views_.empty()) ||
+      (!primary && popup_windows_.count(snapshot.window_id) != 0)) {
+    return false;
+  }
+
+  PopupWindowRecord restored_popup;
+  restored_popup.window_id = snapshot.window_id;
+  restored_popup.request_context = dependencies_.request_context;
+  std::map<window::TabId, CefRefPtr<CefBrowserView>> restored_views;
+  window::TabId active_tab = 0;
+  CefBrowserSettings settings;
+  for (std::size_t index = 0; index < snapshot.tabs.size(); ++index) {
+    if (next_navigation_id_ == 0) return false;
+    auto restored_view = CefBrowserView::CreateBrowserView(
+        this, snapshot.tabs[index].url, settings, nullptr,
+        dependencies_.request_context, this);
+    if (!restored_view) return false;
+    const auto restored_tab =
+        restored_controller->BeginRestore(
+            restored_view,
+            browser_engine::NavigationId::FromRaw(next_navigation_id_++),
+            snapshot.tabs[index]);
+    if (!restored_tab ||
+        !restored_views.emplace(*restored_tab, restored_view).second) {
+      return false;
+    }
+    if (index == snapshot.active_index) active_tab = *restored_tab;
+  }
+  if (active_tab == 0) return false;
+
+  if (primary) {
+    views_ = std::move(restored_views);
+    tab_id_ = active_tab;
+    view_ = views_.at(active_tab);
+  } else {
+    restored_popup.views = std::move(restored_views);
+    restored_popup.tab_id = active_tab;
+    restored_popup.view = restored_popup.views.at(active_tab);
+    popup_windows_.emplace(snapshot.window_id, std::move(restored_popup));
+  }
+  pending_restored_windows_.push_back(snapshot.window_id);
+  return true;
+}
+
+void AlloyProductHostWin::CompleteSessionRestore() {
+  CEF_REQUIRE_UI_THREAD();
+  if (!started_ || closing_ || closed_ || !coordinator_ ||
+      pending_session_restore_.empty()) {
+    return;
+  }
+  const std::size_t window_count = pending_session_restore_.size();
+  for (const auto& snapshot : pending_session_restore_) {
+    pending_restored_browsers_ += snapshot.tabs.size();
+  }
+  while (!pending_session_restore_.empty()) {
+    const auto snapshot = std::move(pending_session_restore_.front());
+    pending_session_restore_.pop_front();
+    if (!CreateRestoredWindow(snapshot)) {
+      FailSessionRestore();
+      return;
+    }
+  }
+  if (tab_id_ == 0 || views_.count(tab_id_) == 0 ||
+      pending_restored_windows_.size() != window_count) {
+    FailSessionRestore();
+    return;
+  }
+  view_ = views_.at(tab_id_);
+  for (std::size_t index = 0; index < window_count; ++index) {
+    CefWindow::CreateTopLevelWindow(this);
+  }
+}
+
+void AlloyProductHostWin::FailSessionRestore() {
+  CEF_REQUIRE_UI_THREAD();
+  if (session_restore_failed_ || !coordinator_) return;
+  session_restore_failed_ = true;
+  session_writes_enabled_ = false;
+  closing_ = true;
+  pending_restored_browsers_ = 0;
+  pending_session_restore_.clear();
+  pending_restored_windows_.clear();
+  for (const auto& window_id : restoring_window_ids_) {
+    if (coordinator_->has_window(window_id)) {
+      static_cast<void>(coordinator_->BeginCloseWindow(window_id, true));
+    }
+  }
+  for (const auto& window_id : restoring_window_ids_) {
+    auto* failed_controller = coordinator_->controller(window_id);
+    if (failed_controller && failed_controller->pending_count() == 0) {
+      static_cast<void>(coordinator_->OnWindowClosed(window_id));
+      popup_windows_.erase(window_id);
+    }
+  }
+  if (coordinator_->window_count() == 0 && coordinator_->Shutdown()) {
+    coordinator_.reset();
+    NotifyClosed();
+  }
+}
+
+void AlloyProductHostWin::ScheduleSessionCheckpoint() {
+  CEF_REQUIRE_UI_THREAD();
+  if (!started_ || closing_ || !session_writes_enabled_ ||
+      dependencies_.session_path.empty()) {
+    return;
+  }
+  if (session_checkpoint_pending_) return;
+  if (++session_checkpoint_generation_ == 0) {
+    session_checkpoint_generation_ = 1;
+  }
+  session_checkpoint_pending_ = true;
+  CefPostDelayedTask(
+      TID_UI,
+      CefCreateClosureTask(base::BindOnce(
+          &AlloyProductHostWin::SaveSessionCheckpoint,
+          CefRefPtr<AlloyProductHostWin>(this), session_checkpoint_generation_)),
+      kSessionCheckpointDelayMilliseconds);
+}
+
+void AlloyProductHostWin::SaveSessionCheckpoint(std::uint64_t generation) {
+  CEF_REQUIRE_UI_THREAD();
+  if (generation != session_checkpoint_generation_) return;
+  session_checkpoint_pending_ = false;
+  if (closing_) return;
+  static_cast<void>(SaveSessionCheckpointNow());
+}
+
+bool AlloyProductHostWin::SaveSessionCheckpointNow() {
+  CEF_REQUIRE_UI_THREAD();
+  if (!session_writes_enabled_ || dependencies_.session_path.empty() ||
+      !coordinator_) {
+    return false;
+  }
+  const auto profile = browser_engine::ProfileId::TryCreate(profile_id_value_);
+  auto snapshot =
+      profile ? coordinator_->SnapshotSession(*profile) : std::nullopt;
+  if (!snapshot || snapshot->windows.empty()) return false;
+  bool has_primary = false;
+  for (const auto& session_window : snapshot->windows) {
+    has_primary = has_primary || session_window.window_id == kPrimaryWindowId;
+  }
+  if (!has_primary) snapshot->windows.front().window_id = kPrimaryWindowId;
+  if (!IsRestorableProductSession(*snapshot)) return false;
+  session_save_result_ = window::AlloySessionRestore::SaveCheckpoint(
+      dependencies_.session_path, *snapshot,
+      browser_session::WindowKind::kRegular);
+  return session_save_result_ == window::AlloySessionFileResult::kSuccess;
+}
+
 bool AlloyProductHostWin::CreatePopupWindow(
     const window::AlloyWindowCoordinator::PopupRequest& request) {
   CEF_REQUIRE_UI_THREAD();
@@ -1395,12 +1688,15 @@ bool AlloyProductHostWin::CreatePopupWindow(
                  browser_engine::NavigationId::FromRaw(next_navigation_id_++))
            : std::nullopt;
   if (!tab) return false;
-  popup_windows_.emplace(
-      request.window_id, PopupWindowRecord{request.window_id, nullptr, view,
-                                           nullptr, request_context, nullptr,
-                                           nullptr, nullptr, *tab,
-                                           incognito_generation, incognito,
-                                           false});
+  PopupWindowRecord popup;
+  popup.window_id = request.window_id;
+  popup.view = view;
+  popup.request_context = request_context;
+  popup.views.emplace(*tab, view);
+  popup.tab_id = *tab;
+  popup.incognito_generation = incognito_generation;
+  popup.incognito = incognito;
+  popup_windows_.emplace(request.window_id, std::move(popup));
   pending_popup_windows_.push_back(request.window_id);
   CefWindow::CreateTopLevelWindow(this);
   return true;
@@ -1495,12 +1791,17 @@ void AlloyProductHostWin::FinalizeIncognitoContext(
     pending_incognito_contexts_.erase(pending);
     return;
   }
-  popup_windows_.emplace(
-      window_id, PopupWindowRecord{window_id, nullptr, view, nullptr,
-                                   request_context,
-                                   std::move(incognito_omnibox),
-                                   std::move(incognito_navigation), nullptr,
-                                   *tab, generation, true, false});
+  PopupWindowRecord popup;
+  popup.window_id = window_id;
+  popup.view = view;
+  popup.request_context = request_context;
+  popup.omnibox = std::move(incognito_omnibox);
+  popup.navigation = std::move(incognito_navigation);
+  popup.views.emplace(*tab, view);
+  popup.tab_id = *tab;
+  popup.incognito_generation = generation;
+  popup.incognito = true;
+  popup_windows_.emplace(window_id, std::move(popup));
   pending_incognito_contexts_.erase(pending);
   pending_popup_windows_.push_back(window_id);
   CefWindow::CreateTopLevelWindow(this);
@@ -1513,6 +1814,31 @@ bool AlloyProductHostWin::ActivateTab(window::TabId tab_id) {
   view_ = views_.count(tab_id) ? views_.at(tab_id) : nullptr;
   browser_ = BrowserForTab(tab_id);
   SyncChrome();
+  return true;
+}
+
+bool AlloyProductHostWin::OnRestoredBrowserReady() {
+  CEF_REQUIRE_UI_THREAD();
+  if (pending_restored_browsers_ == 0) return false;
+  if (--pending_restored_browsers_ != 0) return true;
+  if (!ActivateTab(tab_id_)) {
+    FailSessionRestore();
+    return true;
+  }
+  for (auto& [window_id, popup] : popup_windows_) {
+    auto* popup_controller =
+        coordinator_ ? coordinator_->controller(window_id) : nullptr;
+    const auto browser = popup.browsers.find(popup.tab_id);
+    if (!popup_controller || !popup_controller->Activate(popup.tab_id) ||
+        browser == popup.browsers.end()) {
+      FailSessionRestore();
+      return true;
+    }
+    popup.view = popup.views.at(popup.tab_id);
+    popup.browser = browser->second;
+  }
+  restoring_window_ids_.clear();
+  PostSyncChrome();
   return true;
 }
 
@@ -1552,6 +1878,7 @@ void AlloyProductHostWin::SyncChrome() {
   if (tab_strip_) static_cast<void>(tab_strip_->Sync(tab_controller->model()));
   static_cast<void>(BindActiveChrome());
   if (window_) window_->Layout();
+  ScheduleSessionCheckpoint();
 }
 
 void AlloyProductHostWin::PostSyncChrome() {
@@ -1730,6 +2057,12 @@ std::optional<std::string> AlloyProductHostWin::OwnerWindowIdForView(
     auto* popup_controller = coordinator_->controller(window_id);
     if (popup_controller && popup_controller->OwnsView(view)) return window_id;
   }
+  for (const auto& window_id : restoring_window_ids_) {
+    auto* restoring_controller = coordinator_->controller(window_id);
+    if (restoring_controller && restoring_controller->OwnsView(view)) {
+      return window_id;
+    }
+  }
   return std::nullopt;
 }
 
@@ -1743,6 +2076,12 @@ std::optional<std::string> AlloyProductHostWin::OwnerWindowIdForBrowser(
   for (const auto& [window_id, popup] : popup_windows_) {
     auto* popup_controller = coordinator_->controller(window_id);
     if (popup_controller && popup_controller->OwnsBrowser(browser)) {
+      return window_id;
+    }
+  }
+  for (const auto& window_id : restoring_window_ids_) {
+    auto* restoring_controller = coordinator_->controller(window_id);
+    if (restoring_controller && restoring_controller->OwnsBrowser(browser)) {
       return window_id;
     }
   }
@@ -1776,8 +2115,23 @@ void AlloyProductHostWin::ReleaseClosingView(CefRefPtr<CefBrowser> browser) {
     }
     auto popup = popup_windows_.find(*owner);
     if (popup != popup_windows_.end()) {
-      popup->second.view = nullptr;
-      popup->second.browser = nullptr;
+      for (auto found = popup->second.browsers.begin();
+           found != popup->second.browsers.end(); ++found) {
+        if (!found->second || !browser || !found->second->IsSame(browser)) {
+          continue;
+        }
+        const auto view = popup->second.views.find(found->first);
+        if (view != popup->second.views.end()) {
+          popup->second.views.erase(view);
+        }
+        popup->second.browsers.erase(found);
+        break;
+      }
+      if (popup->second.browser && browser &&
+          popup->second.browser->IsSame(browser)) {
+        popup->second.view = nullptr;
+        popup->second.browser = nullptr;
+      }
     }
     return;
   }

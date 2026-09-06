@@ -71,6 +71,7 @@ public:
   bool OnBeforeClose(CefRefPtr<CefBrowser> browser);
   bool OnRenderProcessGone(CefRefPtr<CefBrowser> browser);
   bool FinalizeRendererCrash(CefRefPtr<CefBrowser> browser);
+  bool RequestNextClose(bool force_close = false);
   std::optional<TransferredTab> TransferOut(TabId tab_id);
   std::optional<TabId> AdoptTransfer(TransferredTab transfer,
                                      bool preserve_id = false);

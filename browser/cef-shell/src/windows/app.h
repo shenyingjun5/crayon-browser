@@ -50,12 +50,15 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
  public:
   BrowserApp(HINSTANCE resource_module,
              ::crayon::browser::localization::LocaleSnapshot locale_snapshot,
-             std::string profile_cache_root);
+             std::string profile_cache_root, std::wstring session_path);
   ~BrowserApp() override;
 
   CefRefPtr<CefBrowserProcessHandler> GetBrowserProcessHandler() override {
     return this;
   }
+  void OnBeforeCommandLineProcessing(
+      const CefString& process_type,
+      CefRefPtr<CefCommandLine> command_line) override;
   CefRefPtr<CefResourceBundleHandler> GetResourceBundleHandler() override {
     return about_resources_;
   }

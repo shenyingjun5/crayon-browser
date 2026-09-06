@@ -26,6 +26,7 @@
 #include "browser/window/alloy_page_markdown.h"
 #include "browser/window/alloy_page_tools.h"
 #include "browser/window/alloy_profile_settings.h"
+#include "browser/window/alloy_session_restore.h"
 #include "browser/window/alloy_site_controls.h"
 #include "browser/window/alloy_tab_strip.h"
 #include "browser/window/alloy_window_coordinator.h"
@@ -82,6 +83,7 @@ class AlloyProductHostWin final : public CefClient,
     std::function<bool(CefRefPtr<CefRequestContext>)>
         register_incognito_content;
     CefRefPtr<CefRequestContext> request_context;
+    std::wstring session_path;
   };
 
   struct Callbacks final {
@@ -99,6 +101,12 @@ class AlloyProductHostWin final : public CefClient,
   bool started() const noexcept { return started_; }
   bool closed() const noexcept { return closed_; }
   CefRefPtr<CefBrowser> browser() const noexcept { return browser_; }
+  window::AlloySessionFileResult session_load_result() const noexcept {
+    return session_load_result_;
+  }
+  window::AlloySessionFileResult session_save_result() const noexcept {
+    return session_save_result_;
+  }
 
   CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
   CefRefPtr<CefLoadHandler> GetLoadHandler() override { return this; }
@@ -255,6 +263,15 @@ class AlloyProductHostWin final : public CefClient,
   bool CreateTab(std::string url, browser_engine::ContentPurpose purpose);
   bool CreatePopupWindow(
       const window::AlloyWindowCoordinator::PopupRequest& request);
+  bool CreateRestoredWindow(
+      const browser_session::SessionWindowSnapshot& snapshot);
+  void CompleteSessionRestore();
+  void FailSessionRestore();
+  bool IsRestorableProductSession(
+      const browser_session::SessionProfileSnapshot& snapshot) const;
+  void ScheduleSessionCheckpoint();
+  void SaveSessionCheckpoint(std::uint64_t generation);
+  bool SaveSessionCheckpointNow();
   bool CreateIncognitoWindow(const browser_engine::ProfileId& profile_id,
                              std::uint64_t generation);
   void FinalizeIncognitoContext(std::string profile_id,
@@ -262,6 +279,7 @@ class AlloyProductHostWin final : public CefClient,
                                 CefRefPtr<CefRequestContext> request_context);
   void FinalizeBrowserCreated(CefRefPtr<CefBrowserView> view,
                               CefRefPtr<CefBrowser> browser);
+  bool OnRestoredBrowserReady();
   bool ActivateTab(window::TabId tab_id);
   void ActivateCreatedTab(window::TabId tab_id);
   void SyncChrome();
@@ -340,6 +358,8 @@ class AlloyProductHostWin final : public CefClient,
     std::unique_ptr<window::AlloyOmnibox> omnibox;
     std::unique_ptr<window::AlloyNavigation> navigation;
     CefRefPtr<CefPanel> toolbar;
+    std::map<window::TabId, CefRefPtr<CefBrowserView>> views;
+    std::map<window::TabId, CefRefPtr<CefBrowser>> browsers;
     window::TabId tab_id = 0;
     std::uint64_t incognito_generation = 0;
     bool incognito = false;
@@ -347,6 +367,11 @@ class AlloyProductHostWin final : public CefClient,
   };
   std::map<std::string, PopupWindowRecord> popup_windows_;
   std::deque<std::string> pending_popup_windows_;
+  std::deque<std::string> pending_restored_windows_;
+  std::deque<browser_session::SessionWindowSnapshot>
+      pending_session_restore_;
+  std::vector<std::string> restoring_window_ids_;
+  std::size_t pending_restored_browsers_ = 0;
   std::map<std::uint64_t, CefRefPtr<CefRequestContext>>
       pending_incognito_contexts_;
   std::string title_;
@@ -358,8 +383,16 @@ class AlloyProductHostWin final : public CefClient,
   window::TabId trusted_input_tab_ = 0;
   std::uint64_t trusted_input_generation_ = 0;
   std::uint64_t trusted_input_at_ms_ = 0;
+  std::uint64_t session_checkpoint_generation_ = 0;
+  bool session_checkpoint_pending_ = false;
+  window::AlloySessionFileResult session_load_result_ =
+      window::AlloySessionFileResult::kNotFound;
+  window::AlloySessionFileResult session_save_result_ =
+      window::AlloySessionFileResult::kNotFound;
   int chrome_browser_id_ = 0;
   bool started_ = false;
+  bool session_writes_enabled_ = false;
+  bool session_restore_failed_ = false;
   bool primary_closing_ = false;
   bool closing_ = false;
   bool closed_ = false;
