@@ -35,6 +35,10 @@ if(NOT _factory_h MATCHES "CEF_REQUIRE_UI_THREAD")
   message(FATAL_ERROR
           "ProfileContextFactory header must document CEF UI thread requirement")
 endif()
+if(NOT _factory_h MATCHES "AdoptGlobalContext")
+  message(FATAL_ERROR
+          "ProfileContextFactory must support adopting CEF's global profile context")
+endif()
 
 # Verify that Profile ID never appears literally in cache path helpers.
 # Reject direct concatenation like: path += "profiles/" + profile_id

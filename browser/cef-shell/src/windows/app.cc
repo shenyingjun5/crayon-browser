@@ -154,7 +154,8 @@ void WindowsWindowIcons::Apply(CefRefPtr<CefBrowser> browser) const {
 
 BrowserApp::BrowserApp(
     HINSTANCE resource_module,
-    ::crayon::browser::localization::LocaleSnapshot locale_snapshot)
+    ::crayon::browser::localization::LocaleSnapshot locale_snapshot,
+    std::string profile_cache_root)
     : window_icons_(std::make_shared<WindowsWindowIcons>(resource_module)),
       about_resources_(
           new branding::AboutBrowserResources(locale_snapshot.locale)),
@@ -201,6 +202,8 @@ BrowserApp::BrowserApp(
               }})),
       trusted_input_monitor_(
           std::make_unique<windows::TrustedInputMonitorWin>()),
+      profile_context_factory_(std::make_unique<context::ProfileContextFactory>(
+          std::move(profile_cache_root))),
       tab_controller_(new window::TabController(
           browser_new_tab::kNewTabUrl,
           [this](CefRefPtr<CefBrowser> browser) {
@@ -237,7 +240,19 @@ BrowserApp::BrowserApp(
                   static_cast<void>(host->CloseTab(tab_id, generation));
                 }
               },
-              permission_store_.get(), nullptr},
+              permission_store_.get(), profile_context_factory_.get(),
+              [this](CefRefPtr<CefRequestContext> request_context) {
+                const auto page_model = browser_new_tab::BuildNewTabPageModel(
+                    browser_new_tab::NewTabProfileMode::kIncognito,
+                    browser_new_tab::ShortcutConfig{});
+                // A temporary profile receives only its private new-tab page.
+                // Registering the shared MDV runtime here would expose the
+                // regular profile's in-memory document to an incognito window.
+                return new_tab::RegisterNewTabSchemeHandlerFactory(
+                    page_model, product_strings_.new_tab,
+                    std::move(request_context));
+              },
+              nullptr},
           windows::AlloyProductHostWin::Callbacks{
               [this](CefRefPtr<CefBrowser> browser) {
                 window_icons_->Apply(browser);
@@ -246,6 +261,21 @@ BrowserApp::BrowserApp(
       shell_runtime_(std::make_shared<WindowsShellRuntime>(tab_controller_)) {}
 
 BrowserApp::~BrowserApp() = default;
+
+void BrowserApp::PrepareForCefShutdown() {
+  CEF_REQUIRE_UI_THREAD();
+  content_host_tick_active_ = false;
+  trusted_input_monitor_->Stop();
+  if (page_markdown_preview_) page_markdown_preview_->Stop();
+  cast_shell_->Shutdown();
+  if (cast_chrome_) cast_chrome_->Close();
+  content_host_->Stop();
+  media_host_->Stop();
+  alloy_product_host_->ReleaseRequestContextsForShutdown();
+  default_profile_context_ = nullptr;
+  if (profile_context_factory_) profile_context_factory_->Shutdown();
+  shell_runtime_->Shutdown();
+}
 
 void BrowserApp::OnRegisterCustomSchemes(
     CefRawPtr<CefSchemeRegistrar> registrar) {
@@ -281,15 +311,12 @@ void BrowserApp::OnContextInitialized() {
       runtime->Shutdown();
     }
   });
-  const auto page_model = browser_new_tab::BuildNewTabPageModel(
-      browser_new_tab::NewTabProfileMode::kRegular,
-      browser_new_tab::ShortcutConfig{});
-  if (!window::RegisterAlloyBuiltinContentFactories(
-          page_model, product_strings_.new_tab, product_strings_.mdv,
-          mdv_runtime_)) {
-    shell_runtime_->Shutdown();
-    CefQuitMessageLoop();
-    return;
+  if (!CefPostTask(
+          TID_UI,
+          CefCreateClosureTask(base::BindOnce(
+              &BrowserApp::InitializeDefaultProfileContext,
+              CefRefPtr<BrowserApp>(this))))) {
+    default_profile_context_failed_ = true;
   }
   tab_controller_->SetLocalEntryCommandHandler(
       [entries = mdv_entries_, editing = mdv_editing_](
@@ -429,9 +456,41 @@ void BrowserApp::OnContextInitialized() {
   ContinueContentHostStartup();
 }
 
+void BrowserApp::InitializeDefaultProfileContext() {
+  CEF_REQUIRE_UI_THREAD();
+  if (default_profile_context_ || default_profile_context_ready_ ||
+      default_profile_context_failed_) {
+    return;
+  }
+  const auto page_model = browser_new_tab::BuildNewTabPageModel(
+      browser_new_tab::NewTabProfileMode::kRegular,
+      browser_new_tab::ShortcutConfig{});
+  default_profile_context_ = CefRequestContext::GetGlobalContext();
+  if (!default_profile_context_ ||
+      !profile_context_factory_->AdoptGlobalContext(
+          "default", default_profile_context_) ||
+      !window::RegisterAlloyBuiltinContentFactories(
+          page_model, product_strings_.new_tab, product_strings_.mdv,
+          mdv_runtime_, default_profile_context_) ||
+      !alloy_product_host_->SetRequestContext(default_profile_context_)) {
+    default_profile_context_failed_ = true;
+    return;
+  }
+  default_profile_context_ready_ = true;
+}
+
 void BrowserApp::ContinueContentHostStartup() {
   CEF_REQUIRE_UI_THREAD();
-  if (content_host_->healthy() && media_host_->healthy()) {
+  if (default_profile_context_failed_) {
+    trusted_input_monitor_->Stop();
+    content_host_->Stop();
+    media_host_->Stop();
+    shell_runtime_->Shutdown();
+    CefQuitMessageLoop();
+    return;
+  }
+  if (default_profile_context_ready_ && content_host_->healthy() &&
+      media_host_->healthy()) {
     const auto profile = browser_engine::ProfileId::TryCreate("default");
     if (!profile ||
         !alloy_product_host_->Start(browser_new_tab::kNewTabUrl,
@@ -464,14 +523,7 @@ void BrowserApp::ContinueContentHostStartup() {
 
 void BrowserApp::OnAlloyBrowsersClosed() {
   CEF_REQUIRE_UI_THREAD();
-  content_host_tick_active_ = false;
-  trusted_input_monitor_->Stop();
-  page_markdown_preview_->Stop();
-  cast_shell_->Shutdown();
-  cast_chrome_->Close();
-  content_host_->Stop();
-  media_host_->Stop();
-  shell_runtime_->Shutdown();
+  PrepareForCefShutdown();
   CefQuitMessageLoop();
 }
 

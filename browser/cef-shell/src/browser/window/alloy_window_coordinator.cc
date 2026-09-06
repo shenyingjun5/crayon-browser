@@ -83,6 +83,18 @@ bool AlloyWindowCoordinator::AttachWindow(const std::string &window_id,
   return true;
 }
 
+bool AlloyWindowCoordinator::CancelPendingWindow(
+    const std::string &window_id) {
+  CEF_REQUIRE_UI_THREAD();
+  auto found = records_.find(window_id);
+  if (!active_ || dispatching_ || found == records_.end() ||
+      found->second.window || found->second.controller->model().size() != 0) {
+    return false;
+  }
+  records_.erase(found);
+  return windows_.CloseWindow(window_id);
+}
+
 bool AlloyWindowCoordinator::RestoreSession(
     const browser_session::SessionProfileSnapshot &snapshot,
     const browser_engine::ProfileId &profile_id) {

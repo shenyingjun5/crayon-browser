@@ -11,6 +11,7 @@
 
 #include "browser/mdv/cef_mdv_editing.h"
 #include "browser/mdv/cef_mdv_entries.h"
+#include "browser/context/profile_context_factory.h"
 #include "browser/media_host/alloy_cast_controller.h"
 #include "browser/media_host/cast_entry_surface.h"
 #include "browser/observation_gateway/cef_observation_bridge.h"
@@ -24,6 +25,7 @@
 #include "browser/window/alloy_omnibox.h"
 #include "browser/window/alloy_page_markdown.h"
 #include "browser/window/alloy_page_tools.h"
+#include "browser/window/alloy_profile_settings.h"
 #include "browser/window/alloy_site_controls.h"
 #include "browser/window/alloy_tab_strip.h"
 #include "browser/window/alloy_window_coordinator.h"
@@ -76,6 +78,9 @@ class AlloyProductHostWin final : public CefClient,
         media_events_ready;
     observation::CefObservationBridge::LifecycleCallback media_lifecycle;
     permission::PermissionStore* permission_store = nullptr;
+    context::ProfileContextFactory* profile_context_factory = nullptr;
+    std::function<bool(CefRefPtr<CefRequestContext>)>
+        register_incognito_content;
     CefRefPtr<CefRequestContext> request_context;
   };
 
@@ -88,6 +93,8 @@ class AlloyProductHostWin final : public CefClient,
 
   bool Start(std::string initial_url, std::string title,
              browser_engine::ProfileId profile_id);
+  bool SetRequestContext(CefRefPtr<CefRequestContext> request_context);
+  void ReleaseRequestContextsForShutdown();
   bool Close(bool force_close);
   bool started() const noexcept { return started_; }
   bool closed() const noexcept { return closed_; }
@@ -248,6 +255,11 @@ class AlloyProductHostWin final : public CefClient,
   bool CreateTab(std::string url, browser_engine::ContentPurpose purpose);
   bool CreatePopupWindow(
       const window::AlloyWindowCoordinator::PopupRequest& request);
+  bool CreateIncognitoWindow(const browser_engine::ProfileId& profile_id,
+                             std::uint64_t generation);
+  void FinalizeIncognitoContext(std::string profile_id,
+                                std::uint64_t generation,
+                                CefRefPtr<CefRequestContext> request_context);
   void FinalizeBrowserCreated(CefRefPtr<CefBrowserView> view,
                               CefRefPtr<CefBrowser> browser);
   bool ActivateTab(window::TabId tab_id);
@@ -266,6 +278,8 @@ class AlloyProductHostWin final : public CefClient,
       CefRefPtr<CefBrowser> browser) const;
   window::AlloyTabController* ControllerForBrowser(
       CefRefPtr<CefBrowser> browser) const;
+  CefRefPtr<CefRequestContext> ContextForWindow(
+      const std::string& window_id) const;
   void ReleaseClosingView(CefRefPtr<CefBrowser> browser);
   void FinalizeRendererCrash(CefRefPtr<CefBrowser> browser);
   void NotifyClosed();
@@ -294,6 +308,7 @@ class AlloyProductHostWin final : public CefClient,
   Callbacks callbacks_;
   std::unique_ptr<window::AlloyWindowCoordinator> coordinator_;
   std::unique_ptr<window::AlloyPageMarkdown> page_markdown_;
+  std::unique_ptr<window::AlloyProfileSettings> profile_settings_;
   CefRefPtr<window::AlloyBuiltinContent> builtin_content_;
   std::unique_ptr<window::AlloyTabStrip> tab_strip_;
   std::unique_ptr<window::AlloyOmnibox> omnibox_;
@@ -321,11 +336,19 @@ class AlloyProductHostWin final : public CefClient,
     CefRefPtr<CefWindow> window;
     CefRefPtr<CefBrowserView> view;
     CefRefPtr<CefBrowser> browser;
+    CefRefPtr<CefRequestContext> request_context;
+    std::unique_ptr<window::AlloyOmnibox> omnibox;
+    std::unique_ptr<window::AlloyNavigation> navigation;
+    CefRefPtr<CefPanel> toolbar;
     window::TabId tab_id = 0;
+    std::uint64_t incognito_generation = 0;
+    bool incognito = false;
     bool closing = false;
   };
   std::map<std::string, PopupWindowRecord> popup_windows_;
   std::deque<std::string> pending_popup_windows_;
+  std::map<std::uint64_t, CefRefPtr<CefRequestContext>>
+      pending_incognito_contexts_;
   std::string title_;
   std::string profile_id_value_;
   window::TabId tab_id_ = 0;

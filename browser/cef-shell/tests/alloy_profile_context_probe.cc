@@ -103,12 +103,16 @@ public:
       return;
     }
     factory_ = std::make_unique<ProfileContextFactory>(profile_root.string());
-    for (std::size_t i = 0; i < kUniqueContextCount; ++i) {
+    contexts_[0] = CefRequestContext::GetGlobalContext();
+    contexts_initialized_[0] = true;
+    if (!factory_->AdoptGlobalContext("profile-a", contexts_[0])) {
+      Finish(false, "adopt-global-context");
+      return;
+    }
+    for (std::size_t i = 1; i < kUniqueContextCount; ++i) {
       initialization_observers_[i] =
           new InitializationObserver(&contexts_initialized_[i]);
     }
-    contexts_[0] = factory_->GetPersistentContext("profile-a",
-                                                  initialization_observers_[0]);
     profile_a_again_ = factory_->GetPersistentContext("profile-a");
     contexts_[1] = factory_->GetPersistentContext("profile-b",
                                                   initialization_observers_[1]);

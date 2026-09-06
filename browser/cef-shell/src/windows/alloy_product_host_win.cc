@@ -15,6 +15,7 @@
 #include "crayon/browser_privacy/privacy_defaults.h"
 #include "browser/permission/site_origin.h"
 #include "include/base/cef_callback.h"
+#include "include/cef_request_context_handler.h"
 #include "include/cef_task.h"
 #include "include/views/cef_box_layout.h"
 #include "include/wrapper/cef_closure_task.h"
@@ -59,6 +60,25 @@ std::optional<browser_engine::ContentCapabilitySet> InitialCapabilities() {
 std::string Localized(localization::AppLocale locale, std::string_view key) {
   const auto value = localization::LocaleCatalog(locale).Find(key);
   return value ? std::string(*value) : std::string{};
+}
+
+window::AlloyOmnibox::Strings OmniboxStrings(localization::AppLocale locale) {
+  return {Localized(locale, "address.placeholder"),
+          Localized(locale, "omnibox.edit")};
+}
+
+window::AlloyNavigation::Strings NavigationStrings(
+    localization::AppLocale locale) {
+  return {Localized(locale, "nav.back"),
+          Localized(locale, "nav.forward"),
+          Localized(locale, "nav.reload"),
+          Localized(locale, "nav.stop"),
+          Localized(locale, "nav.identity.unknown"),
+          Localized(locale, "nav.identity.secure"),
+          Localized(locale, "nav.identity.pending"),
+          Localized(locale, "nav.identity.insecure"),
+          Localized(locale, "nav.identity.local"),
+          Localized(locale, "nav.identity.error")};
 }
 
 bool IsCertificateOrSslError(cef_errorcode_t error) {
@@ -124,6 +144,29 @@ class ProductResourceHandlerWin final : public CefResourceRequestHandler {
   DISALLOW_COPY_AND_ASSIGN(ProductResourceHandlerWin);
 };
 
+class OneShotRequestContextHandler final : public CefRequestContextHandler {
+ public:
+  using Callback =
+      std::function<void(CefRefPtr<CefRequestContext> request_context)>;
+
+  explicit OneShotRequestContextHandler(Callback callback)
+      : callback_(std::move(callback)) {}
+
+  void OnRequestContextInitialized(
+      CefRefPtr<CefRequestContext> request_context) override {
+    CEF_REQUIRE_UI_THREAD();
+    auto callback = std::move(callback_);
+    callback_ = {};
+    if (callback) callback(std::move(request_context));
+  }
+
+ private:
+  Callback callback_;
+
+  IMPLEMENT_REFCOUNTING(OneShotRequestContextHandler);
+  DISALLOW_COPY_AND_ASSIGN(OneShotRequestContextHandler);
+};
+
 }  // namespace
 
 AlloyProductHostWin::AlloyProductHostWin(Dependencies dependencies,
@@ -133,13 +176,44 @@ AlloyProductHostWin::AlloyProductHostWin(Dependencies dependencies,
 
 AlloyProductHostWin::~AlloyProductHostWin() = default;
 
+bool AlloyProductHostWin::SetRequestContext(
+    CefRefPtr<CefRequestContext> request_context) {
+  CEF_REQUIRE_UI_THREAD();
+  if (started_ || closed_ || dependencies_.request_context ||
+      !request_context || request_context->GetCachePath().empty()) {
+    return false;
+  }
+  dependencies_.request_context = std::move(request_context);
+  return true;
+}
+
+void AlloyProductHostWin::ReleaseRequestContextsForShutdown() {
+  CEF_REQUIRE_UI_THREAD();
+  pending_incognito_contexts_.clear();
+  for (auto& [window_id, popup] : popup_windows_) {
+    static_cast<void>(window_id);
+    popup.request_context = nullptr;
+  }
+  dependencies_.request_context = nullptr;
+}
+
 bool AlloyProductHostWin::Start(std::string initial_url, std::string title,
                                 browser_engine::ProfileId profile_id) {
   CEF_REQUIRE_UI_THREAD();
-  if (started_ || closed_ || initial_url.empty() || title.empty()) {
+  if (started_ || closed_ || initial_url.empty() || title.empty() ||
+      !dependencies_.profile_context_factory ||
+      !dependencies_.register_incognito_content ||
+      !dependencies_.request_context) {
     return false;
   }
   profile_id_value_ = profile_id.value();
+  const auto persistent_context =
+      dependencies_.profile_context_factory->GetPersistentContext(
+          profile_id_value_);
+  if (!persistent_context ||
+      !persistent_context->IsSame(dependencies_.request_context)) {
+    return false;
+  }
   coordinator_ = std::make_unique<window::AlloyWindowCoordinator>(
       window::AlloyWindowCoordinator::Callbacks{
           [this](const window::AlloyWindowCoordinator::PopupRequest& request) {
@@ -164,6 +238,25 @@ bool AlloyProductHostWin::Start(std::string initial_url, std::string title,
   if (!tab_controller || !dependencies_.mdv_entries ||
       !dependencies_.mdv_editing || !dependencies_.clipboard_write ||
       !dependencies_.permission_store) {
+    coordinator_.reset();
+    return false;
+  }
+  profile_settings_ = std::make_unique<window::AlloyProfileSettings>(
+      window::AlloyProfileSettings::Callbacks{
+          {},
+          [this](const browser_engine::ProfileId& source_profile,
+                 std::uint64_t generation) {
+            return CreateIncognitoWindow(source_profile, generation);
+          },
+          {},
+          {}});
+  const auto settings_profile =
+      browser_engine::ProfileId::TryCreate(profile_id_value_);
+  if (!settings_profile ||
+      !profile_settings_->AddProfile(
+          *settings_profile, profile_id_value_,
+          browser_profiles_view::ProfileEntryKind::kRegular)) {
+    profile_settings_.reset();
     coordinator_.reset();
     return false;
   }
@@ -221,8 +314,7 @@ bool AlloyProductHostWin::Start(std::string initial_url, std::string title,
             }
           }});
   omnibox_ = std::make_unique<window::AlloyOmnibox>(
-      window::AlloyOmnibox::Strings{Localized(locale, "address.placeholder"),
-                                    Localized(locale, "omnibox.edit")},
+      OmniboxStrings(locale),
       window::AlloyOmnibox::Callbacks{
           {},
           [this](const window::OmniboxSubmission& submission) {
@@ -233,15 +325,7 @@ bool AlloyProductHostWin::Start(std::string initial_url, std::string title,
           [this] { SyncChrome(); }},
       browser_privacy::DefaultPrivacyDefaults());
   navigation_ = std::make_unique<window::AlloyNavigation>(
-      window::AlloyNavigation::Strings{
-          Localized(locale, "nav.back"), Localized(locale, "nav.forward"),
-          Localized(locale, "nav.reload"), Localized(locale, "nav.stop"),
-          Localized(locale, "nav.identity.unknown"),
-          Localized(locale, "nav.identity.secure"),
-          Localized(locale, "nav.identity.pending"),
-          Localized(locale, "nav.identity.insecure"),
-          Localized(locale, "nav.identity.local"),
-          Localized(locale, "nav.identity.error")},
+      NavigationStrings(locale),
       window::AlloyNavigation::Callbacks{[this](const std::string& address) {
         if (omnibox_) static_cast<void>(omnibox_->SetAddress(address));
       }});
@@ -384,9 +468,24 @@ void AlloyProductHostWin::OnWindowCreated(CefRefPtr<CefWindow> window) {
     found->second.window = window;
     CefBoxLayoutSettings popup_settings;
     auto popup_layout = window->SetToBoxLayout(popup_settings);
+    if (found->second.incognito && found->second.navigation &&
+        found->second.omnibox) {
+      found->second.toolbar = CefPanel::CreatePanel(nullptr);
+      CefBoxLayoutSettings toolbar_settings;
+      toolbar_settings.horizontal = true;
+      auto toolbar_layout =
+          found->second.toolbar->SetToBoxLayout(toolbar_settings);
+      found->second.toolbar->AddChildView(found->second.navigation->panel());
+      found->second.toolbar->AddChildView(found->second.omnibox->panel());
+      toolbar_layout->SetFlexForView(found->second.omnibox->panel(), 1);
+      window->AddChildView(found->second.toolbar);
+    }
     window->AddChildView(popup_controller->container());
     popup_layout->SetFlexForView(popup_controller->container(), 1);
-    window->SetTitle(title_);
+    window->SetTitle(found->second.incognito
+                         ? CefString(Localized(dependencies_.locale.locale,
+                                               "privacy.incognito"))
+                         : CefString(title_));
     window->SetSize(CefSize(720, 560));
     window->Layout();
     window->Show();
@@ -571,7 +670,24 @@ void AlloyProductHostWin::FinalizeBrowserCreated(
   }
   if (owner && *owner != kPrimaryWindowId) {
     auto popup = popup_windows_.find(*owner);
-    if (popup != popup_windows_.end()) popup->second.browser = browser;
+    if (popup != popup_windows_.end()) {
+      popup->second.browser = browser;
+      if (popup->second.incognito && popup->second.navigation &&
+          popup->second.omnibox) {
+        const auto main_frame = browser->GetMainFrame();
+        const std::string address =
+            main_frame ? main_frame->GetURL().ToString() : std::string{};
+        if (!popup->second.navigation->Bind(*owner, browser) ||
+            !popup->second.omnibox->SetAddress(address)) {
+          if (!popup->second.closing && coordinator_ &&
+              coordinator_->BeginCloseWindow(*owner, true)) {
+            popup->second.closing = true;
+          }
+          if (popup->second.window) popup->second.window->Close();
+          return;
+        }
+      }
+    }
     static_cast<void>(tab_controller->Activate(*tab_id));
     if (callbacks_.browser_created) callbacks_.browser_created(browser);
     return;
@@ -1079,6 +1195,19 @@ void AlloyProductHostWin::OnBuiltinLoadEnd(CefRefPtr<CefBrowser> browser,
     static_cast<void>(tab_controller->SynchronizeRuntimeState(browser));
   }
   const auto owner = OwnerWindowIdForBrowser(browser);
+  if (owner && *owner != kPrimaryWindowId) {
+    auto found = popup_windows_.find(*owner);
+    if (found != popup_windows_.end() && found->second.incognito &&
+        found->second.navigation && frame) {
+      static_cast<void>(found->second.navigation->OnLoadEnd(
+          browser, frame->GetURL().ToString()));
+      if (found->second.omnibox) {
+        static_cast<void>(found->second.omnibox->OnNavigationFinished(
+            http_status_code >= 200 && http_status_code < 400,
+            frame->GetURL().ToString()));
+      }
+    }
+  }
   if (!owner || *owner != kPrimaryWindowId) return;
   media_observation_bridge_.BindCurrentMainFrame(browser);
   const std::string address = frame->GetURL();
@@ -1099,6 +1228,19 @@ void AlloyProductHostWin::OnBuiltinLoadError(CefRefPtr<CefBrowser> browser,
   CEF_REQUIRE_UI_THREAD();
   if (!Owns(browser) || !frame || !frame->IsMain()) return;
   const auto owner = OwnerWindowIdForBrowser(browser);
+  if (owner && *owner != kPrimaryWindowId) {
+    auto found = popup_windows_.find(*owner);
+    if (found != popup_windows_.end() && found->second.incognito &&
+        found->second.navigation) {
+      static_cast<void>(found->second.navigation->OnLoadError(
+          browser, failed_url.ToString(),
+          IsCertificateOrSslError(error_code)));
+      if (found->second.omnibox) {
+        static_cast<void>(found->second.omnibox->OnNavigationFinished(
+            false, failed_url.ToString()));
+      }
+    }
+  }
   if (!owner || *owner != kPrimaryWindowId) return;
   if (navigation_) {
     static_cast<void>(navigation_->OnLoadError(browser, failed_url.ToString(),
@@ -1127,6 +1269,13 @@ void AlloyProductHostWin::OnBuiltinAddressChange(CefRefPtr<CefBrowser> browser,
         static_cast<void>(SynchronizeSiteControls(browser, url.ToString()));
       }
       static_cast<void>(navigation_->OnAddressChange(browser, url.ToString()));
+    } else if (owner) {
+      auto found = popup_windows_.find(*owner);
+      if (found != popup_windows_.end() && found->second.incognito &&
+          found->second.navigation) {
+        static_cast<void>(found->second.navigation->OnAddressChange(
+            browser, url.ToString()));
+      }
     }
   }
 }
@@ -1159,6 +1308,13 @@ void AlloyProductHostWin::OnBuiltinLoadingStateChange(
   if (owner && *owner == kPrimaryWindowId && navigation_) {
     static_cast<void>(navigation_->OnLoadingStateChange(
         browser, is_loading, can_go_back, can_go_forward));
+  } else if (owner) {
+    auto found = popup_windows_.find(*owner);
+    if (found != popup_windows_.end() && found->second.incognito &&
+        found->second.navigation) {
+      static_cast<void>(found->second.navigation->OnLoadingStateChange(
+          browser, is_loading, can_go_back, can_go_forward));
+    }
   }
   if (owner && *owner == kPrimaryWindowId && is_loading && page_tools_ &&
       tab_controller) {
@@ -1219,14 +1375,20 @@ bool AlloyProductHostWin::CreatePopupWindow(
   CEF_REQUIRE_UI_THREAD();
   auto* popup_controller =
       coordinator_ ? coordinator_->controller(request.window_id) : nullptr;
+  auto request_context = ContextForWindow(request.opener_window_id);
+  const auto opener = popup_windows_.find(request.opener_window_id);
+  const bool incognito =
+      opener != popup_windows_.end() && opener->second.incognito;
+  const std::uint64_t incognito_generation =
+      incognito ? opener->second.incognito_generation : 0;
   if (!popup_controller || request.window_id.empty() || request.url.empty() ||
       popup_windows_.count(request.window_id) != 0 ||
-      next_navigation_id_ == 0 || !dependencies_.request_context) {
+      next_navigation_id_ == 0 || !request_context) {
     return false;
   }
   CefBrowserSettings settings;
   auto view = CefBrowserView::CreateBrowserView(
-      this, request.url, settings, nullptr, dependencies_.request_context, this);
+      this, request.url, settings, nullptr, request_context, this);
   const auto tab =
       view ? popup_controller->BeginCreate(
                  view, browser_engine::ContentPurpose::kWeb,
@@ -1234,11 +1396,114 @@ bool AlloyProductHostWin::CreatePopupWindow(
            : std::nullopt;
   if (!tab) return false;
   popup_windows_.emplace(
-      request.window_id,
-      PopupWindowRecord{request.window_id, nullptr, view, nullptr, *tab, false});
+      request.window_id, PopupWindowRecord{request.window_id, nullptr, view,
+                                           nullptr, request_context, nullptr,
+                                           nullptr, nullptr, *tab,
+                                           incognito_generation, incognito,
+                                           false});
   pending_popup_windows_.push_back(request.window_id);
   CefWindow::CreateTopLevelWindow(this);
   return true;
+}
+
+bool AlloyProductHostWin::CreateIncognitoWindow(
+    const browser_engine::ProfileId& profile_id, std::uint64_t generation) {
+  CEF_REQUIRE_UI_THREAD();
+  if (!started_ || closing_ || !coordinator_ || generation == 0 ||
+      profile_id.value() != profile_id_value_ ||
+      !dependencies_.profile_context_factory ||
+      coordinator_->window_count() + pending_incognito_contexts_.size() >=
+          browser_windows::kMaxWindows ||
+      pending_incognito_contexts_.count(generation) != 0) {
+    return false;
+  }
+  CefRefPtr<AlloyProductHostWin> self(this);
+  auto request_context =
+      dependencies_.profile_context_factory->CreateTemporaryContext(
+          new OneShotRequestContextHandler(
+              [self = std::move(self), profile = profile_id.value(), generation](
+                  CefRefPtr<CefRequestContext> initialized) {
+                self->FinalizeIncognitoContext(profile, generation,
+                                                std::move(initialized));
+              }));
+  if (!request_context || !request_context->GetCachePath().empty()) {
+    return false;
+  }
+  pending_incognito_contexts_.emplace(generation, std::move(request_context));
+  return true;
+}
+
+void AlloyProductHostWin::FinalizeIncognitoContext(
+    std::string profile_id, std::uint64_t generation,
+    CefRefPtr<CefRequestContext> request_context) {
+  CEF_REQUIRE_UI_THREAD();
+  auto pending = pending_incognito_contexts_.find(generation);
+  if (!started_ || closing_ || !coordinator_ ||
+      profile_id != profile_id_value_ ||
+      pending == pending_incognito_contexts_.end() || !pending->second ||
+      !request_context || !pending->second->IsSame(request_context) ||
+      !request_context->GetCachePath().empty() ||
+      !dependencies_.register_incognito_content(request_context)) {
+    if (pending != pending_incognito_contexts_.end()) {
+      pending_incognito_contexts_.erase(pending);
+    }
+    return;
+  }
+  const std::string window_id = "incognito-" + std::to_string(generation);
+  const auto logical_profile = browser_engine::ProfileId::TryCreate(profile_id);
+  auto incognito_omnibox = std::make_unique<window::AlloyOmnibox>(
+      OmniboxStrings(dependencies_.locale.locale),
+      window::AlloyOmnibox::Callbacks{
+          {},
+          [this, window_id](const window::OmniboxSubmission& submission) {
+            auto found = popup_windows_.find(window_id);
+            if (found != popup_windows_.end() && found->second.navigation) {
+              static_cast<void>(found->second.navigation->Navigate(submission));
+            }
+          },
+          {}},
+      browser_privacy::DefaultPrivacyDefaults());
+  auto* incognito_omnibox_ptr = incognito_omnibox.get();
+  auto incognito_navigation = std::make_unique<window::AlloyNavigation>(
+      NavigationStrings(dependencies_.locale.locale),
+      window::AlloyNavigation::Callbacks{
+          [incognito_omnibox_ptr](const std::string& address) {
+            if (incognito_omnibox_ptr) {
+              static_cast<void>(incognito_omnibox_ptr->SetAddress(address));
+            }
+          }});
+  if (!logical_profile ||
+      !incognito_omnibox->panel() || !incognito_navigation->panel() ||
+      !coordinator_->CreatePrimary(window_id, *logical_profile, false)) {
+    pending_incognito_contexts_.erase(pending);
+    return;
+  }
+  auto* incognito_controller = coordinator_->controller(window_id);
+  CefBrowserSettings settings;
+  auto view = CefBrowserView::CreateBrowserView(
+      this, browser_new_tab::kNewTabUrl, settings, nullptr, request_context,
+      this);
+  const auto tab = view && incognito_controller && next_navigation_id_ != 0
+                       ? incognito_controller->BeginCreate(
+                             view,
+                             browser_engine::ContentPurpose::kControlledBuiltIn,
+                             browser_engine::NavigationId::FromRaw(
+                                 next_navigation_id_++))
+                       : std::nullopt;
+  if (!tab) {
+    static_cast<void>(coordinator_->CancelPendingWindow(window_id));
+    pending_incognito_contexts_.erase(pending);
+    return;
+  }
+  popup_windows_.emplace(
+      window_id, PopupWindowRecord{window_id, nullptr, view, nullptr,
+                                   request_context,
+                                   std::move(incognito_omnibox),
+                                   std::move(incognito_navigation), nullptr,
+                                   *tab, generation, true, false});
+  pending_incognito_contexts_.erase(pending);
+  pending_popup_windows_.push_back(window_id);
+  CefWindow::CreateTopLevelWindow(this);
 }
 
 bool AlloyProductHostWin::ActivateTab(window::TabId tab_id) {
@@ -1332,6 +1597,11 @@ bool AlloyProductHostWin::BindActiveChrome() {
   callbacks.open_markdown = [this](CefRefPtr<CefBrowser> target) {
     return dependencies_.mdv_entries &&
            dependencies_.mdv_entries->HandleOpenFileCommand(std::move(target));
+  };
+  callbacks.open_incognito = [this] {
+    return profile_settings_ &&
+           profile_settings_->OpenIncognito() ==
+               window::AlloyProfileSettingsResult::kSuccess;
   };
   callbacks.navigate = [](CefRefPtr<CefBrowser> target,
                           const std::string& url) {
@@ -1485,6 +1755,15 @@ window::AlloyTabController* AlloyProductHostWin::ControllerForBrowser(
   return owner && coordinator_ ? coordinator_->controller(*owner) : nullptr;
 }
 
+CefRefPtr<CefRequestContext> AlloyProductHostWin::ContextForWindow(
+    const std::string& window_id) const {
+  CEF_REQUIRE_UI_THREAD();
+  if (window_id == kPrimaryWindowId) return dependencies_.request_context;
+  const auto found = popup_windows_.find(window_id);
+  return found != popup_windows_.end() ? found->second.request_context
+                                       : nullptr;
+}
+
 void AlloyProductHostWin::ReleaseClosingView(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
   const auto owner = OwnerWindowIdForBrowser(browser);
@@ -1602,6 +1881,12 @@ void AlloyProductHostWin::NotifyClosed() {
     page_markdown_->Shutdown();
     page_markdown_.reset();
   }
+  if (profile_settings_) {
+    profile_settings_->Shutdown();
+    profile_settings_.reset();
+  }
+  pending_incognito_contexts_.clear();
+  dependencies_.request_context = nullptr;
   media_observation_bridge_.SetEventsReadyCallback({});
   media_observation_bridge_.SetLifecycleCallback({});
   auto callback = std::move(callbacks_.all_closed);

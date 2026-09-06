@@ -30,6 +30,7 @@ namespace {
 
 using crayon::browser::cef_shell::mdv::MdvEditController;
 using crayon::browser::cef_shell::mdv::MdvEntryController;
+using crayon::browser::cef_shell::mdv::MdvPageSnapshot;
 using crayon::browser::cef_shell::mdv::MdvRuntimeState;
 using crayon::browser::cef_shell::window::AlloyBuiltinContent;
 using crayon::browser::cef_shell::window::AlloyBuiltinContentObserver;
@@ -39,6 +40,7 @@ constexpr int kWindowWidth = 960;
 constexpr int kWindowHeight = 720;
 constexpr int kPollMilliseconds = 25;
 constexpr int kMaximumPolls = 600;
+constexpr int kOverallTimeoutMilliseconds = 45000;
 constexpr char kViewerUrl[] = "crayon://mdv/app.html";
 
 bool WriteUtf8(const std::filesystem::path& path, const std::string& text) {
@@ -82,6 +84,11 @@ class BuiltinProbe final : public CefApp,
   }
 
   void OnContextInitialized() override {
+    CefPostDelayedTask(
+        TID_UI,
+        base::BindOnce(&BuiltinProbe::OnOverallTimeout,
+                       CefRefPtr<BuiltinProbe>(this)),
+        kOverallTimeoutMilliseconds);
     const auto strings = crayon::browser::product_strings::BuildProductStrings(
         crayon::browser::localization::SnapshotFor(
             crayon::browser::localization::AppLocale::kZhCn),
@@ -328,6 +335,20 @@ class BuiltinProbe final : public CefApp,
   }
 
  private:
+  void OnOverallTimeout() {
+    if (finished_) return;
+    const auto snapshot = state_ ? state_->snapshot() : MdvPageSnapshot{};
+    std::cout << "alloy_builtin_timeout stage=" << stage_
+              << " newtab=" << result_->new_tab_passed
+              << " runtime=" << result_->mdv_runtime_passed
+              << " save=" << result_->edit_save_passed
+              << " conflict=" << result_->conflict_passed
+              << " dirty=" << snapshot.dirty
+              << " confirm=" << snapshot.confirm_visible
+              << " save_ok=" << snapshot.save_ok << std::endl;
+    Finish(false, "overall-timeout");
+  }
+
   void ScheduleEditCheck() {
     CefPostDelayedTask(
         TID_UI,
@@ -355,12 +376,30 @@ class BuiltinProbe final : public CefApp,
       return;
     }
     stage_ = 3;
+    ScheduleConflictCheck();
+  }
+
+  void ScheduleConflictCheck() {
+    CefPostDelayedTask(
+        TID_UI,
+        base::BindOnce(&BuiltinProbe::CheckConflictProjection,
+                       CefRefPtr<BuiltinProbe>(this)),
+        kPollMilliseconds);
+  }
+
+  void CheckConflictProjection() {
+    if (finished_ || stage_ != 3 || !browser_) return;
     browser_->GetMainFrame()->ExecuteJavaScript(
-        "var q=setInterval(function(){var c=document.getElementById('md-"
-        "confirm');if(c&&c.getAttribute('data-show')==='true'&&document.body."
-        "getAttribute('data-dirty')==='true'){clearInterval(q);document.title="
-        "'alloy-conflict-pass';}},20);",
+        "var c=document.getElementById('md-confirm');"
+        "if(c&&c.getAttribute('data-show')==='true'&&document.body."
+        "getAttribute('data-dirty')==='true'){document.title="
+        "'alloy-conflict-pass';}",
         kViewerUrl, 1);
+    if (++conflict_polls_ > kMaximumPolls) {
+      Finish(false, "conflict-projection-timeout");
+      return;
+    }
+    ScheduleConflictCheck();
   }
 
   void Finish(bool passed, const char* detail) {
@@ -393,6 +432,7 @@ class BuiltinProbe final : public CefApp,
   std::filesystem::path markdown_path_;
   int stage_ = 0;
   int edit_polls_ = 0;
+  int conflict_polls_ = 0;
   bool finished_ = false;
 
   IMPLEMENT_REFCOUNTING(BuiltinProbe);

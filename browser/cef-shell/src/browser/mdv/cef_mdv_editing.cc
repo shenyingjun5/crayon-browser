@@ -17,8 +17,11 @@
 #include "crayon/browser_mdv/mdv_entry_guard.h"
 #include "crayon/browser_mdv/mdv_images.h"
 #include "crayon/browser_mdv/mdv_transform.h"
+#include "include/base/cef_callback.h"
 #include "include/cef_id_mappers.h"
 #include "include/cef_parser.h"
+#include "include/cef_task.h"
+#include "include/wrapper/cef_closure_task.h"
 #include "include/wrapper/cef_helpers.h"
 
 namespace crayon::browser::cef_shell::mdv {
@@ -34,6 +37,8 @@ using crayon::browser_mdv_save::SaveKind;
 using crayon::browser_mdv_save::SaveState;
 
 constexpr char kViewerPrefix[] = "crayon://mdv/";
+constexpr int kStatePushRetryDelayMilliseconds = 50;
+constexpr int kStatePushRetryCount = 3;
 
 std::filesystem::path FilesystemPath(const std::string& path_utf8) {
 #if defined(_WIN32)
@@ -539,7 +544,41 @@ void MdvEditController::PushState(CefRefPtr<CefBrowser> browser) {
   }
   CefString json = CefWriteJSON(root, JSON_WRITER_DEFAULT);
   std::string script = "window.mdvPush(" + json.ToString() + ");";
+  if (++push_generation_ == 0) ++push_generation_;
+  DispatchStatePush(std::move(browser), push_generation_, std::move(script),
+                    kStatePushRetryCount);
+}
+
+void MdvEditController::DispatchStatePush(CefRefPtr<CefBrowser> browser,
+                                          std::uint64_t generation,
+                                          std::string script,
+                                          int retries_remaining) {
+  CEF_REQUIRE_UI_THREAD();
+  if (!browser || generation != push_generation_ ||
+      browser->GetIdentifier() != host_browser_id_) {
+    return;
+  }
+  const auto frame = browser->GetMainFrame();
+  if (!frame || frame->GetURL().ToString().rfind(kViewerPrefix, 0) != 0) {
+    return;
+  }
   frame->ExecuteJavaScript(script, CefString(), 0);
+  if (retries_remaining <= 0) return;
+  std::weak_ptr<MdvEditController> weak = weak_from_this();
+  CefPostDelayedTask(
+      TID_UI,
+      CefCreateClosureTask(base::BindOnce(
+          [](std::weak_ptr<MdvEditController> weak,
+             CefRefPtr<CefBrowser> browser, std::uint64_t generation,
+             std::string script, int retries_remaining) {
+            if (const auto self = weak.lock()) {
+              self->DispatchStatePush(std::move(browser), generation,
+                                      std::move(script), retries_remaining);
+            }
+          },
+          std::move(weak), std::move(browser), generation, std::move(script),
+          retries_remaining - 1)),
+      kStatePushRetryDelayMilliseconds);
 }
 
 void MdvEditController::ReleasePendingNavigation(

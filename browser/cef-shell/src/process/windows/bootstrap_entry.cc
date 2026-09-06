@@ -1,6 +1,11 @@
 #include "process/windows/bootstrap_entry.h"
 
+#include <array>
+#include <filesystem>
+#include <optional>
 #include <string>
+
+#include <shlobj.h>
 
 #include "browser/new_tab/cef_new_tab_handler.h"
 #include "include/cef_app.h"
@@ -20,8 +25,39 @@ enum class ExitCode : int {
   kMdvStringsMissing = 16,
   kPageMarkdownStringsMissing = 17,
   kCastStringsMissing = 18,
+  kProfileCacheRootUnavailable = 19,
   kCefInitializeFailed = 20,
 };
+
+std::optional<std::filesystem::path> BuildProfileCacheRoot() {
+  std::array<wchar_t, MAX_PATH> local_app_data{};
+  if (FAILED(SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA | CSIDL_FLAG_CREATE,
+                              nullptr, SHGFP_TYPE_CURRENT,
+                              local_app_data.data()))) {
+    return std::nullopt;
+  }
+  std::filesystem::path root =
+      std::filesystem::path(local_app_data.data()) / "CrayonBrowser" / "CEF";
+  std::error_code error;
+  std::filesystem::create_directories(root, error);
+  return error ? std::nullopt
+               : std::optional<std::filesystem::path>(std::move(root));
+}
+
+std::optional<std::string> WideToUtf8(const std::wstring& value) {
+  if (value.empty()) return std::nullopt;
+  const int length = WideCharToMultiByte(
+      CP_UTF8, WC_ERR_INVALID_CHARS, value.data(),
+      static_cast<int>(value.size()), nullptr, 0, nullptr, nullptr);
+  if (length <= 0) return std::nullopt;
+  std::string result(static_cast<std::size_t>(length), '\0');
+  if (WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, value.data(),
+                          static_cast<int>(value.size()), result.data(), length,
+                          nullptr, nullptr) != length) {
+    return std::nullopt;
+  }
+  return result;
+}
 
 HINSTANCE GetClientModule() {
   HMODULE client_module = nullptr;
@@ -58,12 +94,23 @@ int RunBrowserProcess(HINSTANCE bootstrap_instance, void *sandbox_info) {
   }
   const auto locale_snapshot = ResolveWindowsLocaleSnapshot(
       ReadWindowsPreferredUiLanguages());
+  const auto profile_cache_root = BuildProfileCacheRoot();
+  const auto profile_cache_root_utf8 =
+      profile_cache_root ? WideToUtf8(profile_cache_root->wstring())
+                         : std::nullopt;
+  if (!profile_cache_root || !profile_cache_root_utf8) {
+    return static_cast<int>(ExitCode::kProfileCacheRootUnavailable);
+  }
   CefSettings settings;
   settings.log_severity = LOGSEVERITY_DISABLE;
+  settings.persist_session_cookies = 1;
+  CefString(&settings.root_cache_path).FromWString(
+      profile_cache_root->wstring());
   CefString(&settings.locale) = std::string(locale_snapshot.cef_locale);
   CefString(&settings.accept_language_list) =
       std::string(locale_snapshot.accept_language_list);
-  CefRefPtr<BrowserApp> app(new BrowserApp(client_module, locale_snapshot));
+  CefRefPtr<BrowserApp> app(new BrowserApp(
+      client_module, locale_snapshot, *profile_cache_root_utf8));
   if (!app->brand_icons_valid()) {
     return static_cast<int>(ExitCode::kBrandIconMissing);
   }
@@ -86,6 +133,8 @@ int RunBrowserProcess(HINSTANCE bootstrap_instance, void *sandbox_info) {
   }
 
   CefRunMessageLoop();
+  app->PrepareForCefShutdown();
+  app = nullptr;
   CefShutdown();
   return static_cast<int>(ExitCode::kSuccess);
 }

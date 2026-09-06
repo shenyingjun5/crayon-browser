@@ -78,6 +78,9 @@ class MdvEditController
   void ApplyDecision(CefRefPtr<CefBrowser> browser, const std::string& value);
   void RenderAndStore();
   void PushState(CefRefPtr<CefBrowser> browser);
+  void DispatchStatePush(CefRefPtr<CefBrowser> browser,
+                         std::uint64_t generation, std::string script,
+                         int retries_remaining);
   void ReleasePendingNavigation(CefRefPtr<CefBrowser> browser);
 
   std::shared_ptr<MdvRuntimeState> state_;
@@ -89,6 +92,7 @@ class MdvEditController
   std::string current_doc_dir_;
   std::string pending_url_;
   std::uint64_t document_generation_ = 0;
+  std::uint64_t push_generation_ = 0;
   int host_browser_id_ = -1;
   bool conflict_pending_ = false;
 };

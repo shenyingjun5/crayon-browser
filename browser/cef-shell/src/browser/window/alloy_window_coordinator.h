@@ -49,6 +49,7 @@ public:
                                            std::string target_url,
                                            bool user_gesture);
   bool AttachWindow(const std::string &window_id, CefRefPtr<CefWindow> window);
+  bool CancelPendingWindow(const std::string &window_id);
   bool RestoreSession(
       const browser_session::SessionProfileSnapshot &snapshot,
       const browser_engine::ProfileId &profile_id);

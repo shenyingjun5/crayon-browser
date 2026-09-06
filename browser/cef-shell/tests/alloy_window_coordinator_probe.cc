@@ -80,8 +80,13 @@ public:
 
   void OnContextInitialized() override {
     coordinator_ = std::make_unique<AlloyWindowCoordinator>(Callbacks());
-    if (!coordinator_->CreatePrimary(
-            "primary", Required(ProfileId::TryCreate("alloy-window-probe"))) ||
+    const auto profile =
+        Required(ProfileId::TryCreate("alloy-window-probe"));
+    if (!coordinator_->CreatePrimary("cancelled", profile, false) ||
+        !coordinator_->CancelPendingWindow("cancelled") ||
+        coordinator_->CancelPendingWindow("cancelled") ||
+        coordinator_->window_count() != 0 ||
+        !coordinator_->CreatePrimary("primary", profile) ||
         !CreateManagedWindow("primary", fixture_url_)) {
       Finish(false, "create-primary");
     }

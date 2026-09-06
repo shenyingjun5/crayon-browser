@@ -349,7 +349,8 @@ MdvPageSnapshot MdvRuntimeState::snapshot() const {
 }
 
 bool RegisterMdvSchemeHandlerFactory(
-    MdvPageStrings strings, const std::shared_ptr<MdvRuntimeState>& state) {
+    MdvPageStrings strings, const std::shared_ptr<MdvRuntimeState>& state,
+    CefRefPtr<CefRequestContext> request_context) {
   const auto catalog_result =
       crayon::browser_markdown_runtime::BuildHighlightAssetCatalog();
   if (catalog_result.status != crayon::browser_markdown_runtime::
@@ -392,14 +393,17 @@ bool RegisterMdvSchemeHandlerFactory(
   if (!mermaid_assets) {
     return false;
   }
-  return CefRegisterSchemeHandlerFactory(
-      kMdvScheme, kMdvHost,
-      new MdvSchemeHandlerFactory(std::move(strings), state,
-                                  std::move(highlight_assets),
-                                  std::move(katex_assets),
-                                  std::move(mermaid_assets),
-                                  crayon::browser_mdv::RenderMdvStylesheet(),
-                                  crayon::browser_mdv::RenderMdvScript()));
+  CefRefPtr<CefSchemeHandlerFactory> factory = new MdvSchemeHandlerFactory(
+      std::move(strings), state, std::move(highlight_assets),
+      std::move(katex_assets), std::move(mermaid_assets),
+      crayon::browser_mdv::RenderMdvStylesheet(),
+      crayon::browser_mdv::RenderMdvScript());
+  if (request_context) {
+    return request_context->RegisterSchemeHandlerFactory(
+        kMdvScheme, kMdvHost, std::move(factory));
+  }
+  return CefRegisterSchemeHandlerFactory(kMdvScheme, kMdvHost,
+                                         std::move(factory));
 }
 
 }  // namespace crayon::browser::cef_shell::mdv

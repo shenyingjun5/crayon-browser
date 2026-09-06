@@ -4,6 +4,7 @@
 #include <memory>
 
 #include "crayon/browser_mdv/mdv_page.h"
+#include "include/cef_request_context.h"
 #include "include/cef_scheme.h"
 
 namespace crayon::browser::cef_shell::mdv {
@@ -37,7 +38,8 @@ class MdvRuntimeState {
 // Must be called on the CEF UI thread during OnContextInitialized,
 // after the new-tab factory.
 bool RegisterMdvSchemeHandlerFactory(
-    MdvPageStrings strings, const std::shared_ptr<MdvRuntimeState>& state);
+    MdvPageStrings strings, const std::shared_ptr<MdvRuntimeState>& state,
+    CefRefPtr<CefRequestContext> request_context = nullptr);
 
 }  // namespace crayon::browser::cef_shell::mdv
 

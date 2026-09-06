@@ -17,6 +17,7 @@ namespace crayon::browser::cef_shell::window {
 
 enum class AlloyMainCommand {
   kOpenMarkdown = 0,
+  kOpenIncognito,
   kCopy,
   kPaste,
   kAbout,
@@ -31,6 +32,7 @@ class AlloyInteractions final : public CefMenuButtonDelegate,
 public:
   struct Callbacks final {
     std::function<bool(CefRefPtr<CefBrowser>)> open_markdown;
+    std::function<bool()> open_incognito;
     std::function<bool(CefRefPtr<CefBrowser>, const std::string &)> navigate;
     std::function<bool(CefRefPtr<CefBrowser>, CefRefPtr<CefDragData>,
                        CefDragHandler::DragOperationsMask)>

@@ -13,6 +13,7 @@
 #include "include/cef_command_line.h"
 #include "include/cef_life_span_handler.h"
 #include "include/cef_load_handler.h"
+#include "include/cef_menu_model.h"
 #include "include/cef_task.h"
 #include "include/views/cef_box_layout.h"
 #include "include/views/cef_browser_view.h"
@@ -29,6 +30,49 @@ using crayon::browser::cef_shell::window::AlloyMainCommand;
 constexpr int kPollMilliseconds = 20;
 constexpr int kMaximumChecks = 400;
 constexpr int kContextCommandId = MENU_ID_USER_FIRST + 77;
+
+class TestContextMenuParams final : public CefContextMenuParams {
+public:
+  TestContextMenuParams() = default;
+
+  int GetXCoord() override { return 80; }
+  int GetYCoord() override { return 80; }
+  TypeFlags GetTypeFlags() override { return CM_TYPEFLAG_PAGE; }
+  CefString GetLinkUrl() override { return {}; }
+  CefString GetUnfilteredLinkUrl() override { return {}; }
+  CefString GetSourceUrl() override { return {}; }
+  bool HasImageContents() override { return false; }
+  CefString GetTitleText() override { return {}; }
+  CefString GetPageUrl() override { return "about:blank"; }
+  CefString GetFrameUrl() override { return "about:blank"; }
+  CefString GetFrameCharset() override { return "UTF-8"; }
+  MediaType GetMediaType() override { return CM_MEDIATYPE_NONE; }
+  MediaStateFlags GetMediaStateFlags() override { return CM_MEDIAFLAG_NONE; }
+  CefString GetSelectionText() override { return {}; }
+  CefString GetMisspelledWord() override { return {}; }
+  bool GetDictionarySuggestions(std::vector<CefString>&) override {
+    return false;
+  }
+  bool IsEditable() override { return false; }
+  bool IsSpellCheckEnabled() override { return false; }
+  EditStateFlags GetEditStateFlags() override { return CM_EDITFLAG_NONE; }
+  bool IsCustomMenu() override { return false; }
+
+private:
+  IMPLEMENT_REFCOUNTING(TestContextMenuParams);
+  DISALLOW_COPY_AND_ASSIGN(TestContextMenuParams);
+};
+
+class TestMenuModelDelegate final : public CefMenuModelDelegate {
+public:
+  TestMenuModelDelegate() = default;
+  void ExecuteCommand(CefRefPtr<CefMenuModel>, int,
+                      cef_event_flags_t) override {}
+
+private:
+  IMPLEMENT_REFCOUNTING(TestMenuModelDelegate);
+  DISALLOW_COPY_AND_ASSIGN(TestMenuModelDelegate);
+};
 
 class Probe final : public CefApp,
                     public CefBrowserProcessHandler,
@@ -128,6 +172,10 @@ private:
       ++open_count_;
       return true;
     };
+    callbacks.open_incognito = [this] {
+      ++incognito_count_;
+      return true;
+    };
     callbacks.navigate = [this](CefRefPtr<CefBrowser> browser,
                                 const std::string &url) {
       if (!browser_ || !browser ||
@@ -183,6 +231,13 @@ private:
     if (finished_)
       return;
     if (++checks_ > kMaximumChecks) {
+      std::cout << "alloy_interactions_timeout stage=" << stage_
+                << " menu_open="
+                << (interactions_ && interactions_->menu_open())
+                << " context_augments=" << context_augments_
+                << " context_active="
+                << (interactions_ && interactions_->context_menu_active())
+                << std::endl;
       Finish(false, "timeout");
       return;
     }
@@ -198,6 +253,22 @@ private:
       }
     }
     if (stage_ == 0) {
+      CefRefPtr<CefContextMenuParams> params = new TestContextMenuParams();
+      auto context_menu =
+          CefMenuModel::CreateMenuModel(new TestMenuModelDelegate());
+      interactions_->OnBeforeContextMenu(browser_, browser_->GetMainFrame(),
+                                         params, context_menu);
+      const bool command = interactions_->OnContextMenuCommand(
+          browser_, browser_->GetMainFrame(), params, kContextCommandId,
+          EVENTFLAG_NONE);
+      interactions_->OnContextMenuDismissed(browser_,
+                                             browser_->GetMainFrame());
+      const int context_index =
+          context_menu ? context_menu->GetIndexOf(kContextCommandId) : -1;
+      result_->context_menu_passed =
+          context_menu && context_augments_ == 1 &&
+          context_index >= 0 && command &&
+          context_commands_ == 1 && !interactions_->context_menu_active();
       auto menu = interactions_->GetView(AlloyInteractions::kMenuButtonId);
       if (!menu || !menu->IsDrawn() ||
           menu->AsButton()->AsLabelButton()->GetText().ToString() != "菜单") {
@@ -225,10 +296,21 @@ private:
         Schedule();
         return;
       }
+      // OnMenuClosed can run before the native menu has fully released input
+      // capture. Cross one more UI task boundary before exercising commands
+      // and shutdown against the restored window focus.
+      if (!menu_close_settled_) {
+        menu_close_settled_ = true;
+        Schedule();
+        return;
+      }
       const bool opened = interactions_->HandleAccelerator(
           'O', static_cast<cef_event_flags_t>(EVENTFLAG_CONTROL_DOWN));
       const bool rejected = !interactions_->HandleAccelerator(
           'O', static_cast<cef_event_flags_t>(EVENTFLAG_CONTROL_DOWN |
+                                               EVENTFLAG_SHIFT_DOWN));
+      const bool incognito = interactions_->HandleAccelerator(
+          'N', static_cast<cef_event_flags_t>(EVENTFLAG_CONTROL_DOWN |
                                                EVENTFLAG_SHIFT_DOWN));
       const bool copied = interactions_->Execute(AlloyMainCommand::kCopy);
       const bool pasted = interactions_->Execute(AlloyMainCommand::kPaste);
@@ -236,8 +318,9 @@ private:
       const bool licenses =
           interactions_->Execute(AlloyMainCommand::kLicenses);
       result_->command_passed =
-          opened && rejected && copied && pasted && about && licenses &&
-          open_count_ == 1 && destinations_.size() == 2 &&
+          opened && rejected && incognito && copied && pasted && about &&
+          licenses && open_count_ == 1 && incognito_count_ == 1 &&
+          destinations_.size() == 2 &&
           destinations_[0] ==
               crayon::browser::cef_shell::branding::kAboutBrowserUrl &&
           destinations_[1] == "chrome://credits/";
@@ -254,35 +337,6 @@ private:
           !interactions_->OnDragEnter(browser_, multiple,
                                       DRAG_OPERATION_COPY) &&
           accepted_drags_ == 1;
-      CefMouseEvent event;
-      event.x = 80;
-      event.y = 80;
-      browser_->GetHost()->SendMouseClickEvent(event, MBT_RIGHT, false, 1);
-      browser_->GetHost()->SendMouseClickEvent(event, MBT_RIGHT, true, 1);
-      stage_ = 3;
-      Schedule();
-      return;
-    }
-    if (stage_ == 3) {
-      if (context_augments_ != 1 || !interactions_->context_menu_active()) {
-        Schedule();
-        return;
-      }
-      result_->context_menu_passed = interactions_->OnContextMenuCommand(
-          browser_, browser_->GetMainFrame(), nullptr, kContextCommandId,
-          EVENTFLAG_NONE);
-      window_->SendKeyPress(27, 0);
-      stage_ = 4;
-      Schedule();
-      return;
-    }
-    if (stage_ == 4) {
-      if (interactions_->context_menu_active()) {
-        Schedule();
-        return;
-      }
-      result_->context_menu_passed = result_->context_menu_passed &&
-                                     context_commands_ == 1;
       const bool navigation_cleared = interactions_->OnNavigation(browser_) &&
                                       cancel_count_ == 1;
       auto menu_view = interactions_->GetView(AlloyInteractions::kMenuButtonId);
@@ -318,12 +372,14 @@ private:
   int checks_ = 0;
   int stage_ = 0;
   int open_count_ = 0;
+  int incognito_count_ = 0;
   int accepted_drags_ = 0;
   int context_augments_ = 0;
   int context_commands_ = 0;
   int cancel_count_ = 0;
   bool loaded_ = false;
   bool attached_ = false;
+  bool menu_close_settled_ = false;
   bool finished_ = false;
 
   IMPLEMENT_REFCOUNTING(Probe);

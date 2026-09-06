@@ -53,6 +53,18 @@ endif()
 file(READ "${CRAYON_CEF_SHELL_SOURCE}/src/windows/main_win.cc" windows_main)
 file(READ "${CRAYON_CEF_SHELL_SOURCE}/src/windows/app.cc" windows_app)
 file(READ
+     "${CRAYON_CEF_SHELL_SOURCE}/src/process/windows/bootstrap_entry.cc"
+     windows_bootstrap)
+file(READ
+     "${CRAYON_CEF_SHELL_SOURCE}/src/browser/context/profile_context_factory.cc"
+     profile_context_factory)
+file(READ
+     "${CRAYON_CEF_SHELL_SOURCE}/src/browser/new_tab/cef_new_tab_handler.cc"
+     new_tab_handler)
+file(READ
+     "${CRAYON_CEF_SHELL_SOURCE}/src/browser/mdv/cef_mdv_handler.cc"
+     mdv_handler)
+file(READ
      "${CRAYON_CEF_SHELL_SOURCE}/src/windows/content_host_process_win.cc"
      windows_content_host)
 file(READ
@@ -267,6 +279,17 @@ foreach(required_interaction_token
             "Alloy interactions are missing ${required_interaction_token}")
   endif()
 endforeach()
+foreach(required_incognito_interaction_token
+        "privacy.incognito"
+        "kOpenIncognito"
+        "EVENTFLAG_SHIFT_DOWN")
+  string(FIND "${alloy_interactions}" "${required_incognito_interaction_token}"
+         token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Alloy interactions are missing incognito token ${required_incognito_interaction_token}")
+  endif()
+endforeach()
 foreach(forbidden_interaction_token
         "IDC_OPEN_FILE"
         "ExecuteChromeCommand"
@@ -276,6 +299,55 @@ foreach(forbidden_interaction_token
   if(NOT token_index EQUAL -1)
     message(FATAL_ERROR
             "Alloy interactions contain forbidden Chrome/page token ${forbidden_interaction_token}")
+  endif()
+endforeach()
+foreach(required_alloy_product_profile_token
+        "ProfileContextFactory"
+        "InitializeDefaultProfileContext"
+        "CefPostTask"
+        "GetGlobalContext"
+        "AdoptGlobalContext"
+        "SetRequestContext"
+        "ReleaseRequestContextsForShutdown"
+        "CreateTemporaryContext"
+        "OnRequestContextInitialized"
+        "CefRefPtr<AlloyProductHostWin> self"
+        "register_incognito_content"
+        "NewTabProfileMode::kIncognito"
+        "GetCachePath().empty()"
+        "pending_incognito_contexts_"
+        "CreateIncognitoWindow")
+  string(FIND
+         "${alloy_product_host}${alloy_product_host_header}${windows_app}"
+         "${required_alloy_product_profile_token}" token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Windows Alloy product is missing 24W2b2b token ${required_alloy_product_profile_token}")
+  endif()
+endforeach()
+foreach(required_profile_bootstrap_token
+        "CSIDL_LOCAL_APPDATA"
+        "settings.root_cache_path"
+        "settings.persist_session_cookies"
+        "BuildProfileCacheRoot"
+        "profile_cache_root_utf8"
+        "app->PrepareForCefShutdown()"
+        "app = nullptr")
+  string(FIND "${windows_bootstrap}" "${required_profile_bootstrap_token}"
+         token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Windows bootstrap is missing profile root token ${required_profile_bootstrap_token}")
+  endif()
+endforeach()
+foreach(required_context_scheme_token
+        "request_context->RegisterSchemeHandlerFactory")
+  string(FIND
+         "${new_tab_handler}${mdv_handler}"
+         "${required_context_scheme_token}" token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Per-profile built-in scheme registration is missing ${required_context_scheme_token}")
   endif()
 endforeach()
 foreach(required_builtin_token

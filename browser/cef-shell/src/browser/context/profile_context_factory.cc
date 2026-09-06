@@ -11,6 +11,29 @@ namespace crayon::browser::cef_shell::context {
 ProfileContextFactory::ProfileContextFactory(std::string base_cache_path)
     : base_cache_path_(std::move(base_cache_path)) {}
 
+bool ProfileContextFactory::AdoptGlobalContext(
+    const std::string &profile_id,
+    CefRefPtr<CefRequestContext> request_context) {
+  CEF_REQUIRE_UI_THREAD();
+  if (!active_ || !request_context || !request_context->IsGlobal() ||
+      !IsValidProfileId(profile_id)) {
+    return false;
+  }
+  const std::filesystem::path expected =
+      std::filesystem::path(base_cache_path_) / "Default";
+  const std::filesystem::path actual = request_context->GetCachePath().ToString();
+  if (base_cache_path_.empty() ||
+      expected.lexically_normal() != actual.lexically_normal()) {
+    return false;
+  }
+  const auto existing = persistent_contexts_.find(profile_id);
+  if (existing != persistent_contexts_.end()) {
+    return existing->second->IsSame(request_context);
+  }
+  persistent_contexts_.emplace(profile_id, std::move(request_context));
+  return true;
+}
+
 CefRefPtr<CefRequestContext> ProfileContextFactory::GetPersistentContext(
     const std::string &profile_id,
     CefRefPtr<CefRequestContextHandler> handler) {

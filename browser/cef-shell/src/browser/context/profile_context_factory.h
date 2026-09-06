@@ -22,6 +22,13 @@ class ProfileContextFactory final {
 public:
   explicit ProfileContextFactory(std::string base_cache_path);
 
+  /// Adopts CEF Chrome runtime's already-initialized global Default profile.
+  /// The logical profile ID is retained only in memory and never used as a
+  /// literal disk path component.
+  bool AdoptGlobalContext(
+      const std::string &profile_id,
+      CefRefPtr<CefRequestContext> request_context);
+
   /// Returns a persistent context for the given profile ID.
   /// Creates a new context on first call; subsequent calls return the same
   /// instance. Returns nullptr if the profile ID is invalid.

@@ -11,13 +11,16 @@ bool RegisterAlloyBuiltinContentFactories(
     browser_new_tab::NewTabPageModel new_tab_model,
     browser_new_tab::NewTabPageStrings new_tab_strings,
     browser_mdv::MdvPageStrings mdv_strings,
-    const std::shared_ptr<mdv::MdvRuntimeState>& mdv_state) {
+    const std::shared_ptr<mdv::MdvRuntimeState>& mdv_state,
+    CefRefPtr<CefRequestContext> request_context) {
   CEF_REQUIRE_UI_THREAD();
   return mdv_state &&
-         new_tab::RegisterNewTabSchemeHandlerFactory(
-             std::move(new_tab_model), std::move(new_tab_strings)) &&
-         mdv::RegisterMdvSchemeHandlerFactory(std::move(mdv_strings),
-                                              mdv_state);
+          new_tab::RegisterNewTabSchemeHandlerFactory(
+              std::move(new_tab_model), std::move(new_tab_strings),
+              request_context) &&
+          mdv::RegisterMdvSchemeHandlerFactory(std::move(mdv_strings),
+                                               mdv_state,
+                                               std::move(request_context));
 }
 
 class AlloyBuiltinContent::QueryHandler final

@@ -263,11 +263,19 @@ CefRefPtr<CefApp> CreateNewTabProcessApp() { return new NewTabProcessApp(); }
 
 bool RegisterNewTabSchemeHandlerFactory(
     browser_new_tab::NewTabPageModel page_model,
-    browser_new_tab::NewTabPageStrings strings) {
-  return CefRegisterSchemeHandlerFactory(
-      browser_new_tab::kNewTabScheme, browser_new_tab::kNewTabHost,
+    browser_new_tab::NewTabPageStrings strings,
+    CefRefPtr<CefRequestContext> request_context) {
+  CefRefPtr<CefSchemeHandlerFactory> factory =
       new NewTabSchemeHandlerFactory(std::move(page_model),
-                                     std::move(strings)));
+                                     std::move(strings));
+  if (request_context) {
+    return request_context->RegisterSchemeHandlerFactory(
+        browser_new_tab::kNewTabScheme, browser_new_tab::kNewTabHost,
+        std::move(factory));
+  }
+  return CefRegisterSchemeHandlerFactory(browser_new_tab::kNewTabScheme,
+                                         browser_new_tab::kNewTabHost,
+                                         std::move(factory));
 }
 
 }  // namespace crayon::browser::cef_shell::new_tab

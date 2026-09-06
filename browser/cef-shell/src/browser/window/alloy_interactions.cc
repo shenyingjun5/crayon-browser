@@ -12,11 +12,13 @@ namespace {
 
 constexpr char kLicensesUrl[] = "chrome://credits/";
 constexpr int kOpenMarkdownId = 0xcb01;
-constexpr int kCopyId = 0xcb02;
-constexpr int kPasteId = 0xcb03;
-constexpr int kAboutId = 0xcb04;
-constexpr int kLicensesId = 0xcb05;
+constexpr int kOpenIncognitoId = 0xcb02;
+constexpr int kCopyId = 0xcb03;
+constexpr int kPasteId = 0xcb04;
+constexpr int kAboutId = 0xcb05;
+constexpr int kLicensesId = 0xcb06;
 constexpr int kControlO = 'O';
+constexpr int kControlN = 'N';
 constexpr int kControlC = 'C';
 constexpr int kControlV = 'V';
 
@@ -24,6 +26,8 @@ std::optional<AlloyMainCommand> CommandForId(int id) {
   switch (id) {
   case kOpenMarkdownId:
     return AlloyMainCommand::kOpenMarkdown;
+  case kOpenIncognitoId:
+    return AlloyMainCommand::kOpenIncognito;
   case kCopyId:
     return AlloyMainCommand::kCopy;
   case kPasteId:
@@ -61,6 +65,7 @@ bool AlloyInteractions::Attach(CefRefPtr<CefWindow> window,
   }
   const std::string menu_label = String("app.menu");
   if (menu_label.empty() || String("menu.open_markdown").empty() ||
+      String("privacy.incognito").empty() ||
       String("menu.copy").empty() || String("menu.paste").empty() ||
       String("app.about").empty() || String("menu.licenses").empty()) {
     return false;
@@ -89,6 +94,8 @@ bool AlloyInteractions::Execute(AlloyMainCommand command) {
   switch (command) {
   case AlloyMainCommand::kOpenMarkdown:
     return callbacks_.open_markdown && callbacks_.open_markdown(browser_);
+  case AlloyMainCommand::kOpenIncognito:
+    return callbacks_.open_incognito && callbacks_.open_incognito();
   case AlloyMainCommand::kCopy:
     browser_->GetMainFrame()->Copy();
     return true;
@@ -107,11 +114,16 @@ bool AlloyInteractions::Execute(AlloyMainCommand command) {
 bool AlloyInteractions::HandleAccelerator(int windows_key_code,
                                           cef_event_flags_t modifiers) {
   CEF_REQUIRE_UI_THREAD();
-  const auto forbidden = static_cast<cef_event_flags_t>(
-      EVENTFLAG_ALT_DOWN | EVENTFLAG_COMMAND_DOWN | EVENTFLAG_SHIFT_DOWN);
+  const auto forbidden = static_cast<cef_event_flags_t>(EVENTFLAG_ALT_DOWN |
+                                                        EVENTFLAG_COMMAND_DOWN);
   if (!active_ || (modifiers & EVENTFLAG_CONTROL_DOWN) == 0 ||
       (modifiers & forbidden) != 0)
     return false;
+  const bool shift = (modifiers & EVENTFLAG_SHIFT_DOWN) != 0;
+  if (shift) {
+    return windows_key_code == kControlN &&
+           Execute(AlloyMainCommand::kOpenIncognito);
+  }
   switch (windows_key_code) {
   case kControlO:
     return Execute(AlloyMainCommand::kOpenMarkdown);
@@ -154,6 +166,7 @@ void AlloyInteractions::OnMenuButtonPressed(
   if (!menu_model_)
     return;
   menu_model_->AddItem(kOpenMarkdownId, String("menu.open_markdown"));
+  menu_model_->AddItem(kOpenIncognitoId, String("privacy.incognito"));
   menu_model_->AddSeparator();
   menu_model_->AddItem(kCopyId, String("menu.copy"));
   menu_model_->AddItem(kPasteId, String("menu.paste"));

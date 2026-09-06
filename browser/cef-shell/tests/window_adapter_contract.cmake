@@ -85,7 +85,7 @@ endforeach()
 foreach(required_windows_token
         "window::TabController"
         "GetDefaultClient"
-        "CreateMainWindow"
+        "AlloyProductHostWin"
         "brand_icons_valid")
   string(FIND "${windows_app_header}" "${required_windows_token}"
          header_token_index)
@@ -120,7 +120,8 @@ string(FIND "${windows_app_source}" "SetChromeCommandCallback"
        chrome_callback_index)
 string(FIND "${windows_app_source}" "SetBrowsersClosedCallback"
        closed_callback_index)
-string(FIND "${windows_app_source}" "CreateMainWindow" create_window_index)
+string(FIND "${windows_app_source}" "alloy_product_host_->Start"
+       create_window_index)
 if(context_initialized_index EQUAL -1 OR chrome_callback_index EQUAL -1 OR
    closed_callback_index EQUAL -1 OR create_window_index EQUAL -1 OR
    chrome_callback_index LESS context_initialized_index OR
@@ -128,7 +129,7 @@ if(context_initialized_index EQUAL -1 OR chrome_callback_index EQUAL -1 OR
    chrome_callback_index GREATER create_window_index OR
    closed_callback_index GREATER create_window_index)
   message(FATAL_ERROR
-          "Windows shell callbacks must be installed on the CEF UI thread before CreateMainWindow")
+          "Windows shell callbacks must be installed on the CEF UI thread before Alloy product start")
 endif()
 
 string(REGEX MATCH "command_id[ \t\r\n]*==[ \t\r\n]*[0-9]+"

@@ -15,6 +15,7 @@
 #include "include/cef_life_span_handler.h"
 #include "include/cef_load_handler.h"
 #include "include/cef_request_handler.h"
+#include "include/cef_request_context.h"
 #include "include/wrapper/cef_message_router.h"
 
 namespace crayon::browser::cef_shell::window {
@@ -25,7 +26,8 @@ bool RegisterAlloyBuiltinContentFactories(
     browser_new_tab::NewTabPageModel new_tab_model,
     browser_new_tab::NewTabPageStrings new_tab_strings,
     browser_mdv::MdvPageStrings mdv_strings,
-    const std::shared_ptr<mdv::MdvRuntimeState>& mdv_state);
+    const std::shared_ptr<mdv::MdvRuntimeState>& mdv_state,
+    CefRefPtr<CefRequestContext> request_context = nullptr);
 
 class AlloyBuiltinContentObserver {
  public:
