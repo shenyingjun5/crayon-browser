@@ -112,6 +112,10 @@ class BookmarkStore final {
   /// `kMaxSearchResults`.
   std::vector<std::uint64_t> Search(const std::string& query) const;
 
+  /// Returns whether `url` is accepted by bookmark mutation APIs. UI
+  /// capability checks must reuse this rule instead of duplicating schemes.
+  static bool IsValidUrl(const std::string& url) noexcept;
+
  private:
   struct NodeEntry final {
     BookmarkNode node;
@@ -119,7 +123,6 @@ class BookmarkStore final {
   };
 
   static bool IsValidTitle(const std::string& title) noexcept;
-  static bool IsValidUrl(const std::string& url) noexcept;
   bool WouldCreateCycle(std::uint64_t node_id,
                         std::uint64_t new_parent_id) const noexcept;
   std::size_t DepthOf(std::uint64_t node_id) const noexcept;

@@ -271,7 +271,8 @@ class AlloyProductHostWin final : public CefClient,
   ~AlloyProductHostWin() override;
 
   window::AlloyTabController* controller() const noexcept;
-  bool CreateTab(std::string url, browser_engine::ContentPurpose purpose);
+  bool CreateTab(std::string url, browser_engine::ContentPurpose purpose,
+                 std::optional<window::TabId> copy_advanced_from = std::nullopt);
   bool CreatePopupWindow(
       const window::AlloyWindowCoordinator::PopupRequest& request);
   bool CreateRestoredWindow(

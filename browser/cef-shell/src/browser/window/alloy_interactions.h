@@ -1,13 +1,16 @@
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <string>
+#include <vector>
 
 #include "crayon/browser_localization/locale_snapshot.h"
 #include "include/cef_context_menu_handler.h"
 #include "include/cef_drag_handler.h"
 #include "include/cef_menu_model_delegate.h"
 #include "include/views/cef_browser_view.h"
+#include "include/views/cef_label_button.h"
 #include "include/views/cef_menu_button.h"
 #include "include/views/cef_menu_button_delegate.h"
 #include "include/views/cef_panel.h"
@@ -22,6 +25,37 @@ enum class AlloyMainCommand {
   kPaste,
   kAbout,
   kLicenses,
+  kTogglePin,
+  kDuplicateTab,
+  kToggleMute,
+  kToggleGroup,
+  kToggleBookmarkBar,
+};
+
+struct AlloyDailyCommandState final {
+  bool pinned = false;
+  bool muted = false;
+  bool grouped = false;
+  bool bookmark_bar_visible = false;
+  bool can_duplicate = false;
+};
+
+struct AlloyTabSearchEntry final {
+  std::uint64_t tab_id = 0;
+  std::string label;
+  bool active = false;
+};
+
+struct AlloyBookmarkEntry final {
+  std::uint64_t node_id = 0;
+  std::string label;
+};
+
+struct AlloyBookmarkCommandState final {
+  bool writable = false;
+  bool starred = false;
+  bool bar_visible = false;
+  std::vector<AlloyBookmarkEntry> entries;
 };
 
 /// UI-thread-only interaction adapter for one Alloy content view.
@@ -42,10 +76,20 @@ public:
                        CefRefPtr<CefMenuModel>)>
         augment_context_menu;
     std::function<bool(CefRefPtr<CefBrowser>, int)> context_menu_command;
+    std::function<AlloyDailyCommandState()> daily_state;
+    std::function<bool(AlloyMainCommand)> daily_command;
+    std::function<std::vector<AlloyTabSearchEntry>()> tab_search_entries;
+    std::function<bool(std::uint64_t)> activate_searched_tab;
+    std::function<AlloyBookmarkCommandState()> bookmark_state;
+    std::function<bool()> toggle_current_bookmark;
+    std::function<bool(std::uint64_t)> open_bookmark;
     std::function<void()> cancel_transient;
   };
 
   static constexpr int kMenuButtonId = 0xcb00;
+  static constexpr int kBookmarkButtonId = 0xcd00;
+  static constexpr int kBookmarkBarCommandBase = 0xcd20;
+  static constexpr int kTabSearchCommandBase = 0xcc00;
 
   AlloyInteractions(localization::LocaleSnapshot locale, Callbacks callbacks);
 
@@ -53,6 +97,7 @@ public:
               CefRefPtr<CefBrowser> browser, CefRefPtr<CefPanel> toolbar);
   bool Execute(AlloyMainCommand command);
   bool HandleAccelerator(int windows_key_code, cef_event_flags_t modifiers);
+  bool RefreshDailyControls();
   bool OnNavigation(CefRefPtr<CefBrowser> browser);
   CefRefPtr<CefView> GetView(int view_id) const;
   bool menu_open() const noexcept { return menu_open_; }
@@ -93,7 +138,11 @@ private:
   CefRefPtr<CefBrowser> browser_;
   CefRefPtr<CefPanel> toolbar_;
   CefRefPtr<CefMenuButton> menu_button_;
+  CefRefPtr<CefLabelButton> bookmark_button_;
+  std::vector<CefRefPtr<CefLabelButton>> bookmark_bar_buttons_;
+  std::vector<std::uint64_t> bookmark_bar_ids_;
   CefRefPtr<CefMenuModel> menu_model_;
+  std::vector<std::uint64_t> search_tab_ids_;
   bool menu_open_ = false;
   bool context_menu_active_ = false;
   bool active_ = true;

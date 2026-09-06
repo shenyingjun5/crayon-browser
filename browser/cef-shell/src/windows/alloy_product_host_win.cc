@@ -26,6 +26,7 @@ namespace crayon::browser::cef_shell::windows {
 namespace {
 
 constexpr char kPrimaryWindowId[] = "primary";
+constexpr char kDefaultProductTabGroup[] = "product-group";
 constexpr int kInitialWindowWidth = 1200;
 constexpr int kInitialWindowHeight = 800;
 constexpr std::size_t kMaximumCastObservations = 16;
@@ -756,6 +757,7 @@ void AlloyProductHostWin::FinalizeBrowserCreated(
     }
     return;
   }
+  static_cast<void>(tab_controller->SynchronizeRuntimeState(browser));
   const auto* initial_tab = tab_controller->model().Find(*tab_id);
   if (initial_tab && initial_tab->navigation_generation == 0) {
     static_cast<void>(tab_controller->OnLoadingStateChange(
@@ -1447,6 +1449,9 @@ void AlloyProductHostWin::OnBuiltinAddressChange(CefRefPtr<CefBrowser> browser,
               : nullptr;
       if (bookmarks_ && active_tab && IsActiveTab(active_tab->id)) {
         static_cast<void>(bookmarks_->RefreshForUrl(url.ToString()));
+        if (interactions_) {
+          static_cast<void>(interactions_->RefreshDailyControls());
+        }
       }
     } else if (owner) {
       auto found = popup_windows_.find(*owner);
@@ -1529,8 +1534,9 @@ window::AlloyTabController* AlloyProductHostWin::controller() const noexcept {
   return coordinator_ ? coordinator_->controller(kPrimaryWindowId) : nullptr;
 }
 
-bool AlloyProductHostWin::CreateTab(std::string url,
-                                    browser_engine::ContentPurpose purpose) {
+bool AlloyProductHostWin::CreateTab(
+    std::string url, browser_engine::ContentPurpose purpose,
+    std::optional<window::TabId> copy_advanced_from) {
   CEF_REQUIRE_UI_THREAD();
   auto* tab_controller = controller();
   if (!tab_controller || url.empty() || next_navigation_id_ == 0) return false;
@@ -1543,6 +1549,11 @@ bool AlloyProductHostWin::CreateTab(std::string url,
                  browser_engine::NavigationId::FromRaw(next_navigation_id_++))
            : std::nullopt;
   if (!tab) return false;
+  if (copy_advanced_from &&
+      !tab_controller->CopyAdvancedState(*copy_advanced_from, *tab)) {
+    static_cast<void>(tab_controller->RequestClose(*tab, true));
+    return false;
+  }
   views_.emplace(*tab, view);
   if (!view_) view_ = view;
   SyncChrome();
@@ -2091,7 +2102,11 @@ void AlloyProductHostWin::SyncChrome() {
   CEF_REQUIRE_UI_THREAD();
   auto* tab_controller = controller();
   if (!tab_controller) return;
-  if (tab_strip_) static_cast<void>(tab_strip_->Sync(tab_controller->model()));
+  if (tab_strip_) {
+    static_cast<void>(tab_strip_->Sync(
+        tab_controller->model(), tab_controller->advanced_ordered_tabs()));
+  }
+  if (interactions_) static_cast<void>(interactions_->RefreshDailyControls());
   static_cast<void>(BindActiveChrome());
   if (window_) window_->Layout();
   ScheduleSessionCheckpoint();
@@ -2175,6 +2190,145 @@ bool AlloyProductHostWin::BindActiveChrome() {
     return dependencies_.mdv_entries &&
            dependencies_.mdv_entries->HandleContextMenuCommand(
                std::move(target), command_id);
+  };
+  callbacks.daily_state = [this] {
+    window::AlloyDailyCommandState state;
+    auto* active_controller = controller();
+    const auto active = active_controller
+                            ? active_controller->model().active_tab()
+                            : std::optional<window::TabId>{};
+    if (!active) return state;
+    state.pinned = active_controller->IsPinned(*active);
+    state.muted = active_controller->IsMuted(*active);
+    state.grouped = active_controller->TabGroup(*active).has_value();
+    state.can_duplicate =
+        active_controller->model().size() < window::kMaximumTabsPerWindow;
+    state.bookmark_bar_visible =
+        bookmarks_ && bookmarks_->bar().bar_visible();
+    return state;
+  };
+  callbacks.daily_command = [this](window::AlloyMainCommand command) {
+    auto* active_controller = controller();
+    const auto active = active_controller
+                            ? active_controller->model().active_tab()
+                            : std::optional<window::TabId>{};
+    if (!active) return false;
+    bool changed = false;
+    switch (command) {
+      case window::AlloyMainCommand::kTogglePin:
+        changed = active_controller->PinTab(
+            *active, !active_controller->IsPinned(*active));
+        break;
+      case window::AlloyMainCommand::kDuplicateTab: {
+        const auto* tab = active_controller->model().Find(*active);
+        if (!tab || tab->url.empty()) return false;
+        const auto purpose = tab->url.rfind("crayon://", 0) == 0
+                                 ? browser_engine::ContentPurpose::kControlledBuiltIn
+                                 : browser_engine::ContentPurpose::kWeb;
+        changed = CreateTab(tab->url, purpose, *active);
+        break;
+      }
+      case window::AlloyMainCommand::kToggleMute:
+        changed = active_controller->MuteTab(
+            *active, !active_controller->IsMuted(*active));
+        break;
+      case window::AlloyMainCommand::kToggleGroup:
+        changed = active_controller->SetTabGroup(
+            *active, active_controller->TabGroup(*active)
+                         ? std::nullopt
+                         : std::optional<std::string>(kDefaultProductTabGroup));
+        break;
+      case window::AlloyMainCommand::kToggleBookmarkBar:
+        changed = bookmarks_ && bookmarks_->SetBarVisible(
+                                    !bookmarks_->bar().bar_visible());
+        break;
+      default:
+        return false;
+    }
+    if (changed) PostSyncChrome();
+    return changed;
+  };
+  callbacks.tab_search_entries = [this] {
+    std::vector<window::AlloyTabSearchEntry> entries;
+    auto* active_controller = controller();
+    const auto active = active_controller
+                            ? active_controller->model().active_tab()
+                            : std::optional<window::TabId>{};
+    if (!active_controller || !active) return entries;
+    const auto tabs = active_controller->SearchTabs("");
+    entries.reserve(tabs.size());
+    const std::string fallback =
+        Localized(dependencies_.locale.locale, "tabs.fallback");
+    for (const auto id : tabs) {
+      entries.push_back(
+          {id, fallback + " " + std::to_string(id), id == *active});
+    }
+    return entries;
+  };
+  callbacks.activate_searched_tab = [this](std::uint64_t tab_id) {
+    const bool activated = ActivateTab(tab_id);
+    if (activated) PostSyncChrome();
+    return activated;
+  };
+  callbacks.bookmark_state = [this] {
+    window::AlloyBookmarkCommandState state;
+    if (!bookmarks_) return state;
+    auto* active_controller = controller();
+    const auto active = active_controller
+                            ? active_controller->model().active_tab()
+                            : std::optional<window::TabId>{};
+    const auto* tab = active && active_controller
+                          ? active_controller->model().Find(*active)
+                          : nullptr;
+    state.writable = bookmarks_writes_enabled_ && tab &&
+                     browser_bookmarks::BookmarkStore::IsValidUrl(tab->url);
+    state.starred = bookmarks_->bar().current_page_starred();
+    state.bar_visible = bookmarks_->bar().bar_visible();
+    state.entries.reserve(bookmarks_->bar().items().size());
+    for (const auto& item : bookmarks_->bar().items()) {
+      state.entries.push_back({item.node_id, item.title});
+    }
+    return state;
+  };
+  callbacks.toggle_current_bookmark = [this] {
+    auto* active_controller = controller();
+    const auto active = active_controller
+                            ? active_controller->model().active_tab()
+                            : std::optional<window::TabId>{};
+    const auto* tab = active && active_controller
+                          ? active_controller->model().Find(*active)
+                          : nullptr;
+    if (!bookmarks_ || !bookmarks_writes_enabled_ || !tab || tab->url.empty()) {
+      return false;
+    }
+    const std::string previous = bookmarks_->Export();
+    const auto current = bookmarks_->bar().current_page_bookmark();
+    bool changed = false;
+    if (current) {
+      changed = bookmarks_->Remove(*current) ==
+                window::AlloyBookmarkResult::kSuccess;
+    } else {
+      const auto title = tab_titles_.find(*active);
+      const std::string display_title =
+          title != tab_titles_.end() && IsSafeHistoryTitle(title->second)
+              ? title->second
+              : tab->url;
+      changed = bookmarks_->AddCurrentPage(display_title, tab->url).has_value();
+    }
+    if (!changed) return false;
+    if (SaveBookmarks()) {
+      PostSyncChrome();
+      return true;
+    }
+    static_cast<void>(bookmarks_->Import(previous));
+    return false;
+  };
+  callbacks.open_bookmark = [this](std::uint64_t node_id) {
+    if (!bookmarks_) return false;
+    const auto result =
+        bookmarks_->Open(node_id, window::BookmarkOpenTarget::kCurrentTab);
+    return result == window::AlloyBookmarkResult::kSuccess ||
+           result == window::AlloyBookmarkResult::kFolderShown;
   };
   callbacks.cancel_transient = [this] {
     if (omnibox_) static_cast<void>(omnibox_->Cancel());

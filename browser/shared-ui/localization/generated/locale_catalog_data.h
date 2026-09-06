@@ -14,7 +14,7 @@ struct LocaleCatalogEntry {
   std::string_view zh_tw;
 };
 
-inline constexpr std::array<LocaleCatalogEntry, 214> kLocaleCatalogEntries{{
+inline constexpr std::array<LocaleCatalogEntry, 226> kLocaleCatalogEntries{{
     {"cast.selection.unavailable", "Casting is not ready in this window", "此窗口的投屏入口尚未就绪", "此視窗的投屏入口尚未就緒"},
     {"cast.selection.expired", "Selection expired. Prepare again.", "选择已过期，请重新准备", "選擇已過期，請重新準備"},
     {"cast.selection.connecting", "Connecting to device…", "正在连接设备…", "正在連線裝置…"},
@@ -76,6 +76,18 @@ inline constexpr std::array<LocaleCatalogEntry, 214> kLocaleCatalogEntries{{
     {"tabs.new", "New tab", "新建标签页", "新增分頁"},
     {"tabs.close", "Close tab", "关闭标签页", "關閉分頁"},
     {"tabs.fallback", "Tab", "标签页", "分頁"},
+    {"tabs.pin", "Pin tab", "固定标签页", "釘選分頁"},
+    {"tabs.unpin", "Unpin tab", "取消固定标签页", "取消釘選分頁"},
+    {"tabs.duplicate", "Duplicate tab", "复制标签页", "複製分頁"},
+    {"tabs.mute", "Mute tab", "将标签页静音", "將分頁靜音"},
+    {"tabs.unmute", "Unmute tab", "取消标签页静音", "取消分頁靜音"},
+    {"tabs.add_group", "Add to group", "添加到标签组", "加入分頁群組"},
+    {"tabs.remove_group", "Remove from group", "移出标签组", "移出分頁群組"},
+    {"tabs.search", "Search tabs", "搜索标签页", "搜尋分頁"},
+    {"bookmarks.add_page", "Add bookmark", "添加书签", "新增書籤"},
+    {"bookmarks.remove_page", "Remove bookmark", "移除书签", "移除書籤"},
+    {"bookmarks.show_bar", "Show bookmarks bar", "显示书签栏", "顯示書籤列"},
+    {"bookmarks.hide_bar", "Hide bookmarks bar", "隐藏书签栏", "隱藏書籤列"},
     {"address.placeholder", "Enter a URL", "输入网址", "輸入網址"},
     {"omnibox.edit", "Edit Address", "编辑地址", "編輯網址"},
     {"omnibox.submit", "Submit", "提交", "送出"},

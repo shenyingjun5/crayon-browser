@@ -257,6 +257,10 @@ private:
       }
       if (activate_events_ != 1 || last_activated_ != second_ ||
           !ProjectionMatches({*first_, *second_, *third_}, second_) ||
+          !strip_->Sync(model_, {*third_, *first_, *second_}) ||
+          !ProjectionMatches({*third_, *first_, *second_}, second_) ||
+          strip_->Sync(model_, {*third_, *third_, *second_}) ||
+          !ProjectionMatches({*third_, *first_, *second_}, second_) ||
           !model_.MoveTab(2, 0) || !strip_->Sync(model_) ||
           !ProjectionMatches({*third_, *first_, *second_}, second_)) {
         Finish(false, "activate-or-reorder");

@@ -47,6 +47,9 @@ bool AddAndFindBookmark() {
 bool ValidationMatrix() {
   BookmarkStore store;
   BookmarkError error = BookmarkError::kUnknownId;
+  CHECK(BookmarkStore::IsValidUrl("https://example.test/page"));
+  CHECK(BookmarkStore::IsValidUrl("http://127.0.0.1/page"));
+  CHECK(!BookmarkStore::IsValidUrl("crayon://newtab/"));
   CHECK(store.AddBookmark(0, "", "https://a.test/", &error) == 0);
   CHECK(error == BookmarkError::kInvalidTitle);
   CHECK(store.AddBookmark(0, "x", "ftp://a.test/", &error) == 0);

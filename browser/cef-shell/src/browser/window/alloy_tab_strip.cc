@@ -1,6 +1,7 @@
 #include "browser/window/alloy_tab_strip.h"
 
 #include <utility>
+#include <unordered_set>
 #include <vector>
 
 #include "include/cef_color_ids.h"
@@ -88,17 +89,22 @@ struct AlloyTabStrip::State final : std::enable_shared_from_this<State> {
     return button;
   }
 
-  bool Sync(const TabModel &model) {
+  bool Sync(const TabModel &model, const std::vector<TabId> &order) {
     CEF_REQUIRE_UI_THREAD();
     if (!active || dispatching || !panel ||
-        model.size() > kMaximumTabsPerWindow) {
+        model.size() > kMaximumTabsPerWindow || order.size() != model.size()) {
       return false;
+    }
+
+    std::unordered_set<TabId> unique;
+    unique.reserve(order.size());
+    for (const TabId tab_id : order) {
+      if (!model.Find(tab_id) || !unique.insert(tab_id).second) return false;
     }
 
     panel->RemoveAllChildViews();
     bindings.clear();
     active_tab.reset();
-    const auto order = model.ordered_tabs();
     bindings.reserve(order.size());
     for (std::size_t index = 0; index < order.size(); ++index) {
       const TabId tab_id = order[index];
@@ -223,7 +229,12 @@ CefRefPtr<CefPanel> AlloyTabStrip::panel() const {
 }
 
 bool AlloyTabStrip::Sync(const TabModel &model) {
-  return state_ && state_->Sync(model);
+  return Sync(model, model.ordered_tabs());
+}
+
+bool AlloyTabStrip::Sync(const TabModel &model,
+                         const std::vector<TabId> &ordered_tabs) {
+  return state_ && state_->Sync(model, ordered_tabs);
 }
 
 bool AlloyTabStrip::Shutdown() { return !state_ || state_->Shutdown(); }

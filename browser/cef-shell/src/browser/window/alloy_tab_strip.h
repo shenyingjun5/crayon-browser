@@ -6,6 +6,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "browser/window/tab_model.h"
 #include "include/views/cef_panel.h"
@@ -41,6 +42,7 @@ public:
 
   CefRefPtr<CefPanel> panel() const;
   bool Sync(const TabModel &model);
+  bool Sync(const TabModel &model, const std::vector<TabId> &ordered_tabs);
   bool Shutdown();
 
   bool active() const noexcept;

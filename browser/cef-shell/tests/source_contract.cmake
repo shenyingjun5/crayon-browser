@@ -100,6 +100,9 @@ file(READ
      "${CRAYON_CEF_SHELL_SOURCE}/src/browser/window/alloy_interactions.cc"
      alloy_interactions)
 file(READ
+     "${CRAYON_CEF_SHELL_SOURCE}/src/browser/window/alloy_tab_strip.cc"
+     alloy_tab_strip)
+file(READ
      "${CRAYON_CEF_SHELL_SOURCE}/src/browser/window/alloy_builtin_content.cc"
      alloy_builtin_content)
 file(READ
@@ -402,6 +405,34 @@ foreach(required_alloy_daily_data_token
   if(token_index EQUAL -1)
     message(FATAL_ERROR
             "Windows Alloy product is missing 24W2b3a token ${required_alloy_daily_data_token}")
+  endif()
+endforeach()
+foreach(required_alloy_daily_surface_token
+        "kTogglePin"
+        "kDuplicateTab"
+        "kToggleMute"
+        "kToggleGroup"
+        "kToggleBookmarkBar"
+        "tab_search_entries"
+        "toggle_current_bookmark"
+        "kMaximumVisibleBookmarkButtons")
+  string(FIND
+         "${alloy_interactions}${alloy_product_host}${alloy_product_host_header}"
+         "${required_alloy_daily_surface_token}" token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Windows Alloy product is missing 24W2b3b1 surface token ${required_alloy_daily_surface_token}")
+  endif()
+endforeach()
+foreach(required_alloy_advanced_order_token
+        "advanced_ordered_tabs()"
+        "std::unordered_set<TabId> unique"
+        "order.size() != model.size()")
+  string(FIND "${alloy_product_host}${alloy_tab_strip}"
+         "${required_alloy_advanced_order_token}" token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Windows Alloy product is missing 24W2b3b1 order token ${required_alloy_advanced_order_token}")
   endif()
 endforeach()
 foreach(required_alloy_daily_data_bootstrap_token

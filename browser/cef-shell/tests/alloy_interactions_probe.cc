@@ -213,6 +213,39 @@ private:
           ++context_commands_;
           return true;
         };
+    callbacks.daily_state = [this] {
+      ++daily_state_reads_;
+      return crayon::browser::cef_shell::window::AlloyDailyCommandState{
+          true, true, true, true, true};
+    };
+    callbacks.daily_command = [this](AlloyMainCommand) {
+      ++daily_commands_;
+      return true;
+    };
+    callbacks.tab_search_entries = [] {
+      return std::vector<
+          crayon::browser::cef_shell::window::AlloyTabSearchEntry>{
+          {0, "Invalid tab", false},
+          {11, "Fixture tab", false},
+          {12, "Active tab", true}};
+    };
+    callbacks.activate_searched_tab = [this](std::uint64_t tab_id) {
+      activated_search_tab_ = tab_id;
+      return tab_id == 11;
+    };
+    callbacks.bookmark_state = [] {
+      return crayon::browser::cef_shell::window::AlloyBookmarkCommandState{
+          true, true, true, {{0, "Invalid bookmark"},
+                             {41, "Fixture bookmark"}}};
+    };
+    callbacks.toggle_current_bookmark = [this] {
+      ++bookmark_toggles_;
+      return true;
+    };
+    callbacks.open_bookmark = [this](std::uint64_t node_id) {
+      opened_bookmark_ = node_id;
+      return node_id == 41;
+    };
     callbacks.cancel_transient = [this] { ++cancel_count_; };
     interactions_ = new AlloyInteractions(
         crayon::browser::localization::SnapshotFor(
@@ -275,6 +308,20 @@ private:
         Finish(false, "menu-view");
         return;
       }
+      const auto bookmark_toggle_view =
+          interactions_->GetView(AlloyInteractions::kBookmarkButtonId);
+      const auto bookmark_toggle =
+          bookmark_toggle_view ? bookmark_toggle_view->AsButton() : nullptr;
+      interactions_->OnButtonPressed(bookmark_toggle);
+      const auto bookmark_item_view =
+          interactions_->GetView(AlloyInteractions::kBookmarkBarCommandBase);
+      const auto bookmark_item =
+          bookmark_item_view ? bookmark_item_view->AsButton() : nullptr;
+      interactions_->OnButtonPressed(bookmark_item);
+      if (bookmark_toggles_ != 1 || opened_bookmark_ != 41) {
+        Finish(false, "bookmark-controls");
+        return;
+      }
       menu->AsButton()->AsLabelButton()->AsMenuButton()->TriggerMenu();
       stage_ = 1;
       Schedule();
@@ -285,7 +332,9 @@ private:
         Schedule();
         return;
       }
-      result_->menu_passed = true;
+      interactions_->ExecuteCommand(
+          nullptr, AlloyInteractions::kTabSearchCommandBase, EVENTFLAG_NONE);
+      result_->menu_passed = activated_search_tab_ == 11;
       window_->SendKeyPress(27, 0);
       stage_ = 2;
       Schedule();
@@ -317,9 +366,21 @@ private:
       const bool about = interactions_->Execute(AlloyMainCommand::kAbout);
       const bool licenses =
           interactions_->Execute(AlloyMainCommand::kLicenses);
+      const bool pinned =
+          interactions_->Execute(AlloyMainCommand::kTogglePin);
+      const bool duplicated =
+          interactions_->Execute(AlloyMainCommand::kDuplicateTab);
+      const bool muted =
+          interactions_->Execute(AlloyMainCommand::kToggleMute);
+      const bool grouped =
+          interactions_->Execute(AlloyMainCommand::kToggleGroup);
+      const bool bookmark_bar =
+          interactions_->Execute(AlloyMainCommand::kToggleBookmarkBar);
       result_->command_passed =
           opened && rejected && incognito && copied && pasted && about &&
-          licenses && open_count_ == 1 && incognito_count_ == 1 &&
+          licenses && pinned && duplicated && muted && grouped &&
+          bookmark_bar && daily_state_reads_ >= 1 && daily_commands_ == 5 &&
+          open_count_ == 1 && incognito_count_ == 1 &&
           destinations_.size() == 2 &&
           destinations_[0] ==
               crayon::browser::cef_shell::branding::kAboutBrowserUrl &&
@@ -376,6 +437,11 @@ private:
   int accepted_drags_ = 0;
   int context_augments_ = 0;
   int context_commands_ = 0;
+  int daily_state_reads_ = 0;
+  int daily_commands_ = 0;
+  int bookmark_toggles_ = 0;
+  std::uint64_t opened_bookmark_ = 0;
+  std::uint64_t activated_search_tab_ = 0;
   int cancel_count_ = 0;
   bool loaded_ = false;
   bool attached_ = false;
