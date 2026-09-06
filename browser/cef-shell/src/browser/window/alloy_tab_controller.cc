@@ -451,6 +451,8 @@ bool AlloyTabController::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
   if (found == records_.end()) {
     return false;
   }
+  const TabId closing_tab = found->first;
+  const bool closing_active = model_.active_tab() == closing_tab;
   Record &record = found->second;
   if (!record.close_requested) {
     if (!Accepted(
@@ -470,6 +472,18 @@ bool AlloyTabController::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
   }
   advanced_.OnTabClosed(AdvancedId(found->first));
   records_.erase(found);
+  if (closing_active) {
+    const auto replacement = model_.active_tab();
+    if (replacement) {
+      const auto successor = records_.find(*replacement);
+      if (successor == records_.end() || successor->second.close_requested ||
+          successor->second.view_released ||
+          !Accepted(host_.Activate(successor->second.mount.tab_id,
+                                   successor->second.mount.mount_epoch))) {
+        return false;
+      }
+    }
+  }
   return closed;
 }
 

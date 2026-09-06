@@ -9,6 +9,7 @@ struct AlloyNavigationProbeResult final {
   bool behavior_passed = false;
   bool real_navigation_passed = false;
   bool identity_passed = false;
+  bool rebind_passed = false;
   bool fencing_passed = false;
   bool bookmark_passed = false;
   bool history_passed = false;

@@ -42,6 +42,15 @@
 "nav.forward" = "前进";
 "nav.reload" = "刷新";
 "nav.stop" = "停止";
+"nav.identity.unknown" = "未知站点";
+"nav.identity.secure" = "安全连接";
+"nav.identity.pending" = "正在检查连接";
+"nav.identity.insecure" = "连接不安全";
+"nav.identity.local" = "本地页面";
+"nav.identity.error" = "证书错误";
+"tabs.new" = "新建标签页";
+"tabs.close" = "关闭标签页";
+"tabs.fallback" = "标签页";
 "address.placeholder" = "输入网址";
 "omnibox.edit" = "编辑地址";
 "omnibox.submit" = "提交";

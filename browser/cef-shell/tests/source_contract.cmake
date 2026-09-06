@@ -76,6 +76,9 @@ file(READ
      "${CRAYON_CEF_SHELL_SOURCE}/src/windows/alloy_cast_overlay_win.cc"
      alloy_cast_overlay)
 file(READ
+     "${CRAYON_CEF_SHELL_SOURCE}/src/windows/alloy_product_host_win.cc"
+     alloy_product_host)
+file(READ
      "${CRAYON_CEF_SHELL_SOURCE}/src/browser/window/alloy_interactions.cc"
      alloy_interactions)
 file(READ
@@ -444,5 +447,46 @@ foreach(required_dialog_token
             "Windows Markdown file-dialog adapter is missing ${required_dialog_token}")
   endif()
 endforeach()
+
+# The active interaction surface owns a CefBrowserView. It must be shut down
+# before requesting browser close, not from the asynchronous DoClose release
+# callback, or the final Alloy tab either stays alive or tears down views while
+# CEF is already dispatching its close sequence.
+string(FIND "${alloy_product_host}"
+       "bool AlloyProductHostWin::PrepareActiveChromeForClose"
+       prepare_close_start)
+if(prepare_close_start EQUAL -1)
+  message(FATAL_ERROR "Windows Alloy product close preparation is missing")
+endif()
+string(SUBSTRING "${alloy_product_host}" ${prepare_close_start} -1
+       alloy_product_close_tail)
+string(FIND "${alloy_product_close_tail}" "interactions_->Shutdown();"
+       interaction_shutdown)
+string(FIND "${alloy_product_host}"
+       "const bool active = PrepareActiveChromeForClose(id);"
+       tab_close_prepare)
+string(FIND "${alloy_product_host}"
+       "const bool prepared = active && PrepareActiveChromeForClose(*active);"
+       window_close_prepare)
+string(FIND "${alloy_product_host}"
+       "coordinator_->BeginCloseWindow(kPrimaryWindowId, force_close)"
+       window_close_request)
+string(FIND "${alloy_product_host}"
+       "ShutdownChromeForWindowClose();\n    window_->Close();"
+       window_chrome_shutdown)
+string(FIND "${alloy_product_host}"
+       "value == -107 || (value <= -200 && value >= -299)"
+       ssl_error_classification)
+if(interaction_shutdown EQUAL -1 OR tab_close_prepare EQUAL -1 OR
+   window_close_prepare EQUAL -1 OR window_close_request EQUAL -1 OR
+   window_close_request LESS window_close_prepare OR
+   window_chrome_shutdown EQUAL -1)
+  message(FATAL_ERROR
+          "Windows Alloy product close must release active UI owners before requesting browser close")
+endif()
+if(ssl_error_classification EQUAL -1)
+  message(FATAL_ERROR
+          "Windows Alloy product navigation must classify SSL protocol and certificate errors")
+endif()
 
 message(STATUS "Windows CEF shell source contract passed")

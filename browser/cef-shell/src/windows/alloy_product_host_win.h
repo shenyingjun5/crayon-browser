@@ -1,0 +1,221 @@
+#pragma once
+
+#include <functional>
+#include <map>
+#include <memory>
+#include <optional>
+#include <string>
+#include <vector>
+
+#include "browser/mdv/cef_mdv_editing.h"
+#include "browser/mdv/cef_mdv_entries.h"
+#include "browser/page_markdown/cef_page_markdown_preview.h"
+#include "browser/page_snapshot_gateway/cef_page_snapshot_bridge.h"
+#include "browser/window/alloy_builtin_content.h"
+#include "browser/window/alloy_interactions.h"
+#include "browser/window/alloy_navigation.h"
+#include "browser/window/alloy_omnibox.h"
+#include "browser/window/alloy_page_markdown.h"
+#include "browser/window/alloy_page_tools.h"
+#include "browser/window/alloy_tab_strip.h"
+#include "browser/window/alloy_window_coordinator.h"
+#include "crayon/browser_engine/types.h"
+#include "crayon/browser_localization/locale_snapshot.h"
+#include "include/cef_client.h"
+#include "include/cef_context_menu_handler.h"
+#include "include/cef_display_handler.h"
+#include "include/cef_drag_handler.h"
+#include "include/cef_keyboard_handler.h"
+#include "include/cef_life_span_handler.h"
+#include "include/cef_load_handler.h"
+#include "include/cef_request_handler.h"
+#include "include/views/cef_browser_view_delegate.h"
+#include "include/views/cef_window_delegate.h"
+
+namespace crayon::browser::cef_shell::windows {
+
+// Production owner for the Windows Alloy top-level window, BrowserViews, and
+// base tab/navigation/Markdown surfaces. Remaining product feature surfaces
+// are attached in PLT-SHELL-24W2.
+class AlloyProductHostWin final : public CefClient,
+                                  public CefLifeSpanHandler,
+                                  public CefLoadHandler,
+                                  public CefDisplayHandler,
+                                  public CefRequestHandler,
+                                  public CefKeyboardHandler,
+                                  public CefContextMenuHandler,
+                                  public CefDragHandler,
+                                  public CefBrowserViewDelegate,
+                                  public CefWindowDelegate,
+                                  public window::AlloyBuiltinContentObserver {
+ public:
+  struct Dependencies final {
+    localization::LocaleSnapshot locale;
+    std::shared_ptr<mdv::MdvEntryController> mdv_entries;
+    std::shared_ptr<mdv::MdvEditController> mdv_editing;
+    page_markdown::PageMarkdownStrings page_markdown_strings;
+    std::function<bool(const std::string&)> clipboard_write;
+    gateway::PageSnapshotObserver* snapshot_observer = nullptr;
+    std::function<bool()> snapshot_admission;
+    std::function<void()> snapshot_events_ready;
+  };
+
+  struct Callbacks final {
+    std::function<void(CefRefPtr<CefBrowser>)> browser_created;
+    std::function<void()> all_closed;
+  };
+
+  AlloyProductHostWin(Dependencies dependencies, Callbacks callbacks);
+
+  bool Start(std::string initial_url, std::string title,
+             browser_engine::ProfileId profile_id);
+  bool Close(bool force_close);
+  bool started() const noexcept { return started_; }
+  bool closed() const noexcept { return closed_; }
+  CefRefPtr<CefBrowser> browser() const noexcept { return browser_; }
+
+  CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
+  CefRefPtr<CefLoadHandler> GetLoadHandler() override { return this; }
+  CefRefPtr<CefDisplayHandler> GetDisplayHandler() override { return this; }
+  CefRefPtr<CefRequestHandler> GetRequestHandler() override { return this; }
+  CefRefPtr<CefFindHandler> GetFindHandler() override { return page_tools_; }
+  CefRefPtr<CefKeyboardHandler> GetKeyboardHandler() override { return this; }
+  CefRefPtr<CefContextMenuHandler> GetContextMenuHandler() override {
+    return this;
+  }
+  CefRefPtr<CefDragHandler> GetDragHandler() override { return this; }
+
+  std::vector<gateway::SnapshotGatewayEvent> DrainPageSnapshots(
+      std::size_t max_events);
+  void TickPageMarkdown(
+      std::vector<::crayon::cef_shell::ipc::content_host::Message> replies,
+      bool content_host_healthy);
+
+  cef_runtime_style_t GetBrowserRuntimeStyle() override;
+  cef_runtime_style_t GetWindowRuntimeStyle() override;
+  void OnWindowCreated(CefRefPtr<CefWindow> window) override;
+  bool CanClose(CefRefPtr<CefWindow> window) override;
+  void OnWindowDestroyed(CefRefPtr<CefWindow> window) override;
+  bool OnAccelerator(CefRefPtr<CefWindow> window, int command_id) override;
+  bool OnKeyEvent(CefRefPtr<CefWindow> window,
+                  const CefKeyEvent& event) override;
+  void OnBrowserCreated(CefRefPtr<CefBrowserView> view,
+                        CefRefPtr<CefBrowser> browser) override;
+  void OnBrowserDestroyed(CefRefPtr<CefBrowserView> view,
+                          CefRefPtr<CefBrowser> browser) override;
+  bool DoClose(CefRefPtr<CefBrowser> browser) override;
+  void OnAfterCreated(CefRefPtr<CefBrowser> browser) override;
+  void OnBeforeClose(CefRefPtr<CefBrowser> browser) override;
+  void OnTitleChange(CefRefPtr<CefBrowser> browser,
+                     const CefString& title) override;
+  void OnAddressChange(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
+                       const CefString& url) override;
+  void OnLoadingStateChange(CefRefPtr<CefBrowser> browser, bool is_loading,
+                            bool can_go_back, bool can_go_forward) override;
+  void OnLoadEnd(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
+                 int http_status_code) override;
+  void OnLoadError(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
+                   ErrorCode error_code, const CefString& error_text,
+                   const CefString& failed_url) override;
+  bool OnConsoleMessage(CefRefPtr<CefBrowser> browser, cef_log_severity_t level,
+                        const CefString& message, const CefString& source,
+                        int line) override;
+  bool OnBeforeBrowse(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
+                      CefRefPtr<CefRequest> request, bool user_gesture,
+                      bool is_redirect) override;
+  bool OnKeyEvent(CefRefPtr<CefBrowser> browser, const CefKeyEvent& event,
+                  CefEventHandle os_event) override;
+  bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
+                                CefRefPtr<CefFrame> frame,
+                                CefProcessId source_process,
+                                CefRefPtr<CefProcessMessage> message) override;
+  void OnBeforeContextMenu(CefRefPtr<CefBrowser> browser,
+                           CefRefPtr<CefFrame> frame,
+                           CefRefPtr<CefContextMenuParams> params,
+                           CefRefPtr<CefMenuModel> model) override;
+  bool OnContextMenuCommand(CefRefPtr<CefBrowser> browser,
+                            CefRefPtr<CefFrame> frame,
+                            CefRefPtr<CefContextMenuParams> params,
+                            int command_id, EventFlags event_flags) override;
+  bool OnDragEnter(CefRefPtr<CefBrowser> browser,
+                   CefRefPtr<CefDragData> drag_data,
+                   DragOperationsMask mask) override;
+  void OnRenderProcessTerminated(CefRefPtr<CefBrowser> browser,
+                                 TerminationStatus status, int error_code,
+                                 const CefString& error_string) override;
+
+  void OnBuiltinBrowserClosing(CefRefPtr<CefBrowser> browser) override;
+  void OnBuiltinRenderProcessTerminated(CefRefPtr<CefBrowser> browser) override;
+  void OnBuiltinLoadEnd(CefRefPtr<CefBrowser> browser,
+                        CefRefPtr<CefFrame> frame,
+                        int http_status_code) override;
+  void OnBuiltinLoadError(CefRefPtr<CefBrowser> browser,
+                          CefRefPtr<CefFrame> frame, cef_errorcode_t error_code,
+                          const CefString& error_text,
+                          const CefString& failed_url) override;
+  void OnBuiltinAddressChange(CefRefPtr<CefBrowser> browser,
+                              CefRefPtr<CefFrame> frame,
+                              const CefString& url) override;
+  void OnBuiltinLoadingStateChange(CefRefPtr<CefBrowser> browser,
+                                   bool is_loading, bool can_go_back,
+                                   bool can_go_forward) override;
+  void OnBuiltinBeforeContextMenu(CefRefPtr<CefBrowser> browser,
+                                  CefRefPtr<CefFrame> frame,
+                                  CefRefPtr<CefContextMenuParams> params,
+                                  CefRefPtr<CefMenuModel> model) override;
+  bool OnBuiltinContextMenuCommand(CefRefPtr<CefBrowser> browser,
+                                   CefRefPtr<CefFrame> frame,
+                                   CefRefPtr<CefContextMenuParams> params,
+                                   int command_id,
+                                   cef_event_flags_t event_flags) override;
+
+ private:
+  ~AlloyProductHostWin() override;
+
+  window::AlloyTabController* controller() const noexcept;
+  bool CreateTab(std::string url, browser_engine::ContentPurpose purpose);
+  void FinalizeBrowserCreated(CefRefPtr<CefBrowserView> view,
+                              CefRefPtr<CefBrowser> browser);
+  bool ActivateTab(window::TabId tab_id);
+  void ActivateCreatedTab(window::TabId tab_id);
+  void SyncChrome();
+  void PostSyncChrome();
+  bool BindActiveChrome();
+  bool PrepareActiveChromeForClose(window::TabId tab_id);
+  void ShutdownChromeForWindowClose();
+  CefRefPtr<CefBrowser> BrowserForTab(window::TabId tab_id) const;
+  std::optional<window::TabId> TabForView(CefRefPtr<CefBrowserView> view) const;
+  bool Owns(CefRefPtr<CefBrowser> browser) const;
+  void ReleaseClosingView(CefRefPtr<CefBrowser> browser);
+  void FinalizeRendererCrash(CefRefPtr<CefBrowser> browser);
+  void NotifyClosed();
+
+  Dependencies dependencies_;
+  Callbacks callbacks_;
+  std::unique_ptr<window::AlloyWindowCoordinator> coordinator_;
+  std::unique_ptr<window::AlloyPageMarkdown> page_markdown_;
+  CefRefPtr<window::AlloyBuiltinContent> builtin_content_;
+  std::unique_ptr<window::AlloyTabStrip> tab_strip_;
+  std::unique_ptr<window::AlloyOmnibox> omnibox_;
+  std::unique_ptr<window::AlloyNavigation> navigation_;
+  CefRefPtr<window::AlloyInteractions> interactions_;
+  CefRefPtr<window::AlloyPageTools> page_tools_;
+  CefRefPtr<CefPanel> toolbar_;
+  CefRefPtr<CefWindow> window_;
+  CefRefPtr<CefBrowserView> view_;
+  CefRefPtr<CefBrowser> browser_;
+  std::map<window::TabId, CefRefPtr<CefBrowserView>> views_;
+  std::string title_;
+  std::string profile_id_value_;
+  window::TabId tab_id_ = 0;
+  std::uint64_t next_navigation_id_ = 1;
+  int chrome_browser_id_ = 0;
+  bool started_ = false;
+  bool closing_ = false;
+  bool closed_ = false;
+
+  IMPLEMENT_REFCOUNTING(AlloyProductHostWin);
+  DISALLOW_COPY_AND_ASSIGN(AlloyProductHostWin);
+};
+
+}  // namespace crayon::browser::cef_shell::windows

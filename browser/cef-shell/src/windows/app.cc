@@ -215,6 +215,23 @@ BrowserApp::BrowserApp(
                 CastChromePresentation(cast_shell_->presentation()));
           },
           browser_new_tab::kNewTabUrl, permission_store_.get())),
+      alloy_product_host_(new windows::AlloyProductHostWin(
+          windows::AlloyProductHostWin::Dependencies{
+              locale_snapshot, mdv_entries_, mdv_editing_,
+              page_markdown_strings_, windows::CopyMarkdownToClipboard,
+              content_host_.get(),
+              [host = content_host_.get()] { return host->healthy(); },
+              [this] {
+                if (alloy_product_host_) {
+                  content_host_->Consume(
+                      alloy_product_host_->DrainPageSnapshots(16));
+                }
+              }},
+          windows::AlloyProductHostWin::Callbacks{
+              [this](CefRefPtr<CefBrowser> browser) {
+                window_icons_->Apply(browser);
+              },
+              [this] { OnAlloyBrowsersClosed(); }})),
       shell_runtime_(std::make_shared<WindowsShellRuntime>(tab_controller_)) {}
 
 BrowserApp::~BrowserApp() = default;
@@ -256,14 +273,9 @@ void BrowserApp::OnContextInitialized() {
   const auto page_model = browser_new_tab::BuildNewTabPageModel(
       browser_new_tab::NewTabProfileMode::kRegular,
       browser_new_tab::ShortcutConfig{});
-  if (!new_tab::RegisterNewTabSchemeHandlerFactory(
-          page_model, product_strings_.new_tab)) {
-    shell_runtime_->Shutdown();
-    CefQuitMessageLoop();
-    return;
-  }
-  if (!mdv::RegisterMdvSchemeHandlerFactory(product_strings_.mdv,
-                                             mdv_runtime_)) {
+  if (!window::RegisterAlloyBuiltinContentFactories(
+          page_model, product_strings_.new_tab, product_strings_.mdv,
+          mdv_runtime_)) {
     shell_runtime_->Shutdown();
     CefQuitMessageLoop();
     return;
@@ -409,7 +421,10 @@ void BrowserApp::OnContextInitialized() {
 void BrowserApp::ContinueContentHostStartup() {
   CEF_REQUIRE_UI_THREAD();
   if (content_host_->healthy() && media_host_->healthy()) {
-    if (!tab_controller_->CreateMainWindow()) {
+    const auto profile = browser_engine::ProfileId::TryCreate("default");
+    if (!profile ||
+        !alloy_product_host_->Start(browser_new_tab::kNewTabUrl,
+                                    product_strings_.product_name, *profile)) {
       trusted_input_monitor_->Stop();
       content_host_->Stop();
       media_host_->Stop();
@@ -436,6 +451,19 @@ void BrowserApp::ContinueContentHostStartup() {
                      kContentHostTickMilliseconds);
 }
 
+void BrowserApp::OnAlloyBrowsersClosed() {
+  CEF_REQUIRE_UI_THREAD();
+  content_host_tick_active_ = false;
+  trusted_input_monitor_->Stop();
+  page_markdown_preview_->Stop();
+  cast_shell_->Shutdown();
+  cast_chrome_->Close();
+  content_host_->Stop();
+  media_host_->Stop();
+  shell_runtime_->Shutdown();
+  CefQuitMessageLoop();
+}
+
 void BrowserApp::ScheduleContentHostTick() {
   CefPostDelayedTask(
       TID_UI,
@@ -447,12 +475,12 @@ void BrowserApp::ScheduleContentHostTick() {
 void BrowserApp::ContentHostTick() {
   CEF_REQUIRE_UI_THREAD();
   if (!content_host_tick_active_) return;
-  content_host_->Consume(tab_controller_->DrainPageSnapshots(16));
+  content_host_->Consume(alloy_product_host_->DrainPageSnapshots(16));
   ConsumeMediaObservations();
   content_host_->Tick();
   media_host_->Tick();
-  page_markdown_preview_->Tick(content_host_->Drain(64),
-                               content_host_->healthy());
+  alloy_product_host_->TickPageMarkdown(content_host_->Drain(64),
+                                        content_host_->healthy());
   static_cast<void>(media_host_->Drain(64));
   cast_shell_->ConsumePlanning(media_host_->DrainPlanning(64));
   cast_shell_->ConsumeCast(media_host_->DrainCast(64));
@@ -530,7 +558,7 @@ bool BrowserApp::cast_strings_valid() const {
 }
 
 CefRefPtr<CefClient> BrowserApp::GetDefaultClient() {
-  return tab_controller_->client();
+  return alloy_product_host_;
 }
 
 }  // namespace crayon::browser::cef_shell

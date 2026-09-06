@@ -226,12 +226,14 @@ public:
     result_->window_closed = true;
     result_->behavior_passed =
         passed_ && result_->real_navigation_passed &&
-        result_->identity_passed && result_->fencing_passed &&
+        result_->identity_passed && result_->rebind_passed &&
+        result_->fencing_passed &&
         result_->bookmark_passed && result_->history_passed &&
         result_->download_passed;
     std::cout << "alloy_navigation_windows passed=" << result_->behavior_passed
               << " real_navigation=" << result_->real_navigation_passed
               << " identity=" << result_->identity_passed
+              << " rebind=" << result_->rebind_passed
               << " fencing=" << result_->fencing_passed << std::endl;
     navigation_.reset();
     bookmarks_.reset();
@@ -501,6 +503,16 @@ private:
         Finish(false, "bookmark-readback");
         return;
       }
+      result_->rebind_passed =
+          navigation_->Bind("navigation-probe-foreign", foreign_browser_) &&
+          navigation_->Bind("navigation-probe-rebound", primary_browser_) &&
+          displayed_address_ == fixture_url_ &&
+          navigation_->site_identity() == SiteIdentity::kInsecure &&
+          navigation_->displayed_identity() == "Not secure";
+      if (!result_->rebind_passed) {
+        Finish(false, "rebind-loaded-tab");
+        return;
+      }
       if (!history_->BeginNavigation(1) ||
           history_->CommitNavigation(1, fixture_url_, "Fixture", 100) !=
               AlloyHistoryResult::kSuccess ||
@@ -553,7 +565,13 @@ private:
         ScheduleCheck();
         return;
       }
+      const bool initial_certificate_error =
+          navigation_->site_identity() == SiteIdentity::kCertificateError &&
+          navigation_->displayed_identity() == "Certificate error";
       result_->identity_passed =
+          initial_certificate_error &&
+          navigation_->Bind("navigation-probe-foreign", foreign_browser_) &&
+          navigation_->Bind("navigation-probe-rebound", primary_browser_) &&
           navigation_->site_identity() == SiteIdentity::kCertificateError &&
           navigation_->displayed_identity() == "Certificate error";
       std::cout << "alloy_navigation_windows final_identity="

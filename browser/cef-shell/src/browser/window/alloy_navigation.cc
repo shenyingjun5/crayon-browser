@@ -1,6 +1,7 @@
 #include "browser/window/alloy_navigation.h"
 
 #include <limits>
+#include <map>
 #include <utility>
 
 #include "crayon/browser_navigation/navigation_controller.h"
@@ -17,6 +18,7 @@ constexpr int kBarHeight = 40;
 constexpr int kButtonWidth = 52;
 constexpr int kIdentityWidth = 104;
 constexpr int kChildSpacing = 2;
+constexpr std::size_t kMaximumCachedBrowsers = 64;
 
 class SurfaceDelegate final : public CefPanelDelegate {
 public:
@@ -50,6 +52,19 @@ bool IsAllowedNavigationUrl(const std::string &value) {
 
 struct AlloyNavigation::State final : std::enable_shared_from_this<State> {
   enum class Command { kBack, kForward, kReloadStop };
+
+  struct CachedBrowserState final {
+    std::string address;
+    browser_navigation::SiteIdentity identity =
+        browser_navigation::SiteIdentity::kUnknown;
+    std::uint64_t navigation_id = 0;
+    std::uint64_t next_navigation_id = 1;
+    bool completion_succeeded = false;
+    bool navigation_failed = false;
+    bool loading = false;
+    bool can_go_back = false;
+    bool can_go_forward = false;
+  };
 
   class ButtonDelegate final : public CefButtonDelegate {
   public:
@@ -110,11 +125,62 @@ struct AlloyNavigation::State final : std::enable_shared_from_this<State> {
            browser->GetIdentifier() == candidate->GetIdentifier();
   }
 
+  void CacheCurrentBrowser() {
+    if (!browser || tab_id.empty()) {
+      return;
+    }
+    const int browser_id = browser->GetIdentifier();
+    if (browser_states.find(browser_id) == browser_states.end() &&
+        browser_states.size() >= kMaximumCachedBrowsers) {
+      browser_states.erase(browser_states.begin());
+    }
+    browser_states[browser_id] = CachedBrowserState{
+        address,
+        identity,
+        navigation.CurrentNavigationId(tab_id),
+        next_navigation_id,
+        completion_succeeded,
+        navigation_failed,
+        navigation.IsLoading(tab_id),
+        navigation.CanGoBack(tab_id),
+        navigation.CanGoForward(tab_id)};
+  }
+
+  bool RestoreCachedBrowser(int browser_id) {
+    const auto found = browser_states.find(browser_id);
+    if (found == browser_states.end()) {
+      return false;
+    }
+    const CachedBrowserState& cached = found->second;
+    address = cached.address;
+    identity = cached.identity;
+    next_navigation_id = cached.next_navigation_id;
+    completion_succeeded = cached.completion_succeeded;
+    navigation_failed = cached.navigation_failed;
+    if (cached.navigation_id != 0) {
+      navigation.OnNavigationStarted(tab_id, cached.navigation_id);
+      if (!cached.loading) {
+        if (cached.navigation_failed) {
+          navigation.OnNavigationFailed(tab_id, cached.navigation_id);
+        } else if (cached.completion_succeeded) {
+          navigation.OnNavigationCompleted(tab_id, cached.navigation_id);
+        }
+      }
+    }
+    navigation.SetCanGoBack(tab_id, cached.can_go_back);
+    navigation.SetCanGoForward(tab_id, cached.can_go_forward);
+    if (!address.empty() && callbacks.address_changed) {
+      callbacks.address_changed(address);
+    }
+    return true;
+  }
+
   bool Bind(std::string new_tab_id, CefRefPtr<CefBrowser> new_browser) {
     CEF_REQUIRE_UI_THREAD();
     if (!active || dispatching || new_tab_id.empty() || !new_browser) {
       return false;
     }
+    CacheCurrentBrowser();
     navigation.Shutdown();
     navigation = browser_navigation::NavigationController{};
     tab_id = std::move(new_tab_id);
@@ -125,6 +191,31 @@ struct AlloyNavigation::State final : std::enable_shared_from_this<State> {
     address.clear();
     completion_succeeded = false;
     navigation_failed = false;
+    if (RestoreCachedBrowser(browser->GetIdentifier())) {
+      Sync();
+      return true;
+    }
+    const bool loading = browser->IsLoading();
+    if (const auto frame = browser->GetMainFrame(); frame) {
+      const auto visible_address =
+          AlloyOmnibox::SafeDisplayText(frame->GetURL().ToString());
+      if (visible_address && !visible_address->empty()) {
+        address = *visible_address;
+        const std::uint64_t navigation_id = next_navigation_id++;
+        navigation.OnNavigationStarted(tab_id, navigation_id);
+        completion_succeeded = !loading;
+        identity = browser_navigation::EvaluateSiteIdentity(
+            address, completion_succeeded, false);
+        if (completion_succeeded) {
+          navigation.OnNavigationCompleted(tab_id, navigation_id);
+        }
+        if (callbacks.address_changed) {
+          callbacks.address_changed(address);
+        }
+      }
+    }
+    navigation.SetCanGoBack(tab_id, browser->CanGoBack());
+    navigation.SetCanGoForward(tab_id, browser->CanGoForward());
     Sync();
     return true;
   }
@@ -374,6 +465,7 @@ struct AlloyNavigation::State final : std::enable_shared_from_this<State> {
     navigation.Shutdown();
     browser = nullptr;
     tab_id.clear();
+    browser_states.clear();
     if (panel) {
       panel->RemoveAllChildViews();
     }
@@ -396,6 +488,7 @@ struct AlloyNavigation::State final : std::enable_shared_from_this<State> {
   CefRefPtr<CefBrowser> browser;
   std::string tab_id;
   std::string address;
+  std::map<int, CachedBrowserState> browser_states;
   browser_navigation::SiteIdentity identity =
       browser_navigation::SiteIdentity::kUnknown;
   std::uint64_t next_navigation_id = 1;

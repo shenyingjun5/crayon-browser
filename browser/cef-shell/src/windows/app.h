@@ -20,6 +20,7 @@
 #include "crayon/browser_localization/locale_snapshot.h"
 #include "crayon/browser_product_strings/product_strings.h"
 #include "include/cef_app.h"
+#include "windows/alloy_product_host_win.h"
 #include "windows/content_host_adapter_win.h"
 #include "windows/cast_chrome_win.h"
 #include "windows/media_host_process_win.h"
@@ -68,6 +69,7 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
 
  private:
   void ContinueContentHostStartup();
+  void OnAlloyBrowsersClosed();
   void ScheduleContentHostTick();
   void ContentHostTick();
   void ConsumeMediaObservations();
@@ -87,6 +89,7 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   std::unique_ptr<windows::CastChromeWin> cast_chrome_;
   std::unique_ptr<windows::TrustedInputMonitorWin> trusted_input_monitor_;
   CefRefPtr<window::TabController> tab_controller_;
+  CefRefPtr<windows::AlloyProductHostWin> alloy_product_host_;
   const std::shared_ptr<WindowsShellRuntime> shell_runtime_;
   std::unique_ptr<page_markdown::CefPageMarkdownPreviewController>
       page_markdown_preview_;

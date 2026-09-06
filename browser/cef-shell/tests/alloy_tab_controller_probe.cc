@@ -141,6 +141,10 @@ public:
       CefPostTask(TID_UI,
                   base::BindOnce(&AlloyTabProbe::ActivateCreated,
                                  CefRefPtr<AlloyTabProbe>(this), *tab_id));
+    } else if (index == 2) {
+      CefPostTask(TID_UI,
+                  base::BindOnce(&AlloyTabProbe::ActivateReplacement,
+                                 CefRefPtr<AlloyTabProbe>(this)));
     }
   }
 
@@ -162,6 +166,8 @@ public:
     }
     if (index == 1) {
       result_->late_create_closed = true;
+    } else if (index == 2) {
+      replacement_closed_ = true;
     } else if (crashing_browser_ && crashing_browser_->IsSame(browser)) {
       result_->renderer_crash_closed = true;
       crashing_browser_ = nullptr;
@@ -326,6 +332,12 @@ private:
     }
   }
 
+  void ActivateReplacement() {
+    if (!replacement_tab_ || !controller_->Activate(*replacement_tab_)) {
+      Finish(false, "activate-replacement");
+    }
+  }
+
   void ApplyCloseCancellation() {
     result_->close_cancelled =
         first_tab_.has_value() && controller_->CancelClose(*first_tab_);
@@ -457,6 +469,44 @@ private:
         ScheduleCheck();
         return;
       }
+      CefBrowserSettings settings;
+      views_[2] = CefBrowserView::CreateBrowserView(this, kLateUrl, settings,
+                                                    nullptr, nullptr, this);
+      replacement_tab_ = controller_->BeginCreate(
+          views_[2], ContentPurpose::kWeb, NavigationId::FromRaw(2));
+      if (!replacement_tab_) {
+        Finish(false, "replacement-create");
+        return;
+      }
+      ++stage_;
+      ScheduleCheck();
+      return;
+    }
+    if (stage_ == 4) {
+      if (!loaded_[2]) {
+        ScheduleCheck();
+        return;
+      }
+      if (controller_->model().active_tab() != replacement_tab_ ||
+          !views_[2]->IsVisible() ||
+          !controller_->RequestClose(*replacement_tab_, true)) {
+        Finish(false, "replacement-close");
+        return;
+      }
+      ++stage_;
+      ScheduleCheck();
+      return;
+    }
+    if (stage_ == 5) {
+      if (!replacement_closed_) {
+        ScheduleCheck();
+        return;
+      }
+      if (controller_->model().active_tab() != first_tab_ ||
+          !views_[0]->IsVisible()) {
+        Finish(false, "replacement-activate-successor");
+        return;
+      }
       crashing_browser_ = browsers_[0];
       if (!controller_->OnRenderProcessGone(crashing_browser_)) {
         Finish(false, "renderer-gone-transition");
@@ -505,6 +555,7 @@ private:
   std::array<bool, 3> loaded_{};
   std::optional<TabId> first_tab_;
   std::optional<TabId> late_tab_;
+  std::optional<TabId> replacement_tab_;
   CefRefPtr<CefWindow> window_;
   int checks_ = 0;
   int activation_check_ = 0;
@@ -512,6 +563,7 @@ private:
   int stage_ = 0;
   int logged_stage_ = -1;
   bool state_preserved_ = false;
+  bool replacement_closed_ = false;
   bool clicked_ = false;
   bool cancel_posted_ = false;
   bool finished_ = false;

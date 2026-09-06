@@ -14,7 +14,7 @@ struct LocaleCatalogEntry {
   std::string_view zh_tw;
 };
 
-inline constexpr std::array<LocaleCatalogEntry, 197> kLocaleCatalogEntries{{
+inline constexpr std::array<LocaleCatalogEntry, 206> kLocaleCatalogEntries{{
     {"cast.selection.unavailable", "Casting is not ready in this window", "此窗口的投屏入口尚未就绪", "此視窗的投屏入口尚未就緒"},
     {"cast.selection.expired", "Selection expired. Prepare again.", "选择已过期，请重新准备", "選擇已過期，請重新準備"},
     {"cast.selection.connecting", "Connecting to device…", "正在连接设备…", "正在連線裝置…"},
@@ -59,6 +59,15 @@ inline constexpr std::array<LocaleCatalogEntry, 197> kLocaleCatalogEntries{{
     {"nav.forward", "Forward", "前进", "前進"},
     {"nav.reload", "Reload", "刷新", "重新整理"},
     {"nav.stop", "Stop", "停止", "停止"},
+    {"nav.identity.unknown", "Unknown site", "未知站点", "未知網站"},
+    {"nav.identity.secure", "Secure connection", "安全连接", "安全連線"},
+    {"nav.identity.pending", "Checking connection", "正在检查连接", "正在檢查連線"},
+    {"nav.identity.insecure", "Not secure", "连接不安全", "連線不安全"},
+    {"nav.identity.local", "Local page", "本地页面", "本機頁面"},
+    {"nav.identity.error", "Certificate error", "证书错误", "憑證錯誤"},
+    {"tabs.new", "New tab", "新建标签页", "新增分頁"},
+    {"tabs.close", "Close tab", "关闭标签页", "關閉分頁"},
+    {"tabs.fallback", "Tab", "标签页", "分頁"},
     {"address.placeholder", "Enter a URL", "输入网址", "輸入網址"},
     {"omnibox.edit", "Edit Address", "编辑地址", "編輯網址"},
     {"omnibox.submit", "Submit", "提交", "送出"},

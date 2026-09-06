@@ -126,6 +126,8 @@ if(OS_WINDOWS)
       src/windows/app.h
       src/windows/alloy_cast_overlay_win.cc
       src/windows/alloy_cast_overlay_win.h
+      src/windows/alloy_product_host_win.cc
+      src/windows/alloy_product_host_win.h
       src/windows/cast_chrome_win.cc
       src/windows/cast_chrome_win.h
       src/windows/content_host_adapter_win.cc
