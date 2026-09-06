@@ -67,6 +67,9 @@
 "tabs.add_group" = "添加到标签组";
 "tabs.remove_group" = "移出标签组";
 "tabs.search" = "搜索标签页";
+"tabs.move_to_window" = "移动标签页到窗口";
+"tabs.main_window" = "主窗口";
+"tabs.other_window" = "窗口";
 "bookmarks.add_page" = "添加书签";
 "bookmarks.remove_page" = "移除书签";
 "bookmarks.show_bar" = "显示书签栏";

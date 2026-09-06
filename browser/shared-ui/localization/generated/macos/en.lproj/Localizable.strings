@@ -67,6 +67,9 @@
 "tabs.add_group" = "Add to group";
 "tabs.remove_group" = "Remove from group";
 "tabs.search" = "Search tabs";
+"tabs.move_to_window" = "Move tab to window";
+"tabs.main_window" = "Main window";
+"tabs.other_window" = "Window";
 "bookmarks.add_page" = "Add bookmark";
 "bookmarks.remove_page" = "Remove bookmark";
 "bookmarks.show_bar" = "Show bookmarks bar";

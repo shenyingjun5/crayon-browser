@@ -103,6 +103,12 @@ file(READ
      "${CRAYON_CEF_SHELL_SOURCE}/src/browser/window/alloy_activity_surface.cc"
      alloy_activity_surface)
 file(READ
+     "${CRAYON_CEF_SHELL_SOURCE}/src/browser/window/alloy_tab_transfer_surface.cc"
+     alloy_tab_transfer_surface)
+file(READ
+     "${CRAYON_CEF_SHELL_SOURCE}/src/browser/window/alloy_tab_transfer_surface.h"
+     alloy_tab_transfer_surface_header)
+file(READ
      "${CRAYON_CEF_SHELL_SOURCE}/src/windows/alloy_download_reveal_win.cc"
      alloy_download_reveal)
 file(READ
@@ -469,6 +475,27 @@ foreach(required_alloy_download_reveal_token
   if(token_index EQUAL -1)
     message(FATAL_ERROR
             "Windows Alloy product is missing controlled download reveal token ${required_alloy_download_reveal_token}")
+  endif()
+endforeach()
+foreach(required_alloy_tab_transfer_token
+        "kMaximumTargets = 8"
+        "MENU_ID_USER_FIRST + 500"
+        "std::set<std::string> unique"
+        "candidate.window_id.empty()"
+        "menu_model_ = nullptr"
+        "source_controller->model().size() <= 1"
+        "popup.incognito"
+        "coordinator_->MoveTab"
+        "media_observation_bridge_.CloseBrowser"
+        "media_observation_bridge_.AdvanceNavigation"
+        "transferred_history_generations_"
+        "transfer_surface_->Shutdown()")
+  string(FIND
+         "${alloy_tab_transfer_surface}${alloy_tab_transfer_surface_header}${alloy_product_host}${alloy_product_host_header}"
+         "${required_alloy_tab_transfer_token}" token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Windows Alloy product is missing 24W2b3b3 tab-transfer token ${required_alloy_tab_transfer_token}")
   endif()
 endforeach()
 foreach(required_alloy_daily_data_bootstrap_token

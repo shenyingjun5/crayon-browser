@@ -1003,6 +1003,7 @@ CEF_BOOTSTRAP_EXPORT int RunWinMain(HINSTANCE instance, LPTSTR command_line,
     const bool passed = result->menu_passed && result->command_passed &&
                         result->drag_passed && result->context_menu_passed &&
                         result->activity_passed &&
+                        result->transfer_passed &&
                         result->lifecycle_passed &&
                         result->browser_closed && result->window_closed;
     app = nullptr;

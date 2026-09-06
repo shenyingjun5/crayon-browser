@@ -8,6 +8,7 @@
 #include "browser/branding/about_destination.h"
 #include "browser/window/alloy_activity_surface.h"
 #include "browser/window/alloy_interactions.h"
+#include "browser/window/alloy_tab_transfer_surface.h"
 #include "crayon/browser_localization/locale_snapshot.h"
 #include "include/base/cef_callback.h"
 #include "include/cef_client.h"
@@ -30,6 +31,7 @@ using crayon::browser::cef_shell::window::AlloyActivitySurface;
 using crayon::browser::cef_shell::window::AlloyDownloads;
 using crayon::browser::cef_shell::window::AlloyHistory;
 using crayon::browser::cef_shell::window::AlloyMainCommand;
+using crayon::browser::cef_shell::window::AlloyTabTransferSurface;
 
 constexpr int kPollMilliseconds = 20;
 constexpr int kMaximumChecks = 400;
@@ -139,12 +141,15 @@ public:
     auto window_layout = window_->SetToBoxLayout(column);
     toolbar_ = CefPanel::CreatePanel(nullptr);
     activity_toolbar_ = CefPanel::CreatePanel(nullptr);
+    transfer_toolbar_ = CefPanel::CreatePanel(nullptr);
     CefBoxLayoutSettings row;
     row.horizontal = true;
     toolbar_->SetToBoxLayout(row);
     activity_toolbar_->SetToBoxLayout(row);
+    transfer_toolbar_->SetToBoxLayout(row);
     window_->AddChildView(toolbar_);
     window_->AddChildView(activity_toolbar_);
+    window_->AddChildView(transfer_toolbar_);
     window_->AddChildView(view_);
     window_layout->SetFlexForView(view_, 1);
     window_->SetSize(CefSize(720, 480));
@@ -162,11 +167,13 @@ public:
   }
   void OnWindowDestroyed(CefRefPtr<CefWindow>) override {
     activity_ = nullptr;
+    transfer_ = nullptr;
     downloads_.reset();
     history_.reset();
     interactions_ = nullptr;
     toolbar_ = nullptr;
     activity_toolbar_ = nullptr;
+    transfer_toolbar_ = nullptr;
     view_ = nullptr;
     window_ = nullptr;
     result_->window_closed = true;
@@ -230,6 +237,21 @@ private:
             crayon::browser::localization::AppLocale::kZhCn),
         history_.get(), downloads_.get(), std::move(activity_callbacks));
     if (!activity_->Attach(window_, activity_toolbar_)) return;
+    transfer_ = new AlloyTabTransferSurface(
+        crayon::browser::localization::SnapshotFor(
+            crayon::browser::localization::AppLocale::kZhCn),
+        AlloyTabTransferSurface::Callbacks{
+            [] {
+              return std::vector<
+                  crayon::browser::cef_shell::window::AlloyTabTransferTarget>{
+                  {"popup-1", "窗口 1"}};
+            },
+            [this](const std::string& target) {
+              if (target != "popup-1") return false;
+              ++transfer_commands_;
+              return true;
+            }});
+    if (!transfer_->Attach(window_, transfer_toolbar_)) return;
 
     AlloyInteractions::Callbacks callbacks;
     callbacks.open_markdown = [this](CefRefPtr<CefBrowser> browser) {
@@ -424,12 +446,84 @@ private:
           history_view->IsDrawn() && downloads_view->IsDrawn() &&
           downloads_->ConfirmDangerous(11) && downloads_->Pause(12) &&
           kept_downloads_ == 1 && paused_downloads_ == 1;
-      menu->AsButton()->AsLabelButton()->AsMenuButton()->TriggerMenu();
+      auto transfer_button = transfer_->button();
+      if (!transfer_button || !transfer_button->IsDrawn() ||
+          !transfer_button->AsButton() ||
+          !transfer_button->AsButton()->AsLabelButton() ||
+          !transfer_button->AsButton()->AsLabelButton()->AsMenuButton()) {
+        Finish(false, "transfer-view");
+        return;
+      }
+      transfer_button->AsButton()
+          ->AsLabelButton()
+          ->AsMenuButton()
+          ->TriggerMenu();
       stage_ = 1;
       Schedule();
       return;
     }
     if (stage_ == 1) {
+      if (!transfer_->menu_open()) {
+        Schedule();
+        return;
+      }
+      transfer_->ExecuteCommand(nullptr,
+                                AlloyTabTransferSurface::kTargetCommandBase,
+                                EVENTFLAG_NONE);
+      window_->SendKeyPress(27, 0);
+      stage_ = 2;
+      Schedule();
+      return;
+    }
+    if (stage_ == 2) {
+      if (!transfer_close_settled_) {
+        transfer_close_settled_ = true;
+        Schedule();
+        return;
+      }
+      if (!transfer_->Refresh()) {
+        Finish(false, "transfer-refresh");
+        return;
+      }
+      transfer_->button()
+          ->AsButton()
+          ->AsLabelButton()
+          ->AsMenuButton()
+          ->TriggerMenu();
+      stage_ = 3;
+      Schedule();
+      return;
+    }
+    if (stage_ == 3) {
+      if (!transfer_->menu_open()) {
+        Schedule();
+        return;
+      }
+      transfer_->ExecuteCommand(nullptr,
+                                AlloyTabTransferSurface::kTargetCommandBase,
+                                EVENTFLAG_NONE);
+      result_->transfer_passed = transfer_commands_ == 2;
+      window_->SendKeyPress(27, 0);
+      stage_ = 4;
+      Schedule();
+      return;
+    }
+    if (stage_ == 4) {
+      if (!second_transfer_close_settled_) {
+        second_transfer_close_settled_ = true;
+        Schedule();
+        return;
+      }
+      interactions_->GetView(AlloyInteractions::kMenuButtonId)
+          ->AsButton()
+          ->AsLabelButton()
+          ->AsMenuButton()
+          ->TriggerMenu();
+      stage_ = 5;
+      Schedule();
+      return;
+    }
+    if (stage_ == 5) {
       if (!interactions_->menu_open()) {
         Schedule();
         return;
@@ -438,18 +532,15 @@ private:
           nullptr, AlloyInteractions::kTabSearchCommandBase, EVENTFLAG_NONE);
       result_->menu_passed = activated_search_tab_ == 11;
       window_->SendKeyPress(27, 0);
-      stage_ = 2;
+      stage_ = 6;
       Schedule();
       return;
     }
-    if (stage_ == 2) {
+    if (stage_ == 6) {
       if (interactions_->menu_open()) {
         Schedule();
         return;
       }
-      // OnMenuClosed can run before the native menu has fully released input
-      // capture. Cross one more UI task boundary before exercising commands
-      // and shutdown against the restored window focus.
       if (!menu_close_settled_) {
         menu_close_settled_ = true;
         Schedule();
@@ -513,11 +604,14 @@ private:
                                   interactions_->Shutdown() && menu_view &&
                                   !menu_view->GetParentView() &&
                                   navigation_cleared && cancel_count_ == 2 &&
+                                  transfer_->Shutdown() &&
+                                  transfer_->Shutdown() &&
                                   !interactions_->Execute(
                                       AlloyMainCommand::kOpenMarkdown);
       Finish(result_->menu_passed && result_->command_passed &&
                  result_->drag_passed && result_->context_menu_passed &&
                  result_->activity_passed &&
+                 result_->transfer_passed &&
                  result_->lifecycle_passed,
              "complete");
     }
@@ -538,8 +632,10 @@ private:
   CefRefPtr<CefWindow> window_;
   CefRefPtr<CefPanel> toolbar_;
   CefRefPtr<CefPanel> activity_toolbar_;
+  CefRefPtr<CefPanel> transfer_toolbar_;
   CefRefPtr<AlloyInteractions> interactions_;
   CefRefPtr<AlloyActivitySurface> activity_;
+  CefRefPtr<AlloyTabTransferSurface> transfer_;
   std::unique_ptr<AlloyHistory> history_;
   std::unique_ptr<AlloyDownloads> downloads_;
   std::vector<std::string> destinations_;
@@ -558,6 +654,9 @@ private:
   int cancel_count_ = 0;
   int clear_confirmations_ = 0;
   int history_persists_ = 0;
+  int transfer_commands_ = 0;
+  bool transfer_close_settled_ = false;
+  bool second_transfer_close_settled_ = false;
   int kept_downloads_ = 0;
   int paused_downloads_ = 0;
   std::string restored_url_;

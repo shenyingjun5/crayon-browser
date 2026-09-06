@@ -94,6 +94,8 @@ if(OS_WINDOWS)
       src/browser/window/alloy_downloads.h
       src/browser/window/alloy_activity_surface.cc
       src/browser/window/alloy_activity_surface.h
+      src/browser/window/alloy_tab_transfer_surface.cc
+      src/browser/window/alloy_tab_transfer_surface.h
       src/browser/window/alloy_content_view_host.cc
       src/browser/window/alloy_content_view_host.h
       src/browser/window/alloy_builtin_content.cc
@@ -609,6 +611,8 @@ if(OS_WINDOWS)
       src/browser/window/alloy_downloads.h
       src/browser/window/alloy_activity_surface.cc
       src/browser/window/alloy_activity_surface.h
+      src/browser/window/alloy_tab_transfer_surface.cc
+      src/browser/window/alloy_tab_transfer_surface.h
       src/browser/window/alloy_window_coordinator.cc
       src/browser/window/alloy_window_coordinator.h
       src/browser/context/profile_context_factory.cc

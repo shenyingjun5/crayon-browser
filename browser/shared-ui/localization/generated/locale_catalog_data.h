@@ -14,7 +14,7 @@ struct LocaleCatalogEntry {
   std::string_view zh_tw;
 };
 
-inline constexpr std::array<LocaleCatalogEntry, 248> kLocaleCatalogEntries{{
+inline constexpr std::array<LocaleCatalogEntry, 251> kLocaleCatalogEntries{{
     {"cast.selection.unavailable", "Casting is not ready in this window", "此窗口的投屏入口尚未就绪", "此視窗的投屏入口尚未就緒"},
     {"cast.selection.expired", "Selection expired. Prepare again.", "选择已过期，请重新准备", "選擇已過期，請重新準備"},
     {"cast.selection.connecting", "Connecting to device…", "正在连接设备…", "正在連線裝置…"},
@@ -84,6 +84,9 @@ inline constexpr std::array<LocaleCatalogEntry, 248> kLocaleCatalogEntries{{
     {"tabs.add_group", "Add to group", "添加到标签组", "加入分頁群組"},
     {"tabs.remove_group", "Remove from group", "移出标签组", "移出分頁群組"},
     {"tabs.search", "Search tabs", "搜索标签页", "搜尋分頁"},
+    {"tabs.move_to_window", "Move tab to window", "移动标签页到窗口", "移動分頁到視窗"},
+    {"tabs.main_window", "Main window", "主窗口", "主視窗"},
+    {"tabs.other_window", "Window", "窗口", "視窗"},
     {"bookmarks.add_page", "Add bookmark", "添加书签", "新增書籤"},
     {"bookmarks.remove_page", "Remove bookmark", "移除书签", "移除書籤"},
     {"bookmarks.show_bar", "Show bookmarks bar", "显示书签栏", "顯示書籤列"},

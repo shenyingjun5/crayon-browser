@@ -26,7 +26,6 @@
 namespace crayon::browser::cef_shell::windows {
 namespace {
 
-constexpr char kPrimaryWindowId[] = "primary";
 constexpr char kDefaultProductTabGroup[] = "product-group";
 constexpr int kInitialWindowWidth = 1200;
 constexpr int kInitialWindowHeight = 800;
@@ -563,6 +562,17 @@ void AlloyProductHostWin::OnWindowCreated(CefRefPtr<CefWindow> window) {
       found->second.toolbar->AddChildView(found->second.omnibox->panel());
       toolbar_layout->SetFlexForView(found->second.omnibox->panel(), 1);
       window->AddChildView(found->second.toolbar);
+    } else if (!found->second.incognito) {
+      found->second.toolbar = CefPanel::CreatePanel(nullptr);
+      CefBoxLayoutSettings toolbar_settings;
+      toolbar_settings.horizontal = true;
+      found->second.toolbar->SetToBoxLayout(toolbar_settings);
+      window->AddChildView(found->second.toolbar);
+      if (!AttachTransferSurface(window_id, window, found->second.toolbar,
+                                 found->second.transfer_surface)) {
+        window->Close();
+        return;
+      }
     }
     window->AddChildView(popup_controller->container());
     popup_layout->SetFlexForView(popup_controller->container(), 1);
@@ -574,6 +584,7 @@ void AlloyProductHostWin::OnWindowCreated(CefRefPtr<CefWindow> window) {
     window->Layout();
     window->Show();
     window->Activate();
+    RefreshTransferSurfaces();
     return;
   }
   auto* tab_controller = controller();
@@ -596,6 +607,11 @@ void AlloyProductHostWin::OnWindowCreated(CefRefPtr<CefWindow> window) {
   toolbar_layout->SetFlexForView(omnibox_->panel(), 1);
   window_->AddChildView(tab_strip_->panel());
   window_->AddChildView(toolbar_);
+  if (!AttachTransferSurface(kPrimaryWindowId, window_, toolbar_,
+                             transfer_surface_)) {
+    Close(true);
+    return;
+  }
   window_->AddChildView(tab_controller->container());
   layout->SetFlexForView(tab_controller->container(), 1);
   window_->SetTitle(title_);
@@ -603,6 +619,7 @@ void AlloyProductHostWin::OnWindowCreated(CefRefPtr<CefWindow> window) {
   window_->Layout();
   window_->Show();
   window_->Activate();
+  RefreshTransferSurfaces();
   SyncChrome();
   PostSyncChrome();
 }
@@ -681,9 +698,14 @@ void AlloyProductHostWin::OnWindowDestroyed(CefRefPtr<CefWindow> window) {
       continue;
     }
     const std::string window_id = found->first;
+    if (found->second.transfer_surface) {
+      found->second.transfer_surface->Shutdown();
+      found->second.transfer_surface = nullptr;
+    }
     found->second.window = nullptr;
     if (!coordinator_ || !coordinator_->OnWindowClosed(window_id)) return;
     popup_windows_.erase(found);
+    RefreshTransferSurfaces();
     ScheduleSessionCheckpoint();
     if (coordinator_->window_count() == 0 && coordinator_->Shutdown()) {
       coordinator_.reset();
@@ -694,6 +716,10 @@ void AlloyProductHostWin::OnWindowDestroyed(CefRefPtr<CefWindow> window) {
   if (!window_ || !window || !window_->IsSame(window) || !coordinator_ ||
       !coordinator_->OnWindowClosed(kPrimaryWindowId)) {
     return;
+  }
+  if (transfer_surface_) {
+    transfer_surface_->Shutdown();
+    transfer_surface_ = nullptr;
   }
   window_ = nullptr;
   ScheduleSessionCheckpoint();
@@ -825,6 +851,10 @@ void AlloyProductHostWin::FinalizeBrowserCreated(
 void AlloyProductHostWin::OnBrowserDestroyed(CefRefPtr<CefBrowserView> view,
                                              CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
+  if (browser) {
+    transferred_tab_titles_.erase(browser->GetIdentifier());
+    transferred_history_generations_.erase(browser->GetIdentifier());
+  }
   for (auto& [window_id, popup] : popup_windows_) {
     static_cast<void>(window_id);
     for (auto found = popup.views.begin(); found != popup.views.end();) {
@@ -1383,11 +1413,25 @@ void AlloyProductHostWin::OnBuiltinLoadEnd(CefRefPtr<CefBrowser> browser,
 void AlloyProductHostWin::OnBuiltinTitleChange(
     CefRefPtr<CefBrowser> browser, const CefString& title) {
   CEF_REQUIRE_UI_THREAD();
-  if (!browser || !controller()) return;
+  if (!browser || !coordinator_) return;
   const auto owner = OwnerWindowIdForBrowser(browser);
-  const auto* tab = controller()->model().FindByBrowser(browser->GetIdentifier());
-  if (!owner || *owner != kPrimaryWindowId || !tab) return;
+  if (!owner) return;
   const std::string value = title.ToString();
+  if (*owner != kPrimaryWindowId) {
+    const auto popup = popup_windows_.find(*owner);
+    if (popup == popup_windows_.end() || popup->second.incognito) return;
+    if (IsSafeHistoryTitle(value)) {
+      transferred_tab_titles_[browser->GetIdentifier()] = value;
+    } else {
+      transferred_tab_titles_.erase(browser->GetIdentifier());
+    }
+    return;
+  }
+  const auto* tab = controller()
+                        ? controller()->model().FindByBrowser(
+                              browser->GetIdentifier())
+                        : nullptr;
+  if (!tab) return;
   if (IsSafeHistoryTitle(value)) {
     tab_titles_[tab->id] = value;
   } else {
@@ -2048,6 +2092,247 @@ bool AlloyProductHostWin::ActivateTab(window::TabId tab_id) {
   return true;
 }
 
+std::vector<window::AlloyTabTransferTarget>
+AlloyProductHostWin::TransferTargetsFor(
+    const std::string& source_window_id) const {
+  CEF_REQUIRE_UI_THREAD();
+  std::vector<window::AlloyTabTransferTarget> targets;
+  if (!started_ || closing_ || !coordinator_ || source_window_id.empty()) {
+    return targets;
+  }
+  if (source_window_id != kPrimaryWindowId) {
+    const auto source = popup_windows_.find(source_window_id);
+    if (source == popup_windows_.end() || source->second.incognito ||
+        source->second.closing || !source->second.window) {
+      return targets;
+    }
+  } else if (primary_closing_ || !window_) {
+    return targets;
+  }
+  auto* source_controller = coordinator_->controller(source_window_id);
+  if (!source_controller ||
+      (source_window_id == kPrimaryWindowId &&
+       source_controller->model().size() <= 1)) {
+    return targets;
+  }
+  auto append = [this, &targets](const std::string& id,
+                                 const std::string& label) {
+    auto* target = coordinator_->controller(id);
+    if (target && target->model().size() < window::kMaximumTabsPerWindow) {
+      targets.push_back({id, label});
+    }
+  };
+  if (source_window_id != kPrimaryWindowId && !primary_closing_ && window_) {
+    append(kPrimaryWindowId,
+           Localized(dependencies_.locale.locale, "tabs.main_window"));
+  }
+  std::size_t ordinal = 0;
+  for (const auto& [window_id, popup] : popup_windows_) {
+    if (popup.incognito || popup.closing || !popup.window) continue;
+    ++ordinal;
+    if (window_id == source_window_id) continue;
+    append(window_id,
+           Localized(dependencies_.locale.locale, "tabs.other_window") +
+               " " + std::to_string(ordinal));
+  }
+  return targets;
+}
+
+bool AlloyProductHostWin::AttachTransferSurface(
+    const std::string& source_window_id, CefRefPtr<CefWindow> window,
+    CefRefPtr<CefPanel> toolbar,
+    CefRefPtr<window::AlloyTabTransferSurface>& surface) {
+  CEF_REQUIRE_UI_THREAD();
+  surface = new window::AlloyTabTransferSurface(
+      dependencies_.locale,
+      window::AlloyTabTransferSurface::Callbacks{
+          [this, source_window_id] {
+            return TransferTargetsFor(source_window_id);
+          },
+          [this, source_window_id](const std::string& target_window_id) {
+            return MoveActiveTabToWindow(source_window_id, target_window_id);
+          }});
+  if (surface->Attach(std::move(window), std::move(toolbar))) return true;
+  surface = nullptr;
+  return false;
+}
+
+bool AlloyProductHostWin::MoveActiveTabToWindow(
+    const std::string& source_window_id,
+    const std::string& target_window_id) {
+  CEF_REQUIRE_UI_THREAD();
+  if (!started_ || closing_ || !coordinator_ || source_window_id.empty() ||
+      target_window_id.empty() || source_window_id == target_window_id) {
+    return false;
+  }
+  auto* source_controller = coordinator_->controller(source_window_id);
+  auto* target_controller = coordinator_->controller(target_window_id);
+  const auto source_tab = source_controller
+                              ? source_controller->model().active_tab()
+                              : std::optional<window::TabId>{};
+  if (!source_controller || !target_controller || !source_tab ||
+      target_controller->model().size() >= window::kMaximumTabsPerWindow ||
+      (source_window_id == kPrimaryWindowId &&
+       (primary_closing_ || !window_ ||
+        source_controller->model().size() <= 1))) {
+    return false;
+  }
+
+  CefRefPtr<CefBrowserView> moving_view;
+  CefRefPtr<CefBrowser> moving_browser;
+  if (source_window_id == kPrimaryWindowId) {
+    const auto view = views_.find(*source_tab);
+    if (view == views_.end()) return false;
+    moving_view = view->second;
+    moving_browser = moving_view ? moving_view->GetBrowser() : nullptr;
+  } else {
+    const auto source = popup_windows_.find(source_window_id);
+    if (source == popup_windows_.end() || source->second.incognito ||
+        source->second.closing || !source->second.window) {
+      return false;
+    }
+    const auto view = source->second.views.find(*source_tab);
+    const auto browser = source->second.browsers.find(*source_tab);
+    if (view == source->second.views.end() ||
+        browser == source->second.browsers.end()) {
+      return false;
+    }
+    moving_view = view->second;
+    moving_browser = browser->second;
+  }
+  if (!moving_view || !moving_browser ||
+      !source_controller->OwnsBrowser(moving_browser)) {
+    return false;
+  }
+  if (target_window_id != kPrimaryWindowId) {
+    const auto target = popup_windows_.find(target_window_id);
+    if (target == popup_windows_.end() || target->second.incognito ||
+        target->second.closing || !target->second.window) {
+      return false;
+    }
+  } else if (primary_closing_ || !window_) {
+    return false;
+  }
+
+  const int browser_id = moving_browser->GetIdentifier();
+  std::optional<std::string> transferred_title;
+  std::optional<std::uint64_t> transferred_history_generation;
+  if (source_window_id == kPrimaryWindowId) {
+    const auto title = tab_titles_.find(*source_tab);
+    if (title != tab_titles_.end()) {
+      transferred_title = title->second;
+    }
+    const auto generation = history_committed_generations_.find(*source_tab);
+    if (generation != history_committed_generations_.end()) {
+      transferred_history_generation = generation->second;
+    }
+  }
+  const auto target_tab =
+      coordinator_->MoveTab(source_window_id, *source_tab, target_window_id);
+  if (!target_tab) return false;
+  if (transferred_title) {
+    transferred_tab_titles_[browser_id] = std::move(*transferred_title);
+  }
+  if (transferred_history_generation) {
+    transferred_history_generations_[browser_id] =
+        *transferred_history_generation;
+  }
+
+  if (source_window_id == kPrimaryWindowId) {
+    media_observation_bridge_.CloseBrowser(
+        moving_browser, static_cast<std::uint32_t>(*source_tab));
+    const auto controls = site_controls_.find(*source_tab);
+    if (controls != site_controls_.end()) {
+      controls->second->Shutdown();
+      site_controls_.erase(controls);
+    }
+    site_origins_.erase(*source_tab);
+    site_urls_.erase(*source_tab);
+    tab_titles_.erase(*source_tab);
+    history_committed_generations_.erase(*source_tab);
+    views_.erase(*source_tab);
+  } else {
+    auto source = popup_windows_.find(source_window_id);
+    if (source != popup_windows_.end()) {
+      source->second.views.erase(*source_tab);
+      source->second.browsers.erase(*source_tab);
+      const auto active = source_controller->model().active_tab();
+      if (active) {
+        const auto remaining_view = source->second.views.find(*active);
+        const auto remaining_browser = source->second.browsers.find(*active);
+        if (remaining_view != source->second.views.end() &&
+            remaining_browser != source->second.browsers.end()) {
+          source->second.tab_id = *active;
+          source->second.view = remaining_view->second;
+          source->second.browser = remaining_browser->second;
+        }
+      } else {
+        source->second.view = nullptr;
+        source->second.browser = nullptr;
+        if (!source->second.closing &&
+            coordinator_->BeginCloseWindow(source_window_id, false)) {
+          source->second.closing = true;
+          if (source->second.window) source->second.window->Close();
+        }
+      }
+    }
+  }
+
+  if (target_window_id == kPrimaryWindowId) {
+    views_[*target_tab] = moving_view;
+    const auto title = transferred_tab_titles_.find(browser_id);
+    if (title != transferred_tab_titles_.end()) {
+      tab_titles_[*target_tab] = title->second;
+    }
+    const auto committed = transferred_history_generations_.find(browser_id);
+    if (committed != transferred_history_generations_.end()) {
+      history_committed_generations_[*target_tab] = committed->second;
+    }
+    site_controls_[*target_tab] = std::make_unique<window::AlloySiteControls>(
+        dependencies_.permission_store);
+    const auto frame = moving_browser->GetMainFrame();
+    const std::string address =
+        frame ? frame->GetURL().ToString() : std::string{};
+    static_cast<void>(SynchronizeSiteControls(moving_browser, address));
+    const auto* snapshot = target_controller->model().Find(*target_tab);
+    if (snapshot && snapshot->navigation_generation != 0) {
+      media_observation_bridge_.AdvanceNavigation(
+          moving_browser, static_cast<std::uint32_t>(*target_tab),
+          snapshot->navigation_generation);
+    }
+    transferred_tab_titles_.erase(browser_id);
+    transferred_history_generations_.erase(browser_id);
+    view_ = moving_view;
+    browser_ = moving_browser;
+    static_cast<void>(ActivateTab(*target_tab));
+  } else {
+    auto target = popup_windows_.find(target_window_id);
+    if (target == popup_windows_.end()) return false;
+    target->second.views[*target_tab] = moving_view;
+    target->second.browsers[*target_tab] = moving_browser;
+    target->second.tab_id = *target_tab;
+    target->second.view = moving_view;
+    target->second.browser = moving_browser;
+    if (target->second.window) target->second.window->Layout();
+    if (source_window_id == kPrimaryWindowId) SyncChrome();
+  }
+  static_cast<void>(coordinator_->FocusWindow(target_window_id));
+  RefreshTransferSurfaces();
+  ScheduleSessionCheckpoint();
+  return true;
+}
+
+void AlloyProductHostWin::RefreshTransferSurfaces() {
+  CEF_REQUIRE_UI_THREAD();
+  if (transfer_surface_) static_cast<void>(transfer_surface_->Refresh());
+  for (auto& [window_id, popup] : popup_windows_) {
+    static_cast<void>(window_id);
+    if (popup.transfer_surface) {
+      static_cast<void>(popup.transfer_surface->Refresh());
+    }
+  }
+}
+
 bool AlloyProductHostWin::OnRestoredBrowserReady() {
   CEF_REQUIRE_UI_THREAD();
   if (pending_restored_browsers_ == 0) return false;
@@ -2406,6 +2691,10 @@ bool AlloyProductHostWin::PrepareActiveChromeForClose(window::TabId tab_id) {
 
 void AlloyProductHostWin::ShutdownChromeForWindowClose() {
   CEF_REQUIRE_UI_THREAD();
+  if (transfer_surface_) {
+    transfer_surface_->Shutdown();
+    transfer_surface_ = nullptr;
+  }
   DetachCastSurfaces();
   if (cast_controller_) {
     cast_controller_->Shutdown();

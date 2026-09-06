@@ -28,6 +28,7 @@
 #include "browser/window/alloy_navigation.h"
 #include "browser/window/alloy_omnibox.h"
 #include "browser/window/alloy_page_markdown.h"
+#include "browser/window/alloy_tab_transfer_surface.h"
 #include "browser/window/alloy_page_tools.h"
 #include "browser/window/alloy_profile_settings.h"
 #include "browser/window/alloy_session_restore.h"
@@ -302,6 +303,15 @@ class AlloyProductHostWin final : public CefClient,
                               CefRefPtr<CefBrowser> browser);
   bool OnRestoredBrowserReady();
   bool ActivateTab(window::TabId tab_id);
+  std::vector<window::AlloyTabTransferTarget> TransferTargetsFor(
+      const std::string& source_window_id) const;
+  bool AttachTransferSurface(
+      const std::string& source_window_id, CefRefPtr<CefWindow> window,
+      CefRefPtr<CefPanel> toolbar,
+      CefRefPtr<window::AlloyTabTransferSurface>& surface);
+  bool MoveActiveTabToWindow(const std::string& source_window_id,
+                             const std::string& target_window_id);
+  void RefreshTransferSurfaces();
   void ActivateCreatedTab(window::TabId tab_id);
   void SyncChrome();
   void PostSyncChrome();
@@ -343,6 +353,8 @@ class AlloyProductHostWin final : public CefClient,
                                std::string source_url,
                                std::string target_url);
 
+  inline static constexpr char kPrimaryWindowId[] = "primary";
+
   Dependencies dependencies_;
   Callbacks callbacks_;
   std::unique_ptr<window::AlloyWindowCoordinator> coordinator_;
@@ -363,6 +375,7 @@ class AlloyProductHostWin final : public CefClient,
   std::unique_ptr<window::AlloyHistory> history_;
   std::unique_ptr<window::AlloyDownloads> downloads_;
   CefRefPtr<window::AlloyActivitySurface> activity_surface_;
+  CefRefPtr<window::AlloyTabTransferSurface> transfer_surface_;
   std::map<window::TabId, std::unique_ptr<window::AlloySiteControls>>
       site_controls_;
   std::map<window::TabId, std::string> site_origins_;
@@ -385,6 +398,7 @@ class AlloyProductHostWin final : public CefClient,
     std::unique_ptr<window::AlloyOmnibox> omnibox;
     std::unique_ptr<window::AlloyNavigation> navigation;
     CefRefPtr<CefPanel> toolbar;
+    CefRefPtr<window::AlloyTabTransferSurface> transfer_surface;
     std::map<window::TabId, CefRefPtr<CefBrowserView>> views;
     std::map<window::TabId, CefRefPtr<CefBrowser>> browsers;
     window::TabId tab_id = 0;
@@ -393,6 +407,8 @@ class AlloyProductHostWin final : public CefClient,
     bool closing = false;
   };
   std::map<std::string, PopupWindowRecord> popup_windows_;
+  std::map<int, std::string> transferred_tab_titles_;
+  std::map<int, std::uint64_t> transferred_history_generations_;
   std::deque<std::string> pending_popup_windows_;
   std::deque<std::string> pending_restored_windows_;
   std::deque<browser_session::SessionWindowSnapshot>
