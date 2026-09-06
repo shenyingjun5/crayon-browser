@@ -20,6 +20,7 @@
 #include "browser/page_markdown/cef_page_markdown_preview.h"
 #include "browser/page_snapshot_gateway/cef_page_snapshot_bridge.h"
 #include "browser/window/alloy_builtin_content.h"
+#include "browser/window/alloy_activity_surface.h"
 #include "browser/window/alloy_bookmarks.h"
 #include "browser/window/alloy_downloads.h"
 #include "browser/window/alloy_history.h"
@@ -361,6 +362,7 @@ class AlloyProductHostWin final : public CefClient,
   std::unique_ptr<window::AlloyBookmarks> bookmarks_;
   std::unique_ptr<window::AlloyHistory> history_;
   std::unique_ptr<window::AlloyDownloads> downloads_;
+  CefRefPtr<window::AlloyActivitySurface> activity_surface_;
   std::map<window::TabId, std::unique_ptr<window::AlloySiteControls>>
       site_controls_;
   std::map<window::TabId, std::string> site_origins_;

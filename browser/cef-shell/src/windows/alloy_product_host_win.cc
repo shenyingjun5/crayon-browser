@@ -15,6 +15,7 @@
 #include "crayon/browser_localization/locale_catalog.h"
 #include "crayon/browser_privacy/privacy_defaults.h"
 #include "browser/permission/site_origin.h"
+#include "windows/alloy_download_reveal_win.h"
 #include "include/base/cef_callback.h"
 #include "include/cef_request_context_handler.h"
 #include "include/cef_task.h"
@@ -1778,7 +1779,10 @@ bool AlloyProductHostWin::InitializeDailyState(
           [this](std::uint64_t id) {
             return download_handler_ && download_handler_->Cancel(id);
           },
-          {}});
+          [this](const std::string& path) {
+            return RevealCompletedDownload(dependencies_.download_directory,
+                                           path);
+          }});
   download_handler_ = new permission::CefDownloadHandlerAdapter(
       dependencies_.permission_store, downloads_.get());
 
@@ -2130,6 +2134,10 @@ bool AlloyProductHostWin::BindActiveChrome() {
   if (chrome_browser_id_ == browser->GetIdentifier()) return true;
 
   DetachCastSurfaces();
+  if (activity_surface_) {
+    activity_surface_->Shutdown();
+    activity_surface_ = nullptr;
+  }
   if (interactions_) {
     interactions_->Shutdown();
     interactions_ = nullptr;
@@ -2152,6 +2160,28 @@ bool AlloyProductHostWin::BindActiveChrome() {
   if (snapshot) {
     static_cast<void>(
         page_tools_->OnNavigation(snapshot->navigation_generation));
+  }
+
+  window::AlloyActivitySurface::Callbacks activity_callbacks;
+  activity_callbacks.navigate_current = [browser](const std::string& url) {
+    if (!browser || !browser->GetMainFrame() || url.empty()) return false;
+    browser->GetMainFrame()->LoadURL(url);
+    return true;
+  };
+  activity_callbacks.confirm_clear_history = [this] {
+    return ConfirmNative("history.clear_title", "history.clear_body", {});
+  };
+  activity_callbacks.persist_history = [this] { return SaveHistory(); };
+  activity_callbacks.confirm_dangerous = [this](const std::string& name) {
+    return ConfirmNative("downloads.danger_title", "downloads.danger_body",
+                         name);
+  };
+  activity_surface_ = new window::AlloyActivitySurface(
+      dependencies_.locale, history_.get(), downloads_.get(),
+      std::move(activity_callbacks));
+  if (!activity_surface_->Attach(window_, toolbar_)) {
+    activity_surface_ = nullptr;
+    return false;
   }
 
   window::AlloyInteractions::Callbacks callbacks;
@@ -2337,9 +2367,12 @@ bool AlloyProductHostWin::BindActiveChrome() {
       new window::AlloyInteractions(dependencies_.locale, std::move(callbacks));
   if (!interactions_->Attach(window_, view, browser, toolbar_)) {
     interactions_ = nullptr;
+    activity_surface_->Shutdown();
+    activity_surface_ = nullptr;
     return false;
   }
   static_cast<void>(BindCastForActiveTab());
+  static_cast<void>(interactions_->RefreshDailyControls());
   chrome_browser_id_ = browser->GetIdentifier();
   browser_ = browser;
   view_ = view;
@@ -2353,6 +2386,10 @@ bool AlloyProductHostWin::PrepareActiveChromeForClose(window::TabId tab_id) {
                                      : std::optional<window::TabId>{};
   if (!active || *active != tab_id) return false;
   DetachCastSurfaces();
+  if (activity_surface_) {
+    activity_surface_->Shutdown();
+    activity_surface_ = nullptr;
+  }
   if (interactions_) {
     interactions_->Shutdown();
     interactions_ = nullptr;
@@ -2373,6 +2410,10 @@ void AlloyProductHostWin::ShutdownChromeForWindowClose() {
   if (cast_controller_) {
     cast_controller_->Shutdown();
     cast_controller_.reset();
+  }
+  if (activity_surface_) {
+    activity_surface_->Shutdown();
+    activity_surface_ = nullptr;
   }
   ShutdownDailyState();
   for (auto& [id, controls] : site_controls_) {
@@ -2550,6 +2591,10 @@ void AlloyProductHostWin::FinalizeRendererCrash(CefRefPtr<CefBrowser> browser) {
     cast_controller_->Shutdown();
     cast_controller_.reset();
   }
+  if (activity_surface_) {
+    activity_surface_->Shutdown();
+    activity_surface_ = nullptr;
+  }
   ShutdownDailyState();
   for (auto& [id, controls] : site_controls_) {
     static_cast<void>(id);
@@ -2594,6 +2639,10 @@ void AlloyProductHostWin::NotifyClosed() {
   primary_closing_ = false;
   view_ = nullptr;
   browser_ = nullptr;
+  if (activity_surface_) {
+    activity_surface_->Shutdown();
+    activity_surface_ = nullptr;
+  }
   ShutdownDailyState();
   if (builtin_content_) {
     builtin_content_->Shutdown();
@@ -2683,6 +2732,9 @@ bool AlloyProductHostWin::BindCastForActiveTab() {
   if (!cast_controller_->BindContext(context)) {
     DetachCastSurfaces();
     return false;
+  }
+  if (interactions_) {
+    static_cast<void>(interactions_->RefreshDailyControls());
   }
   cast_overlay_ = std::make_unique<AlloyCastOverlayWin>(
       CefString(Localized(dependencies_.locale.locale,

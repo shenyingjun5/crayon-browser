@@ -100,6 +100,12 @@ file(READ
      "${CRAYON_CEF_SHELL_SOURCE}/src/browser/window/alloy_interactions.cc"
      alloy_interactions)
 file(READ
+     "${CRAYON_CEF_SHELL_SOURCE}/src/browser/window/alloy_activity_surface.cc"
+     alloy_activity_surface)
+file(READ
+     "${CRAYON_CEF_SHELL_SOURCE}/src/windows/alloy_download_reveal_win.cc"
+     alloy_download_reveal)
+file(READ
      "${CRAYON_CEF_SHELL_SOURCE}/src/browser/window/alloy_tab_strip.cc"
      alloy_tab_strip)
 file(READ
@@ -433,6 +439,36 @@ foreach(required_alloy_advanced_order_token
   if(token_index EQUAL -1)
     message(FATAL_ERROR
             "Windows Alloy product is missing 24W2b3b1 order token ${required_alloy_advanced_order_token}")
+  endif()
+endforeach()
+foreach(required_alloy_activity_surface_token
+        "MENU_ID_USER_FIRST"
+        "kMaximumHistoryMenuEntries"
+        "kMaximumDownloadMenuEntries"
+        "RestoreRecentlyClosed()"
+        "ConfirmDangerous"
+        "DiscardDangerous"
+        "ShowInFolder"
+        "confirm_clear_history"
+        "persist_history")
+  string(FIND
+         "${alloy_activity_surface}${alloy_product_host}${alloy_product_host_header}"
+         "${required_alloy_activity_surface_token}" token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Windows Alloy product is missing 24W2b3b2 activity token ${required_alloy_activity_surface_token}")
+  endif()
+endforeach()
+foreach(required_alloy_download_reveal_token
+        "std::filesystem::canonical"
+        "target.parent_path() != directory"
+        "std::filesystem::is_regular_file"
+        "ShellExecuteW")
+  string(FIND "${alloy_download_reveal}"
+         "${required_alloy_download_reveal_token}" token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Windows Alloy product is missing controlled download reveal token ${required_alloy_download_reveal_token}")
   endif()
 endforeach()
 foreach(required_alloy_daily_data_bootstrap_token

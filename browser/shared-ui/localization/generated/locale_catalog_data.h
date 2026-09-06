@@ -14,7 +14,7 @@ struct LocaleCatalogEntry {
   std::string_view zh_tw;
 };
 
-inline constexpr std::array<LocaleCatalogEntry, 226> kLocaleCatalogEntries{{
+inline constexpr std::array<LocaleCatalogEntry, 248> kLocaleCatalogEntries{{
     {"cast.selection.unavailable", "Casting is not ready in this window", "此窗口的投屏入口尚未就绪", "此視窗的投屏入口尚未就緒"},
     {"cast.selection.expired", "Selection expired. Prepare again.", "选择已过期，请重新准备", "選擇已過期，請重新準備"},
     {"cast.selection.connecting", "Connecting to device…", "正在连接设备…", "正在連線裝置…"},
@@ -88,6 +88,28 @@ inline constexpr std::array<LocaleCatalogEntry, 226> kLocaleCatalogEntries{{
     {"bookmarks.remove_page", "Remove bookmark", "移除书签", "移除書籤"},
     {"bookmarks.show_bar", "Show bookmarks bar", "显示书签栏", "顯示書籤列"},
     {"bookmarks.hide_bar", "Hide bookmarks bar", "隐藏书签栏", "隱藏書籤列"},
+    {"history.title", "History", "历史记录", "瀏覽記錄"},
+    {"history.reopen_closed", "Reopen closed tab", "重新打开关闭的标签页", "重新開啟關閉的分頁"},
+    {"history.clear", "Clear browsing history", "清除浏览记录", "清除瀏覽記錄"},
+    {"history.empty", "No history", "暂无历史记录", "暫無瀏覽記錄"},
+    {"history.clear_title", "Clear browsing history?", "清除浏览记录？", "清除瀏覽記錄？"},
+    {"history.clear_body", "This removes browsing history and recently closed tabs from this profile.", "这会删除此资料中的浏览记录和最近关闭的标签页。", "這會刪除此設定檔中的瀏覽記錄和最近關閉的分頁。"},
+    {"downloads.title", "Downloads", "下载", "下載"},
+    {"downloads.empty", "No downloads", "暂无下载", "暫無下載"},
+    {"downloads.keep", "Keep", "保留", "保留"},
+    {"downloads.discard", "Discard", "丢弃", "捨棄"},
+    {"downloads.pause", "Pause", "暂停", "暫停"},
+    {"downloads.resume", "Resume", "继续", "繼續"},
+    {"downloads.cancel", "Cancel", "取消", "取消"},
+    {"downloads.show_in_folder", "Show in folder", "在文件夹中显示", "在資料夾中顯示"},
+    {"downloads.status.pending", "Needs confirmation", "需要确认", "需要確認"},
+    {"downloads.status.in_progress", "Downloading", "正在下载", "正在下載"},
+    {"downloads.status.paused", "Paused", "已暂停", "已暫停"},
+    {"downloads.status.completed", "Completed", "已完成", "已完成"},
+    {"downloads.status.failed", "Failed", "失败", "失敗"},
+    {"downloads.status.cancelled", "Cancelled", "已取消", "已取消"},
+    {"downloads.danger_title", "Keep this download?", "保留此下载？", "保留此下載？"},
+    {"downloads.danger_body", "This file type can harm your computer. Only keep it if you trust the source.", "此文件类型可能会损害你的电脑。仅在信任来源时保留。", "此檔案類型可能會損害你的電腦。僅在信任來源時保留。"},
     {"address.placeholder", "Enter a URL", "输入网址", "輸入網址"},
     {"omnibox.edit", "Edit Address", "编辑地址", "編輯網址"},
     {"omnibox.submit", "Submit", "提交", "送出"},

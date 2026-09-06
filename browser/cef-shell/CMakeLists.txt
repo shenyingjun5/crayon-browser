@@ -92,6 +92,8 @@ if(OS_WINDOWS)
       src/browser/window/alloy_history.h
       src/browser/window/alloy_downloads.cc
       src/browser/window/alloy_downloads.h
+      src/browser/window/alloy_activity_surface.cc
+      src/browser/window/alloy_activity_surface.h
       src/browser/window/alloy_content_view_host.cc
       src/browser/window/alloy_content_view_host.h
       src/browser/window/alloy_builtin_content.cc
@@ -126,6 +128,8 @@ if(OS_WINDOWS)
       src/windows/app.h
       src/windows/alloy_cast_overlay_win.cc
       src/windows/alloy_cast_overlay_win.h
+      src/windows/alloy_download_reveal_win.cc
+      src/windows/alloy_download_reveal_win.h
       src/windows/alloy_product_host_win.cc
       src/windows/alloy_product_host_win.h
       src/windows/cast_chrome_win.cc
@@ -603,6 +607,8 @@ if(OS_WINDOWS)
       src/browser/window/alloy_history.h
       src/browser/window/alloy_downloads.cc
       src/browser/window/alloy_downloads.h
+      src/browser/window/alloy_activity_surface.cc
+      src/browser/window/alloy_activity_surface.h
       src/browser/window/alloy_window_coordinator.cc
       src/browser/window/alloy_window_coordinator.h
       src/browser/context/profile_context_factory.cc

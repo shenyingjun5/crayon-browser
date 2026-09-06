@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "browser/branding/about_destination.h"
+#include "browser/window/alloy_activity_surface.h"
 #include "browser/window/alloy_interactions.h"
 #include "crayon/browser_localization/locale_snapshot.h"
 #include "include/base/cef_callback.h"
@@ -25,6 +26,9 @@
 namespace {
 
 using crayon::browser::cef_shell::window::AlloyInteractions;
+using crayon::browser::cef_shell::window::AlloyActivitySurface;
+using crayon::browser::cef_shell::window::AlloyDownloads;
+using crayon::browser::cef_shell::window::AlloyHistory;
 using crayon::browser::cef_shell::window::AlloyMainCommand;
 
 constexpr int kPollMilliseconds = 20;
@@ -134,10 +138,13 @@ public:
     column.horizontal = false;
     auto window_layout = window_->SetToBoxLayout(column);
     toolbar_ = CefPanel::CreatePanel(nullptr);
+    activity_toolbar_ = CefPanel::CreatePanel(nullptr);
     CefBoxLayoutSettings row;
     row.horizontal = true;
     toolbar_->SetToBoxLayout(row);
+    activity_toolbar_->SetToBoxLayout(row);
     window_->AddChildView(toolbar_);
+    window_->AddChildView(activity_toolbar_);
     window_->AddChildView(view_);
     window_layout->SetFlexForView(view_, 1);
     window_->SetSize(CefSize(720, 480));
@@ -154,8 +161,12 @@ public:
            (!browser_ || browser_->GetHost()->TryCloseBrowser());
   }
   void OnWindowDestroyed(CefRefPtr<CefWindow>) override {
+    activity_ = nullptr;
+    downloads_.reset();
+    history_.reset();
     interactions_ = nullptr;
     toolbar_ = nullptr;
+    activity_toolbar_ = nullptr;
     view_ = nullptr;
     window_ = nullptr;
     result_->window_closed = true;
@@ -164,6 +175,62 @@ public:
 
 private:
   void Attach() {
+    auto profile = crayon::browser_engine::ProfileId::TryCreate("probe");
+    if (!profile) return;
+    history_ = std::make_unique<AlloyHistory>(
+        *profile, false,
+        AlloyHistory::Callbacks{[this](const std::string& url) {
+          restored_url_ = url;
+          return true;
+        }});
+    history_->BeginNavigation(1);
+    history_->CommitNavigation(1, "https://history.test/", "Fixture history",
+                               10);
+    history_->RecordClosedTab("https://closed.test/", "Closed fixture", 20);
+
+    AlloyDownloads::Callbacks download_callbacks;
+    download_callbacks.confirm_pending =
+        [this](std::uint64_t, const std::string&) {
+          ++kept_downloads_;
+          return true;
+        };
+    download_callbacks.discard_pending = [](std::uint64_t) { return true; };
+    download_callbacks.pause = [this](std::uint64_t) {
+      ++paused_downloads_;
+      return true;
+    };
+    download_callbacks.resume = [](std::uint64_t) { return true; };
+    download_callbacks.cancel = [](std::uint64_t) { return true; };
+    download_callbacks.open_location = [](const std::string&) { return true; };
+    downloads_ = std::make_unique<AlloyDownloads>(
+        "C:/verified-downloads", [](const std::string&) { return false; },
+        std::move(download_callbacks));
+    downloads_->OnDownloadStarting(11, "danger.exe",
+                                   "https://download.test/danger.exe");
+    downloads_->OnDownloadStarting(12, "safe.txt",
+                                   "https://download.test/safe.txt");
+
+    AlloyActivitySurface::Callbacks activity_callbacks;
+    activity_callbacks.navigate_current = [](const std::string&) {
+      return true;
+    };
+    activity_callbacks.confirm_clear_history = [this] {
+      ++clear_confirmations_;
+      return allow_history_clear_;
+    };
+    activity_callbacks.persist_history = [this] {
+      ++history_persists_;
+      return allow_history_persist_;
+    };
+    activity_callbacks.confirm_dangerous = [](const std::string& name) {
+      return name == "danger.exe";
+    };
+    activity_ = new AlloyActivitySurface(
+        crayon::browser::localization::SnapshotFor(
+            crayon::browser::localization::AppLocale::kZhCn),
+        history_.get(), downloads_.get(), std::move(activity_callbacks));
+    if (!activity_->Attach(window_, activity_toolbar_)) return;
+
     AlloyInteractions::Callbacks callbacks;
     callbacks.open_markdown = [this](CefRefPtr<CefBrowser> browser) {
       if (!browser_ || !browser ||
@@ -322,6 +389,41 @@ private:
         Finish(false, "bookmark-controls");
         return;
       }
+      activity_->ExecuteCommand(nullptr, AlloyActivitySurface::kRestoreClosedId,
+                                EVENTFLAG_NONE);
+      activity_->ExecuteCommand(nullptr, AlloyActivitySurface::kClearHistoryId,
+                                EVENTFLAG_NONE);
+      allow_history_clear_ = true;
+      allow_history_persist_ = false;
+      activity_->ExecuteCommand(nullptr, AlloyActivitySurface::kClearHistoryId,
+                                EVENTFLAG_NONE);
+      const auto history_view =
+          activity_->GetView(AlloyActivitySurface::kHistoryButtonId);
+      const auto history_button = history_view
+                                      ? history_view->AsButton()
+                                            ->AsLabelButton()
+                                            ->AsMenuButton()
+                                      : nullptr;
+      const auto downloads_view =
+          activity_->GetView(AlloyActivitySurface::kDownloadsButtonId);
+      const auto downloads_button = downloads_view
+                                        ? downloads_view->AsButton()
+                                              ->AsLabelButton()
+                                              ->AsMenuButton()
+                                        : nullptr;
+      if (!history_button || !downloads_button ||
+          history_button->GetText().ToString() != "历史记录" ||
+          downloads_button->GetText().ToString() != "下载" ||
+          restored_url_ != "https://closed.test/" || history_persists_ != 2 ||
+          clear_confirmations_ != 2 ||
+          history_->store().entries().size() != 1) {
+        Finish(false, "activity-state");
+        return;
+      }
+      result_->activity_passed =
+          history_view->IsDrawn() && downloads_view->IsDrawn() &&
+          downloads_->ConfirmDangerous(11) && downloads_->Pause(12) &&
+          kept_downloads_ == 1 && paused_downloads_ == 1;
       menu->AsButton()->AsLabelButton()->AsMenuButton()->TriggerMenu();
       stage_ = 1;
       Schedule();
@@ -401,7 +503,13 @@ private:
       const bool navigation_cleared = interactions_->OnNavigation(browser_) &&
                                       cancel_count_ == 1;
       auto menu_view = interactions_->GetView(AlloyInteractions::kMenuButtonId);
-      result_->lifecycle_passed = interactions_->Shutdown() &&
+      auto activity_history_view =
+          activity_->GetView(AlloyActivitySurface::kHistoryButtonId);
+      result_->lifecycle_passed = activity_->Shutdown() &&
+                                  activity_->Shutdown() &&
+                                  activity_history_view &&
+                                  !activity_history_view->GetParentView() &&
+                                  interactions_->Shutdown() &&
                                   interactions_->Shutdown() && menu_view &&
                                   !menu_view->GetParentView() &&
                                   navigation_cleared && cancel_count_ == 2 &&
@@ -409,6 +517,7 @@ private:
                                       AlloyMainCommand::kOpenMarkdown);
       Finish(result_->menu_passed && result_->command_passed &&
                  result_->drag_passed && result_->context_menu_passed &&
+                 result_->activity_passed &&
                  result_->lifecycle_passed,
              "complete");
     }
@@ -428,7 +537,11 @@ private:
   CefRefPtr<CefBrowser> browser_;
   CefRefPtr<CefWindow> window_;
   CefRefPtr<CefPanel> toolbar_;
+  CefRefPtr<CefPanel> activity_toolbar_;
   CefRefPtr<AlloyInteractions> interactions_;
+  CefRefPtr<AlloyActivitySurface> activity_;
+  std::unique_ptr<AlloyHistory> history_;
+  std::unique_ptr<AlloyDownloads> downloads_;
   std::vector<std::string> destinations_;
   int checks_ = 0;
   int stage_ = 0;
@@ -443,6 +556,13 @@ private:
   std::uint64_t opened_bookmark_ = 0;
   std::uint64_t activated_search_tab_ = 0;
   int cancel_count_ = 0;
+  int clear_confirmations_ = 0;
+  int history_persists_ = 0;
+  int kept_downloads_ = 0;
+  int paused_downloads_ = 0;
+  std::string restored_url_;
+  bool allow_history_clear_ = false;
+  bool allow_history_persist_ = true;
   bool loaded_ = false;
   bool attached_ = false;
   bool menu_close_settled_ = false;
