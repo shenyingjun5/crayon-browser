@@ -1,0 +1,9 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Alloy product popup child</title>
+<output id="result">popup-ready</output>
+<script>
+  const shared = document.cookie.includes('alloy_popup_context=shared');
+  document.querySelector('#result').textContent =
+    `popup-ready context-${shared ? 'shared' : 'isolated'}`;
+</script>

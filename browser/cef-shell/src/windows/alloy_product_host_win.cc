@@ -141,7 +141,21 @@ bool AlloyProductHostWin::Start(std::string initial_url, std::string title,
   }
   profile_id_value_ = profile_id.value();
   coordinator_ = std::make_unique<window::AlloyWindowCoordinator>(
-      window::AlloyWindowCoordinator::Callbacks{});
+      window::AlloyWindowCoordinator::Callbacks{
+          [this](const window::AlloyWindowCoordinator::PopupRequest& request) {
+            return CreatePopupWindow(request);
+          },
+          [this](const std::string& window_id) {
+            if (window_id == kPrimaryWindowId) {
+              if (window_) window_->Activate();
+              return;
+            }
+            const auto found = popup_windows_.find(window_id);
+            if (found != popup_windows_.end() && found->second.window) {
+              found->second.window->Activate();
+            }
+          },
+          {}});
   if (!coordinator_->CreatePrimary(kPrimaryWindowId, std::move(profile_id))) {
     coordinator_.reset();
     return false;
@@ -316,15 +330,30 @@ bool AlloyProductHostWin::Close(bool force_close) {
     return false;
   }
   closing_ = true;
-  const auto active = controller() ? controller()->model().active_tab()
-                                   : std::optional<window::TabId>{};
-  const bool prepared = active && PrepareActiveChromeForClose(*active);
-  if (!coordinator_->BeginCloseWindow(kPrimaryWindowId, force_close)) {
-    closing_ = false;
-    if (prepared) SyncChrome();
-    return false;
+  if (coordinator_->has_window(kPrimaryWindowId)) {
+    const auto active = controller() ? controller()->model().active_tab()
+                                     : std::optional<window::TabId>{};
+    const bool prepared = active && PrepareActiveChromeForClose(*active);
+    if (!primary_closing_ &&
+        !coordinator_->BeginCloseWindow(kPrimaryWindowId, force_close)) {
+      closing_ = false;
+      if (prepared) SyncChrome();
+      return false;
+    }
+    primary_closing_ = true;
   }
-  if (controller() && controller()->pending_count() == 0 && window_) {
+  for (auto& [window_id, popup] : popup_windows_) {
+    if (popup.closing) continue;
+    if (!coordinator_->BeginCloseWindow(window_id, force_close)) continue;
+    popup.closing = true;
+    auto* popup_controller = coordinator_->controller(window_id);
+    if (popup_controller && popup_controller->pending_count() == 0 &&
+        popup.window) {
+      popup.window->Close();
+    }
+  }
+  if (primary_closing_ && controller() &&
+      controller()->pending_count() == 0 && window_) {
     window_->Close();
   }
   return true;
@@ -340,6 +369,30 @@ cef_runtime_style_t AlloyProductHostWin::GetWindowRuntimeStyle() {
 
 void AlloyProductHostWin::OnWindowCreated(CefRefPtr<CefWindow> window) {
   CEF_REQUIRE_UI_THREAD();
+  if (!pending_popup_windows_.empty()) {
+    const std::string window_id = std::move(pending_popup_windows_.front());
+    pending_popup_windows_.pop_front();
+    const auto found = popup_windows_.find(window_id);
+    auto* popup_controller =
+        coordinator_ ? coordinator_->controller(window_id) : nullptr;
+    if (!started_ || closing_ || !window || found == popup_windows_.end() ||
+        !popup_controller || found->second.window ||
+        !coordinator_->AttachWindow(window_id, window)) {
+      if (window) window->Close();
+      return;
+    }
+    found->second.window = window;
+    CefBoxLayoutSettings popup_settings;
+    auto popup_layout = window->SetToBoxLayout(popup_settings);
+    window->AddChildView(popup_controller->container());
+    popup_layout->SetFlexForView(popup_controller->container(), 1);
+    window->SetTitle(title_);
+    window->SetSize(CefSize(720, 560));
+    window->Layout();
+    window->Show();
+    window->Activate();
+    return;
+  }
   auto* tab_controller = controller();
   if (!started_ || closing_ || window_ || !window || !tab_controller ||
       !coordinator_->AttachWindow(kPrimaryWindowId, window)) {
@@ -402,11 +455,32 @@ void AlloyProductHostWin::OnLayoutChanged(CefRefPtr<CefView>,
 
 bool AlloyProductHostWin::CanClose(CefRefPtr<CefWindow> window) {
   CEF_REQUIRE_UI_THREAD();
+  for (auto& [window_id, popup] : popup_windows_) {
+    if (!popup.window || !window || !popup.window->IsSame(window)) continue;
+    auto* popup_controller =
+        coordinator_ ? coordinator_->controller(window_id) : nullptr;
+    if (!popup.closing) {
+      if (!coordinator_ ||
+          !coordinator_->BeginCloseWindow(window_id, false)) {
+        return false;
+      }
+      popup.closing = true;
+    }
+    return !popup_controller || popup_controller->pending_count() == 0;
+  }
   if (!window_ || !window || !window_->IsSame(window)) {
     return true;
   }
-  if (!closing_) {
-    static_cast<void>(Close(false));
+  if (!primary_closing_) {
+    const auto active = controller() ? controller()->model().active_tab()
+                                     : std::optional<window::TabId>{};
+    const bool prepared = active && PrepareActiveChromeForClose(*active);
+    if (!coordinator_ ||
+        !coordinator_->BeginCloseWindow(kPrimaryWindowId, false)) {
+      if (prepared) SyncChrome();
+      return false;
+    }
+    primary_closing_ = true;
     return false;
   }
   return !controller() || controller()->pending_count() == 0;
@@ -414,12 +488,28 @@ bool AlloyProductHostWin::CanClose(CefRefPtr<CefWindow> window) {
 
 void AlloyProductHostWin::OnWindowDestroyed(CefRefPtr<CefWindow> window) {
   CEF_REQUIRE_UI_THREAD();
+  for (auto found = popup_windows_.begin(); found != popup_windows_.end();
+       ++found) {
+    if (!found->second.window || !window ||
+        !found->second.window->IsSame(window)) {
+      continue;
+    }
+    const std::string window_id = found->first;
+    found->second.window = nullptr;
+    if (!coordinator_ || !coordinator_->OnWindowClosed(window_id)) return;
+    popup_windows_.erase(found);
+    if (coordinator_->window_count() == 0 && coordinator_->Shutdown()) {
+      coordinator_.reset();
+      NotifyClosed();
+    }
+    return;
+  }
   if (!window_ || !window || !window_->IsSame(window) || !coordinator_ ||
       !coordinator_->OnWindowClosed(kPrimaryWindowId)) {
     return;
   }
   window_ = nullptr;
-  if (coordinator_->Shutdown()) {
+  if (coordinator_->window_count() == 0 && coordinator_->Shutdown()) {
     coordinator_.reset();
     NotifyClosed();
   }
@@ -441,12 +531,31 @@ void AlloyProductHostWin::OnBrowserCreated(CefRefPtr<CefBrowserView> view,
 void AlloyProductHostWin::FinalizeBrowserCreated(
     CefRefPtr<CefBrowserView> view, CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
-  auto* tab_controller = controller();
+  const auto owner = OwnerWindowIdForView(view);
+  auto* tab_controller = owner && coordinator_
+                             ? coordinator_->controller(*owner)
+                             : nullptr;
   const auto capabilities = InitialCapabilities();
-  const auto tab_id = TabForView(view);
+  std::optional<window::TabId> tab_id;
+  if (owner && *owner == kPrimaryWindowId) {
+    tab_id = TabForView(view);
+  } else if (owner) {
+    const auto popup = popup_windows_.find(*owner);
+    if (popup != popup_windows_.end() && popup->second.view && view &&
+        popup->second.view->IsSame(view)) {
+      tab_id = popup->second.tab_id;
+    }
+  }
   if (!view || !browser || !tab_controller || !capabilities || !tab_id ||
       !tab_controller->OnBrowserCreated(view, browser, *capabilities)) {
-    if (!closing_) {
+    if (owner && *owner != kPrimaryWindowId) {
+      const auto popup = popup_windows_.find(*owner);
+      if (popup != popup_windows_.end() && !popup->second.closing &&
+          coordinator_ && coordinator_->BeginCloseWindow(*owner, true)) {
+        popup->second.closing = true;
+        if (popup->second.window) popup->second.window->Close();
+      }
+    } else if (!closing_) {
       Close(true);
     }
     return;
@@ -459,6 +568,20 @@ void AlloyProductHostWin::FinalizeBrowserCreated(
   if (!browser->IsLoading()) {
     static_cast<void>(tab_controller->OnLoadingStateChange(
         browser, false, browser->CanGoBack(), browser->CanGoForward()));
+  }
+  if (owner && *owner != kPrimaryWindowId) {
+    auto popup = popup_windows_.find(*owner);
+    if (popup != popup_windows_.end()) popup->second.browser = browser;
+    static_cast<void>(tab_controller->Activate(*tab_id));
+    if (callbacks_.browser_created) callbacks_.browser_created(browser);
+    return;
+  }
+  if (!dependencies_.request_context && browser->GetHost()) {
+    dependencies_.request_context = browser->GetHost()->GetRequestContext();
+  }
+  if (!dependencies_.request_context) {
+    if (!closing_) Close(true);
+    return;
   }
   if (const auto* tab = tab_controller->model().Find(*tab_id)) {
     site_controls_[*tab_id] = std::make_unique<window::AlloySiteControls>(
@@ -483,6 +606,13 @@ void AlloyProductHostWin::FinalizeBrowserCreated(
 void AlloyProductHostWin::OnBrowserDestroyed(CefRefPtr<CefBrowserView> view,
                                              CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
+  for (auto& [window_id, popup] : popup_windows_) {
+    static_cast<void>(window_id);
+    if (popup.view && view && popup.view->IsSame(view)) popup.view = nullptr;
+    if (popup.browser && browser && popup.browser->IsSame(browser)) {
+      popup.browser = nullptr;
+    }
+  }
   if (view_ && view && view_->IsSame(view)) {
     view_ = nullptr;
   }
@@ -496,7 +626,7 @@ void AlloyProductHostWin::OnBrowserDestroyed(CefRefPtr<CefBrowserView> view,
 
 bool AlloyProductHostWin::DoClose(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
-  auto* tab_controller = controller();
+  auto* tab_controller = ControllerForBrowser(browser);
   if (!Owns(browser) || !tab_controller ||
       !tab_controller->OnDoClose(browser)) {
     return false;
@@ -514,6 +644,21 @@ void AlloyProductHostWin::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
   }
 }
 
+bool AlloyProductHostWin::OnBeforePopup(
+    CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int,
+    const CefString& target_url, const CefString&,
+    CefLifeSpanHandler::WindowOpenDisposition,
+    bool user_gesture, const CefPopupFeatures&, CefWindowInfo&,
+    CefRefPtr<CefClient>&, CefBrowserSettings&,
+    CefRefPtr<CefDictionaryValue>&, bool*) {
+  CEF_REQUIRE_UI_THREAD();
+  const auto owner = OwnerWindowIdForBrowser(browser);
+  if (!owner || !frame || !frame->IsMain() || !coordinator_) return true;
+  static_cast<void>(coordinator_->RequestPopup(
+      *owner, std::move(browser), target_url.ToString(), user_gesture));
+  return true;
+}
+
 void AlloyProductHostWin::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
   if (builtin_content_) {
@@ -524,7 +669,10 @@ void AlloyProductHostWin::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
 void AlloyProductHostWin::OnBuiltinBrowserClosing(
     CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
-  auto* tab_controller = controller();
+  const auto owner = OwnerWindowIdForBrowser(browser);
+  auto* tab_controller = owner && coordinator_
+                             ? coordinator_->controller(*owner)
+                             : nullptr;
   const auto* closing =
       browser && tab_controller
           ? tab_controller->model().FindByBrowser(browser->GetIdentifier())
@@ -535,7 +683,7 @@ void AlloyProductHostWin::OnBuiltinBrowserClosing(
       !tab_controller->OnBeforeClose(browser)) {
     return;
   }
-  if (closing_tab) {
+  if (owner && *owner == kPrimaryWindowId && closing_tab) {
     const auto controls = site_controls_.find(*closing_tab);
     if (controls != site_controls_.end()) {
       controls->second->Shutdown();
@@ -544,16 +692,30 @@ void AlloyProductHostWin::OnBuiltinBrowserClosing(
     site_origins_.erase(*closing_tab);
     site_urls_.erase(*closing_tab);
   }
-  if (closing_tab) {
+  if (owner && *owner == kPrimaryWindowId && closing_tab) {
     media_observation_bridge_.CloseBrowser(
         browser, static_cast<std::uint32_t>(*closing_tab));
   }
-  if (browser_ && browser && browser_->IsSame(browser)) {
+  if (owner && *owner == kPrimaryWindowId && browser_ && browser &&
+      browser_->IsSame(browser)) {
     browser_ = nullptr;
   }
+  if (owner && *owner != kPrimaryWindowId) {
+    auto popup = popup_windows_.find(*owner);
+    if (popup == popup_windows_.end()) return;
+    popup->second.browser = nullptr;
+    if (tab_controller->pending_count() == 0) {
+      if (!popup->second.closing && coordinator_ &&
+          coordinator_->BeginCloseWindow(*owner, false)) {
+        popup->second.closing = true;
+      }
+      if (popup->second.window) popup->second.window->Close();
+    }
+    return;
+  }
   if (tab_controller->pending_count() == 0 && window_) {
-    if (!closing_ && coordinator_) {
-      closing_ = true;
+    if (!primary_closing_ && coordinator_) {
+      primary_closing_ = true;
       static_cast<void>(
           coordinator_->BeginCloseWindow(kPrimaryWindowId, false));
     }
@@ -880,12 +1042,25 @@ void AlloyProductHostWin::OnRenderProcessTerminated(
 void AlloyProductHostWin::OnBuiltinRenderProcessTerminated(
     CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
-  if (!Owns(browser) || !controller() ||
-      !controller()->OnRenderProcessGone(browser)) {
+  const auto owner = OwnerWindowIdForBrowser(browser);
+  auto* tab_controller = owner && coordinator_
+                             ? coordinator_->controller(*owner)
+                             : nullptr;
+  if (!owner || !tab_controller ||
+      !tab_controller->OnRenderProcessGone(browser)) {
+    return;
+  }
+  if (*owner != kPrimaryWindowId) {
+    static_cast<void>(tab_controller->FinalizeRendererCrash(browser));
+    auto popup = popup_windows_.find(*owner);
+    if (popup != popup_windows_.end() && !popup->second.closing &&
+        coordinator_->BeginCloseWindow(*owner, true)) {
+      popup->second.closing = true;
+    }
     return;
   }
   if (const auto* tab =
-          controller()->model().FindByBrowser(browser->GetIdentifier())) {
+          tab_controller->model().FindByBrowser(browser->GetIdentifier())) {
     media_observation_bridge_.CloseBrowser(
         browser, static_cast<std::uint32_t>(tab->id));
   }
@@ -900,6 +1075,11 @@ void AlloyProductHostWin::OnBuiltinLoadEnd(CefRefPtr<CefBrowser> browser,
                                            int http_status_code) {
   CEF_REQUIRE_UI_THREAD();
   if (!Owns(browser) || !frame || !frame->IsMain()) return;
+  if (auto* tab_controller = ControllerForBrowser(browser)) {
+    static_cast<void>(tab_controller->SynchronizeRuntimeState(browser));
+  }
+  const auto owner = OwnerWindowIdForBrowser(browser);
+  if (!owner || *owner != kPrimaryWindowId) return;
   media_observation_bridge_.BindCurrentMainFrame(browser);
   const std::string address = frame->GetURL();
   if (navigation_) {
@@ -918,6 +1098,8 @@ void AlloyProductHostWin::OnBuiltinLoadError(CefRefPtr<CefBrowser> browser,
                                              const CefString& failed_url) {
   CEF_REQUIRE_UI_THREAD();
   if (!Owns(browser) || !frame || !frame->IsMain()) return;
+  const auto owner = OwnerWindowIdForBrowser(browser);
+  if (!owner || *owner != kPrimaryWindowId) return;
   if (navigation_) {
     static_cast<void>(navigation_->OnLoadError(browser, failed_url.ToString(),
                                                IsCertificateOrSslError(
@@ -933,12 +1115,19 @@ void AlloyProductHostWin::OnBuiltinAddressChange(CefRefPtr<CefBrowser> browser,
                                                  CefRefPtr<CefFrame> frame,
                                                  const CefString& url) {
   CEF_REQUIRE_UI_THREAD();
-  if (Owns(browser) && frame && frame->IsMain() && navigation_) {
-    if (controller()) {
-      static_cast<void>(controller()->OnAddressChange(browser, url.ToString()));
-      static_cast<void>(SynchronizeSiteControls(browser, url.ToString()));
+  if (Owns(browser) && frame && frame->IsMain()) {
+    auto* tab_controller = ControllerForBrowser(browser);
+    if (tab_controller) {
+      static_cast<void>(
+          tab_controller->OnAddressChange(browser, url.ToString()));
     }
-    static_cast<void>(navigation_->OnAddressChange(browser, url.ToString()));
+    const auto owner = OwnerWindowIdForBrowser(browser);
+    if (owner && *owner == kPrimaryWindowId && navigation_) {
+      if (tab_controller) {
+        static_cast<void>(SynchronizeSiteControls(browser, url.ToString()));
+      }
+      static_cast<void>(navigation_->OnAddressChange(browser, url.ToString()));
+    }
   }
 }
 
@@ -947,29 +1136,34 @@ void AlloyProductHostWin::OnBuiltinLoadingStateChange(
     bool can_go_forward) {
   CEF_REQUIRE_UI_THREAD();
   if (!Owns(browser)) return;
+  auto* tab_controller = ControllerForBrowser(browser);
   std::uint64_t previous_generation = 0;
-  if (controller()) {
+  if (tab_controller) {
     if (const auto* previous =
-            controller()->model().FindByBrowser(browser->GetIdentifier())) {
+            tab_controller->model().FindByBrowser(browser->GetIdentifier())) {
       previous_generation = previous->navigation_generation;
     }
-    static_cast<void>(controller()->OnLoadingStateChange(
+    static_cast<void>(tab_controller->OnLoadingStateChange(
         browser, is_loading, can_go_back, can_go_forward));
     const auto* current =
-        controller()->model().FindByBrowser(browser->GetIdentifier());
-    if (current && current->navigation_generation != previous_generation) {
+        tab_controller->model().FindByBrowser(browser->GetIdentifier());
+    const auto owner = OwnerWindowIdForBrowser(browser);
+    if (owner && *owner == kPrimaryWindowId && current &&
+        current->navigation_generation != previous_generation) {
       media_observation_bridge_.AdvanceNavigation(
           browser, static_cast<std::uint32_t>(current->id),
           current->navigation_generation);
     }
   }
-  if (navigation_) {
+  const auto owner = OwnerWindowIdForBrowser(browser);
+  if (owner && *owner == kPrimaryWindowId && navigation_) {
     static_cast<void>(navigation_->OnLoadingStateChange(
         browser, is_loading, can_go_back, can_go_forward));
   }
-  if (is_loading && page_tools_ && controller()) {
+  if (owner && *owner == kPrimaryWindowId && is_loading && page_tools_ &&
+      tab_controller) {
     const auto* tab =
-        controller()->model().FindByBrowser(browser->GetIdentifier());
+        tab_controller->model().FindByBrowser(browser->GetIdentifier());
     if (tab) {
       static_cast<void>(page_tools_->OnNavigation(tab->navigation_generation));
     }
@@ -1006,8 +1200,8 @@ bool AlloyProductHostWin::CreateTab(std::string url,
   auto* tab_controller = controller();
   if (!tab_controller || url.empty() || next_navigation_id_ == 0) return false;
   CefBrowserSettings settings;
-  auto view = CefBrowserView::CreateBrowserView(this, url, settings, nullptr,
-                                                nullptr, this);
+  auto view = CefBrowserView::CreateBrowserView(
+      this, url, settings, nullptr, dependencies_.request_context, this);
   const auto tab =
       view ? tab_controller->BeginCreate(
                  view, purpose,
@@ -1017,6 +1211,33 @@ bool AlloyProductHostWin::CreateTab(std::string url,
   views_.emplace(*tab, view);
   if (!view_) view_ = view;
   SyncChrome();
+  return true;
+}
+
+bool AlloyProductHostWin::CreatePopupWindow(
+    const window::AlloyWindowCoordinator::PopupRequest& request) {
+  CEF_REQUIRE_UI_THREAD();
+  auto* popup_controller =
+      coordinator_ ? coordinator_->controller(request.window_id) : nullptr;
+  if (!popup_controller || request.window_id.empty() || request.url.empty() ||
+      popup_windows_.count(request.window_id) != 0 ||
+      next_navigation_id_ == 0 || !dependencies_.request_context) {
+    return false;
+  }
+  CefBrowserSettings settings;
+  auto view = CefBrowserView::CreateBrowserView(
+      this, request.url, settings, nullptr, dependencies_.request_context, this);
+  const auto tab =
+      view ? popup_controller->BeginCreate(
+                 view, browser_engine::ContentPurpose::kWeb,
+                 browser_engine::NavigationId::FromRaw(next_navigation_id_++))
+           : std::nullopt;
+  if (!tab) return false;
+  popup_windows_.emplace(
+      request.window_id,
+      PopupWindowRecord{request.window_id, nullptr, view, nullptr, *tab, false});
+  pending_popup_windows_.push_back(request.window_id);
+  CefWindow::CreateTopLevelWindow(this);
   return true;
 }
 
@@ -1225,13 +1446,62 @@ void AlloyProductHostWin::ShutdownChromeForWindowClose() {
 }
 
 bool AlloyProductHostWin::Owns(CefRefPtr<CefBrowser> browser) const {
-  auto* tab_controller = controller();
-  return browser && tab_controller && tab_controller->OwnsBrowser(browser);
+  return ControllerForBrowser(browser) != nullptr;
+}
+
+std::optional<std::string> AlloyProductHostWin::OwnerWindowIdForView(
+    CefRefPtr<CefBrowserView> view) const {
+  CEF_REQUIRE_UI_THREAD();
+  if (!view || !coordinator_) return std::nullopt;
+  if (auto* primary = controller(); primary && primary->OwnsView(view)) {
+    return std::string(kPrimaryWindowId);
+  }
+  for (const auto& [window_id, popup] : popup_windows_) {
+    auto* popup_controller = coordinator_->controller(window_id);
+    if (popup_controller && popup_controller->OwnsView(view)) return window_id;
+  }
+  return std::nullopt;
+}
+
+std::optional<std::string> AlloyProductHostWin::OwnerWindowIdForBrowser(
+    CefRefPtr<CefBrowser> browser) const {
+  CEF_REQUIRE_UI_THREAD();
+  if (!browser || !coordinator_) return std::nullopt;
+  if (auto* primary = controller(); primary && primary->OwnsBrowser(browser)) {
+    return std::string(kPrimaryWindowId);
+  }
+  for (const auto& [window_id, popup] : popup_windows_) {
+    auto* popup_controller = coordinator_->controller(window_id);
+    if (popup_controller && popup_controller->OwnsBrowser(browser)) {
+      return window_id;
+    }
+  }
+  return std::nullopt;
+}
+
+window::AlloyTabController* AlloyProductHostWin::ControllerForBrowser(
+    CefRefPtr<CefBrowser> browser) const {
+  const auto owner = OwnerWindowIdForBrowser(browser);
+  return owner && coordinator_ ? coordinator_->controller(*owner) : nullptr;
 }
 
 void AlloyProductHostWin::ReleaseClosingView(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
-  auto* tab_controller = controller();
+  const auto owner = OwnerWindowIdForBrowser(browser);
+  auto* tab_controller = owner && coordinator_
+                             ? coordinator_->controller(*owner)
+                             : nullptr;
+  if (owner && *owner != kPrimaryWindowId) {
+    if (!tab_controller || !tab_controller->ReleaseAfterDoClose(browser)) {
+      return;
+    }
+    auto popup = popup_windows_.find(*owner);
+    if (popup != popup_windows_.end()) {
+      popup->second.view = nullptr;
+      popup->second.browser = nullptr;
+    }
+    return;
+  }
   std::optional<window::TabId> closing_tab;
   CefRefPtr<CefBrowserView> closing_view;
   for (const auto& [id, candidate] : views_) {
@@ -1321,6 +1591,7 @@ void AlloyProductHostWin::NotifyClosed() {
   closed_ = true;
   started_ = false;
   closing_ = false;
+  primary_closing_ = false;
   view_ = nullptr;
   browser_ = nullptr;
   if (builtin_content_) {

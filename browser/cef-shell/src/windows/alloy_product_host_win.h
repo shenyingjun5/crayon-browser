@@ -1,5 +1,6 @@
 #pragma once
 
+#include <deque>
 #include <functional>
 #include <map>
 #include <memory>
@@ -36,6 +37,7 @@
 #include "include/cef_life_span_handler.h"
 #include "include/cef_load_handler.h"
 #include "include/cef_permission_handler.h"
+#include "include/cef_request_context.h"
 #include "include/cef_request_handler.h"
 #include "windows/alloy_cast_overlay_win.h"
 #include "include/views/cef_browser_view_delegate.h"
@@ -74,6 +76,7 @@ class AlloyProductHostWin final : public CefClient,
         media_events_ready;
     observation::CefObservationBridge::LifecycleCallback media_lifecycle;
     permission::PermissionStore* permission_store = nullptr;
+    CefRefPtr<CefRequestContext> request_context;
   };
 
   struct Callbacks final {
@@ -134,6 +137,16 @@ class AlloyProductHostWin final : public CefClient,
                           CefRefPtr<CefBrowser> browser) override;
   bool DoClose(CefRefPtr<CefBrowser> browser) override;
   void OnAfterCreated(CefRefPtr<CefBrowser> browser) override;
+  bool OnBeforePopup(
+      CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
+      int popup_id, const CefString& target_url,
+      const CefString& target_frame_name,
+      CefLifeSpanHandler::WindowOpenDisposition target_disposition,
+      bool user_gesture, const CefPopupFeatures& popup_features,
+      CefWindowInfo& window_info,
+      CefRefPtr<CefClient>& client, CefBrowserSettings& settings,
+      CefRefPtr<CefDictionaryValue>& extra_info,
+      bool* no_javascript_access) override;
   void OnBeforeClose(CefRefPtr<CefBrowser> browser) override;
   void OnTitleChange(CefRefPtr<CefBrowser> browser,
                      const CefString& title) override;
@@ -233,6 +246,8 @@ class AlloyProductHostWin final : public CefClient,
 
   window::AlloyTabController* controller() const noexcept;
   bool CreateTab(std::string url, browser_engine::ContentPurpose purpose);
+  bool CreatePopupWindow(
+      const window::AlloyWindowCoordinator::PopupRequest& request);
   void FinalizeBrowserCreated(CefRefPtr<CefBrowserView> view,
                               CefRefPtr<CefBrowser> browser);
   bool ActivateTab(window::TabId tab_id);
@@ -245,6 +260,12 @@ class AlloyProductHostWin final : public CefClient,
   CefRefPtr<CefBrowser> BrowserForTab(window::TabId tab_id) const;
   std::optional<window::TabId> TabForView(CefRefPtr<CefBrowserView> view) const;
   bool Owns(CefRefPtr<CefBrowser> browser) const;
+  std::optional<std::string> OwnerWindowIdForView(
+      CefRefPtr<CefBrowserView> view) const;
+  std::optional<std::string> OwnerWindowIdForBrowser(
+      CefRefPtr<CefBrowser> browser) const;
+  window::AlloyTabController* ControllerForBrowser(
+      CefRefPtr<CefBrowser> browser) const;
   void ReleaseClosingView(CefRefPtr<CefBrowser> browser);
   void FinalizeRendererCrash(CefRefPtr<CefBrowser> browser);
   void NotifyClosed();
@@ -295,6 +316,16 @@ class AlloyProductHostWin final : public CefClient,
   CefRefPtr<CefBrowserView> view_;
   CefRefPtr<CefBrowser> browser_;
   std::map<window::TabId, CefRefPtr<CefBrowserView>> views_;
+  struct PopupWindowRecord final {
+    std::string window_id;
+    CefRefPtr<CefWindow> window;
+    CefRefPtr<CefBrowserView> view;
+    CefRefPtr<CefBrowser> browser;
+    window::TabId tab_id = 0;
+    bool closing = false;
+  };
+  std::map<std::string, PopupWindowRecord> popup_windows_;
+  std::deque<std::string> pending_popup_windows_;
   std::string title_;
   std::string profile_id_value_;
   window::TabId tab_id_ = 0;
@@ -306,6 +337,7 @@ class AlloyProductHostWin final : public CefClient,
   std::uint64_t trusted_input_at_ms_ = 0;
   int chrome_browser_id_ = 0;
   bool started_ = false;
+  bool primary_closing_ = false;
   bool closing_ = false;
   bool closed_ = false;
 

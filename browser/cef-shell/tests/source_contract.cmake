@@ -387,6 +387,38 @@ foreach(required_alloy_product_security_token
             "Windows Alloy product host is missing 24W2b1 token ${required_alloy_product_security_token}")
   endif()
 endforeach()
+foreach(required_alloy_product_popup_token
+        "OnBeforePopup"
+        "coordinator_->RequestPopup"
+        "CreatePopupWindow"
+        "CefWindow::CreateTopLevelWindow"
+        "pending_popup_windows_"
+        "OwnerWindowIdForBrowser"
+        "ControllerForBrowser"
+        "GetRequestContext"
+        "dependencies_.request_context")
+  string(FIND "${alloy_product_host}${alloy_product_host_header}"
+         "${required_alloy_product_popup_token}"
+         token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Windows Alloy product host is missing 24W2b2a token ${required_alloy_product_popup_token}")
+  endif()
+endforeach()
+string(FIND "${alloy_product_host}"
+       "browser_engine::ContentPurpose::kWeb" product_popup_web_purpose)
+string(FIND "${alloy_product_host}"
+       "CefLifeSpanHandler::WindowOpenDisposition" product_popup_disposition)
+string(FIND "${alloy_product_host}" "no_javascript_access = false"
+       unsafe_popup_javascript_override)
+if(product_popup_web_purpose EQUAL -1 OR product_popup_disposition EQUAL -1)
+  message(FATAL_ERROR
+          "Windows Alloy product popup must use the bounded web-purpose lifecycle")
+endif()
+if(NOT unsafe_popup_javascript_override EQUAL -1)
+  message(FATAL_ERROR
+          "Windows Alloy product popup must not override CEF JavaScript isolation")
+endif()
 string(FIND "${alloy_product_host}" "allow_os_execution = true"
        unsafe_protocol_execution)
 if(NOT unsafe_protocol_execution EQUAL -1)

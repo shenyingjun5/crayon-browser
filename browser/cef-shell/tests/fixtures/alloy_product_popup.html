@@ -1,0 +1,17 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Alloy product popup fixture</title>
+<a id="popup" target="_blank" href="alloy_product_popup_child.html?source=user">
+  Open trusted popup
+</a>
+<output id="result">ready</output>
+<script>
+  const result = document.querySelector('#result');
+  document.cookie = 'alloy_popup_context=shared; SameSite=Lax; path=/';
+  window.addEventListener('load', () => {
+    window.open('alloy_product_popup_child.html?source=programmatic', '_blank');
+    window.setTimeout(() => {
+      result.textContent = 'programmatic-requested';
+    }, 0);
+  });
+</script>
