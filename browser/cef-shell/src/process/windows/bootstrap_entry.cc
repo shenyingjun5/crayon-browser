@@ -99,7 +99,39 @@ int RunBrowserProcess(HINSTANCE bootstrap_instance, void *sandbox_info) {
   const auto profile_cache_root_utf8 =
       profile_cache_root ? WideToUtf8(profile_cache_root->wstring())
                          : std::nullopt;
-  if (!profile_cache_root || !profile_cache_root_utf8) {
+  const auto product_data_root =
+      profile_cache_root
+          ? std::optional<std::filesystem::path>(
+                *profile_cache_root / "ProductData" / "default")
+          : std::nullopt;
+  const auto download_directory =
+      profile_cache_root
+          ? std::optional<std::filesystem::path>(*profile_cache_root /
+                                                 "Downloads")
+          : std::nullopt;
+  std::error_code product_data_error;
+  if (product_data_root) {
+    std::filesystem::create_directories(*product_data_root,
+                                        product_data_error);
+  }
+  if (!product_data_error && download_directory) {
+    std::filesystem::create_directories(*download_directory,
+                                        product_data_error);
+  }
+  const auto bookmarks_path_utf8 =
+      product_data_root
+          ? WideToUtf8((*product_data_root / "bookmarks-v1").wstring())
+          : std::nullopt;
+  const auto history_path_utf8 =
+      product_data_root
+          ? WideToUtf8((*product_data_root / "history-v1").wstring())
+          : std::nullopt;
+  const auto download_directory_utf8 =
+      download_directory ? WideToUtf8(download_directory->wstring())
+                         : std::nullopt;
+  if (!profile_cache_root || !profile_cache_root_utf8 || product_data_error ||
+      !bookmarks_path_utf8 || !history_path_utf8 ||
+      !download_directory_utf8) {
     return static_cast<int>(ExitCode::kProfileCacheRootUnavailable);
   }
   CefSettings settings;
@@ -111,8 +143,11 @@ int RunBrowserProcess(HINSTANCE bootstrap_instance, void *sandbox_info) {
   CefString(&settings.accept_language_list) =
       std::string(locale_snapshot.accept_language_list);
   CefRefPtr<BrowserApp> app(new BrowserApp(
-      client_module, locale_snapshot, *profile_cache_root_utf8,
-      (*profile_cache_root / "alloy-session-v2").wstring()));
+      client_module, locale_snapshot,
+      WindowsProductPaths{*profile_cache_root_utf8,
+                          (*profile_cache_root / "alloy-session-v2").wstring(),
+                          *bookmarks_path_utf8, *history_path_utf8,
+                          *download_directory_utf8}));
   if (!app->brand_icons_valid()) {
     return static_cast<int>(ExitCode::kBrandIconMissing);
   }

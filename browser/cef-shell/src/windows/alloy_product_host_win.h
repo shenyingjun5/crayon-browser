@@ -20,6 +20,9 @@
 #include "browser/page_markdown/cef_page_markdown_preview.h"
 #include "browser/page_snapshot_gateway/cef_page_snapshot_bridge.h"
 #include "browser/window/alloy_builtin_content.h"
+#include "browser/window/alloy_bookmarks.h"
+#include "browser/window/alloy_downloads.h"
+#include "browser/window/alloy_history.h"
 #include "browser/window/alloy_interactions.h"
 #include "browser/window/alloy_navigation.h"
 #include "browser/window/alloy_omnibox.h"
@@ -84,6 +87,9 @@ class AlloyProductHostWin final : public CefClient,
         register_incognito_content;
     CefRefPtr<CefRequestContext> request_context;
     std::wstring session_path;
+    std::string bookmarks_path;
+    std::string history_path;
+    std::string download_directory;
   };
 
   struct Callbacks final {
@@ -106,6 +112,9 @@ class AlloyProductHostWin final : public CefClient,
   }
   window::AlloySessionFileResult session_save_result() const noexcept {
     return session_save_result_;
+  }
+  bool daily_data_load_failed() const noexcept {
+    return daily_data_load_failed_;
   }
 
   CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
@@ -236,6 +245,8 @@ class AlloyProductHostWin final : public CefClient,
   void OnBuiltinLoadEnd(CefRefPtr<CefBrowser> browser,
                         CefRefPtr<CefFrame> frame,
                         int http_status_code) override;
+  void OnBuiltinTitleChange(CefRefPtr<CefBrowser> browser,
+                            const CefString& title) override;
   void OnBuiltinLoadError(CefRefPtr<CefBrowser> browser,
                           CefRefPtr<CefFrame> frame, cef_errorcode_t error_code,
                           const CefString& error_text,
@@ -272,6 +283,14 @@ class AlloyProductHostWin final : public CefClient,
   void ScheduleSessionCheckpoint();
   void SaveSessionCheckpoint(std::uint64_t generation);
   bool SaveSessionCheckpointNow();
+  bool InitializeDailyState(const browser_engine::ProfileId& profile_id);
+  void CommitHistoryNavigation(CefRefPtr<CefBrowser> browser,
+                               const std::string& address,
+                               int http_status_code);
+  void RecordRecentlyClosed(const window::TabSnapshot& tab);
+  bool SaveBookmarks();
+  bool SaveHistory();
+  void ShutdownDailyState();
   bool CreateIncognitoWindow(const browser_engine::ProfileId& profile_id,
                              std::uint64_t generation);
   void FinalizeIncognitoContext(std::string profile_id,
@@ -338,10 +357,15 @@ class AlloyProductHostWin final : public CefClient,
   std::map<std::uint32_t, std::uint32_t> media_generations_;
   std::vector<AlloyCastOverlayObservation> cast_observations_;
   CefRefPtr<permission::CefDownloadHandlerAdapter> download_handler_;
+  std::unique_ptr<window::AlloyBookmarks> bookmarks_;
+  std::unique_ptr<window::AlloyHistory> history_;
+  std::unique_ptr<window::AlloyDownloads> downloads_;
   std::map<window::TabId, std::unique_ptr<window::AlloySiteControls>>
       site_controls_;
   std::map<window::TabId, std::string> site_origins_;
   std::map<window::TabId, std::string> site_urls_;
+  std::map<window::TabId, std::string> tab_titles_;
+  std::map<window::TabId, std::uint64_t> history_committed_generations_;
   CefRefPtr<window::AlloyInteractions> interactions_;
   CefRefPtr<window::AlloyPageTools> page_tools_;
   CefRefPtr<CefPanel> toolbar_;
@@ -393,6 +417,9 @@ class AlloyProductHostWin final : public CefClient,
   bool started_ = false;
   bool session_writes_enabled_ = false;
   bool session_restore_failed_ = false;
+  bool bookmarks_writes_enabled_ = false;
+  bool history_writes_enabled_ = false;
+  bool daily_data_load_failed_ = false;
   bool primary_closing_ = false;
   bool closing_ = false;
   bool closed_ = false;

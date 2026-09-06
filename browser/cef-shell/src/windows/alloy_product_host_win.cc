@@ -7,6 +7,7 @@
 #include <cctype>
 #include <cstdint>
 #include <chrono>
+#include <filesystem>
 #include <optional>
 #include <utility>
 
@@ -44,6 +45,31 @@ std::uint64_t NowMilliseconds() {
       std::chrono::duration_cast<std::chrono::milliseconds>(
           std::chrono::steady_clock::now().time_since_epoch())
           .count());
+}
+
+std::uint64_t NowUnixSeconds() {
+  return static_cast<std::uint64_t>(
+      std::chrono::duration_cast<std::chrono::seconds>(
+          std::chrono::system_clock::now().time_since_epoch())
+          .count());
+}
+
+bool Utf8PathExists(const std::string& path) {
+  if (path.empty()) return true;
+  std::error_code error;
+  const bool exists =
+      std::filesystem::exists(std::filesystem::u8path(path), error);
+  return error || exists;
+}
+
+bool IsSafeHistoryTitle(std::string_view title) {
+  if (title.empty() || title.size() > browser_history::kMaxTitleBytes) {
+    return false;
+  }
+  return std::none_of(title.begin(), title.end(), [](char character) {
+    const auto value = static_cast<unsigned char>(character);
+    return value < 0x20 || value == 0x7F;
+  });
 }
 
 std::optional<browser_engine::ContentCapabilitySet> InitialCapabilities() {
@@ -289,8 +315,13 @@ bool AlloyProductHostWin::Start(std::string initial_url, std::string title,
   builtin_content_ = new window::AlloyBuiltinContent(dependencies_.mdv_entries,
                                                      dependencies_.mdv_editing,
                                                      page_markdown_.get());
-  download_handler_ = new permission::CefDownloadHandlerAdapter(
-      dependencies_.permission_store);
+  if (!InitializeDailyState(*settings_profile)) {
+    builtin_content_ = nullptr;
+    page_markdown_.reset();
+    profile_settings_.reset();
+    coordinator_.reset();
+    return false;
+  }
   const auto locale = dependencies_.locale.locale;
   media_observation_bridge_.SetEventsReadyCallback(
       dependencies_.media_events_ready);
@@ -878,9 +909,13 @@ void AlloyProductHostWin::OnBuiltinBrowserClosing(
           ? tab_controller->model().FindByBrowser(browser->GetIdentifier())
           : nullptr;
   const auto closing_tab = closing ? std::optional<window::TabId>(closing->id)
-                                   : std::nullopt;
+                                    : std::nullopt;
   if (!Owns(browser) || !tab_controller) {
     return;
+  }
+  if (!closing_ && !primary_closing_ && owner &&
+      *owner == kPrimaryWindowId && closing) {
+    RecordRecentlyClosed(*closing);
   }
   const bool finalized = tab_controller->OnBeforeClose(browser);
   if (!finalized &&
@@ -916,6 +951,8 @@ void AlloyProductHostWin::OnBuiltinBrowserClosing(
     }
     site_origins_.erase(*closing_tab);
     site_urls_.erase(*closing_tab);
+    tab_titles_.erase(*closing_tab);
+    history_committed_generations_.erase(*closing_tab);
   }
   if (owner && *owner == kPrimaryWindowId && closing_tab) {
     media_observation_bridge_.CloseBrowser(
@@ -1337,6 +1374,22 @@ void AlloyProductHostWin::OnBuiltinLoadEnd(CefRefPtr<CefBrowser> browser,
     static_cast<void>(omnibox_->OnNavigationFinished(
         http_status_code >= 200 && http_status_code < 400, address));
   }
+  CommitHistoryNavigation(browser, address, http_status_code);
+}
+
+void AlloyProductHostWin::OnBuiltinTitleChange(
+    CefRefPtr<CefBrowser> browser, const CefString& title) {
+  CEF_REQUIRE_UI_THREAD();
+  if (!browser || !controller()) return;
+  const auto owner = OwnerWindowIdForBrowser(browser);
+  const auto* tab = controller()->model().FindByBrowser(browser->GetIdentifier());
+  if (!owner || *owner != kPrimaryWindowId || !tab) return;
+  const std::string value = title.ToString();
+  if (IsSafeHistoryTitle(value)) {
+    tab_titles_[tab->id] = value;
+  } else {
+    tab_titles_.erase(tab->id);
+  }
 }
 
 void AlloyProductHostWin::OnBuiltinLoadError(CefRefPtr<CefBrowser> browser,
@@ -1388,6 +1441,13 @@ void AlloyProductHostWin::OnBuiltinAddressChange(CefRefPtr<CefBrowser> browser,
         static_cast<void>(SynchronizeSiteControls(browser, url.ToString()));
       }
       static_cast<void>(navigation_->OnAddressChange(browser, url.ToString()));
+      const auto* active_tab =
+          tab_controller
+              ? tab_controller->model().FindByBrowser(browser->GetIdentifier())
+              : nullptr;
+      if (bookmarks_ && active_tab && IsActiveTab(active_tab->id)) {
+        static_cast<void>(bookmarks_->RefreshForUrl(url.ToString()));
+      }
     } else if (owner) {
       auto found = popup_windows_.find(*owner);
       if (found != popup_windows_.end() && found->second.incognito &&
@@ -1663,6 +1723,162 @@ bool AlloyProductHostWin::SaveSessionCheckpointNow() {
   return session_save_result_ == window::AlloySessionFileResult::kSuccess;
 }
 
+bool AlloyProductHostWin::InitializeDailyState(
+    const browser_engine::ProfileId& profile_id) {
+  CEF_REQUIRE_UI_THREAD();
+  if (bookmarks_ || history_ || downloads_ || download_handler_ ||
+      dependencies_.bookmarks_path.empty() ||
+      dependencies_.history_path.empty() ||
+      dependencies_.download_directory.empty()) {
+    return false;
+  }
+  bookmarks_ = std::make_unique<window::AlloyBookmarks>(
+      profile_id,
+      window::AlloyBookmarks::Callbacks{
+          [this](const std::string& url) {
+            if (!browser_ || !browser_->GetMainFrame()) return false;
+            browser_->GetMainFrame()->LoadURL(url);
+            return true;
+          },
+          [this](const std::string& url) {
+            return CreateTab(url, browser_engine::ContentPurpose::kWeb);
+          }});
+  history_ = std::make_unique<window::AlloyHistory>(
+      profile_id, false,
+      window::AlloyHistory::Callbacks{[this](const std::string& url) {
+        return CreateTab(url, browser_engine::ContentPurpose::kWeb);
+      }});
+  downloads_ = std::make_unique<window::AlloyDownloads>(
+      dependencies_.download_directory, &Utf8PathExists,
+      window::AlloyDownloads::Callbacks{
+          [this](std::uint64_t id, const std::string& path) {
+            return download_handler_ &&
+                   download_handler_->ConfirmPending(id, path);
+          },
+          [this](std::uint64_t id) {
+            return download_handler_ && download_handler_->DiscardPending(id);
+          },
+          [this](std::uint64_t id) {
+            return download_handler_ && download_handler_->Pause(id);
+          },
+          [this](std::uint64_t id) {
+            return download_handler_ && download_handler_->Resume(id);
+          },
+          [this](std::uint64_t id) {
+            return download_handler_ && download_handler_->Cancel(id);
+          },
+          {}});
+  download_handler_ = new permission::CefDownloadHandlerAdapter(
+      dependencies_.permission_store, downloads_.get());
+
+  std::error_code path_error;
+  const auto bookmarks_path =
+      std::filesystem::u8path(dependencies_.bookmarks_path);
+  const bool bookmarks_exist =
+      std::filesystem::exists(bookmarks_path, path_error);
+  if (path_error || (bookmarks_exist &&
+                     !bookmarks_->LoadFromFile(dependencies_.bookmarks_path))) {
+    daily_data_load_failed_ = true;
+  } else {
+    bookmarks_writes_enabled_ = true;
+  }
+  path_error.clear();
+  const auto history_path = std::filesystem::u8path(dependencies_.history_path);
+  const bool history_exists = std::filesystem::exists(history_path, path_error);
+  if (path_error ||
+      (history_exists && !history_->LoadFromFile(dependencies_.history_path))) {
+    daily_data_load_failed_ = true;
+  } else {
+    history_writes_enabled_ = true;
+  }
+  return true;
+}
+
+void AlloyProductHostWin::CommitHistoryNavigation(
+    CefRefPtr<CefBrowser> browser, const std::string& address,
+    int http_status_code) {
+  CEF_REQUIRE_UI_THREAD();
+  if (!history_ || !history_writes_enabled_ || !browser || address.empty() ||
+      http_status_code < 200 || http_status_code >= 400 || !controller()) {
+    return;
+  }
+  const auto* tab =
+      controller()->model().FindByBrowser(browser->GetIdentifier());
+  if (!tab || tab->url != address || tab->navigation_generation == 0) return;
+  const auto committed = history_committed_generations_.find(tab->id);
+  if (committed != history_committed_generations_.end() &&
+      committed->second >= tab->navigation_generation) {
+    return;
+  }
+  const auto title = tab_titles_.find(tab->id);
+  const std::string& history_title =
+      title != tab_titles_.end() && IsSafeHistoryTitle(title->second)
+          ? title->second
+          : address;
+  if (!history_->BeginNavigation(tab->navigation_generation) ||
+      history_->CommitNavigation(tab->navigation_generation, address,
+                                 history_title, NowUnixSeconds()) !=
+          window::AlloyHistoryResult::kSuccess) {
+    return;
+  }
+  history_committed_generations_[tab->id] = tab->navigation_generation;
+  static_cast<void>(SaveHistory());
+}
+
+void AlloyProductHostWin::RecordRecentlyClosed(const window::TabSnapshot& tab) {
+  CEF_REQUIRE_UI_THREAD();
+  if (!history_ || !history_writes_enabled_ || tab.url.empty()) return;
+  const auto title = tab_titles_.find(tab.id);
+  const std::string& closed_title =
+      title != tab_titles_.end() && IsSafeHistoryTitle(title->second)
+          ? title->second
+          : tab.url;
+  if (history_->RecordClosedTab(tab.url, closed_title, NowUnixSeconds()) ==
+      window::AlloyHistoryResult::kSuccess) {
+    static_cast<void>(SaveHistory());
+  }
+}
+
+bool AlloyProductHostWin::SaveBookmarks() {
+  CEF_REQUIRE_UI_THREAD();
+  if (!bookmarks_ || !bookmarks_writes_enabled_) return false;
+  if (bookmarks_->SaveToFile(dependencies_.bookmarks_path)) return true;
+  bookmarks_writes_enabled_ = false;
+  return false;
+}
+
+bool AlloyProductHostWin::SaveHistory() {
+  CEF_REQUIRE_UI_THREAD();
+  if (!history_ || !history_writes_enabled_) return false;
+  if (history_->SaveToFile(dependencies_.history_path)) return true;
+  history_writes_enabled_ = false;
+  return false;
+}
+
+void AlloyProductHostWin::ShutdownDailyState() {
+  CEF_REQUIRE_UI_THREAD();
+  if (download_handler_) {
+    download_handler_->Shutdown();
+    download_handler_ = nullptr;
+  }
+  if (downloads_) {
+    static_cast<void>(downloads_->Shutdown());
+    downloads_.reset();
+  }
+  if (history_) {
+    static_cast<void>(history_->Shutdown());
+    history_.reset();
+  }
+  if (bookmarks_) {
+    static_cast<void>(bookmarks_->Shutdown());
+    bookmarks_.reset();
+  }
+  history_committed_generations_.clear();
+  tab_titles_.clear();
+  bookmarks_writes_enabled_ = false;
+  history_writes_enabled_ = false;
+}
+
 bool AlloyProductHostWin::CreatePopupWindow(
     const window::AlloyWindowCoordinator::PopupRequest& request) {
   CEF_REQUIRE_UI_THREAD();
@@ -1913,6 +2129,9 @@ bool AlloyProductHostWin::BindActiveChrome() {
   const auto* snapshot = tab_controller->model().Find(*active);
   if (snapshot && !snapshot->url.empty()) {
     static_cast<void>(omnibox_->SetAddress(snapshot->url));
+    if (bookmarks_) {
+      static_cast<void>(bookmarks_->RefreshForUrl(snapshot->url));
+    }
   }
   page_tools_ = new window::AlloyPageTools(browser, window_, profile_id_value_);
   if (snapshot) {
@@ -2001,10 +2220,7 @@ void AlloyProductHostWin::ShutdownChromeForWindowClose() {
     cast_controller_->Shutdown();
     cast_controller_.reset();
   }
-  if (download_handler_) {
-    download_handler_->Shutdown();
-    download_handler_ = nullptr;
-  }
+  ShutdownDailyState();
   for (auto& [id, controls] : site_controls_) {
     static_cast<void>(id);
     controls->Shutdown();
@@ -2180,10 +2396,7 @@ void AlloyProductHostWin::FinalizeRendererCrash(CefRefPtr<CefBrowser> browser) {
     cast_controller_->Shutdown();
     cast_controller_.reset();
   }
-  if (download_handler_) {
-    download_handler_->Shutdown();
-    download_handler_ = nullptr;
-  }
+  ShutdownDailyState();
   for (auto& [id, controls] : site_controls_) {
     static_cast<void>(id);
     controls->Shutdown();
@@ -2227,6 +2440,7 @@ void AlloyProductHostWin::NotifyClosed() {
   primary_closing_ = false;
   view_ = nullptr;
   browser_ = nullptr;
+  ShutdownDailyState();
   if (builtin_content_) {
     builtin_content_->Shutdown();
     builtin_content_ = nullptr;

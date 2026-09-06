@@ -102,6 +102,29 @@ std::string AlloyBookmarks::Export() const {
   return active_ ? browser_bookmarks::SerializeBookmarks(store_) : std::string{};
 }
 
+bool AlloyBookmarks::LoadFromFile(
+    const std::string &path, browser_bookmarks::BookmarkCodecError *error) {
+  if (!active_)
+    return false;
+  auto candidate = browser_bookmarks::LoadBookmarksFromFile(path, error);
+  if (!candidate)
+    return false;
+  auto current = std::move(store_);
+  store_ = std::move(*candidate);
+  if (!RefreshProjection(current_url_)) {
+    store_ = std::move(current);
+    static_cast<void>(RefreshProjection(current_url_));
+    return false;
+  }
+  return true;
+}
+
+bool AlloyBookmarks::SaveToFile(
+    const std::string &path,
+    browser_bookmarks::BookmarkCodecError *error) const {
+  return active_ && browser_bookmarks::SaveBookmarksToFile(store_, path, error);
+}
+
 bool AlloyBookmarks::RefreshForUrl(const std::string &url) {
   if (!active_) {
     return false;

@@ -92,6 +92,9 @@ class HistoryStore final {
   std::size_t recently_closed_count() const noexcept {
     return recently_closed_.size();
   }
+  const std::vector<RecentlyClosedTab>& recently_closed() const noexcept {
+    return recently_closed_;
+  }
 
   /// Case-insensitive substring search over titles and URLs, newest first,
   /// bounded to `kMaxSearchResults`.

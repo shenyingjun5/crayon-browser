@@ -1,4 +1,5 @@
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -265,6 +266,24 @@ bool SaveLoadRoundTripThroughFile() {
   return true;
 }
 
+bool UnicodeDirectoryRoundTripThroughFile() {
+  const auto directory = std::filesystem::temp_directory_path() /
+                         std::filesystem::u8path(u8"crayon-书签-codec");
+  std::error_code filesystem_error;
+  std::filesystem::create_directories(directory, filesystem_error);
+  CHECK(!filesystem_error);
+  const auto path = directory / "bookmarks-v1.txt";
+  BookmarkStore store;
+  store.AddBookmark(0, "Unicode path", "https://unicode.test/");
+  BookmarkCodecError error = BookmarkCodecError::kIoFailure;
+  CHECK(SaveBookmarksToFile(store, path.u8string(), &error));
+  const auto loaded = LoadBookmarksFromFile(path.u8string(), &error);
+  CHECK(loaded && loaded->FindByUrl("https://unicode.test/").size() == 1);
+  std::filesystem::remove_all(directory, filesystem_error);
+  CHECK(!filesystem_error);
+  return true;
+}
+
 bool LoadRejectsMissingAndCorruptFiles() {
   BookmarkCodecError error = BookmarkCodecError::kIoFailure;
   CHECK(!LoadBookmarksFromFile("/nonexistent/crayon-none.txt", &error)
@@ -292,7 +311,8 @@ int main() {
       !SearchIsBoundedAndCaseInsensitive() || !DuplicateUrlDetection() ||
       !UpdateRules() || !RoundTripPreservesTree() ||
       !CorruptionMatrixFailsClosed() || !EmptyDocumentIsValidEmptyTree() ||
-      !SaveLoadRoundTripThroughFile() || !LoadRejectsMissingAndCorruptFiles()) {
+      !SaveLoadRoundTripThroughFile() || !UnicodeDirectoryRoundTripThroughFile() ||
+      !LoadRejectsMissingAndCorruptFiles()) {
     return 1;
   }
   return 0;

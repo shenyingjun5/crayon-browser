@@ -155,7 +155,7 @@ void WindowsWindowIcons::Apply(CefRefPtr<CefBrowser> browser) const {
 BrowserApp::BrowserApp(
     HINSTANCE resource_module,
     ::crayon::browser::localization::LocaleSnapshot locale_snapshot,
-    std::string profile_cache_root, std::wstring session_path)
+    WindowsProductPaths paths)
     : window_icons_(std::make_shared<WindowsWindowIcons>(resource_module)),
       about_resources_(
           new branding::AboutBrowserResources(locale_snapshot.locale)),
@@ -203,7 +203,7 @@ BrowserApp::BrowserApp(
       trusted_input_monitor_(
           std::make_unique<windows::TrustedInputMonitorWin>()),
       profile_context_factory_(std::make_unique<context::ProfileContextFactory>(
-          std::move(profile_cache_root))),
+          std::move(paths.profile_cache_root))),
       tab_controller_(new window::TabController(
           browser_new_tab::kNewTabUrl,
           [this](CefRefPtr<CefBrowser> browser) {
@@ -252,7 +252,9 @@ BrowserApp::BrowserApp(
                     page_model, product_strings_.new_tab,
                     std::move(request_context));
               },
-               nullptr, std::move(session_path)},
+               nullptr, std::move(paths.session_path),
+               std::move(paths.bookmarks_path), std::move(paths.history_path),
+               std::move(paths.download_directory)},
           windows::AlloyProductHostWin::Callbacks{
               [this](CefRefPtr<CefBrowser> browser) {
                 window_icons_->Apply(browser);

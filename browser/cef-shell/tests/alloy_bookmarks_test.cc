@@ -1,4 +1,6 @@
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -76,9 +78,36 @@ bool ProfileIsolationAndFolderProjection() {
         first.folder_items()[0].title == "Leaf");
   return true;
 }
+
+bool FileLoadIsAtomicAndPersists() {
+  const auto directory = std::filesystem::temp_directory_path() /
+                         std::filesystem::u8path(u8"crayon-alloy-书签");
+  std::error_code filesystem_error;
+  std::filesystem::create_directories(directory, filesystem_error);
+  CHECK(!filesystem_error);
+  const auto path = (directory / "bookmarks-v1.txt").u8string();
+  AlloyBookmarks source(Profile("profile-a"), {});
+  CHECK(source.AddCurrentPage("Saved", "https://saved.test/") &&
+        source.SaveToFile(path));
+  AlloyBookmarks restored(Profile("profile-a"), {});
+  CHECK(restored.LoadFromFile(path));
+  CHECK(restored.Search("saved").size() == 1);
+  const auto before = restored.Export();
+  {
+    std::ofstream corrupt(std::filesystem::u8path(path),
+                          std::ios::binary | std::ios::trunc);
+    corrupt << "corrupt";
+  }
+  CHECK(!restored.LoadFromFile(path));
+  CHECK(restored.Export() == before);
+  std::filesystem::remove_all(directory, filesystem_error);
+  CHECK(!filesystem_error);
+  return true;
+}
 } // namespace
 
 int main() {
-  return AdapterContract() && ProfileIsolationAndFolderProjection()
+  return AdapterContract() && ProfileIsolationAndFolderProjection() &&
+                 FileLoadIsAtomicAndPersists()
              ? EXIT_SUCCESS : EXIT_FAILURE;
 }

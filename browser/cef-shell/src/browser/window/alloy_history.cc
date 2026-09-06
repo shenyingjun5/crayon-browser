@@ -115,6 +115,29 @@ std::string AlloyHistory::Export() const {
              : std::string{};
 }
 
+bool AlloyHistory::LoadFromFile(
+    const std::string &path, browser_history::HistoryCodecError *error) {
+  if (!active_ || store_.ephemeral())
+    return false;
+  auto candidate = browser_history::LoadHistoryFromFile(path, error);
+  if (!candidate || candidate->ephemeral())
+    return false;
+  auto current = std::move(store_);
+  store_ = std::move(*candidate);
+  if (!RefreshAll()) {
+    store_ = std::move(current);
+    static_cast<void>(RefreshAll());
+    return false;
+  }
+  return true;
+}
+
+bool AlloyHistory::SaveToFile(
+    const std::string &path, browser_history::HistoryCodecError *error) const {
+  return active_ && !store_.ephemeral() &&
+         browser_history::SaveHistoryToFile(store_, path, error);
+}
+
 bool AlloyHistory::Shutdown() {
   if (!active_) return true;
   active_ = false;

@@ -43,6 +43,12 @@ public:
   bool Import(const std::string &document,
               browser_bookmarks::BookmarkCodecError *error = nullptr);
   std::string Export() const;
+  bool LoadFromFile(
+      const std::string &path,
+      browser_bookmarks::BookmarkCodecError *error = nullptr);
+  bool SaveToFile(
+      const std::string &path,
+      browser_bookmarks::BookmarkCodecError *error = nullptr) const;
   bool RefreshForUrl(const std::string &url);
   bool SetBarVisible(bool visible);
   bool Shutdown();

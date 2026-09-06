@@ -385,6 +385,39 @@ foreach(required_alloy_session_bootstrap_token
             "Windows bootstrap is missing 24W2b2c token ${required_alloy_session_bootstrap_token}")
   endif()
 endforeach()
+foreach(required_alloy_daily_data_token
+        "AlloyBookmarks"
+        "AlloyHistory"
+        "AlloyDownloads"
+        "InitializeDailyState"
+        "CommitHistoryNavigation"
+        "RecordRecentlyClosed"
+        "LoadFromFile"
+        "SaveToFile"
+        "daily_data_load_failed_"
+        "downloads_.get()")
+  string(FIND
+         "${alloy_product_host}${alloy_product_host_header}"
+         "${required_alloy_daily_data_token}" token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Windows Alloy product is missing 24W2b3a token ${required_alloy_daily_data_token}")
+  endif()
+endforeach()
+foreach(required_alloy_daily_data_bootstrap_token
+        "ProductData"
+        "Downloads"
+        "bookmarks-v1"
+        "history-v1"
+        "WindowsProductPaths")
+  string(FIND
+         "${windows_bootstrap}${windows_app}"
+         "${required_alloy_daily_data_bootstrap_token}" token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Windows bootstrap is missing 24W2b3a token ${required_alloy_daily_data_bootstrap_token}")
+  endif()
+endforeach()
 foreach(required_serial_close_token
         "RequestNextClose(false)"
         "if (!force_close)")

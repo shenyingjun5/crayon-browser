@@ -44,6 +44,10 @@ public:
   bool Import(const std::string &document,
               browser_history::HistoryCodecError *error = nullptr);
   std::string Export() const;
+  bool LoadFromFile(const std::string &path,
+                    browser_history::HistoryCodecError *error = nullptr);
+  bool SaveToFile(const std::string &path,
+                  browser_history::HistoryCodecError *error = nullptr) const;
   bool Shutdown();
 
   const browser_history::HistoryStore &store() const noexcept { return store_; }

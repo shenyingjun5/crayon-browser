@@ -1,6 +1,7 @@
 #include "crayon/browser_history/history_codec.h"
 
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <string_view>
 
@@ -105,6 +106,12 @@ std::string SerializeHistory(const HistoryStore& store) {
            std::to_string(entry.url.size()) + "\n" + entry.title + "\n" +
            entry.url + "\n";
   }
+  for (const RecentlyClosedTab& entry : store.recently_closed()) {
+    out += "C " + std::to_string(entry.closed_at) + " " +
+           std::to_string(entry.title.size()) + " " +
+           std::to_string(entry.url.size()) + "\n" + entry.title + "\n" +
+           entry.url + "\n";
+  }
   return out;
 }
 
@@ -127,7 +134,7 @@ std::optional<HistoryStore> DeserializeHistory(
       SetError(error, HistoryCodecError::kTruncated);
       return std::nullopt;
     }
-    if (kind != 'V') {
+    if (kind != 'V' && kind != 'C') {
       SetError(error, HistoryCodecError::kUnknownRecordType);
       return std::nullopt;
     }
@@ -147,7 +154,13 @@ std::optional<HistoryStore> DeserializeHistory(
       SetError(error, HistoryCodecError::kTruncated);
       return std::nullopt;
     }
-    if (store.RecordVisit(std::move(url), std::move(title), visited_at) == 0) {
+    const bool accepted =
+        kind == 'V'
+            ? store.RecordVisit(std::move(url), std::move(title), visited_at) !=
+                  0
+            : store.RecordClosedTab(std::move(url), std::move(title),
+                                    visited_at);
+    if (!accepted) {
       SetError(error, HistoryCodecError::kContentRejected);
       return std::nullopt;
     }
@@ -162,11 +175,13 @@ bool SaveHistoryToFile(const HistoryStore& store,
     SetError(error, HistoryCodecError::kEphemeralRefused);
     return false;
   }
+  const std::filesystem::path target = std::filesystem::u8path(path);
 #ifdef _WIN32
-  const std::string staging =
-      path + ".tmp." + std::to_string(GetCurrentProcessId());
+  std::filesystem::path staging = target;
+  staging += ".tmp." + std::to_string(GetCurrentProcessId());
 #else
-  const std::string staging = path + ".tmp";
+  std::filesystem::path staging = target;
+  staging += ".tmp";
 #endif
   {
     std::ofstream out(staging, std::ios::binary | std::ios::trunc);
@@ -182,13 +197,14 @@ bool SaveHistoryToFile(const HistoryStore& store,
   }
 #ifdef _WIN32
   const bool replaced =
-      MoveFileExA(staging.c_str(), path.c_str(),
-                  MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != FALSE;
+      MoveFileExW(staging.c_str(), target.c_str(),
+                   MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != FALSE;
 #else
-  const bool replaced = std::rename(staging.c_str(), path.c_str()) == 0;
+  const bool replaced = std::rename(staging.c_str(), target.c_str()) == 0;
 #endif
   if (!replaced) {
-    std::remove(staging.c_str());
+    std::error_code remove_error;
+    std::filesystem::remove(staging, remove_error);
     SetError(error, HistoryCodecError::kIoFailure);
     return false;
   }
@@ -198,7 +214,8 @@ bool SaveHistoryToFile(const HistoryStore& store,
 std::optional<HistoryStore> LoadHistoryFromFile(
     const std::string& path,
     HistoryCodecError* error) {
-  std::ifstream in(path, std::ios::binary | std::ios::ate);
+  std::ifstream in(std::filesystem::u8path(path),
+                   std::ios::binary | std::ios::ate);
   if (!in) {
     SetError(error, HistoryCodecError::kIoFailure);
     return std::nullopt;

@@ -1,4 +1,5 @@
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -152,11 +153,17 @@ bool RoundTripPreservesEntries() {
   HistoryStore store;
   store.RecordVisit("https://a.test/?q=1&r=2", "标题 一", 111);
   store.RecordVisit("https://b.test/", "Second", 222);
-  const auto restored = DeserializeHistory(SerializeHistory(store));
+  store.RecordClosedTab("https://closed-a.test/", "Closed A", 333);
+  store.RecordClosedTab("https://closed-b.test/", "Closed B", 444);
+  auto restored = DeserializeHistory(SerializeHistory(store));
   CHECK(restored.has_value());
   CHECK(restored->entries().size() == 2);
   CHECK(restored->entries().front().title == "标题 一");
   CHECK(restored->entries().back().visited_at == 222);
+  CHECK(restored->recently_closed_count() == 2);
+  const auto closed = restored->RestoreRecentlyClosed();
+  CHECK(closed && closed->url == "https://closed-b.test/" &&
+        closed->closed_at == 444);
   return true;
 }
 
@@ -192,11 +199,13 @@ bool FileRoundTripAndMissingFile() {
       "/crayon-history-test-v1.txt";
   HistoryStore store;
   store.RecordVisit("https://a.test/", "a", 7);
+  store.RecordClosedTab("https://closed.test/", "closed", 9);
   HistoryCodecError error = HistoryCodecError::kIoFailure;
   CHECK(SaveHistoryToFile(store, path, &error));
   const auto loaded = LoadHistoryFromFile(path, &error);
   CHECK(loaded.has_value());
   CHECK(loaded->entries().size() == 1);
+  CHECK(loaded->recently_closed_count() == 1);
   store.RecordVisit("https://replacement.test/", "replacement", 8);
   CHECK(SaveHistoryToFile(store, path, &error));
   const auto replaced = LoadHistoryFromFile(path, &error);
@@ -210,6 +219,24 @@ bool FileRoundTripAndMissingFile() {
   return true;
 }
 
+bool UnicodeDirectoryRoundTripThroughFile() {
+  const auto directory = std::filesystem::temp_directory_path() /
+                         std::filesystem::u8path(u8"crayon-历史-codec");
+  std::error_code filesystem_error;
+  std::filesystem::create_directories(directory, filesystem_error);
+  CHECK(!filesystem_error);
+  const auto path = directory / "history-v1.txt";
+  HistoryStore store;
+  store.RecordVisit("https://unicode.test/", "Unicode path", 7);
+  HistoryCodecError error = HistoryCodecError::kIoFailure;
+  CHECK(SaveHistoryToFile(store, path.u8string(), &error));
+  const auto loaded = LoadHistoryFromFile(path.u8string(), &error);
+  CHECK(loaded && loaded->entries().size() == 1);
+  std::filesystem::remove_all(directory, filesystem_error);
+  CHECK(!filesystem_error);
+  return true;
+}
+
 }  // namespace
 
 int main() {
@@ -217,7 +244,8 @@ int main() {
       !EphemeralRefusesEverything() || !RecentlyClosedStackBoundedAndOrdered() ||
       !DeleteRangeBoundaries() || !DeleteUrlAndClearAll() ||
       !SearchNewestFirstAndBounded() || !RoundTripPreservesEntries() ||
-      !CorruptionMatrixFailsClosed() || !FileRoundTripAndMissingFile()) {
+      !CorruptionMatrixFailsClosed() || !FileRoundTripAndMissingFile() ||
+      !UnicodeDirectoryRoundTripThroughFile()) {
     return 1;
   }
   return 0;

@@ -1,4 +1,6 @@
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
 
@@ -75,9 +77,39 @@ bool EphemeralAndProfileIsolation() {
   CHECK(regular.store().entries().empty());
   return true;
 }
+
+bool FileLoadIsAtomicAndPersists() {
+  const auto directory = std::filesystem::temp_directory_path() /
+                         std::filesystem::u8path(u8"crayon-alloy-历史");
+  std::error_code filesystem_error;
+  std::filesystem::create_directories(directory, filesystem_error);
+  CHECK(!filesystem_error);
+  const auto path = (directory / "history-v1.txt").u8string();
+  AlloyHistory source(Profile("profile-a"), false, {});
+  CHECK(source.BeginNavigation(1));
+  CHECK(source.CommitNavigation(1, "https://saved.test/", "Saved", 1) ==
+        AlloyHistoryResult::kSuccess);
+  CHECK(source.SaveToFile(path));
+  AlloyHistory restored(Profile("profile-a"), false, {});
+  CHECK(restored.LoadFromFile(path));
+  CHECK(restored.store().entries().size() == 1);
+  const auto before = restored.Export();
+  {
+    std::ofstream corrupt(std::filesystem::u8path(path),
+                          std::ios::binary | std::ios::trunc);
+    corrupt << "corrupt";
+  }
+  CHECK(!restored.LoadFromFile(path));
+  CHECK(restored.Export() == before);
+  std::filesystem::remove_all(directory, filesystem_error);
+  CHECK(!filesystem_error);
+  return true;
+}
 } // namespace
 
 int main() {
-  return RegularContract() && EphemeralAndProfileIsolation() ? EXIT_SUCCESS
-                                                              : EXIT_FAILURE;
+  return RegularContract() && EphemeralAndProfileIsolation() &&
+                 FileLoadIsAtomicAndPersists()
+             ? EXIT_SUCCESS
+             : EXIT_FAILURE;
 }

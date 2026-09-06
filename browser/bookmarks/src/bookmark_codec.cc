@@ -1,6 +1,7 @@
 #include "crayon/browser_bookmarks/bookmark_codec.h"
 
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <string_view>
 #include <vector>
@@ -204,11 +205,13 @@ std::optional<BookmarkStore> DeserializeBookmarks(
 bool SaveBookmarksToFile(const BookmarkStore& store,
                          const std::string& path,
                          BookmarkCodecError* error) {
+  const std::filesystem::path target = std::filesystem::u8path(path);
 #ifdef _WIN32
-  const std::string staging =
-      path + ".tmp." + std::to_string(GetCurrentProcessId());
+  std::filesystem::path staging = target;
+  staging += ".tmp." + std::to_string(GetCurrentProcessId());
 #else
-  const std::string staging = path + ".tmp";
+  std::filesystem::path staging = target;
+  staging += ".tmp";
 #endif
   {
     std::ofstream out(staging, std::ios::binary | std::ios::trunc);
@@ -224,13 +227,14 @@ bool SaveBookmarksToFile(const BookmarkStore& store,
   }
 #ifdef _WIN32
   const bool replaced =
-      MoveFileExA(staging.c_str(), path.c_str(),
-                  MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != FALSE;
+      MoveFileExW(staging.c_str(), target.c_str(),
+                   MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != FALSE;
 #else
-  const bool replaced = std::rename(staging.c_str(), path.c_str()) == 0;
+  const bool replaced = std::rename(staging.c_str(), target.c_str()) == 0;
 #endif
   if (!replaced) {
-    std::remove(staging.c_str());
+    std::error_code remove_error;
+    std::filesystem::remove(staging, remove_error);
     SetError(error, BookmarkCodecError::kIoFailure);
     return false;
   }
@@ -240,7 +244,8 @@ bool SaveBookmarksToFile(const BookmarkStore& store,
 std::optional<BookmarkStore> LoadBookmarksFromFile(
     const std::string& path,
     BookmarkCodecError* error) {
-  std::ifstream in(path, std::ios::binary | std::ios::ate);
+  std::ifstream in(std::filesystem::u8path(path),
+                   std::ios::binary | std::ios::ate);
   if (!in) {
     SetError(error, BookmarkCodecError::kIoFailure);
     return std::nullopt;

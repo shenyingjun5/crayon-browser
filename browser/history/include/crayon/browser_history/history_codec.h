@@ -25,7 +25,7 @@ enum class HistoryCodecError {
 };
 
 /// Serializes the store into the deterministic `CRAYON-HISTORY v1`
-/// length-prefixed text format (oldest visit first).
+/// length-prefixed text format (oldest visit and closed-tab snapshot first).
 std::string SerializeHistory(const HistoryStore& store);
 
 /// Parses a serialized document into a fresh store.  Any corruption fails

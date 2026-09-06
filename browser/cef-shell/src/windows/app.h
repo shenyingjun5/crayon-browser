@@ -30,6 +30,14 @@
 
 namespace crayon::browser::cef_shell {
 
+struct WindowsProductPaths final {
+  std::string profile_cache_root;
+  std::wstring session_path;
+  std::string bookmarks_path;
+  std::string history_path;
+  std::string download_directory;
+};
+
 class WindowsWindowIcons final {
  public:
   explicit WindowsWindowIcons(HINSTANCE resource_module);
@@ -50,7 +58,7 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
  public:
   BrowserApp(HINSTANCE resource_module,
              ::crayon::browser::localization::LocaleSnapshot locale_snapshot,
-             std::string profile_cache_root, std::wstring session_path);
+             WindowsProductPaths paths);
   ~BrowserApp() override;
 
   CefRefPtr<CefBrowserProcessHandler> GetBrowserProcessHandler() override {
