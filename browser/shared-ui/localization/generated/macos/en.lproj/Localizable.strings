@@ -34,6 +34,14 @@
 "app.title" = "Crayon AI Agent Cast Browser";
 "app.about" = "About Crayon Browser";
 "app.menu" = "Menu";
+"security.permission.title" = "Site permission";
+"security.permission.body" = "Allow this site to use the requested permission?";
+"security.certificate.title" = "Certificate warning";
+"security.certificate.body" = "The connection cannot be verified. Continue once?";
+"security.external.title" = "Open an external application";
+"security.external.body" = "Allow this site to open the following target?";
+"security.download.title" = "Download file";
+"security.download.body" = "Allow this site to download a file?";
 "menu.open_markdown" = "Open Markdown…";
 "menu.copy" = "Copy";
 "menu.paste" = "Paste";

@@ -14,7 +14,7 @@ struct LocaleCatalogEntry {
   std::string_view zh_tw;
 };
 
-inline constexpr std::array<LocaleCatalogEntry, 206> kLocaleCatalogEntries{{
+inline constexpr std::array<LocaleCatalogEntry, 214> kLocaleCatalogEntries{{
     {"cast.selection.unavailable", "Casting is not ready in this window", "此窗口的投屏入口尚未就绪", "此視窗的投屏入口尚未就緒"},
     {"cast.selection.expired", "Selection expired. Prepare again.", "选择已过期，请重新准备", "選擇已過期，請重新準備"},
     {"cast.selection.connecting", "Connecting to device…", "正在连接设备…", "正在連線裝置…"},
@@ -51,6 +51,14 @@ inline constexpr std::array<LocaleCatalogEntry, 206> kLocaleCatalogEntries{{
     {"app.title", "Crayon AI Agent Cast Browser", "蜡笔 AI Agent 投屏浏览器", "蠟筆 AI Agent 投影瀏覽器"},
     {"app.about", "About Crayon Browser", "关于蜡笔浏览器", "關於蠟筆瀏覽器"},
     {"app.menu", "Menu", "菜单", "選單"},
+    {"security.permission.title", "Site permission", "网站权限", "網站權限"},
+    {"security.permission.body", "Allow this site to use the requested permission?", "是否允许此网站使用所请求的权限？", "是否允許此網站使用所要求的權限？"},
+    {"security.certificate.title", "Certificate warning", "证书警告", "憑證警告"},
+    {"security.certificate.body", "The connection cannot be verified. Continue once?", "无法验证此连接，是否仅继续本次访问？", "無法驗證此連線，是否僅繼續本次存取？"},
+    {"security.external.title", "Open an external application", "打开外部应用", "開啟外部應用程式"},
+    {"security.external.body", "Allow this site to open the following target?", "是否允许此网站打开以下目标？", "是否允許此網站開啟下列目標？"},
+    {"security.download.title", "Download file", "下载文件", "下載檔案"},
+    {"security.download.body", "Allow this site to download a file?", "是否允许此网站下载文件？", "是否允許此網站下載檔案？"},
     {"menu.open_markdown", "Open Markdown…", "打开 Markdown…", "開啟 Markdown…"},
     {"menu.copy", "Copy", "复制", "複製"},
     {"menu.paste", "Paste", "粘贴", "貼上"},

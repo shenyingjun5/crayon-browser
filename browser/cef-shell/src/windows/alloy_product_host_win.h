@@ -5,6 +5,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "browser/mdv/cef_mdv_editing.h"
@@ -12,6 +13,8 @@
 #include "browser/media_host/alloy_cast_controller.h"
 #include "browser/media_host/cast_entry_surface.h"
 #include "browser/observation_gateway/cef_observation_bridge.h"
+#include "browser/permission/cef_download_handler.h"
+#include "browser/permission/permission_store.h"
 #include "browser/page_markdown/cef_page_markdown_preview.h"
 #include "browser/page_snapshot_gateway/cef_page_snapshot_bridge.h"
 #include "browser/window/alloy_builtin_content.h"
@@ -20,6 +23,7 @@
 #include "browser/window/alloy_omnibox.h"
 #include "browser/window/alloy_page_markdown.h"
 #include "browser/window/alloy_page_tools.h"
+#include "browser/window/alloy_site_controls.h"
 #include "browser/window/alloy_tab_strip.h"
 #include "browser/window/alloy_window_coordinator.h"
 #include "crayon/browser_engine/types.h"
@@ -31,6 +35,7 @@
 #include "include/cef_keyboard_handler.h"
 #include "include/cef_life_span_handler.h"
 #include "include/cef_load_handler.h"
+#include "include/cef_permission_handler.h"
 #include "include/cef_request_handler.h"
 #include "windows/alloy_cast_overlay_win.h"
 #include "include/views/cef_browser_view_delegate.h"
@@ -46,6 +51,8 @@ class AlloyProductHostWin final : public CefClient,
                                   public CefLoadHandler,
                                   public CefDisplayHandler,
                                   public CefRequestHandler,
+                                  public CefPermissionHandler,
+                                  public CefDownloadHandler,
                                   public CefKeyboardHandler,
                                   public CefContextMenuHandler,
                                   public CefDragHandler,
@@ -66,6 +73,7 @@ class AlloyProductHostWin final : public CefClient,
     observation::CefObservationBridge::EventsReadyCallback
         media_events_ready;
     observation::CefObservationBridge::LifecycleCallback media_lifecycle;
+    permission::PermissionStore* permission_store = nullptr;
   };
 
   struct Callbacks final {
@@ -86,6 +94,10 @@ class AlloyProductHostWin final : public CefClient,
   CefRefPtr<CefLoadHandler> GetLoadHandler() override { return this; }
   CefRefPtr<CefDisplayHandler> GetDisplayHandler() override { return this; }
   CefRefPtr<CefRequestHandler> GetRequestHandler() override { return this; }
+  CefRefPtr<CefPermissionHandler> GetPermissionHandler() override {
+    return this;
+  }
+  CefRefPtr<CefDownloadHandler> GetDownloadHandler() override { return this; }
   CefRefPtr<CefFindHandler> GetFindHandler() override { return page_tools_; }
   CefRefPtr<CefKeyboardHandler> GetKeyboardHandler() override { return this; }
   CefRefPtr<CefContextMenuHandler> GetContextMenuHandler() override {
@@ -134,6 +146,31 @@ class AlloyProductHostWin final : public CefClient,
   void OnLoadError(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
                    ErrorCode error_code, const CefString& error_text,
                    const CefString& failed_url) override;
+  bool OnCertificateError(CefRefPtr<CefBrowser> browser,
+                          cef_errorcode_t cert_error,
+                          const CefString& request_url,
+                          CefRefPtr<CefSSLInfo> ssl_info,
+                          CefRefPtr<CefCallback> callback) override;
+  bool OnRequestMediaAccessPermission(
+      CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
+      const CefString& requesting_origin,
+      std::uint32_t requested_permissions,
+      CefRefPtr<CefMediaAccessCallback> callback) override;
+  bool OnShowPermissionPrompt(
+      CefRefPtr<CefBrowser> browser, std::uint64_t prompt_id,
+      const CefString& requesting_origin,
+      std::uint32_t requested_permissions,
+      CefRefPtr<CefPermissionPromptCallback> callback) override;
+  void OnDismissPermissionPrompt(
+      CefRefPtr<CefBrowser> browser, std::uint64_t prompt_id,
+      cef_permission_request_result_t result) override;
+  bool OnBeforeDownload(
+      CefRefPtr<CefBrowser> browser, CefRefPtr<CefDownloadItem> download_item,
+      const CefString& suggested_name,
+      CefRefPtr<CefBeforeDownloadCallback> callback) override;
+  void OnDownloadUpdated(
+      CefRefPtr<CefBrowser> browser, CefRefPtr<CefDownloadItem> download_item,
+      CefRefPtr<CefDownloadItemCallback> callback) override;
   bool OnConsoleMessage(CefRefPtr<CefBrowser> browser, cef_log_severity_t level,
                         const CefString& message, const CefString& source,
                         int line) override;
@@ -218,6 +255,19 @@ class AlloyProductHostWin final : public CefClient,
   void ApplyCastSnapshot(media_host::AlloyCastController::Snapshot snapshot);
   void UpdateCastGeometry(
       const ::crayon::cef_shell::gateway::GatewayEvent& event);
+  window::AlloySiteControls* SiteControlsFor(
+      CefRefPtr<CefBrowser> browser) const;
+  bool SynchronizeSiteControls(CefRefPtr<CefBrowser> browser,
+                               const std::string& url);
+  bool ResolvePermissions(
+      CefRefPtr<CefBrowser> browser, const std::string& origin,
+      const std::vector<browser_site_controls::PermissionKind>& kinds,
+      std::string_view title_key, std::string_view body_key);
+  bool ConfirmNative(std::string_view title_key, std::string_view body_key,
+                     const std::string& detail) const;
+  void ConfirmExternalProtocol(CefRefPtr<CefBrowser> browser,
+                               std::string source_url,
+                               std::string target_url);
 
   Dependencies dependencies_;
   Callbacks callbacks_;
@@ -233,6 +283,11 @@ class AlloyProductHostWin final : public CefClient,
   std::unique_ptr<AlloyCastOverlayWin> cast_overlay_;
   std::map<std::uint32_t, std::uint32_t> media_generations_;
   std::vector<AlloyCastOverlayObservation> cast_observations_;
+  CefRefPtr<permission::CefDownloadHandlerAdapter> download_handler_;
+  std::map<window::TabId, std::unique_ptr<window::AlloySiteControls>>
+      site_controls_;
+  std::map<window::TabId, std::string> site_origins_;
+  std::map<window::TabId, std::string> site_urls_;
   CefRefPtr<window::AlloyInteractions> interactions_;
   CefRefPtr<window::AlloyPageTools> page_tools_;
   CefRefPtr<CefPanel> toolbar_;
@@ -246,6 +301,9 @@ class AlloyProductHostWin final : public CefClient,
   std::uint64_t next_navigation_id_ = 1;
   std::uint64_t cast_browser_session_ = 1;
   std::uint64_t cast_retry_after_ms_ = 0;
+  window::TabId trusted_input_tab_ = 0;
+  std::uint64_t trusted_input_generation_ = 0;
+  std::uint64_t trusted_input_at_ms_ = 0;
   int chrome_browser_id_ = 0;
   bool started_ = false;
   bool closing_ = false;

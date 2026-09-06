@@ -79,6 +79,9 @@ file(READ
      "${CRAYON_CEF_SHELL_SOURCE}/src/windows/alloy_product_host_win.cc"
      alloy_product_host)
 file(READ
+     "${CRAYON_CEF_SHELL_SOURCE}/src/windows/alloy_product_host_win.h"
+     alloy_product_host_header)
+file(READ
      "${CRAYON_CEF_SHELL_SOURCE}/src/browser/window/alloy_interactions.cc"
      alloy_interactions)
 file(READ
@@ -362,6 +365,34 @@ foreach(required_alloy_product_cast_token
             "Windows Alloy product host is missing 24W2 token ${required_alloy_product_cast_token}")
   endif()
 endforeach()
+foreach(required_alloy_product_security_token
+        "AlloySiteControls"
+        "GetPermissionHandler"
+        "GetDownloadHandler"
+        "OnCertificateError"
+        "OnRequestMediaAccessPermission"
+        "OnShowPermissionPrompt"
+        "OnBeforeDownload"
+        "ProductResourceHandlerWin"
+        "GetFirstPartyForCookies"
+        "trusted_input_generation_"
+        "kExternalProtocolInputLifetimeMilliseconds"
+        "allow_os_execution = false"
+        "MessageBoxW")
+  string(FIND "${alloy_product_host}${alloy_product_host_header}"
+         "${required_alloy_product_security_token}"
+         token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Windows Alloy product host is missing 24W2b1 token ${required_alloy_product_security_token}")
+  endif()
+endforeach()
+string(FIND "${alloy_product_host}" "allow_os_execution = true"
+       unsafe_protocol_execution)
+if(NOT unsafe_protocol_execution EQUAL -1)
+  message(FATAL_ERROR
+          "Windows Alloy product host must not directly allow CEF protocol execution")
+endif()
 string(FIND "${windows_app}" "tab_controller_->DrainMediaObservations"
        legacy_product_media_drain)
 if(NOT legacy_product_media_drain EQUAL -1)

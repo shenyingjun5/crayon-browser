@@ -34,6 +34,14 @@
 "app.title" = "蜡笔 AI Agent 投屏浏览器";
 "app.about" = "关于蜡笔浏览器";
 "app.menu" = "菜单";
+"security.permission.title" = "网站权限";
+"security.permission.body" = "是否允许此网站使用所请求的权限？";
+"security.certificate.title" = "证书警告";
+"security.certificate.body" = "无法验证此连接，是否仅继续本次访问？";
+"security.external.title" = "打开外部应用";
+"security.external.body" = "是否允许此网站打开以下目标？";
+"security.download.title" = "下载文件";
+"security.download.body" = "是否允许此网站下载文件？";
 "menu.open_markdown" = "打开 Markdown…";
 "menu.copy" = "复制";
 "menu.paste" = "粘贴";

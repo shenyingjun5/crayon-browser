@@ -1,6 +1,10 @@
 #include "windows/alloy_product_host_win.h"
 
+#include <windows.h>
+#include <shellapi.h>
+
 #include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <chrono>
 #include <optional>
@@ -9,6 +13,7 @@
 #include "crayon/browser_engine/content_view.h"
 #include "crayon/browser_localization/locale_catalog.h"
 #include "crayon/browser_privacy/privacy_defaults.h"
+#include "browser/permission/site_origin.h"
 #include "include/base/cef_callback.h"
 #include "include/cef_task.h"
 #include "include/views/cef_box_layout.h"
@@ -23,6 +28,13 @@ constexpr int kInitialWindowWidth = 1200;
 constexpr int kInitialWindowHeight = 800;
 constexpr std::size_t kMaximumCastObservations = 16;
 constexpr std::uint64_t kCastBindRetryMilliseconds = 500;
+constexpr std::uint64_t kPermissionPromptLifetimeMilliseconds = 30'000;
+constexpr std::uint64_t kExternalProtocolInputLifetimeMilliseconds = 2'000;
+constexpr std::uint32_t kMediaAccessVideo = 1U << 1;
+constexpr std::uint32_t kMediaAccessAudio = 1U << 2;
+constexpr std::uint32_t kPermissionClipboard = 1U << 4;
+constexpr std::uint32_t kPermissionGeolocation = 1U << 8;
+constexpr std::uint32_t kPermissionNotifications = 1U << 15;
 
 std::uint64_t NowMilliseconds() {
   return static_cast<std::uint64_t>(
@@ -54,6 +66,64 @@ bool IsCertificateOrSslError(cef_errorcode_t error) {
   return value == -107 || (value <= -200 && value >= -299);
 }
 
+browser_site_controls::CertErrorKind CertificateKind(cef_errorcode_t error) {
+  switch (static_cast<int>(error)) {
+    case -200:
+      return browser_site_controls::CertErrorKind::kNameMismatch;
+    case -201:
+      return browser_site_controls::CertErrorKind::kExpired;
+    case -202:
+    case -206:
+      return browser_site_controls::CertErrorKind::kUntrusted;
+    default:
+      return browser_site_controls::CertErrorKind::kGeneric;
+  }
+}
+
+class ProductResourceHandlerWin final : public CefResourceRequestHandler {
+ public:
+  using ProtocolCallback = std::function<void(
+      CefRefPtr<CefBrowser>, std::string, std::string)>;
+
+  ProductResourceHandlerWin(CefRefPtr<CefResourceRequestHandler> observer,
+                            ProtocolCallback protocol_callback)
+      : observer_(std::move(observer)),
+        protocol_callback_(std::move(protocol_callback)) {}
+
+  void OnResourceLoadComplete(CefRefPtr<CefBrowser> browser,
+                              CefRefPtr<CefFrame> frame,
+                              CefRefPtr<CefRequest> request,
+                              CefRefPtr<CefResponse> response,
+                              URLRequestStatus status,
+                              int64_t received_content_length) override {
+    CEF_REQUIRE_IO_THREAD();
+    if (observer_) {
+      observer_->OnResourceLoadComplete(
+          browser, frame, request, response, status, received_content_length);
+    }
+  }
+
+  void OnProtocolExecution(CefRefPtr<CefBrowser> browser,
+                           CefRefPtr<CefFrame>, CefRefPtr<CefRequest> request,
+                           bool& allow_os_execution) override {
+    CEF_REQUIRE_IO_THREAD();
+    allow_os_execution = false;
+    if (browser && request && protocol_callback_) {
+      std::string source_url = request->GetFirstPartyForCookies().ToString();
+      if (source_url.empty()) source_url = request->GetReferrerURL().ToString();
+      protocol_callback_(std::move(browser), std::move(source_url),
+                         request->GetURL().ToString());
+    }
+  }
+
+ private:
+  CefRefPtr<CefResourceRequestHandler> observer_;
+  ProtocolCallback protocol_callback_;
+
+  IMPLEMENT_REFCOUNTING(ProductResourceHandlerWin);
+  DISALLOW_COPY_AND_ASSIGN(ProductResourceHandlerWin);
+};
+
 }  // namespace
 
 AlloyProductHostWin::AlloyProductHostWin(Dependencies dependencies,
@@ -78,7 +148,8 @@ bool AlloyProductHostWin::Start(std::string initial_url, std::string title,
   }
   auto* tab_controller = controller();
   if (!tab_controller || !dependencies_.mdv_entries ||
-      !dependencies_.mdv_editing || !dependencies_.clipboard_write) {
+      !dependencies_.mdv_editing || !dependencies_.clipboard_write ||
+      !dependencies_.permission_store) {
     coordinator_.reset();
     return false;
   }
@@ -91,6 +162,8 @@ bool AlloyProductHostWin::Start(std::string initial_url, std::string title,
   builtin_content_ = new window::AlloyBuiltinContent(dependencies_.mdv_entries,
                                                      dependencies_.mdv_editing,
                                                      page_markdown_.get());
+  download_handler_ = new permission::CefDownloadHandlerAdapter(
+      dependencies_.permission_store);
   const auto locale = dependencies_.locale.locale;
   media_observation_bridge_.SetEventsReadyCallback(
       dependencies_.media_events_ready);
@@ -214,6 +287,15 @@ bool AlloyProductHostWin::IsActiveTab(std::uint32_t tab_id) const {
 void AlloyProductHostWin::NoteTrustedUserInput() {
   CEF_REQUIRE_UI_THREAD();
   media_observation_bridge_.NoteTrustedUserInput(browser_);
+  const auto* tab = browser_ && controller()
+                        ? controller()->model().FindByBrowser(
+                              browser_->GetIdentifier())
+                        : nullptr;
+  if (tab && controller()->model().active_tab() == tab->id) {
+    trusted_input_tab_ = tab->id;
+    trusted_input_generation_ = tab->navigation_generation;
+    trusted_input_at_ms_ = NowMilliseconds();
+  }
 }
 
 void AlloyProductHostWin::TickCast() {
@@ -379,6 +461,11 @@ void AlloyProductHostWin::FinalizeBrowserCreated(
         browser, false, browser->CanGoBack(), browser->CanGoForward()));
   }
   if (const auto* tab = tab_controller->model().Find(*tab_id)) {
+    site_controls_[*tab_id] = std::make_unique<window::AlloySiteControls>(
+        dependencies_.permission_store);
+    const auto main_frame = browser->GetMainFrame();
+    static_cast<void>(SynchronizeSiteControls(
+        browser, main_frame ? main_frame->GetURL().ToString() : std::string{}));
     media_observation_bridge_.AdvanceNavigation(
         browser, static_cast<std::uint32_t>(*tab_id),
         tab->navigation_generation);
@@ -447,6 +534,15 @@ void AlloyProductHostWin::OnBuiltinBrowserClosing(
   if (!Owns(browser) || !tab_controller ||
       !tab_controller->OnBeforeClose(browser)) {
     return;
+  }
+  if (closing_tab) {
+    const auto controls = site_controls_.find(*closing_tab);
+    if (controls != site_controls_.end()) {
+      controls->second->Shutdown();
+      site_controls_.erase(controls);
+    }
+    site_origins_.erase(*closing_tab);
+    site_urls_.erase(*closing_tab);
   }
   if (closing_tab) {
     media_observation_bridge_.CloseBrowser(
@@ -522,6 +618,152 @@ void AlloyProductHostWin::OnLoadError(CefRefPtr<CefBrowser> browser,
   }
 }
 
+bool AlloyProductHostWin::OnCertificateError(
+    CefRefPtr<CefBrowser> browser, cef_errorcode_t cert_error,
+    const CefString& request_url, CefRefPtr<CefSSLInfo>,
+    CefRefPtr<CefCallback> callback) {
+  CEF_REQUIRE_UI_THREAD();
+  if (!Owns(browser) || !callback || !controller()) return false;
+  const auto* tab =
+      controller()->model().FindByBrowser(browser->GetIdentifier());
+  const auto origin =
+      permission::ExtractSiteOrigin(request_url.ToString());
+  if (!tab || !origin || tab->navigation_generation == 0) return false;
+  auto controls = std::make_unique<window::AlloySiteControls>(
+      dependencies_.permission_store);
+  if (!controls->OnNavigation(tab->navigation_generation, *origin)) {
+    return false;
+  }
+  const auto existing = site_controls_.find(tab->id);
+  if (existing != site_controls_.end()) existing->second->Shutdown();
+  auto* controls_ptr = controls.get();
+  site_controls_[tab->id] = std::move(controls);
+  site_origins_[tab->id] = *origin;
+  site_urls_[tab->id] = request_url.ToString();
+  const auto request = controls_ptr->BeginCertificateError(
+      tab->navigation_generation, CertificateKind(cert_error),
+      [callback](bool allowed) {
+        if (allowed) callback->Continue();
+        else callback->Cancel();
+      });
+  if (!request) return false;
+  const bool allow = ConfirmNative("security.certificate.title",
+                                   "security.certificate.body", *origin);
+  return controls_ptr->ResolveCertificate(
+             *request, allow ? browser_site_controls::CertDecision::kProceedOnce
+                             : browser_site_controls::CertDecision::kGoBack) ==
+         window::AlloySiteControlResult::kSuccess;
+}
+
+bool AlloyProductHostWin::OnRequestMediaAccessPermission(
+    CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame>,
+    const CefString& requesting_origin, std::uint32_t requested_permissions,
+    CefRefPtr<CefMediaAccessCallback> callback) {
+  CEF_REQUIRE_UI_THREAD();
+  if (!callback) return true;
+  constexpr std::uint32_t kMappedMediaAccess =
+      kMediaAccessVideo | kMediaAccessAudio;
+  const auto origin =
+      permission::ExtractSiteOrigin(requesting_origin.ToString());
+  if (!origin || requested_permissions == 0 ||
+      (requested_permissions & ~kMappedMediaAccess) != 0) {
+    callback->Cancel();
+    return true;
+  }
+  std::vector<browser_site_controls::PermissionKind> kinds;
+  if ((requested_permissions & kMediaAccessVideo) != 0) {
+    kinds.push_back(browser_site_controls::PermissionKind::kCamera);
+  }
+  if ((requested_permissions & kMediaAccessAudio) != 0) {
+    kinds.push_back(browser_site_controls::PermissionKind::kMicrophone);
+  }
+  if (ResolvePermissions(browser, *origin, kinds, "security.permission.title",
+                         "security.permission.body")) {
+    callback->Continue(requested_permissions);
+  } else {
+    callback->Cancel();
+  }
+  return true;
+}
+
+bool AlloyProductHostWin::OnShowPermissionPrompt(
+    CefRefPtr<CefBrowser> browser, std::uint64_t,
+    const CefString& requesting_origin, std::uint32_t requested_permissions,
+    CefRefPtr<CefPermissionPromptCallback> callback) {
+  CEF_REQUIRE_UI_THREAD();
+  if (!callback) return true;
+  constexpr std::uint32_t kMappedPermissions =
+      kPermissionNotifications | kPermissionGeolocation | kPermissionClipboard;
+  const auto origin =
+      permission::ExtractSiteOrigin(requesting_origin.ToString());
+  if (!origin || requested_permissions == 0 ||
+      (requested_permissions & ~kMappedPermissions) != 0) {
+    callback->Continue(CEF_PERMISSION_RESULT_DENY);
+    return true;
+  }
+  std::vector<browser_site_controls::PermissionKind> kinds;
+  if ((requested_permissions & kPermissionNotifications) != 0) {
+    kinds.push_back(browser_site_controls::PermissionKind::kNotifications);
+  }
+  if ((requested_permissions & kPermissionGeolocation) != 0) {
+    kinds.push_back(browser_site_controls::PermissionKind::kGeolocation);
+  }
+  if ((requested_permissions & kPermissionClipboard) != 0) {
+    kinds.push_back(browser_site_controls::PermissionKind::kClipboardRead);
+    kinds.push_back(browser_site_controls::PermissionKind::kClipboardWrite);
+  }
+  callback->Continue(ResolvePermissions(browser, *origin, kinds,
+                                        "security.permission.title",
+                                        "security.permission.body")
+                         ? CEF_PERMISSION_RESULT_ACCEPT
+                         : CEF_PERMISSION_RESULT_DENY);
+  return true;
+}
+
+void AlloyProductHostWin::OnDismissPermissionPrompt(
+    CefRefPtr<CefBrowser>, std::uint64_t,
+    cef_permission_request_result_t) {
+  CEF_REQUIRE_UI_THREAD();
+}
+
+bool AlloyProductHostWin::OnBeforeDownload(
+    CefRefPtr<CefBrowser> browser, CefRefPtr<CefDownloadItem> download_item,
+    const CefString& suggested_name,
+    CefRefPtr<CefBeforeDownloadCallback> callback) {
+  CEF_REQUIRE_UI_THREAD();
+  auto* controls = SiteControlsFor(browser);
+  const auto* tab = browser && controller()
+                        ? controller()->model().FindByBrowser(
+                              browser->GetIdentifier())
+                        : nullptr;
+  const auto origin = browser && browser->GetMainFrame()
+                          ? permission::ExtractSiteOrigin(
+                                browser->GetMainFrame()->GetURL().ToString())
+                          : std::nullopt;
+  if (!controls || !tab || !origin || !download_handler_ || !download_item ||
+      !callback ||
+      !ResolvePermissions(
+          browser, *origin,
+          {browser_site_controls::PermissionKind::kDownload},
+          "security.download.title", "security.download.body")) {
+    return true;
+  }
+  return download_handler_->OnBeforeDownload(
+      std::move(browser), std::move(download_item), suggested_name,
+      std::move(callback));
+}
+
+void AlloyProductHostWin::OnDownloadUpdated(
+    CefRefPtr<CefBrowser> browser, CefRefPtr<CefDownloadItem> download_item,
+    CefRefPtr<CefDownloadItemCallback> callback) {
+  CEF_REQUIRE_UI_THREAD();
+  if (download_handler_) {
+    download_handler_->OnDownloadUpdated(std::move(browser),
+                                         std::move(download_item),
+                                         std::move(callback));
+  }
+}
+
 bool AlloyProductHostWin::OnConsoleMessage(CefRefPtr<CefBrowser> browser,
                                            cef_log_severity_t level,
                                            const CefString& message,
@@ -549,12 +791,23 @@ AlloyProductHostWin::GetResourceRequestHandler(
     bool& disable_default_handling) {
   disable_default_handling = false;
   CefRefPtr<AlloyProductHostWin> owner(this);
-  return media_observation_bridge_.CreateResourceRequestHandler(
+  auto observer = media_observation_bridge_.CreateResourceRequestHandler(
       browser, request,
       [this](observation::CefNetworkResourceFact fact) {
         media_observation_bridge_.OnNetworkResourceFact(std::move(fact));
       },
       owner);
+  return new ProductResourceHandlerWin(
+      std::move(observer),
+      [owner](CefRefPtr<CefBrowser> source, std::string source_url,
+              std::string target_url) {
+        CefPostTask(
+            TID_UI,
+            CefCreateClosureTask(base::BindOnce(
+                &AlloyProductHostWin::ConfirmExternalProtocol, owner,
+                std::move(source), std::move(source_url),
+                std::move(target_url))));
+      });
 }
 
 bool AlloyProductHostWin::OnKeyEvent(CefRefPtr<CefBrowser> browser,
@@ -683,6 +936,7 @@ void AlloyProductHostWin::OnBuiltinAddressChange(CefRefPtr<CefBrowser> browser,
   if (Owns(browser) && frame && frame->IsMain() && navigation_) {
     if (controller()) {
       static_cast<void>(controller()->OnAddressChange(browser, url.ToString()));
+      static_cast<void>(SynchronizeSiteControls(browser, url.ToString()));
     }
     static_cast<void>(navigation_->OnAddressChange(browser, url.ToString()));
   }
@@ -929,6 +1183,17 @@ void AlloyProductHostWin::ShutdownChromeForWindowClose() {
     cast_controller_->Shutdown();
     cast_controller_.reset();
   }
+  if (download_handler_) {
+    download_handler_->Shutdown();
+    download_handler_ = nullptr;
+  }
+  for (auto& [id, controls] : site_controls_) {
+    static_cast<void>(id);
+    controls->Shutdown();
+  }
+  site_controls_.clear();
+  site_origins_.clear();
+  site_urls_.clear();
   if (interactions_) {
     interactions_->Shutdown();
     interactions_ = nullptr;
@@ -1012,6 +1277,17 @@ void AlloyProductHostWin::FinalizeRendererCrash(CefRefPtr<CefBrowser> browser) {
     cast_controller_->Shutdown();
     cast_controller_.reset();
   }
+  if (download_handler_) {
+    download_handler_->Shutdown();
+    download_handler_ = nullptr;
+  }
+  for (auto& [id, controls] : site_controls_) {
+    static_cast<void>(id);
+    controls->Shutdown();
+  }
+  site_controls_.clear();
+  site_origins_.clear();
+  site_urls_.clear();
   if (interactions_) {
     interactions_->Shutdown();
     interactions_ = nullptr;
@@ -1208,6 +1484,140 @@ void AlloyProductHostWin::UpdateCastGeometry(
     cast_observations_.push_back(std::move(value));
   }
   if (cast_overlay_) cast_overlay_->SetObservations(cast_observations_);
+}
+
+window::AlloySiteControls* AlloyProductHostWin::SiteControlsFor(
+    CefRefPtr<CefBrowser> browser) const {
+  CEF_REQUIRE_UI_THREAD();
+  const auto* tab = browser && controller()
+                        ? controller()->model().FindByBrowser(
+                              browser->GetIdentifier())
+                        : nullptr;
+  if (!tab) return nullptr;
+  const auto found = site_controls_.find(tab->id);
+  return found == site_controls_.end() ? nullptr : found->second.get();
+}
+
+bool AlloyProductHostWin::SynchronizeSiteControls(
+    CefRefPtr<CefBrowser> browser, const std::string& url) {
+  CEF_REQUIRE_UI_THREAD();
+  const auto* tab = browser && controller()
+                        ? controller()->model().FindByBrowser(
+                              browser->GetIdentifier())
+                        : nullptr;
+  const auto origin = permission::ExtractSiteOrigin(url);
+  if (!tab || !origin || tab->navigation_generation == 0) return false;
+  auto& controls = site_controls_[tab->id];
+  if (!controls) {
+    controls = std::make_unique<window::AlloySiteControls>(
+        dependencies_.permission_store);
+  }
+  if (!controls->OnNavigation(tab->navigation_generation, *origin)) {
+    return false;
+  }
+  site_origins_[tab->id] = *origin;
+  site_urls_[tab->id] = url;
+  return true;
+}
+
+bool AlloyProductHostWin::ResolvePermissions(
+    CefRefPtr<CefBrowser> browser, const std::string& origin,
+    const std::vector<browser_site_controls::PermissionKind>& kinds,
+    std::string_view title_key, std::string_view body_key) {
+  CEF_REQUIRE_UI_THREAD();
+  auto* controls = SiteControlsFor(browser);
+  const auto* tab = browser && controller()
+                        ? controller()->model().FindByBrowser(
+                              browser->GetIdentifier())
+                        : nullptr;
+  if (!controls || !tab || kinds.empty()) return false;
+
+  std::optional<bool> grant;
+  for (const auto kind : kinds) {
+    bool allowed = false;
+    const auto now = NowMilliseconds();
+    const auto request = controls->BeginPermission(
+        tab->navigation_generation, origin, kind, now,
+        now + kPermissionPromptLifetimeMilliseconds,
+        [&allowed](bool value) { allowed = value; });
+    if (!request) return false;
+    if (*request != 0) {
+      if (!grant) grant = ConfirmNative(title_key, body_key, origin);
+      if (controls->ResolvePermission(
+              *request,
+              *grant ? window::AlloyPermissionDecision::kAllowSession
+                     : window::AlloyPermissionDecision::kDeny,
+              NowMilliseconds()) != window::AlloySiteControlResult::kSuccess) {
+        return false;
+      }
+    }
+    if (!allowed) return false;
+  }
+  return true;
+}
+
+bool AlloyProductHostWin::ConfirmNative(std::string_view title_key,
+                                        std::string_view body_key,
+                                        const std::string& detail) const {
+  CEF_REQUIRE_UI_THREAD();
+  if (!window_ || !window_->GetWindowHandle() || detail.empty()) return false;
+  const std::string body =
+      Localized(dependencies_.locale.locale, body_key) + "\n\n" + detail;
+  const auto title =
+      CefString(Localized(dependencies_.locale.locale, title_key)).ToWString();
+  return MessageBoxW(static_cast<HWND>(window_->GetWindowHandle()),
+                     CefString(body).ToWString().c_str(), title.c_str(),
+                     MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) == IDYES;
+}
+
+void AlloyProductHostWin::ConfirmExternalProtocol(
+    CefRefPtr<CefBrowser> browser, std::string source_url,
+    std::string target_url) {
+  CEF_REQUIRE_UI_THREAD();
+  if (!Owns(browser) || target_url.empty() || !controller()) return;
+  const auto separator = target_url.find(':');
+  if (separator == std::string::npos) return;
+  std::string scheme = target_url.substr(0, separator);
+  std::transform(scheme.begin(), scheme.end(), scheme.begin(),
+                 [](unsigned char ch) {
+                   return static_cast<char>(std::tolower(ch));
+                 });
+  const auto* tab =
+      controller()->model().FindByBrowser(browser->GetIdentifier());
+  const auto source_origin = permission::ExtractSiteOrigin(source_url);
+  auto* controls = SiteControlsFor(browser);
+  const auto origin = tab ? site_origins_.find(tab->id) : site_origins_.end();
+  const auto source = tab ? site_urls_.find(tab->id) : site_urls_.end();
+  const auto now = NowMilliseconds();
+  const bool has_trusted_input =
+      tab && trusted_input_tab_ == tab->id &&
+      trusted_input_generation_ == tab->navigation_generation &&
+      trusted_input_at_ms_ <= now &&
+      now - trusted_input_at_ms_ <= kExternalProtocolInputLifetimeMilliseconds;
+  trusted_input_tab_ = 0;
+  trusted_input_generation_ = 0;
+  trusted_input_at_ms_ = 0;
+  if (!tab || !source_origin || origin == site_origins_.end() ||
+      source == site_urls_.end() || *source_origin != origin->second ||
+      !controls || !has_trusted_input) {
+    return;
+  }
+  const auto request = controls->BeginExternalProtocol(
+      tab->navigation_generation, origin->second, scheme, target_url,
+      [target_url](bool allowed) {
+        if (allowed) {
+          const auto target = CefString(target_url).ToWString();
+          static_cast<void>(ShellExecuteW(nullptr, L"open", target.c_str(),
+                                          nullptr, nullptr, SW_SHOWNORMAL));
+        }
+      });
+  if (!request || *request == 0) return;
+  const bool allow = ConfirmNative("security.external.title",
+                                   "security.external.body", target_url);
+  static_cast<void>(controls->ResolveExternalProtocol(
+      *request, allow ? browser_site_controls::ProtocolDecision::kAllowOnce
+                      : browser_site_controls::ProtocolDecision::kDeny));
+  if (browser->GetMainFrame()) browser->GetMainFrame()->LoadURL(source->second);
 }
 
 }  // namespace crayon::browser::cef_shell::windows

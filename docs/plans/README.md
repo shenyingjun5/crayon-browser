@@ -48,7 +48,7 @@
 
 ### 自定义外壳＋Alloy（2026-09-04 最新决策）
 
-- 用户批准长期自定义 Shell＋Alloy，一期同步调整；[PLT-SHELL](desktop-shell-roadmap.md) 是当前宿主迁移队列，REL §5 是一期总依赖。共享 00..02、Windows 03W..22W 与 PLT-CAST-R09/R10W 已 VERIFIED；23W 自动化与 Release artifact/guard 已闭合，真实系统语言/IME/Narrator/原生 200% DPI 仍为后续 `BLOCKED` 门禁。Windows `24W1` 已将默认产品首窗切为真实 Alloy；`24W2a` 已把真实媒体 observation、可信输入、MHV2 Cast controller、toolbar entry/overlay 接入 product host，并以双配置定向 CTest 和真实 UI 标签生命周期验证至 `VERIFIED`。当前 `24W2b` 继续汇合 popup、profile/security 与其余日用 surface，24W3 总回归前仍不是可发布完成态。Windows 首发政策不变，macOS 特有迁移与验证后续保留。
+- 用户批准长期自定义 Shell＋Alloy，一期同步调整；[PLT-SHELL](desktop-shell-roadmap.md) 是当前宿主迁移队列，REL §5 是一期总依赖。共享 00..02、Windows 03W..22W 与 PLT-CAST-R09/R10W 已 VERIFIED；23W 自动化与 Release artifact/guard 已闭合，真实系统语言/IME/Narrator/原生 200% DPI 仍为后续 `BLOCKED` 门禁。Windows `24W1` 已将默认产品首窗切为真实 Alloy；`24W2a` 已把真实媒体 observation、可信输入、MHV2 Cast controller、toolbar entry/overlay 接入 product host，并以双配置定向 CTest 和真实 UI 标签生命周期验证至 `VERIFIED`。当前 `24W2b1` 先接 permission/download handler 与 site/certificate/external-protocol 安全边界，随后 `24W2b2/b3` 汇合 popup/Profile/session 与其余日用 surface；24W3 总回归前仍不是可发布完成态。Windows 首发政策不变，macOS 特有迁移与验证后续保留。
 - 原 R02b/b2 LOCATION 多 Chrome view 方案及“等待选择宿主”由本决定取代；旧记录保留为历史，不标完成、不继续原路线。R08 候选宿主接线不等待最终默认切换，防止循环依赖。
 - 浏览器日用基线、三闭环、三语言和原隐私/设备/发布门禁全部保留。新增宿主相关证据不能复用旧 Chrome UI 通过结论；其他 WebView/Chrome 特殊容器只预留边界，不在一期伪造多引擎支持。
 - 测试先无 GUI，后续 Alloy Harness 同进程/专用窗口复用标签；不接管用户日用窗口，不默认抢焦点。需要前台输入/重启新原生二进制的例外须提前说明。

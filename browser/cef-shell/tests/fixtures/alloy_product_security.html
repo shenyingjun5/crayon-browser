@@ -1,0 +1,14 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Alloy product security fixture</title>
+<button id="notification" type="button">Request notification</button>
+<a id="external" href="mailto:alloy-security@example.test">Open external protocol</a>
+<a id="download" download="alloy-product-security.txt"
+   href="data:text/plain,alloy-product-security">Download fixture</a>
+<output id="result">ready</output>
+<script>
+  const result = document.querySelector('#result');
+  document.querySelector('#notification').addEventListener('click', async () => {
+    result.textContent = await Notification.requestPermission();
+  });
+</script>

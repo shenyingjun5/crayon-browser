@@ -236,7 +236,8 @@ BrowserApp::BrowserApp(
                 if (closed) {
                   static_cast<void>(host->CloseTab(tab_id, generation));
                 }
-              }},
+              },
+              permission_store_.get()},
           windows::AlloyProductHostWin::Callbacks{
               [this](CefRefPtr<CefBrowser> browser) {
                 window_icons_->Apply(browser);
