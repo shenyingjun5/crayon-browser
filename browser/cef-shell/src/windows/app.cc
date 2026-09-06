@@ -226,6 +226,16 @@ BrowserApp::BrowserApp(
                   content_host_->Consume(
                       alloy_product_host_->DrainPageSnapshots(16));
                 }
+              },
+              media_host_.get(),
+              [this] { ConsumeMediaObservations(); },
+              [this, host = media_host_.get()](
+                  std::uint32_t tab_id, std::uint64_t navigation_id,
+                  std::uint32_t generation, bool closed) {
+                static_cast<void>(navigation_id);
+                if (closed) {
+                  static_cast<void>(host->CloseTab(tab_id, generation));
+                }
               }},
           windows::AlloyProductHostWin::Callbacks{
               [this](CefRefPtr<CefBrowser> browser) {
@@ -389,8 +399,8 @@ void BrowserApp::OnContextInitialized() {
       });
   tab_controller_->SetMediaObservationEventsReadyCallback(
       [this] { ConsumeMediaObservations(); });
-  if (!trusted_input_monitor_->Start([controller = tab_controller_] {
-        controller->NoteTrustedUserInputForActiveTab();
+  if (!trusted_input_monitor_->Start([host = alloy_product_host_] {
+        host->NoteTrustedUserInput();
       })) {
     shell_runtime_->Shutdown();
     CefQuitMessageLoop();
@@ -482,38 +492,18 @@ void BrowserApp::ContentHostTick() {
   alloy_product_host_->TickPageMarkdown(content_host_->Drain(64),
                                         content_host_->healthy());
   static_cast<void>(media_host_->Drain(64));
-  cast_shell_->ConsumePlanning(media_host_->DrainPlanning(64));
-  cast_shell_->ConsumeCast(media_host_->DrainCast(64));
-  const bool media_healthy = media_host_->healthy();
-  const std::uint64_t cast_epoch = media_host_->cast_state_epoch();
-  if ((!media_healthy && media_host_was_healthy_) ||
-      (media_host_cast_epoch_ != 0 && cast_epoch != media_host_cast_epoch_)) {
-    cast_shell_->OnHostUnavailable();
-  }
-  media_host_was_healthy_ = media_healthy;
-  media_host_cast_epoch_ = cast_epoch;
-  if (CefRefPtr<CefBrowser> active_browser = tab_controller_->ActiveBrowser()) {
-    active_browser_id_ = active_browser->GetIdentifier();
-    static_cast<void>(cast_chrome_->AttachWindow(
-        active_browser_id_, active_browser->GetHost()->GetWindowHandle()));
-    cast_chrome_->SetActiveWindow(active_browser_id_);
-  }
-  cast_chrome_->Render(cast_shell_->coordinator(),
-                       CastChromePresentation(cast_shell_->presentation()));
+  static_cast<void>(media_host_->DrainPlanning(64));
+  alloy_product_host_->TickCast();
   ScheduleContentHostTick();
 }
 
 void BrowserApp::ConsumeMediaObservations() {
   CEF_REQUIRE_UI_THREAD();
   std::vector<media_host::BrowserMediaFact> facts;
-  for (auto& event : tab_controller_->DrainMediaObservations(16)) {
+  for (auto& event : alloy_product_host_->DrainMediaObservations(16)) {
     auto page_url =
-        tab_controller_->TrustedPageUrl(event.tab_id, event.navigation_id);
+        alloy_product_host_->TrustedPageUrl(event.tab_id, event.navigation_id);
     if (!page_url) continue;
-    if (event.source == ::crayon::cef_shell::gateway::EventSource::kMedia &&
-        tab_controller_->model().active_tab() == event.tab_id) {
-      cast_shell_->OnBrowserVerifiedMedia();
-    }
     const auto observed_at = static_cast<std::uint64_t>(
         std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now().time_since_epoch())

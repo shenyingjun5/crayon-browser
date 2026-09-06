@@ -181,8 +181,7 @@ foreach(required_media_app_token
         "CastChromeWin"
         "TrustedInputMonitorWin"
         "DrainPlanning"
-        "DrainCast"
-        "cast_state_epoch")
+        "alloy_product_host_->TickCast")
   string(FIND "${windows_app}" "${required_media_app_token}" token_index)
   if(token_index EQUAL -1)
     message(FATAL_ERROR
@@ -347,6 +346,28 @@ foreach(required_alloy_overlay_token
             "Windows Alloy Cast overlay is missing ${required_alloy_overlay_token}")
   endif()
 endforeach()
+foreach(required_alloy_product_cast_token
+        "media_observation_bridge_"
+        "GetResourceRequestHandler"
+        "DrainMediaObservations"
+        "NoteTrustedUserInput"
+        "AlloyCastController"
+        "CastEntrySurface"
+        "AlloyCastOverlayWin"
+        "TickCast")
+  string(FIND "${alloy_product_host}" "${required_alloy_product_cast_token}"
+         token_index)
+  if(token_index EQUAL -1)
+    message(FATAL_ERROR
+            "Windows Alloy product host is missing 24W2 token ${required_alloy_product_cast_token}")
+  endif()
+endforeach()
+string(FIND "${windows_app}" "tab_controller_->DrainMediaObservations"
+       legacy_product_media_drain)
+if(NOT legacy_product_media_drain EQUAL -1)
+  message(FATAL_ERROR
+          "Windows Alloy product must not drain media observations from the legacy Chrome controller")
+endif()
 foreach(forbidden_alloy_overlay_token
         "ExecuteJavaScript"
         "RequestStartCast"

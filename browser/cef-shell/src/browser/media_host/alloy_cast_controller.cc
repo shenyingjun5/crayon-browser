@@ -173,6 +173,7 @@ bool AlloyCastController::BindContext(Context context) {
     static_cast<void>(RequestDevices(std::nullopt, 0));
   }
   Emit();
+  if (!admitted) context_.reset();
   return admitted;
 }
 

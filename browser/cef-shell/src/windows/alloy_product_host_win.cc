@@ -1,6 +1,8 @@
 #include "windows/alloy_product_host_win.h"
 
+#include <algorithm>
 #include <cstdint>
+#include <chrono>
 #include <optional>
 #include <utility>
 
@@ -19,6 +21,15 @@ namespace {
 constexpr char kPrimaryWindowId[] = "primary";
 constexpr int kInitialWindowWidth = 1200;
 constexpr int kInitialWindowHeight = 800;
+constexpr std::size_t kMaximumCastObservations = 16;
+constexpr std::uint64_t kCastBindRetryMilliseconds = 500;
+
+std::uint64_t NowMilliseconds() {
+  return static_cast<std::uint64_t>(
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::steady_clock::now().time_since_epoch())
+          .count());
+}
 
 std::optional<browser_engine::ContentCapabilitySet> InitialCapabilities() {
   const auto bit = [](browser_engine::ContentCapability capability) {
@@ -81,6 +92,22 @@ bool AlloyProductHostWin::Start(std::string initial_url, std::string title,
                                                      dependencies_.mdv_editing,
                                                      page_markdown_.get());
   const auto locale = dependencies_.locale.locale;
+  media_observation_bridge_.SetEventsReadyCallback(
+      dependencies_.media_events_ready);
+  media_observation_bridge_.SetLifecycleCallback(
+      [this](std::uint32_t tab_id, std::uint64_t navigation_id,
+             std::uint32_t generation, bool closed) {
+        OnMediaLifecycle(tab_id, navigation_id, generation, closed);
+      });
+  if (!dependencies_.media_host) {
+    coordinator_.reset();
+    return false;
+  }
+  cast_controller_ = std::make_unique<media_host::AlloyCastController>(
+      dependencies_.media_host,
+      [this](auto snapshot) { ApplyCastSnapshot(std::move(snapshot)); },
+      Localized(locale, "cast.selection.video_fallback"),
+      Localized(locale, "cast.selection.device_fallback"));
   tab_strip_ = std::make_unique<window::AlloyTabStrip>(
       window::AlloyTabStrip::Strings{Localized(locale, "tabs.new"),
                                      Localized(locale, "tabs.close"),
@@ -160,6 +187,47 @@ void AlloyProductHostWin::TickPageMarkdown(
   }
 }
 
+std::vector<::crayon::cef_shell::gateway::GatewayEvent>
+AlloyProductHostWin::DrainMediaObservations(std::size_t max_events) {
+  CEF_REQUIRE_UI_THREAD();
+  auto events = media_observation_bridge_.Drain(max_events);
+  for (const auto& event : events) UpdateCastGeometry(event);
+  return events;
+}
+
+std::optional<std::string> AlloyProductHostWin::TrustedPageUrl(
+    std::uint32_t tab_id, std::uint64_t navigation_id) const {
+  CEF_REQUIRE_UI_THREAD();
+  const auto* tab = controller() ? controller()->model().Find(tab_id) : nullptr;
+  if (!tab || tab->lifecycle != window::TabLifecycle::kReady ||
+      tab->navigation_generation != navigation_id) {
+    return std::nullopt;
+  }
+  return tab->url;
+}
+
+bool AlloyProductHostWin::IsActiveTab(std::uint32_t tab_id) const {
+  CEF_REQUIRE_UI_THREAD();
+  return controller() && controller()->model().active_tab() == tab_id;
+}
+
+void AlloyProductHostWin::NoteTrustedUserInput() {
+  CEF_REQUIRE_UI_THREAD();
+  media_observation_bridge_.NoteTrustedUserInput(browser_);
+}
+
+void AlloyProductHostWin::TickCast() {
+  CEF_REQUIRE_UI_THREAD();
+  const auto now = NowMilliseconds();
+  if (!cast_surface_ && browser_ && now >= cast_retry_after_ms_) {
+    cast_retry_after_ms_ = now + kCastBindRetryMilliseconds;
+    static_cast<void>(BindCastForActiveTab());
+  }
+  if (cast_controller_) cast_controller_->Tick();
+  if (cast_surface_) cast_surface_->Tick();
+  if (cast_overlay_) cast_overlay_->Tick();
+}
+
 bool AlloyProductHostWin::Close(bool force_close) {
   CEF_REQUIRE_UI_THREAD();
   if (!started_ || closed_ || closing_ || !coordinator_) {
@@ -224,19 +292,30 @@ void AlloyProductHostWin::OnWindowCreated(CefRefPtr<CefWindow> window) {
 bool AlloyProductHostWin::OnAccelerator(CefRefPtr<CefWindow> window,
                                         int command_id) {
   CEF_REQUIRE_UI_THREAD();
-  return window_ && window && window_->IsSame(window) && interactions_ &&
-         interactions_->HandleAccelerator(
-             command_id,
-             static_cast<cef_event_flags_t>(EVENTFLAG_CONTROL_DOWN));
+  if (!window_ || !window || !window_->IsSame(window)) return false;
+  if (cast_surface_ && cast_surface_->HandleAccelerator(command_id)) {
+    return true;
+  }
+  return interactions_ && interactions_->HandleAccelerator(
+                              command_id, static_cast<cef_event_flags_t>(
+                                              EVENTFLAG_CONTROL_DOWN));
 }
 
 bool AlloyProductHostWin::OnKeyEvent(CefRefPtr<CefWindow> window,
                                      const CefKeyEvent& event) {
   CEF_REQUIRE_UI_THREAD();
-  return window_ && window && window_->IsSame(window) && interactions_ &&
-         interactions_->HandleAccelerator(
-             event.windows_key_code,
-             static_cast<cef_event_flags_t>(event.modifiers));
+  if (!window_ || !window || !window_->IsSame(window)) return false;
+  if (cast_surface_ && cast_surface_->HandleKeyEvent(event)) return true;
+  return interactions_ && interactions_->HandleAccelerator(
+                              event.windows_key_code,
+                              static_cast<cef_event_flags_t>(event.modifiers));
+}
+
+void AlloyProductHostWin::OnLayoutChanged(CefRefPtr<CefView>,
+                                           const CefRect&) {
+  CEF_REQUIRE_UI_THREAD();
+  if (cast_surface_) cast_surface_->LayoutChanged();
+  if (cast_overlay_) cast_overlay_->Invalidate();
 }
 
 bool AlloyProductHostWin::CanClose(CefRefPtr<CefWindow> window) {
@@ -289,6 +368,21 @@ void AlloyProductHostWin::FinalizeBrowserCreated(
       Close(true);
     }
     return;
+  }
+  const auto* initial_tab = tab_controller->model().Find(*tab_id);
+  if (initial_tab && initial_tab->navigation_generation == 0) {
+    static_cast<void>(tab_controller->OnLoadingStateChange(
+        browser, true, browser->CanGoBack(), browser->CanGoForward()));
+  }
+  if (!browser->IsLoading()) {
+    static_cast<void>(tab_controller->OnLoadingStateChange(
+        browser, false, browser->CanGoBack(), browser->CanGoForward()));
+  }
+  if (const auto* tab = tab_controller->model().Find(*tab_id)) {
+    media_observation_bridge_.AdvanceNavigation(
+        browser, static_cast<std::uint32_t>(*tab_id),
+        tab->navigation_generation);
+    media_observation_bridge_.BindCurrentMainFrame(browser);
   }
   browser_ = browser;
   if (callbacks_.browser_created) {
@@ -344,9 +438,19 @@ void AlloyProductHostWin::OnBuiltinBrowserClosing(
     CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
   auto* tab_controller = controller();
+  const auto* closing =
+      browser && tab_controller
+          ? tab_controller->model().FindByBrowser(browser->GetIdentifier())
+          : nullptr;
+  const auto closing_tab = closing ? std::optional<window::TabId>(closing->id)
+                                   : std::nullopt;
   if (!Owns(browser) || !tab_controller ||
       !tab_controller->OnBeforeClose(browser)) {
     return;
+  }
+  if (closing_tab) {
+    media_observation_bridge_.CloseBrowser(
+        browser, static_cast<std::uint32_t>(*closing_tab));
   }
   if (browser_ && browser && browser_->IsSame(browser)) {
     browser_ = nullptr;
@@ -438,6 +542,21 @@ bool AlloyProductHostWin::OnBeforeBrowse(CefRefPtr<CefBrowser> browser,
                                  std::move(request), user_gesture, is_redirect);
 }
 
+CefRefPtr<CefResourceRequestHandler>
+AlloyProductHostWin::GetResourceRequestHandler(
+    CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame>,
+    CefRefPtr<CefRequest> request, bool, bool, const CefString&,
+    bool& disable_default_handling) {
+  disable_default_handling = false;
+  CefRefPtr<AlloyProductHostWin> owner(this);
+  return media_observation_bridge_.CreateResourceRequestHandler(
+      browser, request,
+      [this](observation::CefNetworkResourceFact fact) {
+        media_observation_bridge_.OnNetworkResourceFact(std::move(fact));
+      },
+      owner);
+}
+
 bool AlloyProductHostWin::OnKeyEvent(CefRefPtr<CefBrowser> browser,
                                      const CefKeyEvent& event,
                                      CefEventHandle os_event) {
@@ -446,6 +565,7 @@ bool AlloyProductHostWin::OnKeyEvent(CefRefPtr<CefBrowser> browser,
       builtin_content_->OnKeyEvent(browser, event, os_event)) {
     return true;
   }
+  if (cast_surface_ && cast_surface_->HandleKeyEvent(event)) return true;
   return interactions_ && interactions_->HandleAccelerator(
                               event.windows_key_code,
                               static_cast<cef_event_flags_t>(event.modifiers));
@@ -455,6 +575,10 @@ bool AlloyProductHostWin::OnProcessMessageReceived(
     CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
     CefProcessId source_process, CefRefPtr<CefProcessMessage> message) {
   CEF_REQUIRE_UI_THREAD();
+  if (media_observation_bridge_.OnProcessMessageReceived(
+          browser, frame, source_process, message)) {
+    return true;
+  }
   return builtin_content_ && builtin_content_->OnProcessMessageReceived(
                                  std::move(browser), std::move(frame),
                                  source_process, std::move(message));
@@ -507,6 +631,11 @@ void AlloyProductHostWin::OnBuiltinRenderProcessTerminated(
       !controller()->OnRenderProcessGone(browser)) {
     return;
   }
+  if (const auto* tab =
+          controller()->model().FindByBrowser(browser->GetIdentifier())) {
+    media_observation_bridge_.CloseBrowser(
+        browser, static_cast<std::uint32_t>(tab->id));
+  }
   closing_ = true;
   CefPostTask(TID_UI,
               base::BindOnce(&AlloyProductHostWin::FinalizeRendererCrash,
@@ -518,6 +647,7 @@ void AlloyProductHostWin::OnBuiltinLoadEnd(CefRefPtr<CefBrowser> browser,
                                            int http_status_code) {
   CEF_REQUIRE_UI_THREAD();
   if (!Owns(browser) || !frame || !frame->IsMain()) return;
+  media_observation_bridge_.BindCurrentMainFrame(browser);
   const std::string address = frame->GetURL();
   if (navigation_) {
     static_cast<void>(navigation_->OnLoadEnd(browser, address));
@@ -551,6 +681,9 @@ void AlloyProductHostWin::OnBuiltinAddressChange(CefRefPtr<CefBrowser> browser,
                                                  const CefString& url) {
   CEF_REQUIRE_UI_THREAD();
   if (Owns(browser) && frame && frame->IsMain() && navigation_) {
+    if (controller()) {
+      static_cast<void>(controller()->OnAddressChange(browser, url.ToString()));
+    }
     static_cast<void>(navigation_->OnAddressChange(browser, url.ToString()));
   }
 }
@@ -560,6 +693,22 @@ void AlloyProductHostWin::OnBuiltinLoadingStateChange(
     bool can_go_forward) {
   CEF_REQUIRE_UI_THREAD();
   if (!Owns(browser)) return;
+  std::uint64_t previous_generation = 0;
+  if (controller()) {
+    if (const auto* previous =
+            controller()->model().FindByBrowser(browser->GetIdentifier())) {
+      previous_generation = previous->navigation_generation;
+    }
+    static_cast<void>(controller()->OnLoadingStateChange(
+        browser, is_loading, can_go_back, can_go_forward));
+    const auto* current =
+        controller()->model().FindByBrowser(browser->GetIdentifier());
+    if (current && current->navigation_generation != previous_generation) {
+      media_observation_bridge_.AdvanceNavigation(
+          browser, static_cast<std::uint32_t>(current->id),
+          current->navigation_generation);
+    }
+  }
   if (navigation_) {
     static_cast<void>(navigation_->OnLoadingStateChange(
         browser, is_loading, can_go_back, can_go_forward));
@@ -682,6 +831,7 @@ bool AlloyProductHostWin::BindActiveChrome() {
   if (!browser || !view || !window_ || !toolbar_) return false;
   if (chrome_browser_id_ == browser->GetIdentifier()) return true;
 
+  DetachCastSurfaces();
   if (interactions_) {
     interactions_->Shutdown();
     interactions_ = nullptr;
@@ -744,6 +894,7 @@ bool AlloyProductHostWin::BindActiveChrome() {
     interactions_ = nullptr;
     return false;
   }
+  static_cast<void>(BindCastForActiveTab());
   chrome_browser_id_ = browser->GetIdentifier();
   browser_ = browser;
   view_ = view;
@@ -756,6 +907,7 @@ bool AlloyProductHostWin::PrepareActiveChromeForClose(window::TabId tab_id) {
   const auto active = tab_controller ? tab_controller->model().active_tab()
                                      : std::optional<window::TabId>{};
   if (!active || *active != tab_id) return false;
+  DetachCastSurfaces();
   if (interactions_) {
     interactions_->Shutdown();
     interactions_ = nullptr;
@@ -772,6 +924,11 @@ bool AlloyProductHostWin::PrepareActiveChromeForClose(window::TabId tab_id) {
 
 void AlloyProductHostWin::ShutdownChromeForWindowClose() {
   CEF_REQUIRE_UI_THREAD();
+  DetachCastSurfaces();
+  if (cast_controller_) {
+    cast_controller_->Shutdown();
+    cast_controller_.reset();
+  }
   if (interactions_) {
     interactions_->Shutdown();
     interactions_ = nullptr;
@@ -850,6 +1007,11 @@ void AlloyProductHostWin::FinalizeRendererCrash(CefRefPtr<CefBrowser> browser) {
   browser_ = nullptr;
   views_.clear();
   chrome_browser_id_ = 0;
+  DetachCastSurfaces();
+  if (cast_controller_) {
+    cast_controller_->Shutdown();
+    cast_controller_.reset();
+  }
   if (interactions_) {
     interactions_->Shutdown();
     interactions_ = nullptr;
@@ -893,11 +1055,159 @@ void AlloyProductHostWin::NotifyClosed() {
     page_markdown_->Shutdown();
     page_markdown_.reset();
   }
+  media_observation_bridge_.SetEventsReadyCallback({});
+  media_observation_bridge_.SetLifecycleCallback({});
   auto callback = std::move(callbacks_.all_closed);
   callbacks_ = {};
   if (callback) {
     callback();
   }
+}
+
+void AlloyProductHostWin::OnMediaLifecycle(std::uint32_t tab_id,
+                                           std::uint64_t navigation_id,
+                                           std::uint32_t generation,
+                                           bool closed) {
+  CEF_REQUIRE_UI_THREAD();
+  if (closed) {
+    media_generations_.erase(tab_id);
+    cast_observations_.clear();
+  } else {
+    media_generations_[tab_id] = generation;
+  }
+  if (closed && dependencies_.media_lifecycle) {
+    dependencies_.media_lifecycle(tab_id, navigation_id, generation, closed);
+  }
+  if (IsActiveTab(tab_id)) {
+    if (closed) DetachCastSurfaces();
+    else static_cast<void>(BindCastForActiveTab());
+  }
+}
+
+bool AlloyProductHostWin::BindCastForActiveTab() {
+  CEF_REQUIRE_UI_THREAD();
+  auto* tab_controller = controller();
+  const auto active = tab_controller ? tab_controller->model().active_tab()
+                                     : std::optional<window::TabId>{};
+  if (!active || !browser_ || !view_ || !window_ || !toolbar_ ||
+      !cast_controller_) {
+    return false;
+  }
+  DetachCastSurfaces();
+  const auto* tab = tab_controller->model().Find(*active);
+  if (!tab || tab->navigation_generation == 0) {
+    return false;
+  }
+  auto generation =
+      media_generations_.find(static_cast<std::uint32_t>(*active));
+  if (generation == media_generations_.end()) {
+    media_observation_bridge_.AdvanceNavigation(
+        browser_, static_cast<std::uint32_t>(*active),
+        tab->navigation_generation);
+    generation =
+        media_generations_.find(static_cast<std::uint32_t>(*active));
+  }
+  if (generation == media_generations_.end()) return false;
+  const browser_cast_view::CastViewContext context{
+      cast_browser_session_, profile_id_value_,
+      static_cast<std::uint32_t>(*active), tab->navigation_generation,
+      generation->second};
+  media_observation_bridge_.SetActiveTab(
+      static_cast<std::uint32_t>(*active));
+  cast_surface_ = std::make_unique<CastEntrySurface>(
+      dependencies_.locale, [] { return NowMilliseconds(); },
+      [this](browser_cast_view::CastSelectionIntent intent) {
+        if (cast_controller_) {
+          static_cast<void>(cast_controller_->HandleIntent(intent));
+        }
+      });
+  if (!cast_surface_->Attach(window_, view_, toolbar_)) {
+    cast_surface_.reset();
+    return false;
+  }
+  cast_surface_->BindContext(context);
+  if (!cast_controller_->BindContext(context)) {
+    DetachCastSurfaces();
+    return false;
+  }
+  cast_overlay_ = std::make_unique<AlloyCastOverlayWin>(
+      CefString(Localized(dependencies_.locale.locale,
+                          "cast.selection.overlay"))
+          .ToWString(),
+      [] { return NowMilliseconds(); },
+      [this](browser_cast_view::CastMediaRef media) {
+        return cast_controller_ && cast_controller_->OpenForMedia(media);
+      });
+  if (!cast_overlay_->Attach(window_->GetWindowHandle(),
+                             browser_->GetHost()->GetWindowHandle())) {
+    cast_overlay_.reset();
+    return true;
+  }
+  cast_overlay_->BindContext(context);
+  cast_observations_.clear();
+  cast_retry_after_ms_ = 0;
+  return true;
+}
+
+void AlloyProductHostWin::DetachCastSurfaces() {
+  CEF_REQUIRE_UI_THREAD();
+  if (cast_overlay_) {
+    cast_overlay_->Detach();
+    cast_overlay_.reset();
+  }
+  if (cast_surface_) {
+    cast_surface_->Detach();
+    cast_surface_.reset();
+  }
+  cast_observations_.clear();
+}
+
+void AlloyProductHostWin::ApplyCastSnapshot(
+    media_host::AlloyCastController::Snapshot snapshot) {
+  CEF_REQUIRE_UI_THREAD();
+  if (cast_surface_) static_cast<void>(cast_surface_->Apply(snapshot));
+  if (cast_overlay_) {
+    static_cast<void>(cast_overlay_->Apply(std::move(snapshot)));
+    cast_overlay_->SetObservations(cast_observations_);
+  }
+}
+
+void AlloyProductHostWin::UpdateCastGeometry(
+    const ::crayon::cef_shell::gateway::GatewayEvent& event) {
+  CEF_REQUIRE_UI_THREAD();
+  if (event.source != ::crayon::cef_shell::gateway::EventSource::kMedia ||
+      !event.player_reference || !IsActiveTab(event.tab_id) ||
+      !cast_controller_) {
+    return;
+  }
+  const browser_cast_view::CastMediaRef media{
+      event.player_reference->instance_id,
+      event.player_reference->source_revision};
+  cast_observations_.erase(
+      std::remove_if(cast_observations_.begin(), cast_observations_.end(),
+                     [&media](const auto& value) {
+                       return value.anchor.media == media;
+                     }),
+      cast_observations_.end());
+  if (!event.player_removed &&
+      cast_observations_.size() < kMaximumCastObservations) {
+    const auto now = NowMilliseconds();
+    AlloyCastOverlayObservation value;
+    value.anchor.context = cast_controller_->snapshot().context;
+    value.anchor.view_revision = cast_controller_->snapshot().view_revision;
+    value.anchor.media = media;
+    value.anchor.expires_at_ms =
+        now + browser_cast_view::kCastGeometryLifetimeMs;
+    value.anchor.supported = event.media.geometry_supported;
+    value.anchor.x = event.media.geometry_x;
+    value.anchor.y = event.media.geometry_y;
+    value.anchor.width = event.media.geometry_width;
+    value.anchor.height = event.media.geometry_height;
+    value.viewport_width = event.media.viewport_width;
+    value.viewport_height = event.media.viewport_height;
+    cast_observations_.push_back(std::move(value));
+  }
+  if (cast_overlay_) cast_overlay_->SetObservations(cast_observations_);
 }
 
 }  // namespace crayon::browser::cef_shell::windows

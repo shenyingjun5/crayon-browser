@@ -9,6 +9,9 @@
 
 #include "browser/mdv/cef_mdv_editing.h"
 #include "browser/mdv/cef_mdv_entries.h"
+#include "browser/media_host/alloy_cast_controller.h"
+#include "browser/media_host/cast_entry_surface.h"
+#include "browser/observation_gateway/cef_observation_bridge.h"
 #include "browser/page_markdown/cef_page_markdown_preview.h"
 #include "browser/page_snapshot_gateway/cef_page_snapshot_bridge.h"
 #include "browser/window/alloy_builtin_content.h"
@@ -29,6 +32,7 @@
 #include "include/cef_life_span_handler.h"
 #include "include/cef_load_handler.h"
 #include "include/cef_request_handler.h"
+#include "windows/alloy_cast_overlay_win.h"
 #include "include/views/cef_browser_view_delegate.h"
 #include "include/views/cef_window_delegate.h"
 
@@ -58,6 +62,10 @@ class AlloyProductHostWin final : public CefClient,
     gateway::PageSnapshotObserver* snapshot_observer = nullptr;
     std::function<bool()> snapshot_admission;
     std::function<void()> snapshot_events_ready;
+    media_host::MediaHostAdapter* media_host = nullptr;
+    observation::CefObservationBridge::EventsReadyCallback
+        media_events_ready;
+    observation::CefObservationBridge::LifecycleCallback media_lifecycle;
   };
 
   struct Callbacks final {
@@ -90,6 +98,13 @@ class AlloyProductHostWin final : public CefClient,
   void TickPageMarkdown(
       std::vector<::crayon::cef_shell::ipc::content_host::Message> replies,
       bool content_host_healthy);
+  std::vector<::crayon::cef_shell::gateway::GatewayEvent>
+  DrainMediaObservations(std::size_t max_events);
+  std::optional<std::string> TrustedPageUrl(
+      std::uint32_t tab_id, std::uint64_t navigation_id) const;
+  bool IsActiveTab(std::uint32_t tab_id) const;
+  void NoteTrustedUserInput();
+  void TickCast();
 
   cef_runtime_style_t GetBrowserRuntimeStyle() override;
   cef_runtime_style_t GetWindowRuntimeStyle() override;
@@ -99,6 +114,8 @@ class AlloyProductHostWin final : public CefClient,
   bool OnAccelerator(CefRefPtr<CefWindow> window, int command_id) override;
   bool OnKeyEvent(CefRefPtr<CefWindow> window,
                   const CefKeyEvent& event) override;
+  void OnLayoutChanged(CefRefPtr<CefView> view,
+                       const CefRect& new_bounds) override;
   void OnBrowserCreated(CefRefPtr<CefBrowserView> view,
                         CefRefPtr<CefBrowser> browser) override;
   void OnBrowserDestroyed(CefRefPtr<CefBrowserView> view,
@@ -123,6 +140,11 @@ class AlloyProductHostWin final : public CefClient,
   bool OnBeforeBrowse(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
                       CefRefPtr<CefRequest> request, bool user_gesture,
                       bool is_redirect) override;
+  CefRefPtr<CefResourceRequestHandler> GetResourceRequestHandler(
+      CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
+      CefRefPtr<CefRequest> request, bool is_navigation, bool is_download,
+      const CefString& request_initiator,
+      bool& disable_default_handling) override;
   bool OnKeyEvent(CefRefPtr<CefBrowser> browser, const CefKeyEvent& event,
                   CefEventHandle os_event) override;
   bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
@@ -189,6 +211,13 @@ class AlloyProductHostWin final : public CefClient,
   void ReleaseClosingView(CefRefPtr<CefBrowser> browser);
   void FinalizeRendererCrash(CefRefPtr<CefBrowser> browser);
   void NotifyClosed();
+  void OnMediaLifecycle(std::uint32_t tab_id, std::uint64_t navigation_id,
+                        std::uint32_t generation, bool closed);
+  bool BindCastForActiveTab();
+  void DetachCastSurfaces();
+  void ApplyCastSnapshot(media_host::AlloyCastController::Snapshot snapshot);
+  void UpdateCastGeometry(
+      const ::crayon::cef_shell::gateway::GatewayEvent& event);
 
   Dependencies dependencies_;
   Callbacks callbacks_;
@@ -198,6 +227,12 @@ class AlloyProductHostWin final : public CefClient,
   std::unique_ptr<window::AlloyTabStrip> tab_strip_;
   std::unique_ptr<window::AlloyOmnibox> omnibox_;
   std::unique_ptr<window::AlloyNavigation> navigation_;
+  observation::CefObservationBridge media_observation_bridge_;
+  std::unique_ptr<media_host::AlloyCastController> cast_controller_;
+  std::unique_ptr<CastEntrySurface> cast_surface_;
+  std::unique_ptr<AlloyCastOverlayWin> cast_overlay_;
+  std::map<std::uint32_t, std::uint32_t> media_generations_;
+  std::vector<AlloyCastOverlayObservation> cast_observations_;
   CefRefPtr<window::AlloyInteractions> interactions_;
   CefRefPtr<window::AlloyPageTools> page_tools_;
   CefRefPtr<CefPanel> toolbar_;
@@ -209,6 +244,8 @@ class AlloyProductHostWin final : public CefClient,
   std::string profile_id_value_;
   window::TabId tab_id_ = 0;
   std::uint64_t next_navigation_id_ = 1;
+  std::uint64_t cast_browser_session_ = 1;
+  std::uint64_t cast_retry_after_ms_ = 0;
   int chrome_browser_id_ = 0;
   bool started_ = false;
   bool closing_ = false;

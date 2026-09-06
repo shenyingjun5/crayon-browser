@@ -1,7 +1,7 @@
 # 自定义桌面外壳与 Alloy 迁移 Roadmap
 
 - 日期：2026-09-04；决策来源：用户明确选择“自定义外壳＋Alloy”，长期按此架构、一期开始迁移。
-- 状态：共享 `00..02`、Windows `03W..21W` VERIFIED；尚未切换产品默认宿主。
+- 状态：共享 `00..02`、Windows `03W..22W` VERIFIED；Windows 默认宿主已切到 Alloy，正在完成产品 surface 汇合与总回归。
 - 归属：`PLT-M05/PLT-W05` 的跨领域迁移切片，前缀 `PLT-SHELL-`。不另建一套 REL/BUX/Cast 业务计划，不增加 297 个顶层任务或 212 个唯一用例 ID。
 - 一期总入口：[REL](release-v1-roadmap.md)；投屏协议与交互仍由 [PLT-CAST-R](cast-experience-redesign-roadmap.md) 拥有。
 - 平台：按用户 2026-08-31 决策先完成 Windows 10/11 x64 三闭环与发布候选；macOS 共享实现与既有证据保留，签名、公证、Keychain、原生生命周期和打包等特有门禁后续验证，两个平台不能互相替代。
@@ -562,7 +562,8 @@ Code Review：按 v0.9 独立检查唯一 owner、同步 callback reentrancy、t
 
 - 用户决策：语言/IME/Narrator/原生 DPI 真机矩阵先放到后续，23W 继续保持 `BLOCKED` 且不得写成通过；该后置项不再阻塞 Windows 默认宿主工程切换。24W 不改变支持语言、系统设置或 LOC-07W/REL 的最终发布门禁，也不能用候选 probe 冒充默认产品。
 - `24W1 VERIFIED`：建立 Windows production-only Alloy root/client/lifecycle，将 `BrowserApp` 首窗从 `TabController::CreateBrowserWindow` 的 `CEF_RUNTIME_STYLE_CHROME` 切到真实 `CefWindow`＋`CefBrowserView` Alloy；首个 `crayon://newtab`、关闭排空、Browser/Renderer 回调、图标与唯一 message-loop owner 必须真实通过。允许修改 Windows app、一个窄 product host、CMake/source contract 与独立真实 CEF 产品 smoke；禁止删除旧宿主、修改 Mac、Cast/MDV/CNT 算法、协议、授权或依赖。
-- `24W2 IN_PROGRESS`：把已 VERIFIED 的 tab strip、omnibox/navigation、窗口/popup、profile/security/page tools/interactions、内置页/page Markdown、Cast bridge/overlay 接入同一 production host；所有状态仍由既有 controller/adapter 唯一持有，不复制 probe fake transport。真实产品覆盖三闭环和日用功能，不访问公网。
+- `24W2a VERIFIED`：把媒体 observation/network resource bridge、可信输入、MHV2 Cast controller、toolbar entry 与 Browser-owned overlay 接入同一 production host；所有候选、草稿、route、session 与 generation 仍由既有 gateway/adapter/controller 唯一持有，不复制 probe fake transport。
+- `24W2b IN_PROGRESS`：把已 VERIFIED 的窗口/popup、profile/settings、security，以及其余日用 surface 接入同一 production host；保持一窗口一 Profile、原生可信确认、默认拒绝和既有 controller/adapter owner，不访问公网。24W2 原范围因剩余 product surface 与 Cast 生命周期合计超过单提交审查预算而拆为 a/b，不改变验收或一期范围。
 - `24W3 TODO`：双配置完整 build/CTest、默认入口与 artifact forbidden scan、真实 Windows 产品 UI/关闭恢复、性能/安全回归和 v0.9 独立 Review；只有 Chrome-style 默认创建不可达且 Alloy 三闭环无回退后，24W 才能 `VERIFIED`。旧生产接线与共享 Mac 隔离代码只在 25W 移除。
 
 ### 24W1 完成记录（2026-09-06）
@@ -572,3 +573,11 @@ Code Review：按 v0.9 独立检查唯一 owner、同步 callback reentrancy、t
 - 自动化：Windows 11 x64 VS 2022 同一多配置目录，Debug/Release `crayon_browser` 与 `crayon_page_snapshot_cef_integration_win` 均构建成功。最终 Debug/Release 完整 24W1 定向矩阵各 9/9 PASS（40.00s/40.39s），增强导航探针另有 Debug 1/1 PASS（11.08s）。`node --test tools/locales/generate.test.mjs` 6/6 PASS，`node tools/locales/generate.mjs --check` PASS（3 locales/206 keys/9 files）；Debug/Release `localization_generated_check|localization_generator_contract|browser_localization_contract` 各 3/3 PASS（2.08s/2.57s）。一次 Release build＋CTest 组合调用在 184.2s 外层 TIMEOUT，遗留 CTest 随后自然结束；拆分后取得明确 build/CTest 结果，不以超时调用冒充通过。`git diff --check` 与 repo-guard PASS；RG-003/004 仅既有全仓 warning，RG-006 artifact scan 归 24W3。
 - 真实产品：Windows 应用控制启动刚重编译的 Debug `CrayonBrowser.exe`，UI Automation 树确认标题“蜡笔 AI Agent 投屏浏览器”、真实简中 Alloy tab strip/导航/地址栏/menu 与 `crayon://newtab` 内容。点击新建得到两个标签，关闭活动第二标签后首标签内容、`crayon://newtab/`、“本地页面”和刷新状态均恢复；Alt+F4 后只读检查 `CrayonBrowser process count: 0`。此前开发中真实复现并修复后台标签无法关闭、最后窗口悬挂及 CEF shutdown crash；最终未再复现。
 - Code Review 与边界：按 v0.9 检查默认入口真实性、唯一 owner、异步创建/关闭、后继激活、BrowserView 引用释放、TLS 身份、snapshot generation、敏感数据与 Release 隔离；范围内 P0/P1/P2/P3=`0/0/0/0`，APPROVE。24W2 尚需把 Cast controller/entry/overlay、窗口 popup、profile/security 等剩余已验证 surface 接入这个真实 product host；24W3 完整 125 项双配置 CTest、artifact/性能/安全/三闭环总回归尚未执行。23W 的真实系统语言/IME/Narrator/原生 200% DPI 仍按用户决策后置并保持 `BLOCKED`，不由本项替代。
+
+### 24W2a 完成记录（2026-09-06）
+
+- 状态与实现：`VERIFIED`。`AlloyProductHostWin` 直接拥有 `CefObservationBridge`，转发 renderer media IPC 与 CEF network resource facts，并把可信物理输入绑定当前 Alloy Browser；BrowserApp 的媒体消费已切离旧 Chrome `TabController`。Host 使用既有 `MediaHostAdapter`、`AlloyCastController`、`CastEntrySurface` 与 `AlloyCastOverlayWin`，按 active tab/navigation/generation 绑定 MHV2 投影，最多保存 16 个、500ms 到期的几何提示；导航、切换、关闭和 shutdown 均先撤销 surface/context。MediaHost 启动竞态使用固定 500ms monotonic retry，无忙等和高频日志。
+- 缺陷回归：新增 source contract 首轮稳定失败于 product Host 缺少 `CefObservationBridge`。真实产品随后复现快速内置页在 Browser 创建完成前已结束 loading，首代 navigation 仍为 0，导致 Cast surface 原子绑定失败并连带回滚菜单；修为 Browser 创建完成时显式建立首代并同步实际 loading。再次复现 `CastEntrySurface` 收到空 clock 后按契约拒绝 Attach，改为共享 steady monotonic clock。另新增 `failed_context_bind_can_retry`：旧 `AlloyCastController` 在 transport 首次拒绝后错误保留 current context，第二次绑定假成功但 projection 仍 incompatible；修为未 admitted 时清除 context，允许有界重试。
+- 自动化：Windows 11 x64 VS 2022，Debug `crayon_browser` build PASS；Release `crayon_browser`、`crayon_alloy_cast_controller_win_test`、`crayon_page_snapshot_cef_integration_win` build PASS。Debug/Release `alloy_cast_controller_win|alloy_cast_entry_surface_windows|alloy_cast_bridge_windows|alloy_cast_overlay_win|alloy_cast_overlay_windows|media_geometry_windows|windows_cef_shell_source_contract` 各 7/7 PASS（20.70s/15.90s）；source contract 修复前为 0/1、修复后 PASS。新增 controller 回归修复前 0/1、修复后 1/1 PASS。`git diff --check` PASS。
+- 真实产品：启动刚重建 Debug `CrayonBrowser.exe`，UI Automation 确认真实 Alloy 简中 `crayon://newtab` 同时显示菜单与灰态“投屏”原生按钮；点击新建标签后第二标签仍显示同一 Cast entry，关闭活动标签后首标签、本地页面身份、菜单和 Cast entry 均恢复；Alt+F4 后 `CrayonBrowser process count: 0`。本次未用公网、未把灰态入口冒充真实接收端播放；真实 Direct/Relay 证据仍沿用 PLT-W05/REL 所有者并由 24W3 聚合。
+- Code Review 与边界：按 v0.9 检查 generation/active-tab fencing、MediaHost 唯一 owner、失败重试、几何容量/TTL、surface detach、关闭逆序、URL/凭证数据流与旧 Chrome 误消费；P0/P1/P2/P3=`0/0/0/0`，APPROVE。24W2b 的 popup/profile/security/其余日用 surface 尚未完成，24W3 全量/性能/安全/artifact 总回归未运行；语言/IME/Narrator/原生 DPI 继续按用户决策后置。

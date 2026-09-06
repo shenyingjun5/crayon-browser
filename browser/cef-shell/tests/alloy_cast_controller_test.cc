@@ -33,7 +33,7 @@ class FakeTransport final : public media_host::MediaHostTransport {
   }
   void Stop() override { healthy_ = false; }
   bool Enqueue(mh::Message message) override {
-    if (!healthy_) return false;
+    if (!healthy_ || !enqueue_allowed) return false;
     sent.push_back(std::move(message));
     return true;
   }
@@ -83,6 +83,7 @@ class FakeTransport final : public media_host::MediaHostTransport {
   }
 
   bool healthy_ = false;
+  bool enqueue_allowed = true;
   bool player_messages = true;
   bool draft_messages = true;
   bool connect_messages = true;
@@ -305,6 +306,23 @@ bool FullFlow() {
   return true;
 }
 
+bool FailedContextBindCanRetry() {
+  auto transport = std::make_unique<FakeTransport>();
+  auto* fake = transport.get();
+  media_host::MediaHostAdapter adapter(std::move(transport));
+  CHECK_CAST(adapter.Start("media-host"));
+  fake->enqueue_allowed = false;
+  media_host::AlloyCastController controller(
+      &adapter, [](auto) {}, "Video", "Device",
+      [] { return std::uint64_t{1000}; });
+  CHECK_CAST(!controller.BindContext(Context()));
+  fake->enqueue_allowed = true;
+  CHECK_CAST(controller.BindContext(Context()));
+  CHECK_CAST(controller.snapshot().compatible);
+  CHECK_CAST(!fake->sent.empty());
+  return true;
+}
+
 bool CompatibilityFailsClosed() {
   auto transport = std::make_unique<FakeTransport>();
   auto* fake = transport.get();
@@ -364,6 +382,7 @@ bool OverlayMediaIsRevalidated() {
 int main() {
   const std::pair<const char*, bool (*)()> tests[] = {
       {"full_flow", &FullFlow},
+      {"failed_context_bind_can_retry", &FailedContextBindCanRetry},
       {"compatibility_fails_closed", &CompatibilityFailsClosed},
       {"overlay_media_is_revalidated", &OverlayMediaIsRevalidated},
   };
