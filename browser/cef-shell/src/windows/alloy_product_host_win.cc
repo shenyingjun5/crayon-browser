@@ -365,6 +365,10 @@ bool AlloyProductHostWin::Start(std::string initial_url, std::string title,
                 PostSyncChrome();
               }
             }
+          },
+          [this](window::TabId id) {
+            const auto title = tab_titles_.find(id);
+            return title == tab_titles_.end() ? std::string{} : title->second;
           }});
   omnibox_ = std::make_unique<window::AlloyOmnibox>(
       OmniboxStrings(locale),
@@ -1455,6 +1459,12 @@ void AlloyProductHostWin::OnBuiltinTitleChange(
   } else {
     tab_titles_.erase(tab->id);
   }
+  if (tab_strip_) static_cast<void>(tab_strip_->RefreshTitles());
+  if (window_ && controller()->model().active_tab() == tab->id) {
+    window_->SetTitle(IsSafeHistoryTitle(value) && !value.empty()
+                          ? CefString(value + " - " + title_)
+                          : CefString(title_));
+  }
 }
 
 void AlloyProductHostWin::OnBuiltinLoadError(CefRefPtr<CefBrowser> browser,
@@ -2415,7 +2425,14 @@ void AlloyProductHostWin::SyncChrome() {
   }
   if (interactions_) static_cast<void>(interactions_->RefreshDailyControls());
   static_cast<void>(BindActiveChrome());
-  if (window_) window_->Layout();
+  if (window_) {
+    const auto active = tab_controller->model().active_tab();
+    const auto title = active ? tab_titles_.find(*active) : tab_titles_.end();
+    window_->SetTitle(title != tab_titles_.end() && !title->second.empty()
+                          ? CefString(title->second + " - " + title_)
+                          : CefString(title_));
+    window_->Layout();
+  }
   ScheduleSessionCheckpoint();
 }
 

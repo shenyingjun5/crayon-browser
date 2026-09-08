@@ -209,7 +209,10 @@ class BuiltinProbe final : public CefApp,
                   document.title = 'alloy-mdv-fail';
                   return;
                 }
-                source.value += '\n\nalloy-edited';
+                source.value += '\n\nalloy-edit';
+                source.dispatchEvent(new Event('input', {bubbles: true}));
+                // Consecutive input events must not drop the final suffix.
+                source.value += 'ed';
                 source.dispatchEvent(new Event('input', {bubbles: true}));
                 var dirtyTimer = setInterval(function() {
                   if (body.getAttribute('data-dirty') === 'true') {

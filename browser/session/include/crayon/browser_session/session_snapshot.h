@@ -16,7 +16,7 @@ struct SessionTabSnapshot final {
   std::string url;
   bool pinned = false;
   bool muted = false;
-  std::optional<std::string> group;
+  std::optional<std::string> group = std::nullopt;
 };
 
 struct SessionWindowSnapshot final {

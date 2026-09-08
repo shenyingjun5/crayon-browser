@@ -178,10 +178,75 @@ bool ShutdownContract() {
   return true;
 }
 
+bool ResolveDeadlineContract() {
+  PermissionStore store;
+  AlloySiteControls controls(&store);
+  unsigned callbacks = 0;
+  bool allowed = true;
+  CHECK(controls.OnNavigation(1, "https://a.example"));
+  const auto expired = controls.BeginPermission(
+      1, "https://a.example", PermissionKind::kCamera, 10, 20,
+      [&](bool value) { ++callbacks; allowed = value; });
+  CHECK(expired);
+  const auto queued = controls.BeginPermission(
+      1, "https://a.example", PermissionKind::kMicrophone, 10, 0,
+      [&](bool value) { ++callbacks; allowed = value; });
+  CHECK(queued);
+  CHECK(controls.ResolvePermission(*expired, AlloyPermissionDecision::kAllowSession, 20) ==
+        AlloySiteControlResult::kInvalidInput);
+  CHECK(callbacks == 1 && !allowed && controls.front_permission() &&
+        controls.front_permission()->request_id == *queued &&
+        controls.state().PermissionAt("https://a.example", PermissionKind::kCamera, 20) == SitePermission::kDeny &&
+        store.Query("https://a.example", crayon::browser::cef_shell::permission::PermissionKind::kCamera) != PermissionDecision::kAllowSession);
+  CHECK(controls.ResolvePermission(*expired, AlloyPermissionDecision::kDeny, 21) ==
+        AlloySiteControlResult::kNotFront && callbacks == 1);
+  CHECK(controls.ResolvePermission(*queued, AlloyPermissionDecision::kAllowSession, 21) ==
+                    AlloySiteControlResult::kSuccess && callbacks == 2 && allowed);
+  const auto before = controls.BeginPermission(
+      1, "https://a.example", PermissionKind::kGeolocation, 10, 20,
+      [&](bool value) { ++callbacks; allowed = value; });
+  CHECK(before && controls.ResolvePermission(*before, AlloyPermissionDecision::kAllowSession, 19) ==
+                      AlloySiteControlResult::kSuccess && allowed);
+  const auto late = controls.BeginPermission(
+      1, "https://a.example", PermissionKind::kNotifications, 10, 20,
+      [&](bool value) { ++callbacks; allowed = value; });
+  CHECK(late && controls.ResolvePermission(*late, AlloyPermissionDecision::kAllowUntil, 21, 100) ==
+                    AlloySiteControlResult::kInvalidInput && callbacks == 4 && !allowed &&
+        controls.state().PermissionAt("https://a.example", PermissionKind::kNotifications, 21) == SitePermission::kDeny &&
+        store.Query("https://a.example", crayon::browser::cef_shell::permission::PermissionKind::kNotifications) != PermissionDecision::kAllowSession);
+  CHECK(controls.ResolvePermission(*late, AlloyPermissionDecision::kDeny, 22) ==
+                    AlloySiteControlResult::kNotFront && callbacks == 4);
+  return true;
+}
+
+bool ExpiredCallbackShutdownContract() {
+  PermissionStore store;
+  AlloySiteControls *self = nullptr;
+  unsigned callbacks = 0;
+  bool shutdown_allowed = true;
+  AlloySiteControls controls(&store);
+  self = &controls;
+  CHECK(controls.OnNavigation(1, "https://a.example"));
+  const auto request = controls.BeginPermission(
+      1, "https://a.example", PermissionKind::kCamera, 10, 20,
+      [&](bool allowed) {
+        shutdown_allowed = allowed;
+        ++callbacks;
+        self->Shutdown();
+      });
+  CHECK(request && controls.ResolvePermission(*request, AlloyPermissionDecision::kDeny, 20) ==
+                       AlloySiteControlResult::kInvalidInput && callbacks == 1 &&
+        !shutdown_allowed);
+  CHECK(controls.ResolvePermission(*request, AlloyPermissionDecision::kDeny, 21) ==
+        AlloySiteControlResult::kInactive);
+  return true;
+}
+
 } // namespace
 
 int main() {
-  return PermissionPromptContract() && CertificateAndProtocolContract() &&
+  return ResolveDeadlineContract() && ExpiredCallbackShutdownContract() &&
+                 PermissionPromptContract() && CertificateAndProtocolContract() &&
                  ShutdownContract()
              ? EXIT_SUCCESS
              : EXIT_FAILURE;

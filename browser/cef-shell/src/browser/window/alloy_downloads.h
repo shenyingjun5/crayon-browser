@@ -46,6 +46,12 @@ public:
   }
 
 private:
+  using ItemControl = bool (browser_downloads::DownloadItem::*)() noexcept;
+  using ControlCallback = std::function<bool(std::uint64_t)>;
+
+  bool ApplyControl(std::uint64_t download_id,
+                    ItemControl control,
+                    const ControlCallback &callback);
   struct Entry final {
     browser_downloads::DownloadItem item;
     std::string target_path;
@@ -60,6 +66,7 @@ private:
   std::map<std::uint64_t, Entry> entries_;
   browser_downloads_view::DownloadShelfStateMachine shelf_;
   bool active_ = true;
+  bool control_in_progress_ = false;
   std::uint64_t next_generation_ = 1;
 };
 

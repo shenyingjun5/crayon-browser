@@ -11,6 +11,19 @@ constexpr char kPreferenceSaveFailure[] = "preferences-save-failed";
 constexpr char kCleanupStartFailure[] = "cleanup-start-failed";
 constexpr char kCleanupFailure[] = "cleanup-failed";
 
+class ScopedCallback final {
+ public:
+  explicit ScopedCallback(bool *in_progress) : in_progress_(in_progress) {
+    *in_progress_ = true;
+  }
+  ~ScopedCallback() { *in_progress_ = false; }
+  ScopedCallback(const ScopedCallback &) = delete;
+  ScopedCallback &operator=(const ScopedCallback &) = delete;
+
+ private:
+  bool *in_progress_;
+};
+
 } // namespace
 
 AlloyProfileSettings::AlloyProfileSettings(Callbacks callbacks)
@@ -21,7 +34,7 @@ bool AlloyProfileSettings::AddProfile(
     browser_profiles_view::ProfileEntryKind kind,
     browser_preferences::PreferenceStore preferences) {
   const std::string key = profile_id.value();
-  if (!active_ || profiles_.count(key) != 0 ||
+  if (!active_ || callback_in_progress_ || profiles_.count(key) != 0 ||
       !picker_.AddProfile(key, display_name, kind)) {
     return false;
   }
@@ -34,6 +47,8 @@ AlloyProfileSettingsResult
 AlloyProfileSettings::SwitchTo(const std::string &profile_id) {
   if (!active_)
     return AlloyProfileSettingsResult::kInactive;
+  if (callback_in_progress_)
+    return AlloyProfileSettingsResult::kBusy;
   const ProfileRecord *record = Find(profile_id);
   if (!record)
     return AlloyProfileSettingsResult::kUnknownProfile;
@@ -43,12 +58,25 @@ AlloyProfileSettings::SwitchTo(const std::string &profile_id) {
   if (picker_.active_profile() == profile_id) {
     return AlloyProfileSettingsResult::kAlreadyActive;
   }
-  if (!callbacks_.switch_profile ||
-      !callbacks_.switch_profile(record->id, record->kind)) {
+  if (!callbacks_.switch_profile) {
     last_failure_token_ = "profile-switch-failed";
     return AlloyProfileSettingsResult::kExternalFailure;
   }
-  if (picker_.SwitchTo(profile_id) !=
+  const auto callback = callbacks_.switch_profile;
+  const auto id = record->id;
+  const auto kind = record->kind;
+  bool accepted = false;
+  {
+    ScopedCallback call(&callback_in_progress_);
+    accepted = callback(id, kind);
+  }
+  if (!active_)
+    return AlloyProfileSettingsResult::kInactive;
+  if (!accepted || !Find(id.value())) {
+    last_failure_token_ = "profile-switch-failed";
+    return AlloyProfileSettingsResult::kExternalFailure;
+  }
+  if (picker_.SwitchTo(id.value()) !=
       browser_profiles_view::SwitchOutcome::kSwitched) {
     last_failure_token_ = "profile-switch-state-failed";
     return AlloyProfileSettingsResult::kExternalFailure;
@@ -60,11 +88,25 @@ AlloyProfileSettings::SwitchTo(const std::string &profile_id) {
 AlloyProfileSettingsResult AlloyProfileSettings::OpenIncognito() {
   if (!active_)
     return AlloyProfileSettingsResult::kInactive;
+  if (callback_in_progress_)
+    return AlloyProfileSettingsResult::kBusy;
   ProfileRecord *record = ActiveRecord();
   const auto generation = NextGeneration();
   if (!record || !generation || !picker_.RequestIncognitoWindow() ||
-      !callbacks_.open_incognito ||
-      !callbacks_.open_incognito(record->id, *generation)) {
+      !callbacks_.open_incognito) {
+    last_failure_token_ = "incognito-open-failed";
+    return AlloyProfileSettingsResult::kExternalFailure;
+  }
+  const auto callback = callbacks_.open_incognito;
+  const auto id = record->id;
+  bool accepted = false;
+  {
+    ScopedCallback call(&callback_in_progress_);
+    accepted = callback(id, *generation);
+  }
+  if (!active_)
+    return AlloyProfileSettingsResult::kInactive;
+  if (!accepted || !Find(id.value())) {
     last_failure_token_ = "incognito-open-failed";
     return AlloyProfileSettingsResult::kExternalFailure;
   }
@@ -76,6 +118,8 @@ AlloyProfileSettingsResult AlloyProfileSettings::ApplyPreference(
     const std::string &key, browser_preferences::PreferenceValue value) {
   if (!active_)
     return AlloyProfileSettingsResult::kInactive;
+  if (callback_in_progress_)
+    return AlloyProfileSettingsResult::kBusy;
   ProfileRecord *record = ActiveRecord();
   if (!record)
     return AlloyProfileSettingsResult::kUnknownProfile;
@@ -87,8 +131,22 @@ AlloyProfileSettingsResult AlloyProfileSettings::ApplyPreference(
     return AlloyProfileSettingsResult::kInvalidValue;
   }
   settings_.MarkDirty();
-  if (!callbacks_.save_preferences ||
-      !callbacks_.save_preferences(record->id, candidate)) {
+  if (!callbacks_.save_preferences) {
+    settings_.ClearDirty();
+    last_failure_token_ = kPreferenceSaveFailure;
+    return AlloyProfileSettingsResult::kExternalFailure;
+  }
+  const auto callback = callbacks_.save_preferences;
+  const auto id = record->id;
+  bool accepted = false;
+  {
+    ScopedCallback call(&callback_in_progress_);
+    accepted = callback(id, candidate);
+  }
+  if (!active_)
+    return AlloyProfileSettingsResult::kInactive;
+  record = ActiveRecord();
+  if (!accepted || !record || record->id.value() != id.value()) {
     settings_.ClearDirty();
     last_failure_token_ = kPreferenceSaveFailure;
     return AlloyProfileSettingsResult::kExternalFailure;
@@ -100,12 +158,15 @@ AlloyProfileSettingsResult AlloyProfileSettings::ApplyPreference(
 }
 
 bool AlloyProfileSettings::RequestReset() {
-  return active_ && ActiveRecord() && settings_.RequestReset();
+  return active_ && !callback_in_progress_ && ActiveRecord() &&
+         settings_.RequestReset();
 }
 
 AlloyProfileSettingsResult AlloyProfileSettings::ConfirmReset() {
   if (!active_)
     return AlloyProfileSettingsResult::kInactive;
+  if (callback_in_progress_)
+    return AlloyProfileSettingsResult::kBusy;
   ProfileRecord *record = ActiveRecord();
   if (!record || !settings_.reset_pending()) {
     return AlloyProfileSettingsResult::kInvalidValue;
@@ -115,8 +176,21 @@ AlloyProfileSettingsResult AlloyProfileSettings::ConfirmReset() {
   }
   auto candidate = record->preferences;
   candidate.ResetAll();
-  if (!callbacks_.save_preferences ||
-      !callbacks_.save_preferences(record->id, candidate)) {
+  if (!callbacks_.save_preferences) {
+    last_failure_token_ = kPreferenceSaveFailure;
+    return AlloyProfileSettingsResult::kExternalFailure;
+  }
+  const auto callback = callbacks_.save_preferences;
+  const auto id = record->id;
+  bool accepted = false;
+  {
+    ScopedCallback call(&callback_in_progress_);
+    accepted = callback(id, candidate);
+  }
+  if (!active_)
+    return AlloyProfileSettingsResult::kInactive;
+  record = ActiveRecord();
+  if (!accepted || !record || record->id.value() != id.value()) {
     last_failure_token_ = kPreferenceSaveFailure;
     return AlloyProfileSettingsResult::kExternalFailure;
   }
@@ -128,17 +202,19 @@ AlloyProfileSettingsResult AlloyProfileSettings::ConfirmReset() {
   return AlloyProfileSettingsResult::kSuccess;
 }
 
-void AlloyProfileSettings::CancelReset() { settings_.CancelReset(); }
+void AlloyProfileSettings::CancelReset() {
+  if (active_ && !callback_in_progress_)
+    settings_.CancelReset();
+}
 
 std::optional<std::uint64_t> AlloyProfileSettings::BeginCleanup() {
-  if (!active_ || pending_cleanup_generation_ ||
+  if (!active_ || callback_in_progress_ || pending_cleanup_generation_ ||
       picker_.cleanup_failure_pending()) {
     return std::nullopt;
   }
   ProfileRecord *record = ActiveRecord();
   const auto generation = NextGeneration();
-  if (!record || !generation || !callbacks_.begin_cleanup ||
-      !callbacks_.begin_cleanup(record->id, *generation)) {
+  if (!record || !generation || !callbacks_.begin_cleanup) {
     last_failure_token_ = kCleanupStartFailure;
     if (record) {
       static_cast<void>(picker_.ReportCleanupFailure(record->id.value(),
@@ -148,7 +224,26 @@ std::optional<std::uint64_t> AlloyProfileSettings::BeginCleanup() {
   }
   pending_cleanup_generation_ = generation;
   pending_cleanup_profile_ = record->id.value();
-  last_failure_token_.clear();
+  const auto callback = callbacks_.begin_cleanup;
+  const auto id = record->id;
+  bool accepted = false;
+  {
+    ScopedCallback call(&callback_in_progress_);
+    accepted = callback(id, *generation);
+  }
+  if (!active_)
+    return std::nullopt;
+  if (!accepted) {
+    if (pending_cleanup_generation_ && *pending_cleanup_generation_ == *generation) {
+      pending_cleanup_generation_.reset();
+      pending_cleanup_profile_.clear();
+      static_cast<void>(picker_.ReportCleanupFailure(id.value(), kCleanupStartFailure));
+      last_failure_token_ = kCleanupStartFailure;
+    }
+    return std::nullopt;
+  }
+  if (pending_cleanup_generation_ && *pending_cleanup_generation_ == *generation)
+    last_failure_token_.clear();
   return generation;
 }
 
@@ -177,7 +272,7 @@ AlloyProfileSettings::CompleteCleanup(std::uint64_t generation, bool succeeded,
 }
 
 void AlloyProfileSettings::AcknowledgeCleanupFailure() {
-  if (!active_)
+  if (!active_ || callback_in_progress_)
     return;
   picker_.AcknowledgeCleanupFailure();
   last_failure_token_.clear();

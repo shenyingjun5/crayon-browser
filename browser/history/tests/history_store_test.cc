@@ -3,6 +3,7 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <vector>
 
 #include "crayon/browser_history/history_codec.h"
 #include "crayon/browser_history/history_store.h"
@@ -51,6 +52,51 @@ bool ValidationMatrix() {
   CHECK(store.RecordVisit("https://a.test/", std::string(513, 't'), 1,
                           &error) == 0);
   CHECK(error == HistoryError::kInvalidTitle);
+  return true;
+}
+
+bool UrlAuthoritySafetyMatrix() {
+  HistoryStore store;
+  const std::vector<std::string> accepted = {
+      "https://dns.example.test:8443/path@%20?query=@%20#fragment@%20",
+      "http://127.0.0.1:8080/path?value=@%20#fragment",
+      "https://[2001:db8::1]:443/path?value=@%20#fragment",
+  };
+  for (const std::string& url : accepted) {
+    CHECK(store.RecordVisit(url, "历史标题", 1) != 0);
+  }
+  CHECK(store.RecordClosedTab("https://closed.test/", "closed", 2));
+  const std::size_t entry_count = store.entries().size();
+  const std::size_t closed_count = store.recently_closed_count();
+  const std::vector<std::string> rejected = {
+      "https://user:fixture-pass@host.test/",
+      "https://user@host.test/",
+      "https:///path",
+      "https://host name.test/",
+      "https://host.test/path\\segment",
+      "https://%68ost.test/",
+  };
+  HistoryError error = HistoryError::kInvalidTitle;
+  for (const std::string& url : rejected) {
+    CHECK(store.RecordVisit(url, "bad", 3, &error) == 0);
+    CHECK(error == HistoryError::kInvalidUrl && store.entries().size() == entry_count &&
+          store.entries().front().url == accepted.front());
+    CHECK(!store.RecordClosedTab(url, "bad", 4, &error));
+    CHECK(error == HistoryError::kInvalidUrl &&
+          store.recently_closed_count() == closed_count &&
+          store.recently_closed().front().url == "https://closed.test/");
+  }
+  const std::string title = "导入标题";
+  const std::string userinfo_url = "https://user@host.test/";
+  for (const char kind : {'V', 'C'}) {
+    const std::string document = "CRAYON-HISTORY v1\n" + std::string(1, kind) +
+                                 " 1 " + std::to_string(title.size()) + " " +
+                                 std::to_string(userinfo_url.size()) + "\n" + title +
+                                 "\n" + userinfo_url + "\n";
+    HistoryCodecError codec_error = HistoryCodecError::kBadHeader;
+    CHECK(!DeserializeHistory(document, &codec_error).has_value());
+    CHECK(codec_error == HistoryCodecError::kContentRejected);
+  }
   return true;
 }
 
@@ -241,6 +287,7 @@ bool UnicodeDirectoryRoundTripThroughFile() {
 
 int main() {
   if (!RecordAndFind() || !ValidationMatrix() || !CapacityEvictsOldest() ||
+      !UrlAuthoritySafetyMatrix() ||
       !EphemeralRefusesEverything() || !RecentlyClosedStackBoundedAndOrdered() ||
       !DeleteRangeBoundaries() || !DeleteUrlAndClearAll() ||
       !SearchNewestFirstAndBounded() || !RoundTripPreservesEntries() ||

@@ -1,11 +1,18 @@
 #include "alloy_page_tools_probe.h"
 
+#if defined(_WIN32)
 #include <windows.h>
+#else
+#include <unistd.h>
+#endif
 
 #include <cmath>
+#include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
+#include <system_error>
 #include <utility>
 
 #include "browser/window/alloy_page_tools.h"
@@ -30,7 +37,24 @@ using crayon::browser_page_tools::FullscreenState;
 
 constexpr int kPollMilliseconds = 20;
 constexpr int kMaximumChecks = 600;
+constexpr int kMaximumDirectoryCandidates = 32;
 constexpr double kExpectedTwoHundredPercentLevel = 3.8017840169239308;
+
+std::filesystem::path PathFromUtf8(const std::string& value) {
+#if defined(_WIN32)
+  return std::filesystem::path(CefString(value).ToWString());
+#else
+  return std::filesystem::path(value);
+#endif
+}
+
+std::wstring PathForCef(const std::filesystem::path& path) {
+#if defined(_WIN32)
+  return path.native();
+#else
+  return CefString(path.native()).ToWString();
+#endif
+}
 
 class AlloyPageToolsProbe final : public CefApp,
                                   public CefBrowserProcessHandler,
@@ -60,6 +84,9 @@ public:
     command->AppendSwitch("disable-default-apps");
     command->AppendSwitch("disable-sync");
     command->AppendSwitch("no-proxy-server");
+#if defined(__APPLE__)
+    command->AppendSwitch("use-mock-keychain");
+#endif
   }
 
   void OnContextInitialized() override {
@@ -172,7 +199,6 @@ public:
     const bool previous = tools_->FindPrevious(1);
     const bool end = tools_->EndFind(1);
     result_->find_passed = next && previous && end && !tools_->find().active();
-    StartPdf();
   }
 
   void OnWindowDestroyed(CefRefPtr<CefWindow>) override {
@@ -180,9 +206,10 @@ public:
     if (tools_)
       tools_->Shutdown();
     tools_ = nullptr;
-    std::error_code error;
-    std::filesystem::remove(pdf_path_, error);
-    std::filesystem::remove(fenced_path_, error);
+    if (!test_directory_.empty()) {
+      std::error_code error;
+      std::filesystem::remove_all(test_directory_, error);
+    }
     view_ = nullptr;
     window_ = nullptr;
     CefQuitMessageLoop();
@@ -195,42 +222,102 @@ private:
   }
 
   void StartPdf() {
-    wchar_t temp_path[MAX_PATH]{};
-    if (GetTempPathW(MAX_PATH, temp_path) == 0) {
-      Finish(false, "temp-path");
+    if (!CreateTestDirectory()) {
+      Finish(false, "pdf-directory");
       return;
     }
-    pdf_path_ = std::filesystem::path(temp_path) /
-                (L"crayon-alloy-page-tools-" +
-                 std::to_wstring(GetCurrentProcessId()) + L".pdf");
-    if (tools_->PrintToPdf(1, L"relative.pdf", "relative.pdf",
-                           [](bool) {}) ||
-        tools_->PrintToPdf(1, pdf_path_.replace_extension(L".txt").wstring(),
-                           "not-pdf.txt", [](bool) {})) {
-      Finish(false, "pdf-path-guard");
+    pdf_path_ = test_directory_ / PathFromUtf8("页面输出.pdf");
+    const std::filesystem::path text_path =
+        test_directory_ / PathFromUtf8("页面输出.txt");
+    std::string nul_filename = "页面输出";
+    nul_filename.push_back('\0');
+    nul_filename += ".pdf";
+    const std::filesystem::path nul_path =
+        test_directory_ / PathFromUtf8(nul_filename);
+    if (tools_->PrintToPdf(1, CefString("relative.pdf").ToWString(),
+                           "relative.pdf", [](bool) {})) {
+      Finish(false, "pdf-relative-accepted");
       return;
     }
-    pdf_path_.replace_extension(L".pdf");
+    if (tools_->PrintToPdf(1, PathForCef(text_path), "not-pdf.txt",
+                           [](bool) {})) {
+      Finish(false, "pdf-text-accepted");
+      return;
+    }
+    if (tools_->PrintToPdf(1, PathForCef(nul_path), "nul.pdf", [](bool) {})) {
+      Finish(false, "pdf-nul-accepted");
+      return;
+    }
     if (!tools_->PrintToPdf(
-            1, pdf_path_.wstring(), "alloy-page-tools.pdf", [this](bool ok) {
-              result_->pdf_passed = ok && std::filesystem::exists(pdf_path_) &&
-                                    std::filesystem::file_size(pdf_path_) > 0;
+            1, PathForCef(pdf_path_), "alloy-page-tools.pdf", [this](bool ok) {
+              std::error_code error;
+              const bool exists = std::filesystem::exists(pdf_path_, error);
+              const std::uintmax_t size =
+                  exists && !error
+                      ? std::filesystem::file_size(pdf_path_, error)
+                      : 0;
+              char header[5]{};
+              std::ifstream pdf(pdf_path_, std::ios::binary);
+              pdf.read(header, sizeof(header));
+              result_->pdf_passed =
+                  ok && !error && exists && size > 0 &&
+                  pdf.gcount() ==
+                      static_cast<std::streamsize>(sizeof(header)) &&
+                  std::string(header, sizeof(header)) == "%PDF-";
+              if (!result_->pdf_passed) {
+                Finish(false, "pdf-output");
+                return;
+              }
               tools_->AcknowledgeOutput();
-              fenced_path_ = pdf_path_.parent_path() /
-                             L"crayon-alloy-page-tools-fenced.pdf";
-              if (!tools_->PrintToPdf(1, fenced_path_.wstring(),
-                                      "alloy-page-tools-fenced.pdf",
-                                      [this](bool allowed) {
-                                        result_->pdf_fencing_passed =
-                                            !allowed &&
-                                            !tools_->OnNavigation(1);
-                                      }) ||
+              fenced_path_ =
+                  test_directory_ / PathFromUtf8("页面输出-fenced.pdf");
+              if (!tools_->PrintToPdf(
+                      1, PathForCef(fenced_path_),
+                      "alloy-page-tools-fenced.pdf", [this](bool allowed) {
+                        result_->pdf_fencing_passed =
+                            !allowed && !tools_->OnNavigation(1);
+                      }) ||
                   !tools_->OnNavigation(2)) {
                 Finish(false, "pdf-fence");
               }
             })) {
       Finish(false, "print-pdf");
     }
+  }
+
+  bool CreateTestDirectory() {
+    if (!test_directory_.empty())
+      return true;
+    std::error_code error;
+    const std::filesystem::path temporary_root =
+        std::filesystem::temp_directory_path(error);
+    if (error)
+      return false;
+#if defined(_WIN32)
+    const std::string process_id = std::to_string(GetCurrentProcessId());
+#else
+    const std::string process_id = std::to_string(getpid());
+#endif
+    for (int candidate = 0; candidate < kMaximumDirectoryCandidates;
+         ++candidate) {
+      const std::filesystem::path directory =
+          temporary_root / ("crayon-alloy-page-tools-" + process_id + "-" +
+                            std::to_string(candidate));
+      error.clear();
+      if (!std::filesystem::create_directory(directory, error)) {
+        if (error && error != std::errc::file_exists)
+          return false;
+        continue;
+      }
+      test_directory_ = std::filesystem::canonical(directory, error);
+      if (!error)
+        return true;
+      std::error_code cleanup_error;
+      std::filesystem::remove_all(directory, cleanup_error);
+      test_directory_.clear();
+      return false;
+    }
+    return false;
   }
 
   void ScheduleCheck() {
@@ -247,6 +334,13 @@ private:
       Finish(false, "timeout");
       return;
     }
+    if (!pdf_started_ && result_->find_passed && result_->zoom_passed &&
+        result_->fullscreen_passed) {
+      pdf_started_ = true;
+      StartPdf();
+      if (finished_)
+        return;
+    }
     if (result_->find_passed && result_->zoom_passed &&
         result_->fullscreen_passed && result_->pdf_passed &&
         result_->pdf_fencing_passed && result_->capability_passed) {
@@ -260,7 +354,7 @@ private:
     if (finished_)
       return;
     finished_ = true;
-    std::cout << "alloy_page_tools_windows passed=" << passed
+    std::cout << "alloy_page_tools passed=" << passed
               << " detail=" << detail << " find=" << result_->find_passed
               << " zoom=" << result_->zoom_passed
               << " fullscreen=" << result_->fullscreen_passed
@@ -277,6 +371,7 @@ private:
 
   const std::string fixture_url_;
   std::shared_ptr<AlloyPageToolsProbeResult> result_;
+  std::filesystem::path test_directory_;
   std::filesystem::path pdf_path_;
   std::filesystem::path fenced_path_;
   CefRefPtr<CefBrowserView> view_;
@@ -286,6 +381,7 @@ private:
   int checks_ = 0;
   bool started_ = false;
   bool find_completed_ = false;
+  bool pdf_started_ = false;
   bool finished_ = false;
 
   IMPLEMENT_REFCOUNTING(AlloyPageToolsProbe);

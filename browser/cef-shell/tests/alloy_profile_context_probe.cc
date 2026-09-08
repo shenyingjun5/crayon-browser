@@ -1,6 +1,10 @@
 #include "alloy_profile_context_probe.h"
 
+#if defined(_WIN32)
 #include <windows.h>
+#else
+#include <unistd.h>
+#endif
 
 #include <array>
 #include <filesystem>
@@ -89,19 +93,33 @@ public:
     command->AppendSwitch("disable-default-apps");
     command->AppendSwitch("disable-sync");
     command->AppendSwitch("no-proxy-server");
+#if defined(__APPLE__)
+    command->AppendSwitch("use-mock-keychain");
+#endif
   }
 
   void OnContextInitialized() override {
-    const std::filesystem::path profile_root =
+    std::filesystem::path profile_root =
         std::filesystem::temp_directory_path() /
         ("crayon-page-snapshot-integration-" +
+#if defined(_WIN32)
          std::to_string(GetCurrentProcessId()));
+#else
+         std::to_string(getpid()));
+#endif
     std::error_code error;
     std::filesystem::create_directories(profile_root, error);
     if (error) {
       Finish(false, "profile-root");
       return;
     }
+#if defined(__APPLE__)
+    profile_root = std::filesystem::canonical(profile_root, error);
+    if (error) {
+      Finish(false, "profile-root-canonical");
+      return;
+    }
+#endif
     factory_ = std::make_unique<ProfileContextFactory>(profile_root.string());
     contexts_[0] = CefRequestContext::GetGlobalContext();
     contexts_initialized_[0] = true;
@@ -331,15 +349,18 @@ private:
     if (finished_)
       return;
     finished_ = true;
-    std::cout << "alloy_profile_context_windows passed=" << passed
+    std::cout << "alloy_profile_context passed=" << passed
               << " detail=" << detail << std::endl;
     if (expected_windows_ == 0) {
       if (factory_)
         factory_->Shutdown();
       factory_.reset();
+      for (auto &context : contexts_)
+        context = nullptr;
+      profile_a_again_ = nullptr;
       result_->browsers_closed = true;
       result_->window_closed = true;
-      CefQuitMessageLoop();
+      CefPostTask(TID_UI, base::BindOnce(&CefQuitMessageLoop));
       return;
     }
     for (const auto &browser : browsers_) {

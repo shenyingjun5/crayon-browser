@@ -83,6 +83,9 @@ public:
     command->AppendSwitch("disable-default-apps");
     command->AppendSwitch("disable-sync");
     command->AppendSwitch("no-proxy-server");
+#if defined(__APPLE__)
+    command->AppendSwitch("use-mock-keychain");
+#endif
   }
 
   void OnContextInitialized() override {
@@ -324,7 +327,7 @@ private:
     if (finished_)
       return;
     finished_ = true;
-    std::cout << "alloy_security_windows passed=" << passed
+    std::cout << "alloy_security passed=" << passed
               << " detail=" << detail << std::endl;
     if (server_) {
       server_->Stop();

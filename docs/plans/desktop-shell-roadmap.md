@@ -1,10 +1,10 @@
 # 自定义桌面外壳与 Alloy 迁移 Roadmap
 
 - 日期：2026-09-04；决策来源：用户明确选择“自定义外壳＋Alloy”，长期按此架构、一期开始迁移。
-- 状态：共享 `00..02`、Windows `03W..22W` VERIFIED；Windows 默认宿主已切到 Alloy，正在完成产品 surface 汇合与总回归。
+- 状态：共享 `00..02`、Windows `03W..22W` VERIFIED；Windows 默认宿主已切到 Alloy。2026-09-08 Mac 优先构建调通，Windows UI 同步修改、效果后验；`03M0 IMPLEMENTED` 已恢复可运行 Mac 基线，真实接收端门禁待补；当前按 `03M` 起迁移。
 - 归属：`PLT-M05/PLT-W05` 的跨领域迁移切片，前缀 `PLT-SHELL-`。不另建一套 REL/BUX/Cast 业务计划，不增加 297 个顶层任务或 212 个唯一用例 ID。
 - 一期总入口：[REL](release-v1-roadmap.md)；投屏协议与交互仍由 [PLT-CAST-R](cast-experience-redesign-roadmap.md) 拥有。
-- 平台：按用户 2026-08-31 决策先完成 Windows 10/11 x64 三闭环与发布候选；macOS 共享实现与既有证据保留，签名、公证、Keychain、原生生命周期和打包等特有门禁后续验证，两个平台不能互相替代。
+- 平台：2026-09-08 用户明确要求当前先完成 macOS arm64，Windows UI 代码同步改为 Chrome 风格；本轮不执行 Windows 构建/真机门禁。此前 Windows 首发候选决策保留为历史，正式发布顺序在后续发布任务中重新确认；两个平台证据不能互相替代。
 
 ## 1. 冻结的目标与不做项
 
@@ -65,29 +65,46 @@
 | 00 | VERIFIED | 用户决策、current 契约 | 本计划与一期依赖、架构决策同步；仅文档 | D、方案 Review |
 | 01 | VERIFIED | 00 VERIFIED | `shared-ui/shell` 命令 owner 显式选择；自有快捷键无 Chrome passthrough | U；旧调用兼容、重复/非法/关闭/重入拒绝 |
 | 02 | VERIFIED | 00 VERIFIED | engine-api 与 shell 内容视图挂载/能力契约，按 §2 最小增量 | U；公开头独立编译、旧接口兼容、生命周期/未知能力拒绝；无运行后端宣告 |
-| 03M | TODO | 02 VERIFIED | macOS windowed Alloy 单窗口＋两个内容视图的生产宿主原语与独立 Harness | H；同窗口切换不重建网页、缩放/隐藏/关闭/资源回落；默认入口不变 |
+| 03M | VERIFIED | 02 VERIFIED | macOS windowed Alloy 单窗口＋两个内容视图的生产宿主原语与独立 Harness | H；同窗口切换不重建网页、缩放/隐藏/关闭/资源回落；默认入口不变 |
 | 03W | VERIFIED | 02 VERIFIED | Windows windowed Alloy 单窗口＋两个内容视图的生产宿主原语与独立 Harness | H；同窗口切换不重建网页、缩放/隐藏/关闭/资源回落；默认入口不变 |
 | 04W | VERIFIED | 01、03W VERIFIED | Windows TabController/TabModel 的异步创建/关闭与视图映射 | H；beforeunload 取消、迟到创建、崩溃/退出、无双 owner |
-| 04M | TODO | 01、03M VERIFIED | macOS TabController/TabModel 的异步创建/关闭与视图映射 | H；beforeunload 取消、迟到创建、崩溃/退出、无双 owner |
+| 04M | VERIFIED | 01、03M VERIFIED | macOS TabController/TabModel 的异步创建/关闭与视图映射 | H；beforeunload 取消、迟到创建、崩溃/退出、无双 owner |
 | 05W | VERIFIED | 04W VERIFIED | Windows 自绘基础标签栏和新标签入口，消费既有 tab 模型 | H；新建/激活/关闭/排序、焦点/容量，不调用 Chrome 新标签命令 |
-| 05M | TODO | 04M VERIFIED | macOS 自绘基础标签栏和新标签入口，消费既有 tab 模型 | H；新建/激活/关闭/排序、焦点/容量，不调用 Chrome 新标签命令 |
+| 05M | VERIFIED | 04M VERIFIED | macOS 自绘基础标签栏和新标签入口，消费既有 tab 模型 | H；新建/激活/关闭/排序、焦点/容量，不调用 Chrome 新标签命令 |
 | 06W | VERIFIED | 05W VERIFIED | Windows 自绘 omnibox 编辑、搜索/URL 判定和建议接线 | H；输入/取消/旧建议、IDN/URL 显示安全边界、无默认联网建议 |
-| 06M | TODO | 05M VERIFIED | macOS 自绘 omnibox 编辑、搜索/URL 判定和建议接线 | H；输入/取消/旧建议、IDN/URL 显示安全边界、无默认联网建议 |
+| 06M | VERIFIED | 05M VERIFIED | macOS 自绘 omnibox 编辑、搜索/URL 判定和建议接线 | H；输入/取消/旧建议、IDN/URL 显示安全边界、无默认联网建议；鼠标真机矩阵归23M |
 | 07W | VERIFIED | 06W VERIFIED | Windows 导航控制/加载状态/站点身份可见反馈 | H；前后退/刷新/停止、重定向、证书错误、页面不能伪造安全标识 |
-| 07M | TODO | 06M VERIFIED | macOS 导航控制/加载状态/站点身份可见反馈 | H；前后退/刷新/停止、重定向、证书错误、页面不能伪造安全标识 |
+| 07M | VERIFIED | 06M VERIFIED | macOS 导航控制/加载状态/站点身份可见反馈 | H；前后退/刷新/停止、重定向、证书错误、页面不能伪造安全标识 |
 | 08W | VERIFIED | 05W、07W VERIFIED | Windows popup 与多窗口生命周期迁移 | H；来源与用户手势、容量、关闭/恢复、窗口间隔离 |
-| 08M | TODO | 05M、07M VERIFIED | macOS popup 与多窗口生命周期迁移 | H；来源与用户手势、容量、关闭/恢复、窗口间隔离 |
+| 08M | VERIFIED | 05M、07M VERIFIED | macOS popup 与多窗口生命周期迁移 | H；来源与用户手势、容量、关闭/恢复、窗口间隔离 |
 | 09W | VERIFIED | 08W VERIFIED | Windows 高级标签功能接线：固定/复制/静音/搜索/分组/跨窗口移动 | H；复用 advanced 模型；移动不得隐式重载表单或丢状态 |
+| 09M | VERIFIED | 08M VERIFIED | macOS 高级标签功能接线：固定/复制/静音/搜索/分组/跨窗口移动 | H；复用已装配的同一 advanced/coordinator 模型，移动保持 Browser 与 DOM |
 | 10W | VERIFIED | 08W VERIFIED | Windows 会话恢复与崩溃恢复绑定新宿主 | H；无痕不持久、损坏数据、重复恢复、schema 前后兼容、不可静默丢用户标签 |
+| 10M | VERIFIED | 08M VERIFIED | macOS 会话恢复与崩溃恢复绑定新宿主 | H；无痕不持久、损坏数据、重复恢复、schema 前后兼容、不可静默丢用户标签 |
 | 11W | VERIFIED | 07W VERIFIED | Windows 书签栏/管理入口接入已有 store/view | H；编辑/搜索/导入导出、跨 Profile、失败反馈 |
+| 11M | VERIFIED | 07M VERIFIED | macOS 复用书签 store/view/adapter 与真实导航接线 | H；独立契约、替换加载清理旧文件夹投影、Profile 隔离；默认入口归24M |
+| 11M2 | VERIFIED | 11M VERIFIED | 书签/历史持久URL输入拒绝userinfo与歧义authority | U；新增/编辑/访问/最近关闭/codec拒绝，合法HTTP(S)/IPv6不回退；共享修复 |
+| 11M3 | VERIFIED | 11M2、14M、15M VERIFIED | Profile持久文件提交前检查延迟写入错误 | U；bookmarks/history/preferences flush/close失败保留旧文件、清理自身staging |
 | 12W | VERIFIED | 10W VERIFIED | Windows 历史/最近关闭入口接入已有 owner | H；删除边界、无痕隔离、恢复正确目标 |
+| 12M | VERIFIED | 10M VERIFIED | Mac历史adapter契约与搜索投影一致性 | H；导航/删除/导入保持筛选、清空搜索恢复列表，无痕/恢复边界 |
 | 13W | VERIFIED | 07W VERIFIED | Windows 下载 UI 与原 CefDownloadHandler 接线 | H；取消/续传、危险状态、受控保存和打开位置 |
+| 13M | VERIFIED | 07M VERIFIED | Mac下载adapter契约与同步回调生命周期修复 | H；先预检领域转换，回调后复核owner/generation/state；真实CEF下载回读 |
 | 14W | VERIFIED | 08W、10W VERIFIED | Windows 设置/Profile/无痕选择 UI 接线 | H；独立 request context、设置 readback、清理失败显式反馈 |
+| 14M | VERIFIED | 08M、10M VERIFIED | Mac设置/Profile/无痕接线；分14M1/14M2 | U＋H；设置callback生命周期及真实request context隔离 |
+| 14M1 | VERIFIED | 12M、13M VERIFIED | Mac Profile/settings adapter契约与callback重入修复 | U；同步清理完成、Shutdown/嵌套拒绝、保存回滚 |
+| 14M2 | VERIFIED | 14M1 VERIFIED | Mac真实CEF Profile context Harness | H；regular复用/隔离、两个临时context独立、cookie隔离与关闭 |
 | 15W | VERIFIED | 07W、14W VERIFIED | Windows 权限/证书/popup/外部协议可信确认面板 | H；origin/TTL/导航失效、默认拒绝、不调用网页伪造面板 |
+| 15M | VERIFIED | 07M、14M VERIFIED | Mac权限/证书/外部协议候选接线，分15M1/15M2 | U＋H；提示期限及真实CEF证书/权限/协议边界；默认产品面板归24M |
+| 15M1 | VERIFIED | 14M VERIFIED | 权限决策入口直接复核提示deadline | U；到期即拒绝、不记录授权、回调一次及队列继续 |
+| 15M2 | VERIFIED | 15M1 VERIFIED | Mac真实CEF安全探针接线 | H；离线TLS证书拒绝/单次继续、权限和外部协议默认阻断 |
 | 16W | VERIFIED | 07W VERIFIED | Windows 查找/缩放/全屏/打印/PDF 页面工具接线 | H；逐能力验证，不能假定 Alloy 提供 Chrome UI；PiP 不支持时明确矩阵 |
+| 16M | VERIFIED | 07M VERIFIED | Mac查找/缩放/全屏/打印/PDF候选页面工具接线 | H；真实CEF查找/缩放/全屏/中文PDF与回调隔离通过；物理打印另验 |
 | 17W | VERIFIED | 15W VERIFIED | Windows 主菜单/上下文菜单/拖放/剪贴板/本地文件入口迁移 | H；平台快捷键、About/许可、安全文件选择、取消与来源约束 |
+| 17M | TODO | 15M VERIFIED | Mac主菜单/上下文菜单/拖放/剪贴板/本地文件入口迁移 | H；复用已有Mac平台入口，原生选择/取消、来源与命令目标约束 |
 | 18W | VERIFIED | 17W VERIFIED | Windows 内置新标签/MDV 内容接入新 host | P；源码/预览/编辑/原子保存/冲突，Mermaid/Highlight/KaTeX 离线；复用 MDV/MRT 门禁 |
+| 18M | TODO | 17M VERIFIED | Mac Chrome风格内置新标签/MDV接入Alloy | P；源码/预览/快速编辑/原子保存/冲突，离线渲染与外观 |
 | 19W | VERIFIED | 07W、17W VERIFIED | Windows 网页 Markdown 从新入口到原快照/导出链 | P；当前标签、导航取消、跨源/隐藏内容拒绝、复制/保存；CNT addendum |
+| 19M | TODO | 07M、17M VERIFIED | Mac网页Markdown从Alloy入口到既有快照/导出链 | P；当前目标、导航取消、跨源/隐藏内容拒绝、复制/保存 |
 | 20 | VERIFIED | 02、PLT-CAST-R08u1 VERIFIED | CastEntrySurface 去 LOCATION 耦合，按钮/面板挂到自绘栏 | U＋H；布局/灰态/事件/释放；无真实后端时仍不允许开始 |
 | 21W | VERIFIED | 07W、15W、20、R03b/R04/R07 VERIFIED | 对应 PLT-CAST-R08W 的 Alloy 产品接线，不另建投屏 owner | P；多视频/设备明确选择、连接不播放、错误/播控、MHV2 兼容拒绝 |
 | 21M | TODO | 07M、15M、20、R03b/R04/R07 VERIFIED | 对应 PLT-CAST-R08M 的 Alloy 产品接线，不另建投屏 owner | P；多视频/设备明确选择、连接不播放、错误/播控、MHV2 兼容拒绝 |
@@ -141,6 +158,145 @@ ctest --test-dir .cache/build/windows-cef-debug -C Release --output-on-failure
 - 记录 commit/range、脏工作区范围、OS/架构/CEF/配置、命令、exit、数量/耗时及 PASS/FAIL/TIMEOUT/NOT_RUN。最终安装包分别做 Release surface、签名/公证及更新回滚；凭证、上传和发布另需授权。
 
 ## 7. PLT-SHELL-00 方案完成
+
+### PLT-SHELL-03M 当前原子范围（2026-09-08）
+
+- 状态：`VERIFIED`；依赖 02 VERIFIED。复用现有 `AlloyContentViewHost` 和 03W 独立 probe，在 Mac 固定 CEF 150 上编译并验证。允许现有 host/probe、Mac 集成入口、CMake 与本计划；禁止默认入口切换、Profile/Cast 协议和新增依赖。
+- 单一目标：一个后台 Alloy 窗口挂载两内容视图，切换保持 Browser ID/URL/DOM 状态，隐藏/缩放/窄宽布局、epoch/capacity 拒绝、关闭资源归零。
+- 验收：Mac Debug 相关 target build、`alloy_content_view_host_mac` 与共享 content-view registry；预算 10 分钟、首次失败停止。生产默认入口仍是已恢复的 Chrome-style 基线；此结果不能代替 04M..27M。
+- 结果：Debug target build PASS；共享 registry 1/1 PASS（0.01s）；`alloy_content_view_host_mac` 1/1 PASS（3.50s）。两次最初 30s TIMEOUT 均已完成功能/关闭回调，采样显示停在 CefShutdown；与 Mac 基线比较确认缺少 `use-mock-keychain`。补齐产品规定参数后正常退出；尝试的延后 Quit 无效果，已撤回。Review：生产 host 未改动，Mac 装配/平台配置与生命周期证据通过，APPROVE。
+
+### PLT-SHELL-04M 当前原子范围（2026-09-08）
+
+- 状态：`VERIFIED`；依赖 01/03M VERIFIED。允许既有 AlloyTabController、tab model、advanced/session 链接、独立 lifecycle probe、Mac CEF test 入口和本计划。单一目标是原 owner 的异步创建/关闭在 Mac 可用；不切换产品默认入口，不复制业务状态。
+- 验收：既有 loopback `alloy-tabs` fixture、Mac CEF 可信测试输入、beforeunload 取消、迟到创建、renderer crash、容量/高级状态与最终资源释放。预算10分钟，首错停止；Windows 现有分支行为保留，Windows执行后补。
+- 结果：AppleClang 发现测试构造初始化顺序 warning-as-error，按声明顺序修正；首次点击前尚未收到页面监听器安装回执，测试停在 stage1。增加页面 title 就绪回执及窗口激活检查，保留实际 CEF 鼠标输入，未用 DOM click 伪造激活。`alloy_tab_controller_mac` 1/1 PASS（4.42s），beforeunload取消/迟到创建/崩溃/高级状态/关闭全通过。Review APPROVE，Windows对应测试改动待后续实机回归。
+
+### PLT-SHELL-05M 当前原子范围（2026-09-08）
+
+- 状态：`VERIFIED`；依赖 04M VERIFIED。复用已接入的共享 AlloyTabStrip 与 Mac CEF probe；允许现有 strip/probe/CMake 与本计划，不新增状态 owner。只确认 Mac 标签栏新建/激活/关闭/排序、容量、标题和焦点行为。
+- 验收：`alloy_tab_controller_mac|alloy_tab_strip_mac` 联合回归；预算2分钟，首错停止。旧 Chrome-style 默认入口不变，实际产品装配由24M负责。
+- 结果：联合2/2 PASS（6.61s）。首次联合运行 strip 功能全通过、退出30s超时，补齐与03M同一 Mac Keychain 参数后正常退出；不抹掉首次超时。Review APPROVE；Mac 默认产品装配与系统输入矩阵后续验证。
+
+### PLT-SHELL-06M 当前原子范围（2026-09-08）
+
+- 状态：`VERIFIED`；依赖05M VERIFIED。允许既有 AlloyOmnibox、search provider/domain链接、独立probe和Mac测试入口；不新增联网建议，不改URL安全规则或默认搜索配置。
+- 目标/验收：Mac真实CEF文本输入、建议选择/取消、旧generation拒绝、URL/IDN显示安全；沿用Windowsprobe，只将OS输入adapter改为CEF测试API，Mac字符输入此项限定ASCII，中文IME另归23M。预算10分钟，首错停止。
+- 结果：Debug target build PASS，`alloy_omnibox_mac` 1/1 PASS（4.44s）；真实CEF输入、suggestion选择/取消、generation与显示安全全部通过。Review APPROVE；不扩展ASCII结果到中文IME。
+- 复核修正：Luna 对冻结二进制 `8cce33b7e5f1edd1da33cc747570238919eb469a838900120b18c7cfc1c0d7c3` 执行四项上游测试，首项 `alloy_omnibox_mac` 在 stage 5 等待鼠标建议提交超时，exit 8、11.77s；其余三项 `not_run_due_to_first_failure`。06M 回到 IN_PROGRESS，07M 下游验证 BLOCKED。修复范围仅 omnibox probe 的 Mac 鼠标事件同步与必要失败诊断，不改变生产输入行为；等待实际悬停后点击，预算一次修复与三次定向复核，首错停止。日志 `luna-frozen-baseline-tests.log`，旧单次 PASS 不代表稳定通过。
+- 后续证据：Terra 增加分阶段移动/悬停确认，主会话 Review 后 Luna 构建 PASS/0（23.64s）；三次定向计划首轮即 FAIL/8（15.17s），后两次未运行。诊断明确 `move_sent=1 click_sent=0 state=0 drawn=1`，不是点击提交后的生产逻辑失败。源 diff SHA-256 `9d3858da7f6c695f21de62da9cb78e002231edc990f44f4989c2f688307131b7`，测试产物 `b438c572e90c57351f2244e8bc9de2a2e9db82b7e53edac35676fb7ea27a86ca`；日志 `luna-omnibox-build.log`/`luna-omnibox-repeat-tests.log`。主会话核对固定 CEF/Chromium Mac 测试事件按屏幕位置查找窗口的实现；一次普通时限 CUA 观察超时，记 `NO_EFFECTIVE_OUTPUT`，最早偏离为观察工具返回前测试已退出。下一诊断只增加 test-only 有界观察时限与窗口/屏幕几何，预算单次30秒，不作为自动验收通过。
+- 验证方案修订：几何诊断与 CUA 观察确认窗口/建议项已正确显示（窗口 0,39,900,360；按钮 0,108,900,36，active/visible=true），CEF 合成鼠标仍未产生悬停。撤回无效的悬停等待与临时诊断开关；Mac 自动回归使用真实可聚焦建议按钮的 `RequestFocus`＋空格键输入，仍经 CEF 按钮事件与生产提交链。Windows 保留原鼠标输入。Mac 鼠标点击不在该自动化结果内，P2 验证缺口明确转 `PLT-SHELL-23M` 真机输入矩阵，默认产品切换仍须该门禁；不是已修复 CEF 鼠标 API 的声明。新输入契约冻结后预算构建一次＋三次定向测试，首错停止。
+- 最终定向结果：Luna 构建 PASS/0（2.45s）；`ctest --test-dir .cache/build/macos-arm64-cef-debug-ninja -R '^alloy_omnibox_mac$' --repeat until-fail:3 --output-on-failure --stop-on-failure` 三次全部 PASS/0（5.39s）。产物 SHA-256 `370175d4cfdf3c2ee50905aa93373d338b127a771b630ec741c0e2e2d2fdc936`；日志 `luna-omnibox-keyboard-build.log`/`luna-omnibox-keyboard-tests.log`。主会话 Review APPROVE，06M恢复VERIFIED（键盘输入、建议按钮真实激活、generation、安全显示、取消）；原生鼠标点击观察未获得成功AX证据，NOT_RUN，仍归23M。07M恢复当前活动任务。
+
+### PLT-SHELL-07M 当前原子范围（2026-09-08）
+
+- 状态：`IN_PROGRESS`；依赖06M VERIFIED。复用现有 AlloyNavigation 与 navigation probe，Mac装配现有书签/历史/下载依赖以运行原完整场景；允许这些既有模块、测试平台文件/输入adapter、CMake与本计划，不修改领域协议或存储schema。
+- 验收：loopback `alloy-navigation` 的真实前后退/刷新停止、redirect/证书错误、站点身份与旧绑定拒绝，并保留原probe的书签/历史/下载检查。临时下载目录由测试独占并清理；预算10分钟，首错停止，生产默认切换不在本项。
+- Review 边界：既有 probe 把 loopback HTTP 服务改为 HTTPS 访问，覆盖真实 `ERR_SSL_PROTOCOL_ERROR` 及对应不安全身份显示/重绑；这不是完整证书链、过期证书或域名不匹配矩阵，相关门禁不能据此关闭。
+- 结果：Terra 完成接线，主会话 Review APPROVE；Luna 执行 `ctest --test-dir .cache/build/macos-arm64-cef-debug-ninja -R '^alloy_navigation_mac$' --output-on-failure --stop-on-failure`，1/1 PASS/0，3.52s，产物 SHA-256 前后保持 `370175d4cfdf3c2ee50905aa93373d338b127a771b630ec741c0e2e2d2fdc936`。真实导航、站点身份、旧绑定拒绝、书签/历史/下载回读及关闭通过；日志 `luna-navigation-tests.log`。最高 VERIFIED，不覆盖默认产品入口或完整证书矩阵。
+
+### PLT-SHELL-08M macOS 多窗口接线（2026-09-08）
+
+- 状态：VERIFIED；依赖05M/07M VERIFIED。单一目标：在Mac Harness复用既有 `AlloyWindowCoordinator` 与对应完整 probe，验证可信popup、窗口容量、opener隔离及关闭生命周期；不复制业务owner。
+- 输入：固定CEF150 arm64、03M..07M已编译共享组件、既有Windows coordinator probe及loopback `alloy-windows` fixture。允许3个测试/装配文件（coordinator probe、Mac integration main、CEF CMake）；共享生产coordinator只允许编译器实际发现的平台兼容缺口的最小修复。禁止默认产品切换、Cast/权限协议、存储schema、依赖升级和Windows输入语义变更。
+- 验收：构建Mac integration target，运行 `alloy_window_coordinator_mac` 单次真实CEF场景，保留原有高级标签/恢复回读检查但不自动关闭09M/10M的独立验收范围；后续受影响组合回归。预算10分钟，首错停止，源码/产物变化使下游证据失效；输出测试日志、输入/产物指纹和主会话Review结论。
+- 结果：Terra 完成3文件接线，主会话 Review APPROVE；Luna 固定构建 PASS/0（6.49s），`ctest --test-dir .cache/build/macos-arm64-cef-debug-ninja -R '^alloy_window_coordinator_mac$' --output-on-failure --stop-on-failure` 1/1 PASS/0（4.82s）。源码 diff SHA-256 前后 `e57210a78b37b2e30312d634c12fb426a89975861eb39e77f9aa1c040cdea35d`，产物 `9248e79b9aa36c03fde358e75e519dde3c7ff16c88fee05ca4510b8b23e371e0`。日志 `luna-windows-build.log`/`luna-windows-tests.log`；真实popup、来源策略、窗口隔离和最终关闭均为进程PASS的必需条件。最高 VERIFIED，默认产品装配与23M真机输入矩阵未覆盖。
+
+### PLT-SHELL-09M macOS 高级标签复核（2026-09-08）
+
+- 状态：VERIFIED；依赖08M VERIFIED。既有共享高级标签生产代码已随04M/08M装配，无新增生产实现。单一目标：逐项确认固定/复制/静音/搜索/分组/跨窗口移动与Mac证据对应，补领域与controller定向回归；允许本计划及确有失败时的最小修复，禁止默认host、会话持久化和新状态owner。
+- 输入与验收：复用08M冻结产物 `9248e79b...e371e0` 的真实 Browser identity、DOM transfer保留、复制独立Browser、pin/mute/group回读证据；运行 `advanced_tab_strip_contract` 与 `alloy_tab_controller_mac` 验证排序/搜索/关闭。预算2分钟，一次首错停止，不重复运行不受影响的08M场景；最高VERIFIED，23M产品输入与24M默认入口不在本项。
+- 复核失败：Luna确认选择2项；领域advanced契约PASS，04M controller在stage1 `clicked=0` 超时，exit8，18.50s，`advanced_state=1`、`late_create_closed=1`，完整关闭流程未运行完成。日志 `luna-advanced-tabs-tests.log`，冻结产物前后 `9248e79b...e371e0`。09M暂停，04M重开；Mac页面点击改为08M已经通过的定向 `CefBrowserHost::SendMouseClickEvent`，坐标为内容视图内固定fixture按钮位置，避免全局窗口鼠标路由；保留真实用户手势/beforeunload验证，不调用DOM click。允许仅controller probe，预算一次修复＋三次定向验证，首错停止；产品源码与Windows路径不改。
+- 修复与出口：Terra仅修改controller probe Mac点击为BrowserHost定向输入，主会话Review APPROVE；Luna构建PASS/0（3.99s）、`ctest ... -R '^alloy_tab_controller_mac$' --repeat until-fail:3 --output-on-failure --stop-on-failure` 三次PASS/0（9.44s）。源码diff前后 `d1641efa582634ceba17b66939cc6e1f256effadce790d3d321cab8ba1809ebd`，产物 `2adb5125f06304888da04290e305b834ee04c825919d60ec4cabdd5058ea57c1`；日志 `luna-tab-input-build.log`/`luna-tab-input-tests.log`。04M恢复VERIFIED；结合已通过advanced领域契约、08M真实DOM/Browser移动与复制状态必需断言，09M达到VERIFIED。未改生产业务，不把本项扩展为系统鼠标/IME总验证。
+
+### PLT-SHELL-11M macOS 书签接线复核（2026-09-08）
+
+- 状态：VERIFIED；依赖07M VERIFIED。单一目标：补齐已装配共享 `AlloyBookmarks` 的Mac独立契约，并修复从文件替换书签树后仍显示旧文件夹条目的问题。主会话Review确认 `LoadFromFile` 未清除 `folder_items_`，而Import已清除；旧投影不能继续指向被替换的树。
+- 允许：`alloy_bookmarks.cc`、独立 `alloy_bookmarks_test.cc`、CEF CMake、本计划。测试先稳定复现成功替换后旧文件夹消失及失败加载保留当前投影；Terra只实现限定变更，Luna执行固定验证，主会话Review。测试临时目录改为独占创建和仅清理自身，避免固定名字并发互相覆盖。禁止新owner、schema/依赖、默认host、其它功能重构。
+- 验收：Mac target `crayon_alloy_bookmarks_test`，`alloy_bookmarks_contract` 红绿复现，再运行书签domain/bar契约与 `alloy_navigation_mac`。固定当前源码快照与CEF150；构建/测试预算10分钟、每阶段首错停止，源码变化使后续证据失效；输出日志/指纹/结果。Windows共享修复一并交付，Windows执行NOT_RUN；系统文件选择和默认产品装配归17M/24M。
+- 结果：Luna在原生产实现稳定复现成功Load后旧folder投影残留，唯一测试FAIL/8（1.34s，`luna-bookmarks-red-tests.log`）；Terra仅在成功刷新树后清空投影，失败路径保留原状态。主会话Review另修测试的Windows可编译性及UTF-8独占目录清理后APPROVE。四目标build PASS/0（2.32s），初轮4/4 PASS（6.90s）；该轮旧指纹方法误纳入文档且无前快照，正式冻结证据改用已审查build adapter指纹一次复验：`ctest --test-dir .cache/build/macos-arm64-cef-debug-ninja -R '^(bookmarks_contract|bookmark_bar_contract|alloy_bookmarks_contract|alloy_navigation_mac)$' --output-on-failure --stop-on-failure`，4/4 PASS/0（2.99s）。源指纹前后 `6e565dc975cac1ac3469faa6c355bb53d0b162bf75d227f8494df724ef2c1880`，adapter测试 `843442f1ae43c507928bb335ccb71bf5a2b63c54abcd45eb1ce08f30a3fd6a00`，CEF测试 `c333156889be820f894e4df0397922b3ca8cd05b690ed3a6bb7891b6b715b7b5` 均未变；日志 `luna-bookmarks-frozen-tests.log`。11M最高VERIFIED；另发现持久URL边界P2由下一原子任务11M2立即处理，不混入本次投影修复。
+
+### PLT-SHELL-11M2 书签/历史持久URL边界（2026-09-08）
+
+- 状态：VERIFIED；依赖11M VERIFIED。单一目标：让两个领域现有 `IsValidUrl` 入口拒绝URL authority中的userinfo，防止新增、编辑、访问、最近关闭及导入把明文登录信息存入书签/历史。沿用当前HTTP(S)、长度和控制字符边界，不新增URL类型、公共API、跨领域依赖或schema。
+- 允许：`browser/bookmarks/src/bookmark_store.cc`、`browser/history/src/history_store.cc`及各自已有领域测试、本计划。先红测，后Terra最小实现，主会话Review，Luna固定验证。仅检查authority非空、不含`@`、原始空格/反斜杠及authority百分号歧义；不改变路径/query/fragment中的`@`和合法百分号编码。保留合法DNS/IPv4/IPv6、端口、UTF-8标题与现有URL容量，不把此边界称为完整网络URL解析器。
+- 验收：两领域验证矩阵及新增/编辑/最近关闭、codec导入拒绝向量；拒绝时现有树/历史不变，不删除原文件；正常URL往返通过。固定源指纹使用 `scripts/build_macos_local.py` 的 `fingerprint()`（含未跟踪源码，排除docs）；红绿各一次、每阶段5分钟首错停止。最高VERIFIED，Windows运行待补。禁止自动清理用户历史/书签，不读取真实Profile，不改CEF、存储文件原子机制或外部协议。
+- 结果：Luna红测稳定复现userinfo被新增接受，bookmarks FAIL/8（1.23s），history按首错停止NOT_RUN；Terra完成两领域入口校验与V/C导入负向向量，主会话Review APPROVE。Mac四目标build PASS/0（2.94s），`ctest --test-dir .cache/build/macos-arm64-cef-debug-ninja -R '^(bookmarks_contract|history_contract|alloy_bookmarks_contract|alloy_navigation_mac)$' --output-on-failure --stop-on-failure` 4/4 PASS/0（5.54s）。源指纹前后 `45aecd8a7d67e221e2c5f222460c3ea4d5d0092eaf8c7f510cd96f3382f8f21b`；CEF产物 `4e8d6b66bc94ca4bf2fbff0f14d86b53c097ea7d852e9f83b70d32c4c6623634`。日志 `luna-url-red-tests.log`、`luna-url-green-build.log`、`luna-url-green-tests.log`；P2关闭，最高VERIFIED。未更改/删除现有用户数据；旧不安全文档将被拒绝加载，现有host写保护失败路径保留原文件。
+
+### PLT-SHELL-13M Mac下载接线与回调重入（2026-09-08）
+
+- 状态：VERIFIED；依赖07M VERIFIED，11M2已VERIFIED，优先处理Review P1。单一目标：在Mac编译已有纯C++下载adapter契约，并修复外部控制callback同步Shutdown/进度更新导致旧迭代器失效或状态覆盖的问题；复用domain与CEF handler owner。
+- 允许：`alloy_downloads.{h,cc}`、已有 `alloy_downloads_test.cc`、CEF CMake、本计划。私有统一控制入口先在item副本验证状态转换，保留callback副本与generation/原状态，外部调用后重新查找entry并校验active/generation/state；只在仍有效时对当前item应用转换，保留回调中到达的进度。私有RAII控制调用guard拒绝同步嵌套控制，避免callback递归；仍允许进度与Shutdown。OpenLocation复制path/callback后再调用；路径选择回调后检查active。禁止新增公共API、download领域状态、目录授权、CEF callback owner、平台文件入口或依赖。
+- 验收：先测试错误状态不触发callback的稳定红测，再覆盖全部控制动作同步Shutdown、回调中合法进度保留、回调中终态不被覆盖、callback拒绝不改变领域、打开位置期间Shutdown。Mac测试用POSIX目录字符串，不触碰真实文件；正常生命周期、容量/旧generation保留。运行domain/shelf/adapter契约与真实loopback `alloy_navigation_mac`，以固定源/产物指纹记录；每阶段10分钟首错停止。系统保存选择/真实恶意样本/默认产品归17M/24M，Windows运行NOT_RUN。
+- 结果：Luna红测确认completed状态仍调用外部控制，FAIL/8（1.28s），后续重入测试未运行；Terra按统一入口修复，主会话Review覆盖callback副本、旧iterator失效、状态/进度保留及嵌套调用guard，APPROVE。Mac四目标build PASS/0（2.91s），`ctest --test-dir .cache/build/macos-arm64-cef-debug-ninja -R '^(download_domain_contract|download_shelf_contract|alloy_downloads_contract|alloy_navigation_mac)$' --output-on-failure --stop-on-failure` 4/4 PASS/0（4.89s），包含五种控制同步Shutdown、进度/终态回调、嵌套拒绝和OpenLocation参数生命周期。源指纹前后 `cb2ca7e209bb9ac1bc6a63fafd21ffc6cae8e0d90b672cbea729be0706e5be96`；adapter产物 `e7bdf276e68a2ff53b7ec0280acba9abed500dfb597edc6f45a2434220862727`，CEF `4eddd8db6f824eafd4190c452b70018731a1af874c63d51698fa2b015971cc66`；日志 `luna-download-red-tests.log`、`luna-download-green-build.log`、`luna-download-green-tests.log`。P1关闭，最高VERIFIED；未覆盖callback销毁调用对象本身、系统文件对话框或默认产品装配。
+
+### PLT-SHELL-12M Mac历史与搜索投影（2026-09-08）
+
+- 状态：VERIFIED；依赖10M VERIFIED，13M的P1已修。单一目标：在Mac接入已有history adapter独立契约，并保证列表始终与当前搜索词一致。现 `RefreshAll` 在导航/删除/导入/加载后无条件显示全部条目而保留query；`Search("")`则返回空列表，形成状态与显示不一致。
+- 允许：`alloy_history.cc`、已有 `alloy_history_test.cc`、CEF CMake、本计划。非空query复用既有有界Search投影；空query走现有newest-first全列表投影。保留ClearAll明确清空query的语义，不改变history store、generation、无痕、codec、恢复回调或默认host。文件测试独占UTF-8临时目录并仅清理自身。
+- 验收：先稳定红测查询后新增非匹配导航仍只显示匹配项；覆盖匹配导航追加顺序、删除/导入/加载后筛选保留、清空搜索恢复列表、失败导入/加载保留原投影，原无痕/最近关闭契约保持。Mac domain/view/adapter/真实 `alloy_navigation_mac` 四项定向回归；固定源指纹、每阶段5分钟首错停止，最高VERIFIED。默认产品UI与文件选择归17M/24M，Windows运行待补。
+- 结果：Luna红测在非匹配导航后的投影断言稳定FAIL/8（1.13s）；Terra用两处分支复用已有Search/Project，主会话Review确认无递归环、非空筛选与空查询全量各走正确路径，APPROVE。Mac四目标build PASS/0（2.80s）；`ctest --test-dir .cache/build/macos-arm64-cef-debug-ninja -R '^(history_contract|history_page_contract|alloy_history_contract|alloy_navigation_mac)$' --output-on-failure --stop-on-failure` 4/4 PASS/0（4.92s）。源指纹前后 `ac06381105f138f9532e9aeba5aaf7ec51f5543f6575446b806498afb8f886e1`；adapter产物 `d67c685cc6192cd7070fb4cc783ff3955deae39ddf0484e1fec6c153856e32db`，CEF `709047dfa18a0749577e183db183e5dd71e4d77703c5a90a24473c21193711e9`；日志 `luna-history-red-tests.log`、`luna-history-green-build.log`、`luna-history-green-tests.log`。P2关闭，最高VERIFIED；默认产品/Windows执行未覆盖。
+
+### PLT-SHELL-14M1 设置callback生命周期（2026-09-08）
+
+- 状态：VERIFIED；依赖12M/13M VERIFIED。主会话Review发现 `ApplyPreference/ConfirmReset/BeginCleanup` 保留ProfileRecord指针跨外部callback；同步Shutdown会清空profiles。BeginCleanup还在callback返回后才发布pending generation，使同步完成被误判为旧generation。单一目标为修复既有adapter的同步callback边界并在Mac注册独立契约，不改变设置键、Profile类型或持久化schema。
+- 允许：`alloy_profile_settings.{h,cc}`、既有独立测试、CEF CMake与本计划。拷贝callback和ProfileId/候选值，外部调用后检查active并重新解析record；私有RAII guard拒绝嵌套命令，Shutdown和CompleteCleanup保留可重入。清理开始前发布generation/Profile绑定，启动拒绝只撤销本次pending；同步完成的成功/失败不得被BeginCleanup随后覆盖。禁止新公共API/状态枚举、CEF context所有权更改、默认host或真实用户Profile读写。
+- 验收：稳定红测同步CompleteCleanup返回success而非stale；覆盖切换/无痕/保存/reset/cleanup callback同步Shutdown、嵌套命令拒绝、同步清理失败可见、启动拒绝可重试、正常异步旧generation拒绝与原typed settings回滚。Mac preferences/settings/profile-picker/adapter定向契约，固定源指纹，红绿各一次每阶段5分钟首错停止；最高VERIFIED，真实context隔离归14M2，callback销毁调用对象本身不在本项。
+- 结果：Luna红测FAIL/8（1.27s），稳定复现同步完成被拒绝；Terra实现后主会话Review补齐回调中调用者目标字符串变化、同步失败后启动拒绝不得覆盖错误、Shutdown参数生命周期三项，APPROVE。Mac四目标build PASS/0（1.07s）；`ctest --test-dir .cache/build/macos-arm64-cef-debug-ninja -R '^(preferences_contract|settings_page_contract|profile_picker_contract_test[.]cc|alloy_profile_settings_contract)$' --output-on-failure --stop-on-failure` 4/4 PASS/0（1.39s）。源指纹前后 `bd961125ffcc437e3313f859f01bb077c977e8e589c38512d57c7775faf379ed`；adapter产物 `08e482671ff151cec637baf32c941d3769de94f4a022881ade44585cf80784ce`。日志 `luna-profile-red-tests.log`、`luna-profile-green-build.log`、`luna-profile-green-tests.log`。P1关闭，最高VERIFIED；未覆盖callback销毁调用对象本身、Windows运行或默认产品选择UI。
+
+### PLT-SHELL-14M2 真实Profile context接线（2026-09-08）
+
+- 状态：VERIFIED；依赖14M1 VERIFIED。复用已有 `alloy_profile_context_probe` 与 `ProfileContextFactory`；只补Mac PID/include、产品mock-keychain语义、Mac integration dispatch/CMake。Mac仅该scenario设置global cache为既有测试root的Default，以满足AdoptGlobalContext真实持久路径契约；其余scenario配置不变。
+- 允许上述probe、Mac integration main、CEF CMake、本计划；生产factory仅在实际编译/行为暴露平台缺口时经主Review最小修复。四个独立Alloy窗口承载两个regular和两个temporary contexts，不同Profile不得混挂同一窗口，不访问真实Cookie/Keychain。预算10分钟首错停止；通过实际CEF窗口、cache path与固定fixture cookie交叉回读和完整关闭才VERIFIED。默认产品选择UI和真机输入归23M/24M。
+- 固定接线：Mac integration target编译既有factory与profile_id_validator；仅profiles场景按Windows既有出口在CefShutdown前释放app引用。验收构建 `crayon_page_snapshot_cef_integration_test --parallel 2`，`ctest --test-dir .cache/build/macos-arm64-cef-debug-ninja -R '^alloy_profile_context_mac$' --output-on-failure --stop-on-failure` 恰好一项，timeout45；源码fingerprint及二进制SHA前后固定，任何源码/fixture变更使依赖证据失效。预期输出为四个结果位全部true与测试日志，不扩展默认产品宿主。
+- 首轮失败：主会话Review纠正CMake误加Windows分支与遗漏app释放后，Luna构建PASS/0（6.93s），唯一CTest FAIL/8（35.66s），`alloy_profile_context passed=0 detail=adopt-global-context`，随后 `DCHECK failed: !g_context. CefShutdown was not called`；cookie/窗口隔离NOT_RUN。源指纹前后 `2e9a36d62b10f8c790ad7cb6e798057f635bd6bd03e98ded1d18294f3238fd8c`，产物 `87d6e4b8b1852a32d40bc66b4b0d987ba935a5f9f8093b01c11ea9aef30ccc5a`，日志 `luna-profile-context-build.log/tests.log`。暂停后续依赖；下一次限定诊断global/cache存在及词法/规范路径相等布尔值，不记录路径；修正初始化期间失败出口为投递退出任务并释放context引用，预算一次诊断构建/测试5分钟。不得放宽factory路径契约。
+- 诊断结果：build PASS/0（2.75s）、唯一CTest FAIL/8（2.60s），`context_present=1 global=1 cache_empty=0 lexical_equal=0 canonical_equal=1`；退出不再出现CefShutdown DCHECK。源指纹 `15e9ee309686e3ac50dbcd1bf3ee9da203fc7dc475815d483b26ecdca2299431` 前后一致，产物 `dbc9e632fa94a1739804d2b0ab0a8f1fed0f7afca971e62ce4de8ca90c365bfe`，日志 `luna-profile-context-diag-build.log/tests.log`。确定Mac临时目录别名导致同目录词法不等；修复限定为Mac profiles测试输入规范化（main与probe同一根），保留factory严格判断，移除临时诊断，保留安全失败退出。新输入允许一次5分钟复验，未证明真实隔离前不启动15M。
+- 最终结果：Terra仅规范化Mac测试输入，生产factory不变；主会话Review APPROVE。Luna构建PASS/0（3.91s），上述唯一 `alloy_profile_context_mac` 1/1 PASS/0（4.25s）；context/cookie隔离与全部Browser/window关闭均为退出成功的必需条件。源指纹前后 `9f7c0d6990e290f724a1b74b1e4de35e6d44aac15282be4703262f803f6771a3`，产物 `c207bbc4106712683b4b009a83a4eb8188abbd35aad22be007d3b912ca365c7e`，日志 `luna-profile-context-final-build.log/tests.log`。14M1/14M2及14M最高VERIFIED；真实用户Profile迁移、默认产品选择UI和Windows本轮运行未覆盖。
+
+### PLT-SHELL-15M1 权限提示到期决策（2026-09-08）
+
+- 状态：VERIFIED；依赖14M VERIFIED。主会话Review发现 `ResolvePermission` 未检查prompt.deadline，只有独立 `ExpirePermissions` 处理过期；确认调用与过期扫描的先后顺序不应改变授权结果。单一目标：在既有决策入口拒绝已到期提示，并将adapter独立契约接入Mac。
+- 允许：`alloy_site_controls.cc`、既有独立测试、CEF CMake与本计划。front request/generation有效后、写入任何授权状态前检查非零deadline<=now；移走该callback、移除两个队列的front并以dismiss消费，再调用false，返回既有kInvalidInput。不调用全队列过期扫描，不影响其它尚有效请求，不新增枚举/API/权限owner。callback可同步Shutdown，完成拒绝后不访问已清空成员。
+- 验收：先红测不调用ExpirePermissions而在deadline时点击AllowSession；覆盖deadline前成功、恰好到期/超过到期拒绝、deadline0保持既有无超时语义、AllowUntil不绕过、权限store/state无授权、重复决策不重复callback、下一提示正常、拒绝callback同步Shutdown。Mac adapter/site-controls/permission定向契约，红绿各一次、5分钟首错停止，源指纹固定；Windows共享修复运行NOT_RUN，真实CEF和OS授权不在此项。
+- 结果：Luna红测FAIL/8（1.56s），稳定复现到期确认未拒绝；Terra以7行在授权入口消费并拒绝到期front，主会话Review确认回调后不访问成员、无state/store授权写入，APPROVE。Mac三目标build PASS/0（0.41s），`ctest --test-dir .cache/build/macos-arm64-cef-debug-ninja -R '^(alloy_site_controls_contract|site_controls_contract|permission_store_test|permission_contract)$' --output-on-failure --stop-on-failure` 4/4 PASS/0（1.33s）。源指纹前后 `7d71fa08e06cbc66dd4e52cec9c76bc5495c184f902fbb4ae22f1668abc1c780`，adapter产物 `7e7eb37990a6c7f8d8fb0619982ab52bd5c547d0ad96c8471798eff09eb2afa4`；日志 `luna-permission-deadline-red-build.log/tests.log`、`luna-permission-deadline-green-build.log/tests.log`。P1关闭，最高VERIFIED；实际OS硬件授权、Windows运行未覆盖。
+
+### PLT-SHELL-15M2 Mac真实安全探针（2026-09-08）
+
+- 状态：VERIFIED；依赖15M1 VERIFIED。复用既有 `alloy_security_probe`、官方CEF离线TLS证书资源与本地fixture，不新建权限/证书/外部协议owner。允许probe的Mac产品mock-keychain、Mac integration dispatch及test-only证书目录、CEF CMake；不启动真实外部应用，不访问硬件权限或产品Profile。
+- 主会话接线前审查CEF test data目录及资源只进integration target，固定一项 `alloy_security_mac` timeout45；单次构建/执行预算10分钟首错停止，四类安全结果与关闭均为PASS必要条件。默认产品原生确认面板归24M，真实硬件授权与系统输入归23M。
+- 接线方案已核对固定CEF150本地头文件与资源：四个官方证书 `expired_cert.pem/localhost_cert.pem/ok_cert.pem/root_ca_cert.pem` 只复制到integration bundle的 `Contents/Resources/ceftests_files/net/data/ssl/certificates`，先创建目标目录，最后才adhoc签名。Mac main仅security场景从自身NSBundle资源目录调用 `CefSetDataDirectoryForTests`，再CefInitialize；退出前释放app。probe仅增加Mac mock-keychain及中性日志标签，继续复用既有权限/证书/协议测试。七个结果位（证书拒绝/单次继续、权限提示、外部协议阻断/拒绝、Browser/window关闭）全部为真才通过；生产app不得包含test证书资源。
+- 首轮构建FAIL/1（5.24s）：CEF `cef_test_server.h/cef_test_helpers.h` 报 `This file can be included for unit tests only`，证书核对/签名/CTest均NOT_RUN。源指纹前后 `8be0877de77578fbed68a9c207a4e1990c98be54f69f323b97a661804e2c3ddd`，日志 `luna-security-build.log`。主会话核对官方头与Windows既有接线，遗漏Mac integration target私有 `UNIT_TEST` 定义；只补该test target标记，不修改CEF/vendor或产品宏。新构建输入允许一次10分钟复验，首错停止。
+- 最终结果：主会话Review确认宏仅作用于integration，APPROVE；Luna构建PASS/0（15.94s），4份证书source/bundle SHA一致，`codesign --verify --deep --strict` 测试app PASS/0（0.22s）。`ctest --test-dir .cache/build/macos-arm64-cef-debug-ninja -R '^alloy_security_mac$' --output-on-failure --stop-on-failure` 1/1 PASS/0（4.93s），七位安全/关闭结果均必需。源指纹前后 `ce2ed92cee00843f5b6dbc7589574cc6dcf52c5d498520504adc60a776e2bade`，产物 `9906063b0e3be792bdddbef95590fa95ba7472393fcb96841cdd4c6296fa597a`；日志 `luna-security-final-build.log/tests.log`。15M1/15M2及15M最高VERIFIED；产品默认确认UI、实际硬件授权/系统外部应用和Windows本轮执行未覆盖。
+
+### PLT-SHELL-11M3 持久文件延迟写入失败（2026-09-08）
+
+- 状态：VERIFIED；依赖11M2/14M/15M VERIFIED，优先关闭Review数据完整性问题。主会话确认三类codec都在ofstream析构前检查good，析构flush/close失败未被观察，随后仍rename替换旧文件。单一目标：提交staging前显式flush/close并检查结果，失败返回原有kIoFailure并清理本次已打开的staging，旧target保持不变。
+- 允许：`browser/bookmarks/src/bookmark_codec.cc`、`browser/history/src/history_codec.cc`、`browser/preferences/src/preference_codec.cc`；新增独立Mac测试 `browser/cef-shell/tests/profile_persistence_mac_test.cc`、CEF CMake、本计划。不改变公共API/schema/序列化、临时文件命名、目录授权或领域owner，不访问用户Profile。各codec只修同一延迟IO根因，禁止无关重构。
+- 红测：独立纯C++测试在自身独占临时目录先保存旧有效文件，再fork子进程仅降低自身RLIMIT_FSIZE并忽略SIGXFSZ，写入大于限额但小于streambuffer的确定载荷。要求Save失败/kIoFailure、旧文件字节不变、staging已清理；先bookmarks复现再history/preferences，首错停止。限制只作用测试子进程，不改系统或父进程限制；父进程waitpid有界由CTest timeout保障，测试不链接CEF运行时、不创建线程、不含生产故障注入。
+- 绿测：Mac三codec失败矩阵与正常UTF-8往返、三个领域原有契约；源码fingerprint固定，红绿各一次5分钟首错停止。最高VERIFIED；不宣称断电durability、磁盘fsync、跨进程并发、Windows真实磁盘故障已覆盖。
+- 结果：Luna红测FAIL/8（1.16s），`bookmarks save unexpectedly succeeded`、子进程exit3，明确非setup exit2；后续两类未运行。Terra修复三处flush/close与失败清理，主会话Review APPROVE。Mac四目标build PASS/0（1.31s），`ctest --test-dir .cache/build/macos-arm64-cef-debug-ninja -R '^(profile_persistence_mac|bookmarks_contract|history_contract|preferences_contract)$' --output-on-failure --stop-on-failure` 4/4 PASS/0（2.69s），三个codec子进程失败场景均执行，旧文件字节与staging清理断言通过。源指纹前后 `4101b2f370611ab07127923339ea2aa13905fbe5bf6e06512ca4cc3917cb6234`，测试产物 `6a748518bc30ef5e1e200c47eb9fb81dadc0acd25680b9a530f0d66c0ef44fba`；日志 `luna-persistence-red-build.log/tests.log`、`luna-persistence-green-build.log/tests.log`。P1关闭，最高VERIFIED；父进程/系统限制、用户Profile均未修改。
+
+### PLT-SHELL-16M Mac页面工具与PDF路径（2026-09-08）
+
+- 状态：VERIFIED；依赖07M VERIFIED，11M3数据完整性修复已VERIFIED。单一目标：将既有 `AlloyPageTools` 与真实CEF页面工具探针接入Mac，验证查找、缩放、全屏往返和PDF输出/导航撤销；不实现第二套页面工具owner，不调用实际打印机。
+- 允许：`alloy_page_tools_probe.cc`、Mac integration main、CEF CMake；生产 `alloy_page_tools.cc` 仅在红测确认Mac路径缺口后最小修复。复用page-tools领域及CEF150。先限定Windows include/PID与Mac mock-keychain，探针PDF使用独占临时目录、UTF-8文件名，测试自身路径到CEF wide参数通过CefString转换，避免把测试的locale转换失败误当产品失败；只能清理自己成功创建的目录。
+- 主会话已发现现validator直接从wstring构造filesystem path，Mac Unicode转换可能依赖locale；先真实中文PDF路径和相对/非PDF/嵌入NUL拒绝向量复现，不提前改生产。若确认，转换入口使用CEF UTF-8转换＋filesystem::u8path，ASCII扩展名检查，显式拒绝NUL，保留现有公共签名与容量；不得放宽受控保存授权。
+- 探针顺序：等待find/zoom/fullscreen往返完成后仅一次启动PDF，避免Mac全屏动画与PDF导航generation测试互相污染。最终find/zoom/fullscreen/PDF/PDF fencing/capability/Browser关闭/window关闭八位均必需；不把system_print capability布尔值当系统打印验证。CMake只接Mac integration与既有page-tools库，注册 `alloy_page_tools_mac` 本地fixture，timeout45。
+- 验收：固定源与CEF输入，红绿每阶段一次10分钟首错停止，Luna执行integration build与单项真实CEF；主会话Review。路径/fixture变化使依赖证据失效；默认产品菜单与保存面板归17M/24M，Windows运行、物理打印机和PiP未覆盖。
+- 首轮构建：源码指纹 `a148684f89ce67bf309b43e56d732cab1560d1a28912e5777b2da58c75a5f373`，Mac arm64 Debug，`PATH="$PWD/.cache/toolchains/ninja/bin:$PATH" cmake --build .cache/build/macos-arm64-cef-debug-ninja --target crayon_page_snapshot_cef_integration_test --parallel 2` FAIL/exit1/7.85s；日志 `.cache/evidence/luna-page-tools-red-build.log`。CEF目标禁异常，且当前标准下 `u8path` deprecated、`u8string` 为char8_t，与探针CefString转换不兼容；下游 `alloy_page_tools_mac` 为NOT_RUN。修正测试边界为Windows UTF-16 native/POSIX UTF-8 native转换，移除测试try/catch，保留error_code IO；尚未形成生产路径缺陷证据。
+- 行为红测：修正测试输入后，源指纹 `94a2c856823c91df1f9be20b0001db3bcfaddae27d9a0086d0a4e54d7a5124da`，同一构建 PASS/exit0/10.48s；`PATH="$PWD/.cache/toolchains/ninja/bin:$PATH" ctest --test-dir .cache/build/macos-arm64-cef-debug-ninja -R '^alloy_page_tools_mac$' --output-on-failure --stop-on-failure` FAIL/exit8/1项/6.99s，`detail=pdf-nul-accepted find=1 zoom=1 fullscreen=1 pdf=0 pdf_fence=0 capability=1`。日志 `.cache/evidence/luna-page-tools-path-{build,tests}.log`，integration二进制SHA256 `cff97ca4da5487a0211f79bcacfc5b38090de062c08a43258978c5a51657b4f8`。确认嵌入NUL未拒绝；仅修validator前置拒绝，不推断Unicode转换缺陷。
+- 用户收尾决策（2026-09-08）：本项完成并验证、Review后暂停，不领取17M或后续任务；提交并推送本轮代码与文档，Windows运行仍留待Windows环境验证。
+- 第二次行为验证：源指纹 `7a3578534b81f6fe36d315acae790c330ac7d4387a78a894226df41b89082e7e`，同一构建PASS/exit0/2.76s，单项CTest FAIL/exit8/5.01s，`detail=pdf-fence find=1 zoom=1 fullscreen=1 pdf=1 pdf_fence=0 capability=1`；中文PDF文件头验证已通过，NUL拒绝已生效。日志 `.cache/evidence/luna-page-tools-green-{build,tests}.log`；二进制SHA256 `e06c62142bcc704947cf4e53085f9c9da461425b30a31397ed221b44019fa451`。主会话核对Mac SDK libc++实现，small-buffer std::function移动会克隆且保留源；现有完成/取消路径只move未显式清空，造成下一次PDF误判pending。范围内追加两处 `std::exchange(pdf_completion_, PdfCompletion{})`，先撤销原回调所有权再交付，保留generation/path清理顺序；不更改公共API或输出状态机。
+- 最终结果：源码前后指纹 `88a775fbd089405c787d9166e11726e9bef3ddc01e843998ced617e65f86300e`，同一integration构建PASS/exit0/2.95s，同一 `^alloy_page_tools_mac$` CTest 1/1 PASS/exit0/5.76s。日志 `.cache/evidence/luna-page-tools-final-{build,tests}.log`；integration二进制SHA256 `156967b783922ac71fffef63e4cb7a279042cf28edbd3b92c028f7dbbdf76c85`。查找、缩放、全屏往返、真实中文PDF、下一次输出启动与导航撤销、能力模型和Browser/window关闭八位通过；路径NUL和完成/取消回调所有权两项缺陷关闭。主会话Review：P1/P2已关闭，APPROVE；最高VERIFIED，未覆盖Windows执行、系统打印机、原生保存面板、Mac默认Alloy产品装配或操作系统层PDF IO取消。用户要求本项后暂停。
+- 提交收尾：同源Mac guarded build/严格签名PASS，登记的全量CTest 117/117 PASS（195.21s）。等价fast检查中既有Rust Keychain `object_safety_assertion` 返回 `delete: Unavailable`，保留FAIL，legacy-dev未运行；该Rust模块无本轮修改，不扩展修复。完整命令/receipt/风险见 [本轮Review](../reviews/2026-09-08-phase1-ui-review.md#16m完成后的提交检查与暂停)。后续17M未领取。
+
+### PLT-SHELL-10M macOS 会话原子存储（2026-09-08）
+
+- 状态：VERIFIED；依赖08M VERIFIED。主会话方案Review：共享session模块继续唯一拥有schema/恢复策略，coordinator恢复Browser/高级状态已有08M证据；剩余平台缺口为现有 `AlloySessionRestore` 的Windows文件API。新增仅macOS shell私有文件adapter，复用共享编码/解码与 `AlloySessionFileResult`，不改Windows接口、格式或领域所有权。
+- 允许路径：`src/macos/alloy_session_restore_mac.{h,cc}`、独立Mac测试、CEF CMake与本计划。单一目标为有界同目录原子checkpoint读写，支持UTF-8绝对路径；无痕在任何IO前返回跳过；不自动创建父目录，不读取秘密，不触碰真实用户session。
+- 文件边界：拒绝空/NUL/相对/超长/非法basename；父目录fd定位，临时文件0600、随机独占创建、有界碰撞次数；写全量/同步/关闭后同目录rename，失败清理本次临时文件。读取拒绝symlink/非普通文件，长度受共享上限约束，处理EINTR/短读与profile mismatch；不得阻塞FIFO。目录同步失败显式IO错误，不宣称未发生替换。
+- 验收：Mac独立测试覆盖roundtrip/替换/UTF-8、corrupt/missing/profile mismatch/oversize、无痕不落盘、非法路径、symlink/FIFO拒绝、替换失败保留目标与临时文件清理；复用08M恢复执行证据，补session领域契约。预算实现约2生产文件、1测试文件，净增生产代码低于400行；构建/测试10分钟首错停止。默认产品入口接线、崩溃整包/升级/回滚/断电长稳留24M/QAR，不在本项冒充通过。
+- 结果：Terra实现完成，主会话Review修正合法长文件名临时路径溢出、缺失父目录首次读取结果、失败测试清理三项后APPROVE。Luna经 `scripts/build_macos_local.py --cef-root <固定CEF150缓存> --flavor Debug` 产品构建/本地验签PASS/0（22.66s），receipt `local-builds/1788838917882857000/receipt.json`；独立target build PASS/0（0.36s）；`ctest --test-dir .cache/build/macos-arm64-cef-debug-ninja -R '^(alloy_session_restore_mac|session_restore_contract_test[.]cc)$' --output-on-failure --stop-on-failure` 2/2 PASS/0（1.17s）。源码diff前后 `a7bac1080dcbaa15c57523b4e6b1cdbcdd9920a53398ef8296518f1c224ff29c`，产品 `21076b1a199c02338c241ddda9c10162355999ad9a9bda891211cecd4e4fc044`，测试 `1591ffeffbd3bec69d5d3705c8aca833f6fe35d8df288fdb59bcfb5db4874336`。日志 `luna-session-product-build.log`/`luna-session-test-build.log`/`luna-session-tests.log`；最高VERIFIED，未宣称默认Chrome宿主已使用新checkpoint或正式签名/发行完成。
 
 - 状态：VERIFIED；单一目标：将批准的自定义 Shell＋Alloy 决策变为一期完整依赖与迁移验收计划。
 - 输入：当前 PRD/架构/测试/Review、REL/CEF/BUX/PLT/Cast、固定 CEF 150 头文件、TabController/TabModel、engine-api 与 shared-ui/shell 的真实调用方。
@@ -585,6 +741,33 @@ Code Review：按 v0.9 独立检查唯一 owner、同步 callback reentrancy、t
 - 真实产品：刚重建 Debug 浅色与 Release `--force-dark-mode` 深色产品均实际启动；确认紧凑两行层级、主题前景色、标签切换/新建/关闭、导航与日用动作图标，关闭按钮 hover 实际显示“关闭标签页”。Windows UI Automation 可读“后退/前进/刷新/连接不安全/移动标签页到窗口/历史记录/下载/添加书签/播放视频后可投屏/菜单”等 accessible name；两次退出后 Crayon 进程计数均为 0。系统主题运行中热切换与原生 200% DPI 仍按明确不做项 NOT_RUN，1x/2x 资源表示已由自动化覆盖。
 - Code Review：按 v0.9 检查需求边界、图标供应链/确定性、CEF state image 生命周期、主题/disabled 状态、键盘与无障碍、generation/owner、Release 隔离和生成文件规模；Review 中收敛了 2340 行全量 glyph 头，仅保留产品 allow-set。最终 P0/P1/P2/P3=`0/0/0/0`，APPROVE。24W3 恢复为下一任务，负责双配置完整 CTest、artifact、安全/性能与三闭环总回归；上述未闭合的环境型全量失败不影响本项定向 VERIFIED，但不能作为 24W3 通过证据。
 - 追加复验：用户 2026-09-07 截图稳定证明书签图标鼠标点击后残留蓝色焦点框；新增 `IsFocusable()==false` 真实 CEF 回归在修复前稳定失败 `bookmark-icon`。共享 icon adapter 已统一改为 icon-only action 不接收持久焦点，保留标签标题、地址栏及既有命令/快捷键；Release `alloy_interactions_windows` 修复后通过，其余双配置定向与新二进制视觉复验待窗口释放后执行，故本项暂回 `IN_PROGRESS`。
+
+### 24W2b3b5 Chrome 风格完整界面收口（2026-09-08）
+
+用户要求先 Review 一期代码、完成一期剩余 Roadmap，并把完整界面统一为 Chrome 桌面浏览器风格。本轮基线为 `02a4a20d115c61436497312eb015fad27e37c7e7`，初始工作区干净。沿用本 Roadmap，视觉改造先于 24W3 最终产品与 artifact 回归；历史 UI 截图不能证明新界面通过。
+
+2026-09-08 用户后续明确：当前改为 **macOS arm64 优先构建和调通；Windows 界面代码同步改为 Chrome 风格，Windows 效果后续验证**。下列 5a 属共享页面，5b/5c 同步修改 Windows 产品代码。Mac 当前仍是 Chrome-style 基线，先验证该真实产品三闭环与共享页面，然后按 03M 起的依赖完成 Alloy 迁移；不能把旧宿主运行通过标成 03M..27M 完成。正式签名/发布动作不由本次本地开发授权推导。
+
+| 子项 | 状态 | 输入/依赖 | 单一目标与允许路径 | 验收与边界 |
+|---|---|---|---|---|
+| 24W2b3b5a | VERIFIED | BUX-01/03 已有模型；用户新视觉要求 | 共享新标签页统一为居中、简洁、圆形快捷入口的 Chrome 风格；`browser/shared-ui/new-tab`、设计契约与本计划 | 现有 new-tab C++ 行为契约；真实生成 HTML 的浅/深、窄/宽、长标题、键盘与 200% 缩放视觉检查；无外部请求、无痕隔离、CSP 不变 |
+| 24W2b3b5b | IMPLEMENTED | 5a VERIFIED；24W2b3b4 现有实现；MDV-26 VERIFIED | 标签真实标题、顶部尺寸/主题/地址栏与图标焦点；现有 Alloy window surfaces、Windows Host 与对应测试 | Mac 共享 CEF 标签栏、source/package 3/3 PASS（5.81s）；标题更新/超长回退、键盘焦点保留、真实 CEF 点击、容量/布局通过。Windows Host 已接标题投影与窗口标题；Windows 编译/效果 NOT_RUN，按用户指令后补 |
+| 24W2b3b5c | VERIFIED | 5b IMPLEMENTED 且共享 CEF 回归通过；按用户指令 Windows 效果后验 | 当前原子范围为 Markdown 自有页面 Chrome 风格和 Mac 原生菜单产品名；允许 mdv_page、application_menu_mac、对应测试与文档 | 生产 HTML/CSS/JS 的三视图×两主题×宽1280/窄360 共12组无溢出；连续 input 完整投递、成功状态/后续编辑清除通过。既有菜单/设置/历史/下载/Cast 原生 surface 沿用 CEF/OS 主题，Windows 总视觉验收后补，不改业务 owner |
+| 24W2b3b5d | TODO | 5b IMPLEMENTED；当前 Mac 08M 原子批次结束后细化领取 | 普通 popup/restored window 补各窗口导航、地址栏与标签投影，保持 Chrome 风格与窗口隔离；当前普通窗口仅有 transfer surface，未完成 | 先冻结每窗口 owner/回调/关闭范围；共享 CEF 行为与来源隔离验证，Windows 编译/完整视觉按用户要求后补；禁止复制业务 owner 或将主窗口状态用于其他窗口 |
+
+5a 不新增搜索 provider、搜索表单、后台网络、持久化字段、依赖或平台能力；地址栏仍是搜索与导航 owner。仅做现有功能的视觉重排，不用不可操作的假搜索框充当完成。5b/5c 不改变投屏/授权/隐私协议。任何依赖、实现、测试或候选包变化均使相应旧证据失效。Windows 平台门禁、物理输入、正式接收端、系统语言/IME/Narrator、安装/升级/回滚与长稳保留，不能以 Mac 或 HTML 预览替代。
+
+本轮代码初审见 [一期代码与界面审查](../reviews/2026-09-08-phase1-ui-review.md)。完成 5a 后逐项更新实际证据；24W3 在完整界面收口后重跑。
+
+5a 验证记录（macOS arm64，2026-09-08）：`cmake -S . -B .cache/build/macos-shared-debug -G 'Unix Makefiles' -DCRAYON_BUILD_TESTS=ON -DCRAYON_ENABLE_CEF=OFF -DCMAKE_BUILD_TYPE=Debug`、`cmake --build .cache/build/macos-shared-debug --target crayon_browser_new_tab_test --parallel 2`、`ctest --test-dir .cache/build/macos-shared-debug --output-on-failure -R '^browser_new_tab_contract$'` 均退出 0，1/1 PASS（0.40 秒）。预览直接调用生产 `RenderNewTabDocument/RenderNewTabStylesheet`，仅将 stylesheet URL 映射为 loopback 静态资源；普通/空/无痕/配置错误 × light/dark × 1280/360 共 16 组无横向溢出，Tab 到真实 shortcut link 后 `:focus-visible=true`，720 宽 200% CSS 缩放无溢出。已检查宽浅色和窄深色焦点截图。示例文案用于极长标题压力检查；真实三语言系统与 CEF App 门禁尚未覆盖。范围内视觉/安全/无痕自审无新增 P0/P1/P2，APPROVE，仅共享页面达到 VERIFIED。
+
+### PLT-SHELL-03M0 Mac 现有产品基线恢复（2026-09-08）
+
+- 状态：`IMPLEMENTED`；2026-09-08 基线验证发现 MDV 快速输入丢失，先由 `MDV-26` 修复，再继续本项。依赖用户 Mac 优先指令、已有 macOS Chrome-style 生产实现、5a VERIFIED。单一目标：从当前源码生成并验证真实 Mac arm64 本地 Debug 应用，为后续 03M Alloy 迁移提供可运行基线；旧 Chrome-style 通过不等于 Alloy 迁移完成。
+- 输入：固定 CEF 150.0.10/macOS arm64 官方 archive（下载器 SHA-1 校验）、Cast-SDK `44c3a99871aa1e68cbda71eacefbb41d23a747a8`、当前工作区摘要。允许 `scripts/build_macos_local.py`、[Mac 本地构建 adapter](../current/macos-local-build.md)、macOS 生产/测试的最小构建缺陷修复、本计划及证据；Windows UI 改动由 5b/5c 领取，禁止外部 SDK 修改、系统设置变化、正式发行。
+- 验收：guarded Debug App 构建、strict/deep ad-hoc 验签、独立 Profile 的启动/新标签页/退出；再执行相同 App 对应的 CTest 与三闭环，用真实接收端补 LAN 投屏。预算每次 30 分钟；首次失败停止；源码/Harness/依赖变化使对应证据失效。
+- 首轮结果：CEF 下载器校验 PASS，SDK 从本机现有仓库初始化为锁定提交；CMake 配置 PASS、C++ wrapper 编译完成。Rust 首次下载依赖因沙箱禁止写 Cargo cache 退出 101，产品 build 退出 2，未到验签/启动。保留原始失败记录，获工具权限后仍走同一入口恢复，不能记为一次全绿。当前未连接 ADB 设备，LAN 真机项 NOT_RUN。
+- 实际产品发现：Ninja Debug App 已构建并通过 strict/deep 验签，真实窗口和本地 HTTP 导航正常；但 `main_mac.mm` 没有创建应用菜单，系统菜单栏只有 App 名，Cmd+T/Cmd+O 不响应。官方 CEF Mac 示例显式加载带 keyboard equivalents 的 MainMenu。将已有 Chrome command/MDV open-save owner 接入本地化原生 App/File/Edit/View/Window 菜单，属于恢复既有入口，不新增业务 owner；允许新增 `macos/application_menu_mac` 及独立 AppKit 测试、main 装配和 CMake 接线。先以真实窗口缺失菜单/快捷键和 native menu 行为测试固定问题，再验证 Cmd+T/O/S/W/L 与退出。另修复完整 test-target build 暴露的 `SessionTabSnapshot::group` 缺少显式默认值；现有 legacy 恢复测试追加 pinned/muted/group 默认值检查，定向 1/1 PASS。
 
 ### 24W3 原子范围（2026-09-06）
 

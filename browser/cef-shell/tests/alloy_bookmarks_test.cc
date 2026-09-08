@@ -2,7 +2,9 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <random>
 #include <string>
+#include <system_error>
 #include <vector>
 
 #include "browser/window/alloy_bookmarks.h"
@@ -27,6 +29,48 @@ ProfileId Profile(const char *value) {
   if (!result) std::abort();
   return *result;
 }
+
+class TemporaryDirectory final {
+public:
+  TemporaryDirectory() {
+    std::error_code error;
+    const std::filesystem::path temporary_root =
+        std::filesystem::temp_directory_path(error);
+    if (error)
+      return;
+    std::random_device random;
+    for (int attempt = 0; attempt < 32; ++attempt) {
+      const std::string suffix = std::to_string(random()) + "-" +
+                                 std::to_string(random());
+      const std::filesystem::path candidate =
+          temporary_root /
+          std::filesystem::u8path(std::string(u8"crayon-alloy-书签-") + suffix);
+      error.clear();
+      if (std::filesystem::create_directory(candidate, error)) {
+        path_ = candidate;
+        return;
+      }
+      if (error && error != std::errc::file_exists)
+        return;
+    }
+  }
+  ~TemporaryDirectory() {
+    if (path_.empty())
+      return;
+    std::error_code error;
+    static_cast<void>(std::filesystem::remove_all(path_, error));
+  }
+
+  TemporaryDirectory(const TemporaryDirectory &) = delete;
+  TemporaryDirectory &operator=(const TemporaryDirectory &) = delete;
+  TemporaryDirectory(TemporaryDirectory &&) = delete;
+  TemporaryDirectory &operator=(TemporaryDirectory &&) = delete;
+
+  const std::filesystem::path &path() const { return path_; }
+
+private:
+  std::filesystem::path path_;
+};
 
 bool AdapterContract() {
   std::string current_navigation;
@@ -80,28 +124,42 @@ bool ProfileIsolationAndFolderProjection() {
 }
 
 bool FileLoadIsAtomicAndPersists() {
-  const auto directory = std::filesystem::temp_directory_path() /
-                         std::filesystem::u8path(u8"crayon-alloy-书签");
-  std::error_code filesystem_error;
-  std::filesystem::create_directories(directory, filesystem_error);
-  CHECK(!filesystem_error);
-  const auto path = (directory / "bookmarks-v1.txt").u8string();
+  TemporaryDirectory directory;
+  CHECK(!directory.path().empty());
+  const auto path = (directory.path() / "bookmarks-v1.txt").u8string();
   AlloyBookmarks source(Profile("profile-a"), {});
   CHECK(source.AddCurrentPage("Saved", "https://saved.test/") &&
         source.SaveToFile(path));
   AlloyBookmarks restored(Profile("profile-a"), {});
+  CHECK(restored.Import("CRAYON-BOOKMARKS v1\nF 0 6\nFolder\n"
+                        "B 1 4 18\nLeaf\nhttps://leaf.test/\n"));
+  const auto folder = restored.Search("Folder");
+  CHECK(folder.size() == 1 &&
+        restored.Open(folder[0], BookmarkOpenTarget::kCurrentTab) ==
+            AlloyBookmarkResult::kFolderShown &&
+        restored.folder_items().size() == 1);
   CHECK(restored.LoadFromFile(path));
-  CHECK(restored.Search("saved").size() == 1);
+  CHECK(restored.Search("saved").size() == 1 && restored.folder_items().empty());
+  CHECK(restored.Import("CRAYON-BOOKMARKS v1\nF 0 6\nFolder\n"
+                        "B 1 4 18\nLeaf\nhttps://leaf.test/\n"));
+  const auto reopened_folder = restored.Search("Folder");
+  CHECK(reopened_folder.size() == 1 &&
+        restored.Open(reopened_folder[0], BookmarkOpenTarget::kCurrentTab) ==
+            AlloyBookmarkResult::kFolderShown &&
+        restored.folder_items().size() == 1 &&
+        restored.folder_items()[0].title == "Leaf");
   const auto before = restored.Export();
+  const auto folder_items_before = restored.folder_items();
   {
     std::ofstream corrupt(std::filesystem::u8path(path),
                           std::ios::binary | std::ios::trunc);
     corrupt << "corrupt";
   }
   CHECK(!restored.LoadFromFile(path));
-  CHECK(restored.Export() == before);
-  std::filesystem::remove_all(directory, filesystem_error);
-  CHECK(!filesystem_error);
+  CHECK(restored.Export() == before && restored.folder_items().size() ==
+                                         folder_items_before.size() &&
+        !folder_items_before.empty() && !restored.folder_items().empty() &&
+        restored.folder_items()[0].title == folder_items_before[0].title);
   return true;
 }
 } // namespace

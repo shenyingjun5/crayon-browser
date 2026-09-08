@@ -1,6 +1,8 @@
 #include "alloy_tab_controller_probe.h"
 
+#if defined(_WIN32)
 #include <windows.h>
+#endif
 
 #include <array>
 #include <cstdlib>
@@ -54,7 +56,7 @@ class AlloyTabProbe final : public CefApp,
 public:
   AlloyTabProbe(std::string fixture_url,
                 std::shared_ptr<AlloyTabControllerProbeResult> result)
-      : fixture_url_(std::move(fixture_url)), result_(std::move(result)) {}
+      : result_(std::move(result)), fixture_url_(std::move(fixture_url)) {}
 
   CefRefPtr<CefBrowserProcessHandler> GetBrowserProcessHandler() override {
     return this;
@@ -68,6 +70,9 @@ public:
   void
   OnBeforeCommandLineProcessing(const CefString &,
                                 CefRefPtr<CefCommandLine> command) override {
+#if defined(__APPLE__)
+    command->AppendSwitch("use-mock-keychain");
+#endif
     command->AppendSwitch("disable-background-networking");
     command->AppendSwitch("disable-component-update");
     command->AppendSwitch("disable-default-apps");
@@ -112,6 +117,7 @@ public:
     window_->SetSize(CefSize(800, 560));
     window_->Layout();
     window_->Show();
+    window_->Activate();
   }
 
   void OnBrowserCreated(CefRefPtr<CefBrowserView> view,
@@ -208,7 +214,8 @@ public:
               "window.value=42;"
               "document.addEventListener('click',function(){"
               "window.onbeforeunload=function(e){e.preventDefault();"
-              "e.returnValue='';};document.title='close-fixture-armed';});",
+              "e.returnValue='';};document.title='close-fixture-armed';});"
+              "document.title='close-fixture-ready';",
               fixture_url_, 1);
         }
         loaded_[index] = true;
@@ -217,7 +224,9 @@ public:
   }
 
   void OnTitleChange(CefRefPtr<CefBrowser>, const CefString &title) override {
-    if (title == "state-preserved") {
+    if (title == "close-fixture-ready") {
+      input_ready_ = true;
+    } else if (title == "state-preserved") {
       state_preserved_ = true;
     } else if (title == "close-fixture-armed") {
       clicked_ = true;
@@ -375,7 +384,8 @@ private:
       return;
     }
     if (stage_ == 0) {
-      if (!loaded_[0] || !result_->late_create_closed) {
+      if (!loaded_[0] || !input_ready_ || !result_->late_create_closed ||
+          !window_ || !window_->IsActive()) {
         ScheduleCheck();
         return;
       }
@@ -405,11 +415,12 @@ private:
         Finish(false, "advanced-state");
         return;
       }
-      const HWND handle = window_->GetWindowHandle();
-      RECT bounds{};
       window_->Activate();
       views_[0]->RequestFocus();
       browsers_[0]->GetHost()->SetFocus(true);
+#if defined(_WIN32)
+      const HWND handle = window_->GetWindowHandle();
+      RECT bounds{};
       if (!handle || !GetWindowRect(handle, &bounds) ||
           !SetForegroundWindow(handle) ||
           !SetCursorPos(bounds.left + 50, bounds.top + 50)) {
@@ -425,6 +436,18 @@ private:
         Finish(false, "activate-input");
         return;
       }
+#else
+      const CefRect bounds = views_[0]->GetBounds();
+      if (bounds.width <= 0 || bounds.height <= 0) {
+        Finish(false, "activate-bounds");
+        return;
+      }
+      CefMouseEvent event{};
+      event.x = 50;
+      event.y = 50;
+      browsers_[0]->GetHost()->SendMouseClickEvent(event, MBT_LEFT, false, 1);
+      browsers_[0]->GetHost()->SendMouseClickEvent(event, MBT_LEFT, true, 1);
+#endif
       activation_check_ = checks_;
       ++stage_;
       ScheduleCheck();
@@ -564,6 +587,7 @@ private:
   int logged_stage_ = -1;
   bool state_preserved_ = false;
   bool replacement_closed_ = false;
+  bool input_ready_ = false;
   bool clicked_ = false;
   bool cancel_posted_ = false;
   bool finished_ = false;

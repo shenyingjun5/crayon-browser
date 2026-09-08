@@ -422,8 +422,8 @@ private:
         return;
       }
       interactions_->OnButtonPressed(bookmark_toggle);
-      if (bookmark_toggle->HasFocus() || !bookmark_toggle->IsFocusable()) {
-        Finish(false, "bookmark-focus-release");
+      if (!bookmark_toggle->HasFocus() || !bookmark_toggle->IsFocusable()) {
+        Finish(false, "bookmark-focus-preserved");
         return;
       }
       const auto bookmark_item_view =

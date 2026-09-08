@@ -1,6 +1,8 @@
 #include "alloy_tab_strip_probe.h"
 
+#if defined(_WIN32)
 #include <windows.h>
+#endif
 
 #include <iostream>
 #include <memory>
@@ -8,6 +10,7 @@
 #include <utility>
 
 #include "browser/window/alloy_tab_strip.h"
+#include "browser/window/alloy_icon.h"
 #include "browser/window/tab_model.h"
 #include "include/base/cef_callback.h"
 #include "include/cef_command_line.h"
@@ -44,6 +47,9 @@ public:
   void
   OnBeforeCommandLineProcessing(const CefString &,
                                 CefRefPtr<CefCommandLine> command) override {
+#if defined(__APPLE__)
+    command->AppendSwitch("use-mock-keychain");
+#endif
     command->AppendSwitch("disable-background-networking");
     command->AppendSwitch("disable-component-update");
     command->AppendSwitch("disable-default-apps");
@@ -64,7 +70,10 @@ public:
         AlloyTabStrip::Callbacks{
             [this]() { OnNewTab(); },
             [this](TabId tab_id) { OnActivateTab(tab_id); },
-            [this](TabId tab_id) { OnCloseTab(tab_id); }});
+            [this](TabId tab_id) { OnCloseTab(tab_id); },
+            [this](TabId tab_id) {
+              return tab_id == first_ ? projected_title_ : std::string{};
+            }});
     if (!strip_->Sync(model_)) {
       Finish(false, "initial-sync");
       return;
@@ -174,6 +183,7 @@ private:
     }
     window_->Activate();
     view->RequestFocus();
+#if defined(_WIN32)
     const HWND handle = window_->GetWindowHandle();
     const CefPoint center = CefDisplay::ConvertScreenPointToPixels(
         CefPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2));
@@ -189,6 +199,12 @@ private:
     input[1].type = INPUT_MOUSE;
     input[1].mi.dwFlags = MOUSEEVENTF_LEFTUP;
     return SendInput(2, input, sizeof(INPUT)) == 2;
+#else
+    window_->SendMouseMove(bounds.x + bounds.width / 2,
+                           bounds.y + bounds.height / 2);
+    window_->SendMouseEvents(MBT_LEFT, true, true);
+    return true;
+#endif
   }
 
   bool ProjectionMatches(std::initializer_list<TabId> expected,
@@ -249,6 +265,31 @@ private:
                            ->GetViewForID(AlloyTabStrip::kNewTabCommandId)
                            ->AsButton()
                            ->AsLabelButton();
+      const auto title = active ? active->AsLabelButton() : nullptr;
+      if (!title || title->GetText().ToString() != projected_title_) {
+        Finish(false, "page-title-projection");
+        return;
+      }
+      projected_title_ = "Updated page title";
+      if (!strip_->RefreshTitles() || title->GetText().ToString() != projected_title_) {
+        Finish(false, "page-title-refresh");
+        return;
+      }
+      projected_title_.assign(4097, 'x');
+      if (!strip_->RefreshTitles() || title->GetText().ToString() != "Tab 1") {
+        Finish(false, "oversize-title-fallback");
+        return;
+      }
+      add->RequestFocus();
+      if (!add->HasFocus()) {
+        Finish(false, "keyboard-focus-setup");
+        return;
+      }
+      crayon::browser::cef_shell::window::ReleaseAlloyIconFocus(add);
+      if (!add->HasFocus() || !add->IsFocusable()) {
+        Finish(false, "keyboard-focus-retained");
+        return;
+      }
       result_->icons_passed =
           active && active->IsEnabled() && close && add &&
           close->GetText().empty() && add->GetText().empty() &&
@@ -398,6 +439,7 @@ private:
 
   std::shared_ptr<AlloyTabStripProbeResult> result_;
   TabModel model_;
+  std::string projected_title_ = "Reader & <page> title";
   std::unique_ptr<AlloyTabStrip> strip_;
   CefRefPtr<CefPanel> mounted_panel_;
   CefRefPtr<CefWindow> window_;

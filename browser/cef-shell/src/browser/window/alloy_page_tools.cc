@@ -18,7 +18,8 @@ double CefZoomLevel(int factor) {
 }
 
 bool IsValidAuthorizedPdfPath(const std::wstring &path) {
-  if (path.empty() || path.size() > kMaximumWindowsPathLength)
+  if (path.empty() || path.find(L'\0') != std::wstring::npos ||
+      path.size() > kMaximumWindowsPathLength)
     return false;
   const std::filesystem::path parsed(path);
   if (!parsed.is_absolute())
@@ -193,7 +194,7 @@ void AlloyPageTools::OnPdfPrintFinished(const CefString &path, bool ok) {
   else
     output_.NotifyFailed(browser_page_tools::PageOutputError::kEngineFailed,
                          profile_id_);
-  PdfCompletion completion = std::move(pdf_completion_);
+  PdfCompletion completion = std::exchange(pdf_completion_, PdfCompletion{});
   pdf_generation_ = 0;
   pdf_path_.clear();
   completion(ok);
@@ -232,7 +233,7 @@ void AlloyPageTools::CancelPdf() {
       output_.state() == browser_page_tools::PageOutputState::kRunning) {
     static_cast<void>(output_.Cancel());
   }
-  PdfCompletion completion = std::move(pdf_completion_);
+  PdfCompletion completion = std::exchange(pdf_completion_, PdfCompletion{});
   pdf_generation_ = 0;
   pdf_path_.clear();
   completion(false);

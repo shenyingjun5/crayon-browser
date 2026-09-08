@@ -1,11 +1,14 @@
 #import <Cocoa/Cocoa.h>
 
 #include <string>
+#include <array>
 
 #include "include/cef_application_mac.h"
 #include "include/cef_command_line.h"
+#include "include/cef_resource_bundle.h"
 #include "include/wrapper/cef_library_loader.h"
 #include "macos/app.h"
+#include "macos/application_menu_mac.h"
 #include "process/macos/ui_language_mac.h"
 
 namespace {
@@ -134,6 +137,35 @@ int main(int argc, char* argv[]) {
 
     CrayonAppDelegate* delegate = [[CrayonAppDelegate alloc]
       initWithTabController:app->tab_controller()];
+    using crayon::browser::cef_shell::macos::ApplicationCommand;
+    using crayon::browser::cef_shell::macos::ApplicationMenuMac;
+    const crayon::browser::localization::LocaleCatalog catalog(locale_snapshot.locale);
+    auto application_menu = std::make_unique<ApplicationMenuMac>(
+        std::string(catalog.Find("app.title").value_or("")),
+        [](const char* key) {
+          const int id = cef_id_for_pack_string_name(key);
+          return id > 0 ? CefResourceBundle::GetGlobal()->GetLocalizedString(id).ToString()
+                        : std::string{};
+        },
+        [controller = app->tab_controller()](ApplicationCommand command) {
+          const auto browser = controller->ActiveBrowser();
+          if (!browser) return;
+          if (command == ApplicationCommand::kSave && controller->HandleSaveKey(browser)) {
+            return;
+          }
+          static constexpr std::array kCommands = {
+              "IDC_ABOUT", "IDC_OPTIONS", "IDC_NEW_TAB", "IDC_NEW_WINDOW",
+              "IDC_NEW_INCOGNITO_WINDOW", "IDC_OPEN_FILE", "IDC_CLOSE_TAB",
+              "IDC_SAVE_PAGE", "IDC_PRINT", "IDC_FIND", "IDC_FOCUS_LOCATION",
+              "IDC_RELOAD", "IDC_ZOOM_PLUS", "IDC_ZOOM_MINUS", "IDC_ZOOM_NORMAL",
+              "IDC_BACK", "IDC_FORWARD", "IDC_SELECT_NEXT_TAB", "IDC_SELECT_PREVIOUS_TAB"};
+          static_assert(kCommands.size() ==
+                        static_cast<std::size_t>(ApplicationCommand::kPreviousTab) + 1);
+          const int id = cef_id_for_command_id_name(kCommands.at(static_cast<std::size_t>(command)));
+          if (id > 0 && browser->GetHost()->CanExecuteChromeCommand(id)) {
+            browser->GetHost()->ExecuteChromeCommand(id, CEF_WOD_CURRENT_TAB);
+          }
+        });
     NSApp.delegate = delegate;
     [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
     [NSApp finishLaunching];
@@ -141,6 +173,7 @@ int main(int argc, char* argv[]) {
 
     CefRunMessageLoop();
     NSApp.delegate = nil;
+    application_menu.reset();
     CefShutdown();
   }
   return static_cast<int>(ExitCode::kSuccess);

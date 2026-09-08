@@ -116,6 +116,7 @@ bool AlloyBookmarks::LoadFromFile(
     static_cast<void>(RefreshProjection(current_url_));
     return false;
   }
+  folder_items_.clear();
   return true;
 }
 

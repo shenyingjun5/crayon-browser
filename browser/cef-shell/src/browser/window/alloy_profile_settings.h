@@ -95,6 +95,7 @@ private:
   std::string pending_cleanup_profile_;
   std::string last_failure_token_;
   std::uint64_t next_generation_ = 1;
+  bool callback_in_progress_ = false;
   bool active_ = true;
 };
 

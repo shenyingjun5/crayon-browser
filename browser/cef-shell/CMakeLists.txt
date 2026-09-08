@@ -986,6 +986,8 @@ if(OS_MAC)
       "${PROJECT_SOURCE_DIR}/browser/shared-ui/localization/generated/macos/zh-Hant.lproj/Localizable.strings")
   set(crayon_macos_sources
       ${crayon_location_bar_sources}
+      src/macos/application_menu_mac.h
+      src/macos/application_menu_mac.mm
       src/browser/context/profile_context_factory.cc
       src/browser/context/profile_context_factory.h
       src/browser/context/profile_id_validator.cc
@@ -1026,6 +1028,8 @@ if(OS_MAC)
       src/renderer/page_snapshot_collector/cef_page_snapshot_renderer.h
       src/browser/window/tab_controller.cc
       src/browser/window/tab_model.cc
+      src/macos/alloy_session_restore_mac.h
+      src/macos/alloy_session_restore_mac.cc
       src/macos/app.cc
       src/macos/app.h
       src/macos/cast_chrome_mac.h
@@ -1135,6 +1139,7 @@ if(OS_MAC)
                         PROPERTIES OBJCXX_STANDARD 20
                                    OBJCXX_STANDARD_REQUIRED ON)
   set_source_files_properties(src/macos/main_mac.mm
+                              src/macos/application_menu_mac.mm
                               src/macos/cast_chrome_mac.mm
                               src/macos/page_markdown_platform_mac.mm
                               src/macos/trusted_input_monitor_mac.mm
@@ -1151,6 +1156,7 @@ if(OS_MAC)
                         PRIVATE libcef_dll_wrapper ${CEF_STANDARD_LIBS}
                                 crayon::browser-new-tab
                                 crayon::browser-product-strings
+                                crayon::browser-session
                                 crayon::browser-windows
                                 crayon::browser-cast-view
                                 crayon::browser-page-tools
@@ -1168,7 +1174,17 @@ if(OS_MAC)
                MACOSX_BUNDLE_INFO_PLIST
                "${CMAKE_CURRENT_BINARY_DIR}/generated/Info.plist")
 
-  COPY_MAC_FRAMEWORK("${CRAYON_BROWSER_TARGET}" "${CEF_BINARY_DIR}"
+  # CEF's copy macro uses ln -sf on directory aliases. On an incremental
+  # build those aliases already point at directories, so ln follows them and
+  # creates broken nested links. Reassemble this generated framework first.
+  function(crayon_copy_mac_framework target binary_path app_path)
+    add_custom_command(TARGET ${target} POST_BUILD
+      COMMAND "${CMAKE_COMMAND}" -E rm -rf
+              "${app_path}/Contents/Frameworks/Chromium Embedded Framework.framework"
+      VERBATIM)
+    COPY_MAC_FRAMEWORK("${target}" "${binary_path}" "${app_path}")
+  endfunction()
+  crayon_copy_mac_framework("${CRAYON_BROWSER_TARGET}" "${CEF_BINARY_DIR}"
                      "${CRAYON_MACOS_APP}")
   add_custom_command(
     TARGET ${CRAYON_BROWSER_TARGET} POST_BUILD
@@ -1260,6 +1276,125 @@ if(OS_MAC)
     VERBATIM)
 
   if(CRAYON_BUILD_TESTS)
+    add_executable(
+      crayon_alloy_profile_settings_test
+      tests/alloy_profile_settings_test.cc
+      src/browser/window/alloy_profile_settings.cc
+      src/browser/window/alloy_profile_settings.h)
+    target_compile_features(crayon_alloy_profile_settings_test PRIVATE cxx_std_17)
+    target_include_directories(crayon_alloy_profile_settings_test
+                               PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_options(crayon_alloy_profile_settings_test
+                           PRIVATE -Wall -Wextra -Werror -Wpedantic)
+    target_link_libraries(crayon_alloy_profile_settings_test
+                          PRIVATE crayon::browser-engine-api
+                                  crayon::browser-preferences
+                                  crayon::browser-profiles-view
+                                  crayon::browser-settings-view)
+    add_test(NAME alloy_profile_settings_contract
+             COMMAND crayon_alloy_profile_settings_test)
+    set_tests_properties(alloy_profile_settings_contract
+                         PROPERTIES LABELS "shell;macos;profiles;settings;alloy" TIMEOUT 30)
+    add_executable(crayon_profile_persistence_mac_test
+                   tests/profile_persistence_mac_test.cc)
+    target_compile_features(crayon_profile_persistence_mac_test
+                            PRIVATE cxx_std_17)
+    target_compile_options(crayon_profile_persistence_mac_test
+                           PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_link_libraries(crayon_profile_persistence_mac_test
+                          PRIVATE crayon::browser-bookmarks
+                                  crayon::browser-history
+                                  crayon::browser-preferences)
+    add_test(NAME profile_persistence_mac
+             COMMAND crayon_profile_persistence_mac_test)
+    set_tests_properties(profile_persistence_mac
+                         PROPERTIES TIMEOUT 30 LABELS "macos;persistence")
+    add_executable(crayon_alloy_site_controls_test
+                   tests/alloy_site_controls_test.cc
+                   src/browser/window/alloy_site_controls.cc
+                   src/browser/window/alloy_site_controls.h
+                   src/browser/permission/permission_store.cc
+                   src/browser/permission/permission_store.h)
+    target_compile_features(crayon_alloy_site_controls_test PRIVATE cxx_std_17)
+    target_include_directories(crayon_alloy_site_controls_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_options(crayon_alloy_site_controls_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_link_libraries(crayon_alloy_site_controls_test PRIVATE crayon::browser-site-controls)
+    add_test(NAME alloy_site_controls_contract COMMAND crayon_alloy_site_controls_test)
+    set_tests_properties(alloy_site_controls_contract PROPERTIES TIMEOUT 30 LABELS "shell;macos;site-controls;alloy")
+    add_executable(
+      crayon_alloy_history_test
+      tests/alloy_history_test.cc
+      src/browser/window/alloy_history.cc
+      src/browser/window/alloy_history.h)
+    target_compile_features(crayon_alloy_history_test PRIVATE cxx_std_17)
+    target_include_directories(crayon_alloy_history_test
+                               PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_options(crayon_alloy_history_test
+                           PRIVATE -Wall -Wextra -Werror -Wpedantic)
+    target_link_libraries(crayon_alloy_history_test
+                          PRIVATE crayon::browser-history
+                                  crayon::browser-history-view
+                                  crayon::browser-engine-api)
+    add_test(NAME alloy_history_contract COMMAND crayon_alloy_history_test)
+    set_tests_properties(alloy_history_contract
+                         PROPERTIES LABELS "shell;macos;history;alloy" TIMEOUT 30)
+    add_executable(
+      crayon_alloy_downloads_test
+      tests/alloy_downloads_test.cc
+      src/browser/window/alloy_downloads.cc
+      src/browser/window/alloy_downloads.h
+      src/browser/permission/download_observer.h)
+    target_compile_features(crayon_alloy_downloads_test PRIVATE cxx_std_17)
+    target_include_directories(crayon_alloy_downloads_test
+                               PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_options(crayon_alloy_downloads_test
+                           PRIVATE -Wall -Wextra -Werror -Wpedantic)
+    target_link_libraries(crayon_alloy_downloads_test
+                          PRIVATE crayon::browser-downloads
+                                  crayon::browser-downloads-view)
+    add_test(NAME alloy_downloads_contract COMMAND crayon_alloy_downloads_test)
+    set_tests_properties(alloy_downloads_contract
+                         PROPERTIES LABELS "shell;macos;downloads;alloy" TIMEOUT 30)
+    add_executable(
+      crayon_alloy_bookmarks_test
+      tests/alloy_bookmarks_test.cc
+      src/browser/window/alloy_bookmarks.cc
+      src/browser/window/alloy_bookmarks.h)
+    target_compile_features(crayon_alloy_bookmarks_test PRIVATE cxx_std_17)
+    target_include_directories(crayon_alloy_bookmarks_test
+                               PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_options(crayon_alloy_bookmarks_test
+                           PRIVATE -Wall -Wextra -Werror -Wpedantic)
+    target_link_libraries(crayon_alloy_bookmarks_test
+                          PRIVATE crayon::browser-bookmarks
+                                  crayon::browser-bookmarks-view
+                                  crayon::browser-engine-api)
+    add_test(NAME alloy_bookmarks_contract COMMAND crayon_alloy_bookmarks_test)
+    set_tests_properties(alloy_bookmarks_contract
+                         PROPERTIES LABELS "shell;macos;bookmarks;alloy" TIMEOUT 30)
+    add_executable(crayon_alloy_session_restore_mac_test
+                   tests/alloy_session_restore_mac_test.cc
+                   src/macos/alloy_session_restore_mac.cc)
+    target_compile_features(crayon_alloy_session_restore_mac_test PRIVATE cxx_std_17)
+    target_include_directories(crayon_alloy_session_restore_mac_test PRIVATE
+                               "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(crayon_alloy_session_restore_mac_test PRIVATE
+                          crayon::browser-session)
+    add_test(NAME alloy_session_restore_mac
+             COMMAND crayon_alloy_session_restore_mac_test)
+    set_tests_properties(alloy_session_restore_mac
+                         PROPERTIES LABELS "shell;macos;session" TIMEOUT 30)
+    add_executable(crayon_application_menu_mac_test
+                   tests/application_menu_mac_test.mm
+                   src/macos/application_menu_mac.mm)
+    set_target_properties(crayon_application_menu_mac_test PROPERTIES
+                          OBJCXX_STANDARD 20 OBJCXX_STANDARD_REQUIRED ON)
+    target_compile_options(crayon_application_menu_mac_test PRIVATE -fobjc-arc)
+    target_include_directories(crayon_application_menu_mac_test PRIVATE
+                               "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(crayon_application_menu_mac_test PRIVATE "-framework Cocoa")
+    add_test(NAME application_menu_mac COMMAND crayon_application_menu_mac_test)
+    set_tests_properties(application_menu_mac PROPERTIES TIMEOUT 30)
     add_executable(
       crayon_content_host_process_mac_test
       tests/content_host_process_mac_test.cc
@@ -1399,6 +1534,35 @@ if(CRAYON_BUILD_TESTS)
       crayon_page_snapshot_cef_integration_test MACOSX_BUNDLE
       ${crayon_location_bar_sources}
       tests/page_snapshot_cef_integration_mac.mm
+      tests/alloy_security_probe.cc
+      tests/alloy_security_probe.h
+      src/browser/window/alloy_site_controls.cc
+      src/browser/window/alloy_site_controls.h
+      tests/alloy_profile_context_probe.cc
+      tests/alloy_profile_context_probe.h
+      src/browser/context/profile_context_factory.cc
+      src/browser/context/profile_context_factory.h
+      src/browser/context/profile_id_validator.cc
+      src/browser/context/profile_id_validator.h
+      tests/alloy_omnibox_probe.cc
+      src/browser/window/alloy_omnibox.cc
+      tests/alloy_navigation_probe.cc
+      src/browser/window/alloy_navigation.cc
+      tests/alloy_page_tools_probe.cc
+      tests/alloy_page_tools_probe.h
+      src/browser/window/alloy_page_tools.cc
+      src/browser/window/alloy_page_tools.h
+      src/browser/window/alloy_bookmarks.cc
+      src/browser/window/alloy_history.cc
+      src/browser/window/alloy_downloads.cc
+      tests/alloy_window_coordinator_probe.cc
+      src/browser/window/alloy_window_coordinator.cc
+      tests/alloy_tab_controller_probe.cc
+      src/browser/window/alloy_tab_controller.cc
+      tests/alloy_content_view_host_probe.cc
+      src/browser/window/alloy_content_view_host.cc
+      tests/alloy_tab_strip_probe.cc
+      src/browser/window/alloy_tab_strip.cc
       tests/cast_toolbar_host_probe.cc
       tests/cast_entry_surface_probe.cc
       tests/media_observation_cef_message_checks.cc
@@ -1445,12 +1609,28 @@ if(CRAYON_BUILD_TESTS)
     target_compile_definitions(
       crayon_page_snapshot_cef_integration_test
       PRIVATE
+        UNIT_TEST
         CRAYON_SNAPSHOT_TEST_HELPER_PATH="${CRAYON_MACOS_APP}/Contents/Frameworks/CrayonBrowser Helper.app/Contents/MacOS/CrayonBrowser Helper"
         CRAYON_CONTENT_HOST_TEST_PATH="${crayon_content_host_binary}"
         CRAYON_MEDIA_HOST_TEST_PATH="${crayon_media_host_binary}")
     target_link_libraries(
       crayon_page_snapshot_cef_integration_test
       PRIVATE libcef_dll_wrapper ${CEF_STANDARD_LIBS}
+              crayon::browser-shared-shell
+              crayon::browser-session
+              crayon::browser-tabs-advanced
+              crayon::browser-omnibox-core
+              crayon::browser-omnibox-provider
+              crayon::browser-navigation
+              crayon::browser-bookmarks
+              crayon::browser-bookmarks-view
+              crayon::browser-history
+              crayon::browser-history-view
+              crayon::browser-downloads
+              crayon::browser-downloads-view
+              crayon::browser-page-tools
+              crayon::browser-site-controls
+              crayon::browser-privacy-standard
               crayon::browser-localization
               crayon::browser-cast-view
               crayon::browser-windows
@@ -1463,7 +1643,7 @@ if(CRAYON_BUILD_TESTS)
     add_dependencies(crayon_page_snapshot_cef_integration_test
                      ${CRAYON_BROWSER_TARGET} crayon_content_host
                      crayon_media_host)
-    COPY_MAC_FRAMEWORK(
+    crayon_copy_mac_framework(
       "crayon_page_snapshot_cef_integration_test" "${CEF_BINARY_DIR}"
       "${CEF_TARGET_OUT_DIR}/crayon_page_snapshot_cef_integration_test.app")
     foreach(snapshot_helper_name ${crayon_macos_helper_names})
@@ -1474,6 +1654,19 @@ if(CRAYON_BUILD_TESTS)
                 "$<TARGET_BUNDLE_DIR:crayon_page_snapshot_cef_integration_test>/Contents/Frameworks/${snapshot_helper_name}.app"
         VERBATIM)
     endforeach()
+    set(crayon_security_certificate_files
+        expired_cert.pem
+        localhost_cert.pem
+        ok_cert.pem
+        root_ca_cert.pem)
+    set(crayon_security_certificate_copy_commands)
+    foreach(crayon_security_certificate ${crayon_security_certificate_files})
+      list(
+        APPEND crayon_security_certificate_copy_commands
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                "${CEF_ROOT}/tests/ceftests/resources/net/data/ssl/certificates/${crayon_security_certificate}"
+                "$<TARGET_BUNDLE_DIR:crayon_page_snapshot_cef_integration_test>/Contents/Resources/ceftests_files/net/data/ssl/certificates/${crayon_security_certificate}")
+    endforeach()
     add_custom_command(
       TARGET crayon_page_snapshot_cef_integration_test POST_BUILD
       COMMAND "${CMAKE_COMMAND}" -E make_directory
@@ -1481,6 +1674,9 @@ if(CRAYON_BUILD_TESTS)
       COMMAND "${CMAKE_COMMAND}" -E copy_if_different
               "${PROJECT_SOURCE_DIR}/browser/shared-ui/design/icons/cast-device.svg"
               "$<TARGET_BUNDLE_DIR:crayon_page_snapshot_cef_integration_test>/Contents/Resources/cast-device.svg"
+      COMMAND "${CMAKE_COMMAND}" -E make_directory
+              "$<TARGET_BUNDLE_DIR:crayon_page_snapshot_cef_integration_test>/Contents/Resources/ceftests_files/net/data/ssl/certificates"
+      ${crayon_security_certificate_copy_commands}
       COMMAND
         "${CMAKE_COMMAND}"
         "-DCRAYON_APP_BUNDLE=$<TARGET_BUNDLE_DIR:crayon_page_snapshot_cef_integration_test>"
@@ -1500,6 +1696,45 @@ if(CRAYON_BUILD_TESTS)
     add_test(NAME cast_toolbar_host_probe
              COMMAND crayon_page_snapshot_cef_integration_test
              --cast-toolbar-host-probe)
+    add_test(NAME alloy_omnibox_mac
+             COMMAND crayon_page_snapshot_cef_integration_test --alloy-omnibox-probe)
+    set_tests_properties(alloy_omnibox_mac PROPERTIES TIMEOUT 30 LABELS "cef;shell;macos")
+    add_test(NAME alloy_navigation_mac
+             COMMAND "${CRAYON_PYTHON3_EXECUTABLE}"
+                     "${PROJECT_SOURCE_DIR}/tests/e2e/desktop/browser/run_page_snapshot_fixture.py"
+                     "$<TARGET_FILE:crayon_page_snapshot_cef_integration_test>" alloy-navigation)
+    set_tests_properties(alloy_navigation_mac PROPERTIES TIMEOUT 45 LABELS "cef;shell;macos;alloy;navigation;integration")
+    add_test(NAME alloy_profile_context_mac
+             COMMAND "${CRAYON_PYTHON3_EXECUTABLE}"
+                     "${PROJECT_SOURCE_DIR}/tests/e2e/desktop/browser/run_page_snapshot_fixture.py"
+                     "$<TARGET_FILE:crayon_page_snapshot_cef_integration_test>" alloy-profiles)
+    set_tests_properties(alloy_profile_context_mac PROPERTIES TIMEOUT 45 LABELS "cef;shell;macos;alloy;profiles;integration")
+    add_test(NAME alloy_security_mac
+             COMMAND "${CRAYON_PYTHON3_EXECUTABLE}"
+                     "${PROJECT_SOURCE_DIR}/tests/e2e/desktop/browser/run_page_snapshot_fixture.py"
+                     "$<TARGET_FILE:crayon_page_snapshot_cef_integration_test>" alloy-security)
+    set_tests_properties(alloy_security_mac PROPERTIES TIMEOUT 45 LABELS "cef;shell;macos;alloy;security;integration")
+    add_test(NAME alloy_page_tools_mac
+             COMMAND "${CRAYON_PYTHON3_EXECUTABLE}"
+                     "${PROJECT_SOURCE_DIR}/tests/e2e/desktop/browser/run_page_snapshot_fixture.py"
+                     "$<TARGET_FILE:crayon_page_snapshot_cef_integration_test>" alloy-page-tools)
+    set_tests_properties(alloy_page_tools_mac PROPERTIES TIMEOUT 45 LABELS "cef;shell;macos;alloy;page-tools;integration")
+    add_test(NAME alloy_window_coordinator_mac
+             COMMAND "${CRAYON_PYTHON3_EXECUTABLE}"
+                     "${PROJECT_SOURCE_DIR}/tests/e2e/desktop/browser/run_page_snapshot_fixture.py"
+                     "$<TARGET_FILE:crayon_page_snapshot_cef_integration_test>" alloy-windows)
+    set_tests_properties(alloy_window_coordinator_mac PROPERTIES TIMEOUT 45 LABELS "cef;shell;macos;alloy;popup;integration")
+    add_test(NAME alloy_tab_controller_mac
+             COMMAND "${CRAYON_PYTHON3_EXECUTABLE}"
+                     "${PROJECT_SOURCE_DIR}/tests/e2e/desktop/browser/run_page_snapshot_fixture.py"
+                     "$<TARGET_FILE:crayon_page_snapshot_cef_integration_test>" alloy-tabs)
+    set_tests_properties(alloy_tab_controller_mac PROPERTIES TIMEOUT 45 LABELS "cef;shell;macos")
+    add_test(NAME alloy_content_view_host_mac
+             COMMAND crayon_page_snapshot_cef_integration_test --alloy-content-view-host-probe)
+    set_tests_properties(alloy_content_view_host_mac PROPERTIES TIMEOUT 30 LABELS "cef;shell;macos")
+    add_test(NAME alloy_tab_strip_mac
+             COMMAND crayon_page_snapshot_cef_integration_test --alloy-tab-strip-probe)
+    set_tests_properties(alloy_tab_strip_mac PROPERTIES TIMEOUT 30 LABELS "cef;shell;macos")
     add_test(NAME cast_entry_surface_probe
              COMMAND crayon_page_snapshot_cef_integration_test
              --cast-entry-surface-probe)

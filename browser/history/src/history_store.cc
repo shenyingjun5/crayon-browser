@@ -56,10 +56,25 @@ void SetError(HistoryError* error, HistoryError value) noexcept {
 }  // namespace
 
 bool HistoryStore::IsValidUrl(const std::string& url) noexcept {
+  constexpr std::string_view kHttpsPrefix = "https://";
+  constexpr std::string_view kHttpPrefix = "http://";
   if (url.size() > kMaxUrlBytes || HasControlChars(url)) {
     return false;
   }
-  return StartsWith(url, "https://") || StartsWith(url, "http://");
+  const std::size_t scheme_length =
+      StartsWith(url, kHttpsPrefix)
+          ? kHttpsPrefix.size()
+          : (StartsWith(url, kHttpPrefix) ? kHttpPrefix.size() : 0);
+  if (scheme_length == 0 || url.find('\\') != std::string::npos) {
+    return false;
+  }
+  const std::size_t authority_end = url.find_first_of("/?#", scheme_length);
+  const std::string_view authority(
+      url.data() + scheme_length,
+      (authority_end == std::string::npos ? url.size() : authority_end) -
+          scheme_length);
+  return !authority.empty() &&
+         authority.find_first_of("@ %") == std::string_view::npos;
 }
 
 bool HistoryStore::IsValidTitle(const std::string& title) noexcept {

@@ -9,6 +9,10 @@
 - 第一期语言：同一候选包支持 `en-US/zh-CN/zh-TW`，按用户首选系统 UI 语言在完整重启时自动选择；Windows `LOC-07W` 是 `REL-03` 硬门禁
 - 一期宿主：自定义 Shell＋CEF Alloy。2026-09-04 用户决策由 [PLT-SHELL](desktop-shell-roadmap.md) 承接，当前 Mac 先做共享/本地验证，Windows 首发政策不变；旧 Chrome-style 仅保留迁移基线，不作为长期第二套产品。
 
+2026-09-08 执行调整：用户明确要求先用 Mac 环境构建并完成 Mac 侧全部一期工作，Windows UI 代码同步改为 Chrome 风格、效果后续在 Windows 验证。当前按 PLT-SHELL-03M0→03M 起的 macOS 队列推进；上述 Windows 发布依赖作为待恢复验证队列保留，本轮不把其状态改变或历史证据充作 Mac 通过。正式签名/公证/发布与最终发行平台选择仍是后续独立任务。
+
+2026-09-08 收尾指令：用户要求完成当前PLT-SHELL-16M后暂停并提交推送。16M已VERIFIED；后续17M及三闭环/真机/发行门禁保留原状态，第一期尚未整体完成。详细代码Review与验证证据见SHELL及 `docs/reviews/2026-09-08-phase1-ui-review.md`。
+
 ## 1. 一期完成口径
 
 一期只在发布包内形成三个用户闭环：

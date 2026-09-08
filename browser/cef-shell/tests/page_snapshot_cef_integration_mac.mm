@@ -17,13 +17,23 @@
 #include "browser/media_host/cast_shell_controller.h"
 #include "browser/media_host/media_host_adapter.h"
 #include "browser/window/tab_controller.h"
+#include "alloy_navigation_probe.h"
+#include "alloy_page_tools_probe.h"
+#include "alloy_profile_context_probe.h"
+#include "alloy_security_probe.h"
+#include "alloy_window_coordinator_probe.h"
 #include "cast_toolbar_host_probe.h"
 #include "cast_entry_surface_probe.h"
+#include "alloy_tab_strip_probe.h"
+#include "alloy_content_view_host_probe.h"
+#include "alloy_tab_controller_probe.h"
+#include "alloy_omnibox_probe.h"
 #include "media_observation_cef_message_checks.h"
 #include "include/base/cef_callback.h"
 #include "include/cef_app.h"
 #include "include/cef_application_mac.h"
 #include "include/cef_task.h"
+#include "include/test/cef_test_helpers.h"
 #include "include/wrapper/cef_closure_task.h"
 #include "include/wrapper/cef_helpers.h"
 #include "include/wrapper/cef_library_loader.h"
@@ -1000,6 +1010,24 @@ class SnapshotFixtureApp final : public CefApp,
 @end
 
 int main(int argc, char *argv[]) {
+  const bool omnibox_probe =
+      argc == 2 && std::string(argv[1]) == "--alloy-omnibox-probe";
+  const bool navigation_probe =
+      argc == 3 && std::string(argv[2]) == "alloy-navigation";
+  const bool profile_context_probe =
+      argc == 3 && std::string(argv[2]) == "alloy-profiles";
+  const bool security_probe =
+      argc == 3 && std::string(argv[2]) == "alloy-security";
+  const bool page_tools_probe =
+      argc == 3 && std::string(argv[2]) == "alloy-page-tools";
+  const bool window_coordinator_probe =
+      argc == 3 && std::string(argv[2]) == "alloy-windows";
+  const bool tab_controller_probe =
+      argc == 3 && std::string(argv[2]) == "alloy-tabs";
+  const bool content_view_probe =
+      argc == 2 && std::string(argv[1]) == "--alloy-content-view-host-probe";
+  const bool tab_strip_probe =
+      argc == 2 && std::string(argv[1]) == "--alloy-tab-strip-probe";
   const bool entry_probe =
       argc == 2 && std::string(argv[1]) == "--cast-entry-surface-probe";
   const bool toolbar_close_probe =
@@ -1007,7 +1035,8 @@ int main(int argc, char *argv[]) {
   const bool toolbar_probe =
       toolbar_close_probe ||
       (argc == 2 && std::string(argv[1]) == "--cast-toolbar-host-probe");
-  if (argc != 3 && !toolbar_probe && !entry_probe)
+  if (argc != 3 && !toolbar_probe && !entry_probe && !tab_strip_probe &&
+      !content_view_probe && !omnibox_probe)
     return 2;
   CefScopedLibraryLoader library_loader;
   if (!library_loader.LoadInMain())
@@ -1018,17 +1047,69 @@ int main(int argc, char *argv[]) {
     CefSettings settings;
     settings.no_sandbox = true;
     settings.log_severity = LOGSEVERITY_WARNING;
-    const std::filesystem::path cache_path =
+    std::filesystem::path cache_path =
         std::filesystem::temp_directory_path() /
         ("crayon-page-snapshot-integration-" + std::to_string(getpid()));
+    if (profile_context_probe) {
+      std::error_code canonical_error;
+      cache_path = std::filesystem::weakly_canonical(cache_path, canonical_error);
+      if (canonical_error)
+        return 5;
+    }
     CefString(&settings.root_cache_path).FromString(cache_path.string());
+    if (profile_context_probe)
+      CefString(&settings.cache_path).FromString((cache_path / "Default").string());
     CefString(&settings.browser_subprocess_path)
         .FromString(CRAYON_SNAPSHOT_TEST_HELPER_PATH);
+    if (security_probe) {
+      NSString *resource_path = [[NSBundle mainBundle] resourcePath];
+      if (!resource_path || [resource_path length] == 0)
+        return 5;
+      const char *resource_path_utf8 = [resource_path UTF8String];
+      if (!resource_path_utf8)
+        return 5;
+      const std::filesystem::path ceftests_files =
+          std::filesystem::path(resource_path_utf8) / "ceftests_files";
+      std::error_code resource_error;
+      if (!std::filesystem::is_directory(ceftests_files, resource_error) ||
+          resource_error) {
+        return 5;
+      }
+      CefSetDataDirectoryForTests(ceftests_files.string());
+    }
     auto toolbar_result = std::make_shared<CastToolbarHostProbeResult>();
     auto entry_result = std::make_shared<CastEntrySurfaceProbeResult>();
+    auto tab_strip_result = std::make_shared<AlloyTabStripProbeResult>();
+    auto content_view_result = std::make_shared<AlloyContentViewHostProbeResult>();
+    auto tab_controller_result = std::make_shared<AlloyTabControllerProbeResult>();
+    auto omnibox_result = std::make_shared<AlloyOmniboxProbeResult>();
+    auto navigation_result = std::make_shared<AlloyNavigationProbeResult>();
+    auto profile_context_result = std::make_shared<AlloyProfileContextProbeResult>();
+    auto security_result = std::make_shared<AlloySecurityProbeResult>();
+    auto page_tools_result = std::make_shared<AlloyPageToolsProbeResult>();
+    auto window_coordinator_result =
+        std::make_shared<AlloyWindowCoordinatorProbeResult>();
     CefRefPtr<SnapshotFixtureApp> snapshot_app;
     CefRefPtr<CefApp> app;
-    if (entry_probe) {
+    if (omnibox_probe) {
+      app = CreateAlloyOmniboxProbe(omnibox_result);
+    } else if (navigation_probe) {
+      app = CreateAlloyNavigationProbe(argv[1], navigation_result);
+    } else if (profile_context_probe) {
+      app = CreateAlloyProfileContextProbe(argv[1], profile_context_result);
+    } else if (security_probe) {
+      app = CreateAlloySecurityProbe(argv[1], security_result);
+    } else if (page_tools_probe) {
+      app = CreateAlloyPageToolsProbe(argv[1], page_tools_result);
+    } else if (window_coordinator_probe) {
+      app = CreateAlloyWindowCoordinatorProbe(argv[1], window_coordinator_result);
+    } else if (tab_controller_probe) {
+      app = CreateAlloyTabControllerProbe(argv[1], tab_controller_result);
+    } else if (content_view_probe) {
+      app = CreateAlloyContentViewHostProbe(content_view_result);
+    } else if (tab_strip_probe) {
+      app = CreateAlloyTabStripProbe(tab_strip_result);
+    } else if (entry_probe) {
       app = CreateCastEntrySurfaceProbe(entry_result);
     } else if (toolbar_probe) {
       app = CreateCastToolbarHostProbe(toolbar_result, toolbar_close_probe);
@@ -1043,7 +1124,51 @@ int main(int argc, char *argv[]) {
     [NSApp activateIgnoringOtherApps:YES];
     CefRunMessageLoop();
     const bool passed =
-        entry_probe
+        omnibox_probe
+            ? omnibox_result->behavior_passed && omnibox_result->window_closed
+            : navigation_probe
+            ? navigation_result->behavior_passed &&
+                  navigation_result->real_navigation_passed &&
+                  navigation_result->identity_passed &&
+                  navigation_result->fencing_passed &&
+                  navigation_result->bookmark_passed &&
+                  navigation_result->history_passed &&
+                  navigation_result->download_passed &&
+                  navigation_result->window_closed
+            : profile_context_probe
+            ? profile_context_result->context_isolation_passed &&
+                  profile_context_result->cookie_isolation_passed &&
+                  profile_context_result->browsers_closed &&
+                  profile_context_result->window_closed
+            : security_probe
+            ? security_result->certificate_deny_passed &&
+                  security_result->certificate_once_passed &&
+                  security_result->permission_prompt_passed &&
+                  security_result->external_protocol_blocked &&
+                  security_result->external_protocol_denied &&
+                  security_result->browser_closed && security_result->window_closed
+            : page_tools_probe
+            ? page_tools_result->find_passed && page_tools_result->zoom_passed &&
+                  page_tools_result->fullscreen_passed && page_tools_result->pdf_passed &&
+                  page_tools_result->pdf_fencing_passed &&
+                  page_tools_result->capability_passed &&
+                  page_tools_result->browser_closed && page_tools_result->window_closed
+            : window_coordinator_probe
+            ? window_coordinator_result->behavior_passed &&
+                  window_coordinator_result->real_popup_passed &&
+                  window_coordinator_result->policy_passed &&
+                  window_coordinator_result->isolation_passed &&
+                  window_coordinator_result->windows_closed
+            : tab_controller_probe
+            ? tab_controller_result->behavior_passed && tab_controller_result->close_cancelled &&
+                  tab_controller_result->late_create_closed && tab_controller_result->renderer_crash_closed &&
+                  tab_controller_result->window_closed
+            : content_view_probe
+            ? content_view_result->behavior_passed && content_view_result->browsers_closed &&
+                  content_view_result->window_closed
+            : tab_strip_probe
+            ? tab_strip_result->behavior_passed && tab_strip_result->window_closed
+            : entry_probe
             ? entry_result->behavior_passed && entry_result->browser_closed &&
                   entry_result->window_closed
             : toolbar_probe
@@ -1053,6 +1178,8 @@ int main(int argc, char *argv[]) {
                         (!toolbar_close_probe ||
                          toolbar_result->cancellation_verified)
                   : snapshot_app->passed();
+    if (profile_context_probe || security_probe || page_tools_probe)
+      app = nullptr;
     CefShutdown();
     std::error_code cleanup_error;
     std::filesystem::remove_all(cache_path, cleanup_error);

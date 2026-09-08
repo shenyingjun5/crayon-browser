@@ -20,6 +20,7 @@ constexpr int kTabMinimumWidth = 62;
 constexpr int kTabMaximumWidth = 208;
 constexpr int kCloseMinimumWidth = 32;
 constexpr int kChildSpacing = 2;
+constexpr std::size_t kMaximumTitleBytes = 4096;
 
 class SurfaceDelegate final : public CefPanelDelegate {
 public:
@@ -97,6 +98,26 @@ struct AlloyTabStrip::State final : std::enable_shared_from_this<State> {
     return button;
   }
 
+  std::string Title(TabId id, std::size_t index) const {
+    const std::string value = callbacks.title ? callbacks.title(id) : std::string{};
+    if (!value.empty() && value.size() <= kMaximumTitleBytes) return value;
+    return strings.tab_fallback + " " + std::to_string(index + 1);
+  }
+
+  bool RefreshTitles() {
+    CEF_REQUIRE_UI_THREAD();
+    if (!active || dispatching) return false;
+    for (std::size_t index = 0; index < bindings.size(); ++index) {
+      auto& binding = bindings[index];
+      const auto title = Title(binding.tab_id, index);
+      binding.activate->SetText(title);
+      binding.activate->SetTooltipText(title);
+      binding.activate->SetAccessibleName(title);
+    }
+    if (panel) panel->Layout();
+    return true;
+  }
+
   bool Sync(const TabModel &model, const std::vector<TabId> &order) {
     CEF_REQUIRE_UI_THREAD();
     if (!active || dispatching || !panel ||
@@ -131,12 +152,12 @@ struct AlloyTabStrip::State final : std::enable_shared_from_this<State> {
       row_layout.horizontal = true;
       row_layout.between_child_spacing = kChildSpacing;
       row->SetToBoxLayout(row_layout);
-      const std::string title =
-          strings.tab_fallback + " " + std::to_string(index + 1);
+      const std::string title = Title(tab_id, index);
       auto activate_button =
           Button(title, kActivateCommandBase + static_cast<int>(index),
                  kTabMinimumWidth);
       activate_button->SetMaximumSize(CefSize(kTabMaximumWidth, kStripHeight));
+      activate_button->SetHorizontalAlignment(CEF_HORIZONTAL_ALIGNMENT_LEFT);
       activate_button->SetEnabled(snapshot->lifecycle !=
                                   TabLifecycle::kClosing);
       if (is_active) {
@@ -260,6 +281,8 @@ bool AlloyTabStrip::Sync(const TabModel &model,
 }
 
 bool AlloyTabStrip::Shutdown() { return !state_ || state_->Shutdown(); }
+
+bool AlloyTabStrip::RefreshTitles() { return state_ && state_->RefreshTitles(); }
 
 bool AlloyTabStrip::active() const noexcept { return state_ && state_->active; }
 

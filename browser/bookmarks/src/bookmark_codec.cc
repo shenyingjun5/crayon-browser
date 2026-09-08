@@ -220,7 +220,11 @@ bool SaveBookmarksToFile(const BookmarkStore& store,
       return false;
     }
     out << SerializeBookmarks(store);
+    out.flush();
+    out.close();
     if (!out.good()) {
+      std::error_code remove_error;
+      std::filesystem::remove(staging, remove_error);
       SetError(error, BookmarkCodecError::kIoFailure);
       return false;
     }

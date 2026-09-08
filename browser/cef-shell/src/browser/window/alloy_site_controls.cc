@@ -69,6 +69,13 @@ AlloySiteControlResult AlloySiteControls::ResolvePermission(
       prompt.origin != origin_) {
     return AlloySiteControlResult::kStaleGeneration;
   }
+  if (prompt.deadline != 0 && prompt.deadline <= now) {
+    DecisionCallback completion = std::move(permissions_.front().completion);
+    permissions_.pop_front();
+    static_cast<void>(queue_.ResolveFront(PromptResolution::kDismiss));
+    completion(false);
+    return AlloySiteControlResult::kInvalidInput;
+  }
 
   SitePermission site_decision = SitePermission::kDeny;
   switch (decision) {

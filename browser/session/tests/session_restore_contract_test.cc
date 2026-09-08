@@ -162,6 +162,9 @@ bool SnapshotV1CompatibilityAndCorruption() {
   CHECK(legacy->windows.size() == 1 &&
         legacy->windows[0].tabs.size() == 2);
   CHECK(legacy->windows[0].tabs[0].url == "crayon://newtab/");
+  for (const auto& tab : legacy->windows[0].tabs) {
+    CHECK(!tab.pinned && !tab.muted && !tab.group.has_value());
+  }
   CHECK(!DecodeSessionSnapshot("CRAYON_SESSION_V9\nP\t7031\n", &error));
   CHECK(error == SessionSnapshotError::kUnsupportedVersion);
   CHECK(!DecodeSessionSnapshot(

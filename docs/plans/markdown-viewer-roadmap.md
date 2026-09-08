@@ -1,5 +1,12 @@
 # MDV：本地 Markdown 查看器 Roadmap
 
+## MDV-26 快速输入尾部丢失修复（2026-09-08）
+
+- 状态：`VERIFIED`；依赖现有 MDV-05/06 编辑保存。Mac 真实产品复现：快速输入 `MAC_SAVE_CHECK_0908`，界面完整，但 Cmd+S 后磁盘仅 `MAC_SAVE_CHECK_0`，重复保存仍缺尾部。原因是前端 80ms leading-only 节流直接丢弃后续 input。
+- 单一目标：每次实际编辑到达既有 Browser 编辑 owner，保留原来的渲染调度、原子写与权限边界。允许 `browser/shared-ui/mdv/src/mdv_page.cc`、现有 MDV/CEF 行为测试与本计划；禁止扩展文件访问、修改持久化协议或新增依赖。
+- 验收：现有 CEF 编辑保存 probe 追加同一事件循环连续两次 input 后完整内容写回；Mac 产品快速输入、Cmd+S、文件逐字比对；现有 MDV CTest。Windows probe 代码同步，Windows 执行后补。预算 20 分钟；首错停止，代码/产物变化使旧证据失效。
+- 证据：macOS arm64 Debug guarded build 与 strict/deep ad-hoc 验签 PASS；最新 App 通过可信地址栏打开临时 `.md`、切换 Source、快速输入 `COMPLETE_SAVE_1234567890`、Cmd+S，磁盘回读完整标记。既有 MDV 单元/行为 CTest 在本轮 Mac 完整测试集中通过。删除丢弃 input 的前端节流，Browser 编辑缓存与已有 render debounce 继续负责调度。Windows CEF probe 新增连续两次 input 后 write-back 完整后缀断言，Windows 执行 `NOT_RUN`。Review：已关闭 P1 尾部数据丢失，范围内 APPROVE；高频大文档输入性能需后续 QAR 场景复测，不以本地短输入冒充长稳。
+
 状态：本模块属于第一期三大闭环之一；`MDV-01 DONE`，`MDV-02..07,10..13 VERIFIED`，`MDV-08/09/21..23 DONE`，`MDV-24/25 VERIFIED`；Mermaid Full 为 `MDV-14..20 DONE`（Windows 回归见 MDV-20W）。MDV-25 已移除生产 App 的 `BuildFixtureSnapshot()` 初始化并通过 macOS arm64 Debug/Release、真实空态和本地文件验证；Windows x64 对称回归仍归 Windows 终端。macOS arm64 Debug/Release 的七类 Mermaid、50-block、离线发布目录、SBOM/NOTICE、CEF 嵌套签名与退出零残留已闭合；MDV-20 仍需 Windows x64 Debug/Release 发布包回归后才能转 `DONE`。原生 macOS x64 不进入第一期 Apple Silicon 支持矩阵；Windows Narrator/中文 IME/原生 200% DPI 与当前自动化无法替代的窄窗交互真机仍待补。本 Roadmap 承接“浏览器内查看本地 Markdown 文档、渲染预览、分栏编辑与标准 Mermaid 图表”的产品增量（PRD v0.8 §4.1）：`crayon://mdv` 内置查看页复用 `crayon://newtab` 的自定义 scheme、应用内资源与严格 CSP 模式；本地 `.md` 只经用户手势的受控入口打开，保存走原子写。MDV 是纯用户能力，不进入 CAAP tool registry；Agent 侧任意文件访问禁令不变。
 
 ## 产品设计结论

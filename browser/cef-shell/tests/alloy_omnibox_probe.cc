@@ -1,6 +1,8 @@
 #include "alloy_omnibox_probe.h"
 
+#if defined(_WIN32)
 #include <windows.h>
+#endif
 
 #include <iostream>
 #include <memory>
@@ -14,6 +16,7 @@
 #include "include/cef_command_line.h"
 #include "include/cef_task.h"
 #include "include/views/cef_box_layout.h"
+#include "include/views/cef_button.h"
 #include "include/views/cef_display.h"
 #include "include/views/cef_window.h"
 #include "include/views/cef_window_delegate.h"
@@ -32,6 +35,11 @@ using crayon::browser_privacy::DefaultPrivacyDefaults;
 
 constexpr int kPollMilliseconds = 25;
 constexpr int kMaximumChecks = 320;
+constexpr int kKeyDown = 0x28;
+constexpr int kKeyEnter = 0x0d;
+constexpr int kKeyEscape = 0x1b;
+constexpr int kKeyPeriod = 0xbe;
+constexpr int kKeySpace = 0x20;
 
 class AlloyOmniboxProbe final : public CefApp,
                                 public CefBrowserProcessHandler,
@@ -46,6 +54,9 @@ public:
   void
   OnBeforeCommandLineProcessing(const CefString &,
                                 CefRefPtr<CefCommandLine> command) override {
+#if defined(__APPLE__)
+    command->AppendSwitch("use-mock-keychain");
+#endif
     command->AppendSwitch("disable-background-networking");
     command->AppendSwitch("disable-component-update");
     command->AppendSwitch("disable-default-apps");
@@ -121,25 +132,35 @@ private:
     if (!window_)
       return false;
     window_->Activate();
+#if defined(_WIN32)
     const HWND handle = window_->GetWindowHandle();
     return handle && SetForegroundWindow(handle);
+#else
+    return window_->IsActive();
+#endif
   }
 
-  bool SendKey(WORD key) {
+  bool SendKey(int key) {
     if (!Foreground())
       return false;
+#if defined(_WIN32)
     INPUT input[2]{};
     input[0].type = INPUT_KEYBOARD;
-    input[0].ki.wVk = key;
+    input[0].ki.wVk = static_cast<WORD>(key);
     input[1].type = INPUT_KEYBOARD;
-    input[1].ki.wVk = key;
+    input[1].ki.wVk = static_cast<WORD>(key);
     input[1].ki.dwFlags = KEYEVENTF_KEYUP;
     return SendInput(2, input, sizeof(INPUT)) == 2;
+#else
+    window_->SendKeyPress(key, EVENTFLAG_NONE);
+    return true;
+#endif
   }
 
   bool SendUnicodeText(const std::wstring &text) {
     if (!Foreground())
       return false;
+#if defined(_WIN32)
     std::vector<INPUT> input;
     input.reserve(text.size() * 2);
     for (wchar_t character : text) {
@@ -154,22 +175,43 @@ private:
     }
     return SendInput(static_cast<UINT>(input.size()), input.data(),
                      sizeof(INPUT)) == input.size();
+#else
+    // This native smoke covers the ASCII fixture; IME is a separate gate.
+    for (const wchar_t character : text) {
+      if (character >= L'a' && character <= L'z') {
+        window_->SendKeyPress(static_cast<int>(character - L'a' + L'A'), EVENTFLAG_NONE);
+      } else if (character == L'.') {
+        window_->SendKeyPress(kKeyPeriod, EVENTFLAG_NONE);
+      } else {
+        return false;
+      }
+    }
+    return true;
+#endif
   }
 
-  bool ClickFirstSuggestion() {
-    if (!Foreground() || !omnibox_->panel() ||
-        omnibox_->panel()->GetChildViewCount() < 2) {
-      return false;
-    }
+  CefRefPtr<CefButton> FirstSuggestionButton(CefRect *bounds) const {
+    if (!omnibox_->panel() || omnibox_->panel()->GetChildViewCount() < 2)
+      return nullptr;
     auto suggestion_panel = omnibox_->panel()->GetChildViewAt(1)->AsPanel();
-    if (!suggestion_panel || suggestion_panel->GetChildViewCount() == 0) {
+    if (!suggestion_panel || suggestion_panel->GetChildViewCount() == 0)
+      return nullptr;
+    auto button = suggestion_panel->GetChildViewAt(0)->AsButton();
+    if (!button)
+      return nullptr;
+    if (bounds)
+      *bounds = button->GetBoundsInScreen();
+    return button;
+  }
+
+  bool ActivateFirstSuggestion() {
+    CefRect bounds{};
+    const auto button = FirstSuggestionButton(&bounds);
+    if (!Foreground() || !button || !button->IsDrawn() ||
+        bounds.width <= 0 || bounds.height <= 0) {
       return false;
     }
-    const auto button = suggestion_panel->GetChildViewAt(0);
-    const CefRect bounds = button->GetBoundsInScreen();
-    if (!button->IsDrawn() || bounds.width <= 0 || bounds.height <= 0) {
-      return false;
-    }
+#if defined(_WIN32)
     const CefPoint point = CefDisplay::ConvertScreenPointToPixels(
         CefPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2));
     if (!SetCursorPos(point.x, point.y))
@@ -180,6 +222,13 @@ private:
     input[1].type = INPUT_MOUSE;
     input[1].mi.dwFlags = MOUSEEVENTF_LEFTUP;
     return SendInput(2, input, sizeof(INPUT)) == 2;
+#else
+    button->RequestFocus();
+    if (!button->HasFocus())
+      return false;
+    window_->SendKeyPress(kKeySpace, EVENTFLAG_NONE);
+    return true;
+#endif
   }
 
   std::vector<OmniboxSuggestion> Suggestions(std::size_t count) {
@@ -204,6 +253,8 @@ private:
     if (finished_)
       return;
     if (++checks_ > kMaximumChecks) {
+      std::cout << "alloy_omnibox_windows timeout stage=" << stage_
+                << std::endl;
       Finish(false, "timeout");
       return;
     }
@@ -245,7 +296,7 @@ private:
           omnibox_->ApplySuggestions(generation - 1, Suggestions(1)) ||
           !omnibox_->ApplySuggestions(generation, Suggestions(10)) ||
           omnibox_->ApplySuggestions(generation, Suggestions(1)) ||
-          omnibox_->suggestion_count() != 8 || !SendKey(VK_DOWN)) {
+          omnibox_->suggestion_count() != 8 || !SendKey(kKeyDown)) {
         Finish(false, "generation-or-down");
         return;
       }
@@ -255,7 +306,7 @@ private:
       return;
     }
     if (stage_ == 2) {
-      if (omnibox_->selected_suggestion() != 0 || !SendKey(VK_RETURN)) {
+      if (omnibox_->selected_suggestion() != 0 || !SendKey(kKeyEnter)) {
         Finish(false, "selection-or-enter");
         return;
       }
@@ -283,10 +334,17 @@ private:
     }
     if (stage_ == 4) {
       window_->Layout();
-      if (!ClickFirstSuggestion()) {
+      if (!ActivateFirstSuggestion()) {
         Finish(false, "suggestion-click");
         return;
       }
+#if defined(_WIN32)
+      std::cout << "alloy_omnibox_windows suggestion_activation=mouse"
+                << std::endl;
+#else
+      std::cout << "alloy_omnibox_windows suggestion_activation=keyboard"
+                << std::endl;
+#endif
       ++stage_;
       ScheduleCheck();
       return;
@@ -336,7 +394,7 @@ private:
           !omnibox_->Edit("draft remains") ||
           !omnibox_->SetAddress("https://new.test/") ||
           omnibox_->displayed_text() != "draft remains" || !omnibox_->Focus() ||
-          !SendKey(VK_ESCAPE)) {
+          !SendKey(kKeyEscape)) {
         Finish(false, "editing-protection");
         return;
       }

@@ -539,6 +539,7 @@ void MdvEditController::PushState(CefRefPtr<CefBrowser> browser) {
   dict->SetString("preview", snapshot.rendered_html);
   dict->SetBool("dirty", snapshot.dirty);
   dict->SetBool("confirm", snapshot.confirm_visible);
+  dict->SetBool("saveOk", snapshot.save_ok);
   if (!snapshot.error_text.empty()) {
     dict->SetString("banner", snapshot.error_text);
   }

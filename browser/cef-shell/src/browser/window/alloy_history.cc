@@ -87,6 +87,7 @@ bool AlloyHistory::ClearAll() {
 
 bool AlloyHistory::Search(const std::string &query) {
   if (!active_ || !view_.SetQuery(query)) return false;
+  if (query.empty()) return RefreshAll();
   std::vector<browser_history_view::HistoryProjection> projected;
   for (const auto &entry : store_.Search(query)) {
     projected.push_back({entry.id,
@@ -147,6 +148,7 @@ bool AlloyHistory::Shutdown() {
 }
 
 bool AlloyHistory::RefreshAll() {
+  if (!view_.query().empty()) return Search(view_.query());
   std::vector<browser_history::HistoryEntry> entries(store_.entries().begin(),
                                                      store_.entries().end());
   return view_.SetEntries(Project(entries));

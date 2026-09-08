@@ -168,7 +168,7 @@ BrowserApp::BrowserApp(
                 cast_shell_->coordinator(),
                 CastChromePresentation(cast_shell_->presentation()));
           },
-          std::nullopt, permission_store_.get())) {}
+          std::string(kInitialUrl), permission_store_.get())) {}
 
 BrowserApp::~BrowserApp() = default;
 

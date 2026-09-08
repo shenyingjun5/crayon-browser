@@ -1,6 +1,11 @@
 #include "alloy_navigation_probe.h"
 
+#if defined(_WIN32)
 #include <windows.h>
+#else
+#include <cstdlib>
+#include <filesystem>
+#endif
 
 #include <iostream>
 #include <memory>
@@ -48,10 +53,16 @@ constexpr int kPollMilliseconds = 20;
 constexpr int kMaximumChecks = 600;
 
 bool WindowsPathExists(const std::string &path) {
+#if defined(_WIN32)
   return GetFileAttributesA(path.c_str()) != INVALID_FILE_ATTRIBUTES;
+#else
+  std::error_code error;
+  return std::filesystem::exists(path, error) && !error;
+#endif
 }
 
 std::optional<std::string> CreateVerifiedDownloadDirectory() {
+#if defined(_WIN32)
   char temporary_path[MAX_PATH]{};
   if (GetTempPathA(MAX_PATH, temporary_path) == 0)
     return std::nullopt;
@@ -63,6 +74,15 @@ std::optional<std::string> CreateVerifiedDownloadDirectory() {
     return std::nullopt;
   }
   return std::string(unique_path);
+#else
+  std::error_code error;
+  const auto root = std::filesystem::temp_directory_path(error);
+  if (error) return std::nullopt;
+  const auto pattern = (root / "crayon-alloy-download-XXXXXX").string();
+  std::vector<char> path(pattern.begin(), pattern.end());
+  path.push_back('\0');
+  return mkdtemp(path.data()) ? std::optional<std::string>(path.data()) : std::nullopt;
+#endif
 }
 
 std::string Origin(const std::string &url) {
@@ -111,6 +131,9 @@ public:
   void
   OnBeforeCommandLineProcessing(const CefString &,
                                 CefRefPtr<CefCommandLine> command) override {
+#if defined(__APPLE__)
+    command->AppendSwitch("use-mock-keychain");
+#endif
     command->AppendSwitch("disable-background-networking");
     command->AppendSwitch("disable-component-update");
     command->AppendSwitch("disable-default-apps");
@@ -174,11 +197,16 @@ public:
               return download_handler_ && download_handler_->Cancel(id);
             },
             [this](const std::string &path) {
+#if defined(_WIN32)
               const DWORD attributes = GetFileAttributesA(path.c_str());
               if (attributes == INVALID_FILE_ATTRIBUTES ||
                   (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0) {
                 return false;
               }
+#else
+              std::error_code error;
+              if (!std::filesystem::is_regular_file(path, error) || error) return false;
+#endif
               downloaded_path_ = path;
               return true;
             }});
@@ -241,10 +269,20 @@ public:
     downloads_.reset();
     download_handler_ = nullptr;
     if (!downloaded_path_.empty()) {
+#if defined(_WIN32)
       static_cast<void>(DeleteFileA(downloaded_path_.c_str()));
+#else
+      std::error_code error;
+      std::filesystem::remove(downloaded_path_, error);
+#endif
     }
     if (download_directory_) {
+#if defined(_WIN32)
       static_cast<void>(RemoveDirectoryA(download_directory_->c_str()));
+#else
+      std::error_code error;
+      std::filesystem::remove(*download_directory_, error);
+#endif
     }
     primary_view_ = nullptr;
     foreign_view_ = nullptr;
@@ -347,6 +385,7 @@ private:
     }
     window_->Activate();
     const CefRect bounds = view->GetBoundsInScreen();
+#if defined(_WIN32)
     const CefPoint point = CefDisplay::ConvertScreenPointToPixels(
         CefPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2));
     if (!SetCursorPos(point.x, point.y)) {
@@ -358,6 +397,11 @@ private:
     input[1].type = INPUT_MOUSE;
     input[1].mi.dwFlags = MOUSEEVENTF_LEFTUP;
     return SendInput(2, input, sizeof(INPUT)) == 2;
+#else
+    window_->SendMouseMove(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+    window_->SendMouseEvents(MBT_LEFT, true, true);
+    return true;
+#endif
   }
 
   void ScheduleCheck() {

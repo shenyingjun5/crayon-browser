@@ -57,6 +57,8 @@ Cast-SDK source lock 的当前事实位于 `config/cast-sdk-source.toml`、`.git
 
 ## 4. 真实现状
 
+- **2026-09-08 当前执行：Mac 优先构建调通，Windows UI 同步改为 Chrome 风格、效果后续验证（用户明确指令）。** macOS arm64 Debug产品基线已恢复，原生菜单/本地Markdown快速编辑保存通过；Alloy `03M..16M` 及 `11M2/11M3` 候选组件/独立Harness达到VERIFIED，具体范围与未覆盖项见 [SHELL](../plans/desktop-shell-roadmap.md)。用户要求完成16M后提交推送并暂停，未领取17M。Windows代码已默认Alloy；Mac默认入口仍是Chrome-style，完整切换归24M。下述08-31/09-04的平台优先级和未装配描述是历史快照，不能覆盖最新代码和本次指令。Mac本地构建使用 [guarded adapter](macos-local-build.md)，不执行正式发布。
+
 - 2026-09-04 最新用户决策：自定义 Shell＋Alloy 是长期架构，一期开始迁移，具体领取和状态以 PLT-SHELL 为准。默认产品尚为 Chrome-style；后文已有实现/平台证据是迁移前基线，不代表自定义外壳通过。当前 Mac 可先做共享代码和原生验证，Windows 首发与两平台独立发布门禁不变。
 - 已收口的主干包括 `BRD-01..04`、Foundation、`MED-01..19`、`BUX-01..18`、`SDK-01..14`、`RNM-01..08`、`ACT-01..12` 与 `MRT-01..08`；CEF 为 `CEF-01..05/15 DONE`、`CEF-06..14 VERIFIED`，其他模块的 VERIFIED/DONE 差异仍以专项 Roadmap 的真实门禁为准。
 - CEF 固定基线为 `150.0.10+g8042e43+chromium-150.0.7871.101` Standard。历史四平台 hash 已锁定，Windows x64 archive 已校验；后续产品构建只推进 Windows/macOS。

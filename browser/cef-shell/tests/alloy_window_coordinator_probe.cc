@@ -1,7 +1,6 @@
 #include "alloy_window_coordinator_probe.h"
 
-#include <windows.h>
-
+#include <cstdlib>
 #include <deque>
 #include <iostream>
 #include <map>
@@ -71,6 +70,9 @@ public:
   void
   OnBeforeCommandLineProcessing(const CefString &,
                                 CefRefPtr<CefCommandLine> command) override {
+#if defined(__APPLE__)
+    command->AppendSwitch("use-mock-keychain");
+#endif
     command->AppendSwitch("disable-background-networking");
     command->AppendSwitch("disable-component-update");
     command->AppendSwitch("disable-default-apps");

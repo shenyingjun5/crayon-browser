@@ -28,6 +28,7 @@ public:
     std::function<void()> new_tab;
     std::function<void(TabId)> activate_tab;
     std::function<void(TabId)> close_tab;
+    std::function<std::string(TabId)> title = {};
   };
 
   static constexpr int kNewTabCommandId = 0x7a00;
@@ -43,6 +44,7 @@ public:
   CefRefPtr<CefPanel> panel() const;
   bool Sync(const TabModel &model);
   bool Sync(const TabModel &model, const std::vector<TabId> &ordered_tabs);
+  bool RefreshTitles();
   bool Shutdown();
 
   bool active() const noexcept;

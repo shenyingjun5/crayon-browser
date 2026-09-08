@@ -119,10 +119,10 @@ void ReleaseAlloyIconFocus(CefRefPtr<CefButton> button) {
       !label->GetImage(CEF_BUTTON_STATE_NORMAL)) {
     return;
   }
-  // SetFocusable(false) also clears current focus. Restore focusability
-  // immediately so keyboard traversal and programmatic activation keep working.
-  button->SetFocusable(false);
-  button->SetFocusable(true);
+  // Reset the pressed visual state without discarding keyboard focus. CEF's
+  // activation callback does not identify pointer vs keyboard input, so it
+  // cannot safely decide that the focus ring should be removed.
+  if (button->IsEnabled()) button->SetState(CEF_BUTTON_STATE_NORMAL);
 }
 
 } // namespace crayon::browser::cef_shell::window

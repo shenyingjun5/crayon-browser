@@ -3,6 +3,7 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <vector>
 
 #include "crayon/browser_bookmarks/bookmark_codec.h"
 #include "crayon/browser_bookmarks/bookmark_store.h"
@@ -65,6 +66,48 @@ bool ValidationMatrix() {
   CHECK(error == BookmarkError::kInvalidUrl);
   CHECK(store.AddBookmark(999, "x", "https://a.test/", &error) == 0);
   CHECK(error == BookmarkError::kUnknownId);
+  return true;
+}
+
+bool UrlAuthoritySafetyMatrix() {
+  BookmarkStore store;
+  const std::vector<std::string> accepted = {
+      "https://dns.example.test:8443/path@%20?query=@%20#fragment@%20",
+      "http://127.0.0.1:8080/path?value=@%20#fragment",
+      "https://[2001:db8::1]:443/path?value=@%20#fragment",
+  };
+  for (const std::string& url : accepted) {
+    CHECK(store.AddBookmark(BookmarkStore::kRootId, "书签标题", url) != 0);
+  }
+  const auto existing =
+      store.AddBookmark(BookmarkStore::kRootId, "old", "https://old.test/");
+  CHECK(existing != 0);
+  const std::size_t node_count = store.node_count();
+  const std::vector<std::string> rejected = {
+      "https://user:fixture-pass@host.test/",
+      "https://user@host.test/",
+      "https:///path",
+      "https://host name.test/",
+      "https://host.test/path\\segment",
+      "https://%68ost.test/",
+  };
+  BookmarkError error = BookmarkError::kUnknownId;
+  for (const std::string& url : rejected) {
+    CHECK(store.AddBookmark(BookmarkStore::kRootId, "bad", url, &error) == 0);
+    CHECK(error == BookmarkError::kInvalidUrl && store.node_count() == node_count);
+    CHECK(!store.Update(existing, "changed", url, &error));
+    CHECK(error == BookmarkError::kInvalidUrl && store.Find(existing)->title == "old" &&
+          store.Find(existing)->url == "https://old.test/");
+  }
+  const std::string title = "导入标题";
+  const std::string userinfo_url = "https://user@host.test/";
+  const std::string document = "CRAYON-BOOKMARKS v1\nB 0 " +
+                               std::to_string(title.size()) + " " +
+                               std::to_string(userinfo_url.size()) + "\n" + title +
+                               "\n" + userinfo_url + "\n";
+  BookmarkCodecError codec_error = BookmarkCodecError::kBadHeader;
+  CHECK(!DeserializeBookmarks(document, &codec_error).has_value());
+  CHECK(codec_error == BookmarkCodecError::kContentRejected);
   return true;
 }
 
@@ -312,6 +355,7 @@ int main() {
   if (!AddAndFindBookmark() || !ValidationMatrix() || !FoldersMoveAndCycles() ||
       !RemoveCascades() || !IdsAreNeverReused() || !DepthAndCapacityBounded() ||
       !SearchIsBoundedAndCaseInsensitive() || !DuplicateUrlDetection() ||
+      !UrlAuthoritySafetyMatrix() ||
       !UpdateRules() || !RoundTripPreservesTree() ||
       !CorruptionMatrixFailsClosed() || !EmptyDocumentIsValidEmptyTree() ||
       !SaveLoadRoundTripThroughFile() || !UnicodeDirectoryRoundTripThroughFile() ||

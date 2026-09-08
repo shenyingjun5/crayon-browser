@@ -5,6 +5,23 @@
 
 namespace crayon::browser::cef_shell::window {
 
+namespace {
+
+class ScopedControlCall final {
+ public:
+  explicit ScopedControlCall(bool *in_progress) : in_progress_(in_progress) {
+    *in_progress_ = true;
+  }
+  ~ScopedControlCall() { *in_progress_ = false; }
+  ScopedControlCall(const ScopedControlCall &) = delete;
+  ScopedControlCall &operator=(const ScopedControlCall &) = delete;
+
+ private:
+  bool *in_progress_;
+};
+
+} // namespace
+
 AlloyDownloads::AlloyDownloads(
     std::string verified_directory,
     browser_downloads::PathExistsPredicate path_exists, Callbacks callbacks)
@@ -24,7 +41,7 @@ AlloyDownloads::OnDownloadStarting(std::uint64_t download_id,
   const auto path = file_name ? browser_downloads::ResolveUniqueDownloadPath(
                                     directory_, *file_name, path_exists_)
                               : std::nullopt;
-  if (!file_name || !path)
+  if (!active_ || !file_name || !path)
     return {};
   auto item = browser_downloads::DownloadItem::Create(download_id, *file_name);
   const auto state = item.state();
@@ -90,52 +107,77 @@ bool AlloyDownloads::ConfirmDangerous(std::uint64_t download_id) {
   if (!active_ || found == entries_.end() ||
       found->second.item.state() !=
           browser_downloads::DownloadState::kPendingDangerConfirm ||
-      !callbacks_.confirm_pending ||
-      !callbacks_.confirm_pending(download_id, found->second.target_path) ||
-      !found->second.item.ConfirmDangerous()) {
+      !callbacks_.confirm_pending) {
+    return false;
+  }
+  const auto confirm_callback = callbacks_.confirm_pending;
+  const std::string target_path = found->second.target_path;
+  return ApplyControl(
+      download_id, &browser_downloads::DownloadItem::ConfirmDangerous,
+      [confirm_callback, target_path](std::uint64_t id) {
+        return confirm_callback(id, target_path);
+      });
+}
+
+bool AlloyDownloads::DiscardDangerous(std::uint64_t download_id) {
+  return ApplyControl(download_id,
+                      &browser_downloads::DownloadItem::DiscardDangerous,
+                      callbacks_.discard_pending);
+}
+
+bool AlloyDownloads::Pause(std::uint64_t download_id) {
+  return ApplyControl(download_id, &browser_downloads::DownloadItem::Pause,
+                      callbacks_.pause);
+}
+
+bool AlloyDownloads::Resume(std::uint64_t download_id) {
+  return ApplyControl(download_id, &browser_downloads::DownloadItem::Resume,
+                      callbacks_.resume);
+}
+
+bool AlloyDownloads::Cancel(std::uint64_t download_id) {
+  return ApplyControl(download_id, &browser_downloads::DownloadItem::Cancel,
+                      callbacks_.cancel);
+}
+
+bool AlloyDownloads::ApplyControl(std::uint64_t download_id,
+                                  ItemControl control,
+                                  const ControlCallback &callback) {
+  auto found = entries_.find(download_id);
+  if (!active_ || control_in_progress_ || found == entries_.end() || !callback)
+    return false;
+  const std::uint64_t generation = found->second.generation;
+  const browser_downloads::DownloadState original_state =
+      found->second.item.state();
+  auto preview = found->second.item;
+  if (!(preview.*control)())
+    return false;
+  const ControlCallback callback_copy = callback;
+  bool callback_accepted = false;
+  {
+    ScopedControlCall control_call(&control_in_progress_);
+    callback_accepted = callback_copy(download_id);
+  }
+  if (!callback_accepted || !active_)
+    return false;
+  found = entries_.find(download_id);
+  if (found == entries_.end() || found->second.generation != generation ||
+      found->second.item.state() != original_state ||
+      !(found->second.item.*control)()) {
     return false;
   }
   return Project(download_id);
 }
 
-bool AlloyDownloads::DiscardDangerous(std::uint64_t download_id) {
-  auto found = entries_.find(download_id);
-  if (!active_ || found == entries_.end() || !callbacks_.discard_pending ||
-      !callbacks_.discard_pending(download_id) ||
-      !found->second.item.DiscardDangerous())
-    return false;
-  return Project(download_id);
-}
-
-bool AlloyDownloads::Pause(std::uint64_t download_id) {
-  auto found = entries_.find(download_id);
-  if (!active_ || found == entries_.end() || !callbacks_.pause ||
-      !callbacks_.pause(download_id) || !found->second.item.Pause())
-    return false;
-  return Project(download_id);
-}
-
-bool AlloyDownloads::Resume(std::uint64_t download_id) {
-  auto found = entries_.find(download_id);
-  if (!active_ || found == entries_.end() || !callbacks_.resume ||
-      !callbacks_.resume(download_id) || !found->second.item.Resume())
-    return false;
-  return Project(download_id);
-}
-
-bool AlloyDownloads::Cancel(std::uint64_t download_id) {
-  auto found = entries_.find(download_id);
-  if (!active_ || found == entries_.end() || !callbacks_.cancel ||
-      !callbacks_.cancel(download_id) || !found->second.item.Cancel())
-    return false;
-  return Project(download_id);
-}
-
 bool AlloyDownloads::OpenLocation(std::uint64_t download_id) const {
   auto found = entries_.find(download_id);
-  return active_ && found != entries_.end() &&
-         found->second.item.CanOpenLocation() && callbacks_.open_location &&
-         callbacks_.open_location(found->second.target_path);
+  if (!active_ || found == entries_.end() ||
+      !found->second.item.CanOpenLocation() || !callbacks_.open_location) {
+    return false;
+  }
+  const auto open_location = callbacks_.open_location;
+  const std::string target_path = found->second.target_path;
+  return open_location(target_path);
 }
 
 bool AlloyDownloads::Shutdown() {

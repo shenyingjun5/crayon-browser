@@ -242,7 +242,10 @@ bool SavePreferencesToFile(const PreferenceStore &store,
       return false;
     }
     out << SerializePreferences(store);
+    out.flush();
+    out.close();
     if (!out.good()) {
+      std::remove(staging.c_str());
       SetError(error, PreferenceCodecError::kIoFailure);
       return false;
     }

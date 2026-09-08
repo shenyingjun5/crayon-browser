@@ -326,11 +326,9 @@ std::string RenderNewTabDocument(const NewTabPageModel& model,
               "content=\"width=device-width,initial-scale=1\"><title>"
            << EscapeHtml(strings.document_title)
            << "</title><link rel=\"stylesheet\" href=\"" << kNewTabStylesheetUrl
-           << "\"></head><body><main><header class=\"hero\"><span "
-              "class=\"brand-mark\" aria-hidden=\"true\"></span><p "
-              "class=\"eyebrow\">"
-           << EscapeHtml(strings.document_title) << "</p><h1>"
-           << EscapeHtml(heading) << "</h1><p class=\"description\">"
+           << "\"></head><body><main><header class=\"hero\"><h1>"
+           << EscapeHtml(incognito ? heading : strings.document_title)
+           << "</h1><p class=\"description\">"
            << EscapeHtml(description) << "</p><p class=\"omnibox-hint\">"
            << EscapeHtml(strings.omnibox_hint) << "</p></header>";
 
@@ -339,7 +337,7 @@ std::string RenderNewTabDocument(const NewTabPageModel& model,
                 "id=\"shortcuts-heading\">"
              << EscapeHtml(strings.shortcuts_heading) << "</h2>";
     if (model.config_status != NewTabConfigStatus::kAccepted) {
-      document << "<p class=\"empty-state\">"
+      document << "<p class=\"empty-state\" role=\"status\">"
                << EscapeHtml(strings.config_error) << "</p>";
     } else if (model.shortcuts.empty()) {
       document << "<p class=\"empty-state\">"
@@ -352,7 +350,8 @@ std::string RenderNewTabDocument(const NewTabPageModel& model,
                  << "\" rel=\"noreferrer\"><span class=\"shortcut-mark\" "
                     "aria-hidden=\"true\">"
                  << EscapeHtml(FirstUtf8CodePoint(shortcut.title))
-                 << "</span><span>" << EscapeHtml(shortcut.title)
+                 << "</span><span class=\"shortcut-title\">"
+                 << EscapeHtml(shortcut.title)
                  << "</span></a></li>";
       }
       document << "</ul>";
@@ -366,35 +365,43 @@ std::string RenderNewTabDocument(const NewTabPageModel& model,
 std::string RenderNewTabStylesheet() {
   return R"css(:root {
   color-scheme: light dark;
-  --page: #f8f7fb;
-  --surface: #ffffff;
+  --page: #ffffff;
+  --surface: #f1f3f4;
   --text: #202124;
   --muted: #5f6368;
-  --accent: #6d4aff;
-  --accent-soft: #eee9ff;
-  --border: #e3e1e8;
-  font-family: "Segoe UI", system-ui, sans-serif;
+  --accent: #1a73e8;
+  --hover: #e8eaed;
+  font-family: "Segoe UI", Arial, system-ui, sans-serif;
 }
 * { box-sizing: border-box; }
 body { margin: 0; min-height: 100vh; background: var(--page); color: var(--text); }
-main { width: min(760px, calc(100% - 48px)); margin: 0 auto; padding: 12vh 0 64px; }
-.hero { margin-bottom: 48px; }
-.brand-mark { display: block; width: 36px; height: 36px; margin-bottom: 20px; border-radius: 12px; background: var(--accent); box-shadow: inset -9px -9px 0 var(--accent-soft); }
-.eyebrow { margin: 0 0 10px; color: var(--accent); font-size: 13px; font-weight: 650; letter-spacing: .04em; }
-h1 { margin: 0; font-size: clamp(32px, 6vw, 54px); line-height: 1.08; letter-spacing: -.035em; }
-.description { max-width: 570px; margin: 18px 0 0; color: var(--muted); font-size: 17px; line-height: 1.6; }
-.omnibox-hint { margin: 26px 0 0; color: var(--muted); font-size: 13px; }
-h2 { margin: 0 0 16px; font-size: 15px; letter-spacing: .01em; }
-.shortcut-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
-.shortcut { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); color: var(--text); text-decoration: none; }
-.shortcut:hover, .shortcut:focus-visible { border-color: var(--accent); outline: 2px solid transparent; box-shadow: 0 4px 16px rgb(50 35 110 / 12%); }
-.shortcut-mark { display: grid; flex: 0 0 36px; height: 36px; place-items: center; border-radius: 11px; background: var(--accent-soft); color: var(--accent); font-weight: 700; }
-.empty-state { margin: 0; padding: 22px; border: 1px dashed var(--border); border-radius: 14px; color: var(--muted); text-align: center; }
+main { width: min(640px, calc(100% - 48px)); margin: 0 auto; padding: clamp(64px, 18vh, 176px) 0 48px; text-align: center; }
+.hero { margin-bottom: 40px; }
+h1 { margin: 0; font-size: clamp(28px, 5vw, 44px); font-weight: 500; line-height: 1.25; letter-spacing: -.025em; overflow-wrap: anywhere; }
+.description { max-width: 540px; margin: 20px auto 0; color: var(--muted); font-size: 14px; line-height: 1.65; overflow-wrap: anywhere; }
+.omnibox-hint { margin: 16px 0 0; color: var(--muted); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+h2 { margin: 0 0 16px; color: var(--muted); font-size: 13px; font-weight: 400; }
+.shortcut-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.shortcut-grid li { width: 112px; max-width: 100%; min-width: 0; }
+.shortcut { display: flex; flex-direction: column; align-items: center; gap: 12px; min-height: 116px; padding: 16px 8px 12px; border-radius: 8px; color: var(--text); text-decoration: none; }
+.shortcut:hover { background: var(--surface); }
+.shortcut:active { background: var(--hover); }
+.shortcut:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; background: var(--surface); }
+.shortcut-mark { display: grid; width: 48px; height: 48px; flex: 0 0 48px; place-items: center; border-radius: 50%; background: var(--surface); color: var(--text); font-size: 20px; font-weight: 500; }
+.shortcut:hover .shortcut-mark { background: var(--hover); }
+.shortcut-title { width: 100%; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.empty-state { margin: 0; padding: 16px; color: var(--muted); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+[data-profile-mode="incognito"] .hero { max-width: 540px; margin-inline: auto; }
 @media (prefers-color-scheme: dark) {
-  :root { --page: #17161a; --surface: #232126; --text: #f1eff5; --muted: #b4b0bb; --accent: #b7a5ff; --accent-soft: #493d75; --border: #3b3840; }
+  :root { --page: #202124; --surface: #303134; --text: #e8eaed; --muted: #bdc1c6; --accent: #8ab4f8; --hover: #3c4043; }
 }
 @media (max-width: 520px) {
-  main { width: min(100% - 32px, 760px); padding-top: 64px; }
+  main { width: calc(100% - 32px); padding-top: 64px; }
+  .hero { margin-bottom: 28px; }
+}
+@media (forced-colors: active) {
+  .shortcut-mark { border: 1px solid ButtonText; }
+  .shortcut:focus-visible { outline-color: Highlight; }
 }
 )css";
 }

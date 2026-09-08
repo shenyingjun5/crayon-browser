@@ -190,7 +190,11 @@ bool SaveHistoryToFile(const HistoryStore& store,
       return false;
     }
     out << SerializeHistory(store);
+    out.flush();
+    out.close();
     if (!out.good()) {
+      std::error_code remove_error;
+      std::filesystem::remove(staging, remove_error);
       SetError(error, HistoryCodecError::kIoFailure);
       return false;
     }
