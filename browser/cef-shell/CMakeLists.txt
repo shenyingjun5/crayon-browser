@@ -6,6 +6,8 @@ set(CRAYON_BROWSER_TARGET crayon_browser)
 SET_CEF_TARGET_OUT_DIR()
 
 set(crayon_location_bar_sources
+    src/browser/window/alloy_icon.cc
+    src/browser/window/alloy_icon.h
     src/browser/window/chrome_location_bar.cc
     src/browser/window/chrome_location_bar.h
     src/browser/media_host/cast_entry_surface.cc
@@ -584,6 +586,8 @@ if(OS_WINDOWS)
       tests/alloy_window_coordinator_probe.cc
       tests/alloy_window_coordinator_probe.h
       src/browser/window/alloy_content_view_host.cc
+      src/browser/window/alloy_icon.cc
+      src/browser/window/alloy_icon.h
       src/browser/window/alloy_content_view_host.h
       src/browser/window/alloy_builtin_content.cc
       src/browser/window/alloy_builtin_content.h

@@ -111,6 +111,31 @@ test('vendor verifier rejects tamper, missing and extra files', async () => {
   }
 });
 
+test('vendor verifier accepts CRLF metadata and rejects lone carriage returns',
+     async () => {
+       const root = await mkdtemp(
+           path.join(os.tmpdir(), 'crayon-katex-crlf-test-'));
+       try {
+         await cp(vendorRoot(), root, {recursive: true});
+         for (const relative of ['manifest.json', 'VENDORED.md']) {
+           const filePath = path.join(root, relative);
+           const text = (await readFile(filePath, 'utf8'))
+                            .replace(/\r\n/g, '\n')
+                            .replace(/\n/g, '\r\n');
+           await writeFile(filePath, text);
+         }
+         await verifyVendorDirectory(root);
+
+         const manifestPath = path.join(root, 'manifest.json');
+         const manifest = await readFile(manifestPath, 'utf8');
+         await writeFile(manifestPath, manifest.replace(/\r\n/, '\r'));
+         await assert.rejects(() => verifyVendorDirectory(root),
+                              /invalid carriage return/);
+       } finally {
+         await rm(root, {recursive: true, force: true});
+       }
+     });
+
 test('package identity, CLI dependency and archive integrity fail closed', () => {
   const base = {
     name: 'katex',

@@ -4,6 +4,7 @@
 #include <optional>
 #include <utility>
 
+#include "browser/window/alloy_icon.h"
 #include "crayon/browser_localization/locale_catalog.h"
 #include "include/base/cef_callback.h"
 #include "include/cef_color_ids.h"
@@ -24,7 +25,7 @@ namespace {
 using namespace browser_cast_view;
 // Existing desktop design-token dimensions; native theme owns font and colors.
 constexpr int kToolbarHeight = 48, kHitHeight = 36, kGap = 8;
-constexpr int kEntryWidth = 96, kPanelWidth = 464, kPanelMinWidth = 320;
+constexpr int kEntryWidth = 36, kPanelWidth = 464, kPanelMinWidth = 320;
 constexpr int kPanelHeight = 560, kPanelMinHeight = 280, kScrollHeight = 256;
 constexpr int kScrollBarAllowance = 20;
 constexpr int kEscapeKey = 27, kTabKey = 9;
@@ -36,6 +37,7 @@ public:
   explicit ButtonDelegate(std::function<void(CefRefPtr<CefButton>)> callback)
       : callback_(std::move(callback)) {}
   void OnButtonPressed(CefRefPtr<CefButton> button) override {
+    window::ReleaseAlloyIconFocus(button);
     callback_(button);
   }
   void OnThemeChanged(CefRefPtr<CefView> view) override {
@@ -151,14 +153,15 @@ struct CastEntrySurface::State final : std::enable_shared_from_this<State> {
   }
   CefRefPtr<CefLabelButton> Button(const std::string &text,
                                    CastSelectionIntent intent, int id = 0,
-                                   std::optional<CastVideoAnchor> anchor = {}) {
+                                   std::optional<CastVideoAnchor> anchor = {},
+                                   bool icon_only = false) {
     std::weak_ptr<State> weak = shared_from_this();
     auto button = CefLabelButton::CreateLabelButton(
         new ButtonDelegate([weak](CefRefPtr<CefButton> sender) {
           if (auto self = weak.lock())
             self->Dispatch(sender);
         }),
-        text);
+        icon_only ? CefString() : CefString(text));
     button->SetID(id);
     button->SetFocusable(true);
     button->SetMinimumSize(CefSize(kHitHeight, kHitHeight));
@@ -385,10 +388,9 @@ struct CastEntrySurface::State final : std::enable_shared_from_this<State> {
     list->AddChildView(
         Button(String("cast.code.connect"),
                presentation.Intent(CastIntentKind::kLookupCode)));
-    list->AddChildView(
-        Button(String("cast.selection.connect"),
-               presentation.Intent(CastIntentKind::kConnectDevice),
-               kConnectId));
+    list->AddChildView(Button(
+        String("cast.selection.connect"),
+        presentation.Intent(CastIntentKind::kConnectDevice), kConnectId));
     if (s.selected_media)
       list->AddChildView(Text(String("cast.selection.selected") + " · " +
                               MediaName(*s.selected_media)));
@@ -438,10 +440,12 @@ struct CastEntrySurface::State final : std::enable_shared_from_this<State> {
     HideOverlays();
     actions[0].intent = presentation.Intent(CastIntentKind::kOpen);
     const auto &s = presentation.snapshot();
-    entry->SetText(String("cast.feature.idle") +
-                   (s && s->eligible_count
-                        ? " · " + std::to_string(s->eligible_count)
-                        : ""));
+    const std::string entry_label =
+        String("cast.feature.idle") +
+        (s && s->eligible_count ? " · " + std::to_string(s->eligible_count)
+                                : "");
+    entry->SetAccessibleName(entry_label);
+    entry->SetTooltipText(entry_label);
     if (presentation.PickerVisible()) {
       panel = Column();
       panel->SetInsets(CefInsets(kGap, kGap, kGap, kGap));
@@ -636,7 +640,13 @@ bool CastEntrySurface::Attach(CefRefPtr<CefWindow> window,
   s->browser_view = browser_view;
   s->toolbar = toolbar;
   s->entry = s->Button(s->String("cast.feature.idle"),
-                       s->presentation.Intent(CastIntentKind::kOpen), kEntryId);
+                       s->presentation.Intent(CastIntentKind::kOpen), kEntryId,
+                       {}, true);
+  if (!window::ApplyAlloyIcon(s->entry, window::AlloyIcon::kCast,
+                              s->String("cast.feature.idle"))) {
+    s->Detach();
+    return false;
+  }
   s->entry->SetMinimumSize(CefSize(kEntryWidth, kToolbarHeight));
   s->entry->SetMaximumSize(CefSize(kEntryWidth, kToolbarHeight));
   toolbar->AddChildView(s->entry);

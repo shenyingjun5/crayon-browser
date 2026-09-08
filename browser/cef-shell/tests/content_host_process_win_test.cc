@@ -7,6 +7,7 @@
 
 #include <chrono>
 #include <functional>
+#include <iostream>
 #include <iterator>
 #include <optional>
 #include <string>
@@ -18,6 +19,11 @@ namespace {
 
 using crayon::browser::cef_shell::windows::ContentHostProcess;
 namespace host = crayon::browser::cef_shell::windows::content_host_ipc;
+
+// The production supervisor allows one five-second health admission to fail,
+// waits one second, and then retries. Keep the integration deadline above that
+// bounded sequence so a valid retry is not reported as a process failure.
+constexpr auto kProcessTransitionDeadline = std::chrono::seconds(12);
 
 class ScopedHandle final {
  public:
@@ -49,12 +55,17 @@ bool Run() {
   ScopedHandle sentinel_read;
   ScopedHandle sentinel_write;
   if (!CreatePipe(sentinel_read.Put(), sentinel_write.Put(), &inheritable, 0)) {
+    std::cerr << "stage=sentinel-create win32=" << GetLastError() << '\n';
     return false;
   }
   ContentHostProcess process;
-  if (!process.Start(CRAYON_CONTENT_HOST_TEST_PATH) ||
-      !WaitFor([&process] { return process.healthy(); },
-               std::chrono::seconds(6))) {
+  if (!process.Start(CRAYON_CONTENT_HOST_TEST_PATH)) {
+    std::cerr << "stage=start\n";
+    return false;
+  }
+  if (!WaitFor([&process] { return process.healthy(); },
+               kProcessTransitionDeadline)) {
+    std::cerr << "stage=initial-health\n";
     return false;
   }
   sentinel_write.Reset();
@@ -63,6 +74,7 @@ bool Run() {
   if (PeekNamedPipe(sentinel_read.Get(), nullptr, 0, nullptr, &available,
                     nullptr) ||
       GetLastError() != ERROR_BROKEN_PIPE) {
+    std::cerr << "stage=handle-inheritance win32=" << GetLastError() << '\n';
     return false;
   }
   sentinel_read.Reset();
@@ -165,6 +177,7 @@ bool Run() {
       !process.Enqueue(host::Terminal{"process", "tab-1", 1, 1,
                                       host::TerminalStatus::kCompleted,
                                       host::EngineError::kNone})) {
+    std::cerr << "stage=enqueue\n";
     return false;
   }
   std::vector<host::Message> replies;
@@ -177,13 +190,22 @@ bool Run() {
           },
           std::chrono::seconds(6)) ||
       !std::holds_alternative<host::MarkdownChunk>(replies.front())) {
+    std::cerr << "stage=reply count=" << replies.size()
+              << " healthy=" << process.healthy() << '\n';
     return false;
   }
-  if (!process.Enqueue(host::Shutdown{}) ||
-      !WaitFor([&process] { return !process.healthy(); },
-               std::chrono::seconds(3)) ||
-      !WaitFor([&process] { return process.healthy(); },
-               std::chrono::seconds(6))) {
+  if (!process.Enqueue(host::Shutdown{})) {
+    std::cerr << "stage=shutdown-enqueue\n";
+    return false;
+  }
+  if (!WaitFor([&process] { return !process.healthy(); },
+               std::chrono::seconds(3))) {
+    std::cerr << "stage=shutdown-observe\n";
+    return false;
+  }
+  if (!WaitFor([&process] { return process.healthy(); },
+               kProcessTransitionDeadline)) {
+    std::cerr << "stage=restart-health\n";
     return false;
   }
   process.Stop();

@@ -9,6 +9,7 @@ struct AlloyTabStripProbeResult final {
   bool real_clicks_passed = false;
   bool capacity_passed = false;
   bool layout_passed = false;
+  bool icons_passed = false;
   bool window_closed = false;
 };
 

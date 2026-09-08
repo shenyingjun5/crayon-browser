@@ -14,6 +14,7 @@
 #include "include/cef_task.h"
 #include "include/views/cef_box_layout.h"
 #include "include/views/cef_display.h"
+#include "include/views/cef_label_button.h"
 #include "include/views/cef_window.h"
 #include "include/views/cef_window_delegate.h"
 #include "include/wrapper/cef_closure_task.h"
@@ -96,11 +97,12 @@ public:
     result_->window_closed = true;
     result_->behavior_passed = passed_ && result_->real_clicks_passed &&
                                result_->capacity_passed &&
-                               result_->layout_passed;
+                               result_->layout_passed && result_->icons_passed;
     std::cout << "alloy_tab_strip_windows passed=" << result_->behavior_passed
               << " real_clicks=" << result_->real_clicks_passed
               << " capacity=" << result_->capacity_passed
-              << " layout=" << result_->layout_passed << std::endl;
+              << " layout=" << result_->layout_passed
+              << " icons=" << result_->icons_passed << std::endl;
     mounted_panel_ = nullptr;
     window_ = nullptr;
     strip_.reset();
@@ -175,7 +177,9 @@ private:
     const HWND handle = window_->GetWindowHandle();
     const CefPoint center = CefDisplay::ConvertScreenPointToPixels(
         CefPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2));
-    if (!handle || !SetForegroundWindow(handle) ||
+    if (!handle ||
+        (GetForegroundWindow() != handle &&
+         (!SetForegroundWindow(handle) || GetForegroundWindow() != handle)) ||
         !SetCursorPos(center.x, center.y)) {
       return false;
     }
@@ -231,6 +235,32 @@ private:
           !ProjectionMatches({*first_, *second_, *third_}, first_) ||
           !strip_->Sync(model_)) {
         Finish(false, "initial-projection");
+        return;
+      }
+      const auto active =
+          strip_->panel()
+              ->GetViewForID(AlloyTabStrip::kActivateCommandBase)
+              ->AsButton();
+      const auto close = strip_->panel()
+                             ->GetViewForID(AlloyTabStrip::kCloseCommandBase)
+                             ->AsButton()
+                             ->AsLabelButton();
+      const auto add = strip_->panel()
+                           ->GetViewForID(AlloyTabStrip::kNewTabCommandId)
+                           ->AsButton()
+                           ->AsLabelButton();
+      result_->icons_passed =
+          active && active->IsEnabled() && close && add &&
+          close->GetText().empty() && add->GetText().empty() &&
+          close->GetImage(CEF_BUTTON_STATE_NORMAL) &&
+          !close->GetImage(CEF_BUTTON_STATE_NORMAL)->IsEmpty() &&
+          close->GetImage(CEF_BUTTON_STATE_NORMAL)->HasRepresentation(1.0F) &&
+          close->GetImage(CEF_BUTTON_STATE_NORMAL)->HasRepresentation(2.0F) &&
+          add->GetImage(CEF_BUTTON_STATE_NORMAL) &&
+          !add->GetImage(CEF_BUTTON_STATE_NORMAL)->IsEmpty() &&
+          close->IsFocusable() && add->IsFocusable();
+      if (!result_->icons_passed) {
+        Finish(false, "icon-contract");
         return;
       }
       window_->SetSize(CefSize(320, 140));

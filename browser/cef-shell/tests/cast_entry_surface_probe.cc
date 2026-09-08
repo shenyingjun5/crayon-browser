@@ -11,6 +11,7 @@
 #include "include/views/cef_box_layout.h"
 #include "include/views/cef_browser_view_delegate.h"
 #include "include/views/cef_button.h"
+#include "include/views/cef_label_button.h"
 #include "include/views/cef_panel.h"
 #include "include/views/cef_window_delegate.h"
 #include "include/wrapper/cef_closure_task.h"
@@ -239,6 +240,15 @@ private:
     }
     switch (stage_) {
     case 0: {
+      const auto entry_label =
+          entry->AsButton() ? entry->AsButton()->AsLabelButton() : nullptr;
+      if (!entry_label || !entry_label->GetText().empty() ||
+          !entry_label->GetImage(CEF_BUTTON_STATE_NORMAL) ||
+          !entry_label->GetImage(CEF_BUTTON_STATE_NORMAL)
+               ->HasRepresentation(2.0F)) {
+        Finish(false, "entry_icon_contract");
+        return;
+      }
       if (!snapshot_.view_revision && entry->IsEnabled()) {
         Finish(false, "must_start_disabled");
         return;

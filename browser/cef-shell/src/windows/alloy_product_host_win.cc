@@ -201,7 +201,8 @@ class OneShotRequestContextHandler final : public CefRequestContextHandler {
 AlloyProductHostWin::AlloyProductHostWin(Dependencies dependencies,
                                          Callbacks callbacks)
     : dependencies_(std::move(dependencies)),
-      callbacks_(std::move(callbacks)) {}
+      callbacks_(std::move(callbacks)),
+      external_protocol_input_(kExternalProtocolInputLifetimeMilliseconds) {}
 
 AlloyProductHostWin::~AlloyProductHostWin() = default;
 
@@ -461,10 +462,15 @@ void AlloyProductHostWin::NoteTrustedUserInput() {
                               browser_->GetIdentifier())
                         : nullptr;
   if (tab && controller()->model().active_tab() == tab->id) {
-    trusted_input_tab_ = tab->id;
-    trusted_input_generation_ = tab->navigation_generation;
-    trusted_input_at_ms_ = NowMilliseconds();
+    const auto origin = site_origins_.find(tab->id);
+    if (origin != site_origins_.end()) {
+      static_cast<void>(external_protocol_input_.Note(
+          tab->id, tab->navigation_generation, origin->second,
+          NowMilliseconds()));
+      return;
+    }
   }
+  external_protocol_input_.Reset();
 }
 
 void AlloyProductHostWin::TickCast() {
@@ -1246,6 +1252,18 @@ bool AlloyProductHostWin::OnBeforeBrowse(CefRefPtr<CefBrowser> browser,
                                          CefRefPtr<CefRequest> request,
                                          bool user_gesture, bool is_redirect) {
   CEF_REQUIRE_UI_THREAD();
+  if (Owns(browser) && frame && frame->IsMain() && request && controller()) {
+    const auto* tab =
+        controller()->model().FindByBrowser(browser->GetIdentifier());
+    const auto origin = tab ? site_origins_.find(tab->id) : site_origins_.end();
+    if (tab && origin != site_origins_.end()) {
+      static_cast<void>(external_protocol_input_.Arm(
+          tab->id, tab->navigation_generation, origin->second,
+          request->GetURL().ToString(), user_gesture, NowMilliseconds()));
+    } else {
+      external_protocol_input_.Reset();
+    }
+  }
   return builtin_content_ && builtin_content_->OnBeforeBrowse(
                                  std::move(browser), std::move(frame),
                                  std::move(request), user_gesture, is_redirect);
@@ -3126,6 +3144,7 @@ bool AlloyProductHostWin::SynchronizeSiteControls(
                         : nullptr;
   const auto origin = permission::ExtractSiteOrigin(url);
   if (!tab || !origin || tab->navigation_generation == 0) return false;
+  external_protocol_input_.Reset();
   auto& controls = site_controls_[tab->id];
   if (!controls) {
     controls = std::make_unique<window::AlloySiteControls>(
@@ -3208,21 +3227,18 @@ void AlloyProductHostWin::ConfirmExternalProtocol(
   const auto origin = tab ? site_origins_.find(tab->id) : site_origins_.end();
   const auto source = tab ? site_urls_.find(tab->id) : site_urls_.end();
   const auto now = NowMilliseconds();
-  const bool has_trusted_input =
-      tab && trusted_input_tab_ == tab->id &&
-      trusted_input_generation_ == tab->navigation_generation &&
-      trusted_input_at_ms_ <= now &&
-      now - trusted_input_at_ms_ <= kExternalProtocolInputLifetimeMilliseconds;
-  trusted_input_tab_ = 0;
-  trusted_input_generation_ = 0;
-  trusted_input_at_ms_ = 0;
+  const auto trusted_generation =
+      tab && source_origin
+          ? external_protocol_input_.Consume(tab->id, *source_origin,
+                                             target_url, now)
+          : std::nullopt;
   if (!tab || !source_origin || origin == site_origins_.end() ||
       source == site_urls_.end() || *source_origin != origin->second ||
-      !controls || !has_trusted_input) {
+      !controls || !trusted_generation) {
     return;
   }
   const auto request = controls->BeginExternalProtocol(
-      tab->navigation_generation, origin->second, scheme, target_url,
+      *trusted_generation, origin->second, scheme, target_url,
       [target_url](bool allowed) {
         if (allowed) {
           const auto target = CefString(target_url).ToWString();

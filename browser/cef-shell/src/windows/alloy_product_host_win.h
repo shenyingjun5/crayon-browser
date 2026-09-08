@@ -48,6 +48,7 @@
 #include "include/cef_request_context.h"
 #include "include/cef_request_handler.h"
 #include "windows/alloy_cast_overlay_win.h"
+#include "windows/trusted_input_monitor_win.h"
 #include "include/views/cef_browser_view_delegate.h"
 #include "include/views/cef_window_delegate.h"
 
@@ -423,9 +424,7 @@ class AlloyProductHostWin final : public CefClient,
   std::uint64_t next_navigation_id_ = 1;
   std::uint64_t cast_browser_session_ = 1;
   std::uint64_t cast_retry_after_ms_ = 0;
-  window::TabId trusted_input_tab_ = 0;
-  std::uint64_t trusted_input_generation_ = 0;
-  std::uint64_t trusted_input_at_ms_ = 0;
+  TrustedExternalProtocolInput external_protocol_input_;
   std::uint64_t session_checkpoint_generation_ = 0;
   bool session_checkpoint_pending_ = false;
   window::AlloySessionFileResult session_load_result_ =

@@ -1,9 +1,10 @@
 #include "browser/window/alloy_tab_strip.h"
 
-#include <utility>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
+#include "browser/window/alloy_icon.h"
 #include "include/cef_color_ids.h"
 #include "include/views/cef_box_layout.h"
 #include "include/views/cef_button_delegate.h"
@@ -15,13 +16,15 @@ namespace crayon::browser::cef_shell::window {
 namespace {
 
 constexpr int kStripHeight = 40;
-constexpr int kTabMinimumWidth = 56;
+constexpr int kTabMinimumWidth = 62;
+constexpr int kTabMaximumWidth = 208;
 constexpr int kCloseMinimumWidth = 32;
 constexpr int kChildSpacing = 2;
 
 class SurfaceDelegate final : public CefPanelDelegate {
 public:
-  explicit SurfaceDelegate(int minimum_width) : minimum_width_(minimum_width) {}
+  explicit SurfaceDelegate(int minimum_width, bool active = true)
+      : minimum_width_(minimum_width), active_(active) {}
 
   CefSize GetPreferredSize(CefRefPtr<CefView>) override {
     return CefSize(minimum_width_, kStripHeight);
@@ -32,11 +35,14 @@ public:
   }
 
   void OnThemeChanged(CefRefPtr<CefView> view) override {
-    view->SetBackgroundColor(view->GetThemeColor(CEF_ColorPrimaryBackground));
+    view->SetBackgroundColor(view->GetThemeColor(
+        active_ ? CEF_ColorTabBackgroundActiveFrameActive
+                : CEF_ColorTabBackgroundInactiveFrameActive));
   }
 
 private:
   const int minimum_width_;
+  const bool active_;
   IMPLEMENT_REFCOUNTING(SurfaceDelegate);
 };
 
@@ -55,6 +61,7 @@ struct AlloyTabStrip::State final : std::enable_shared_from_this<State> {
         : state_(std::move(state)) {}
 
     void OnButtonPressed(CefRefPtr<CefButton> button) override {
+      ReleaseAlloyIconFocus(button);
       if (auto state = state_.lock()) {
         state->Dispatch(button);
       }
@@ -78,9 +85,10 @@ struct AlloyTabStrip::State final : std::enable_shared_from_this<State> {
   }
 
   CefRefPtr<CefLabelButton> Button(const std::string &label, int command_id,
-                                   int minimum_width) {
+                                   int minimum_width, bool icon_only = false) {
     auto button = CefLabelButton::CreateLabelButton(
-        new ButtonDelegate(weak_from_this()), label);
+        new ButtonDelegate(weak_from_this()),
+        icon_only ? CefString() : CefString(label));
     button->SetID(command_id);
     button->SetFocusable(true);
     button->SetMinimumSize(CefSize(minimum_width, kStripHeight));
@@ -99,7 +107,8 @@ struct AlloyTabStrip::State final : std::enable_shared_from_this<State> {
     std::unordered_set<TabId> unique;
     unique.reserve(order.size());
     for (const TabId tab_id : order) {
-      if (!model.Find(tab_id) || !unique.insert(tab_id).second) return false;
+      if (!model.Find(tab_id) || !unique.insert(tab_id).second)
+        return false;
     }
 
     panel->RemoveAllChildViews();
@@ -115,8 +124,9 @@ struct AlloyTabStrip::State final : std::enable_shared_from_this<State> {
         return false;
       }
 
+      const bool is_active = model.active_tab() == tab_id;
       auto row = CefPanel::CreatePanel(new SurfaceDelegate(
-          kTabMinimumWidth + kCloseMinimumWidth + kChildSpacing));
+          kTabMinimumWidth + kCloseMinimumWidth + kChildSpacing, is_active));
       CefBoxLayoutSettings row_layout;
       row_layout.horizontal = true;
       row_layout.between_child_spacing = kChildSpacing;
@@ -126,15 +136,19 @@ struct AlloyTabStrip::State final : std::enable_shared_from_this<State> {
       auto activate_button =
           Button(title, kActivateCommandBase + static_cast<int>(index),
                  kTabMinimumWidth);
-      const bool is_active = model.active_tab() == tab_id;
-      activate_button->SetEnabled(!is_active && snapshot->lifecycle !=
-                                                    TabLifecycle::kClosing);
+      activate_button->SetMaximumSize(CefSize(kTabMaximumWidth, kStripHeight));
+      activate_button->SetEnabled(snapshot->lifecycle !=
+                                  TabLifecycle::kClosing);
       if (is_active) {
         active_tab = tab_id;
       }
       auto close_button =
           Button(strings.close_tab, kCloseCommandBase + static_cast<int>(index),
-                 kCloseMinimumWidth);
+                 kCloseMinimumWidth, true);
+      if (!ApplyAlloyIcon(close_button, AlloyIcon::kTabClose,
+                          strings.close_tab)) {
+        return false;
+      }
       close_button->SetEnabled(snapshot->lifecycle != TabLifecycle::kClosing);
       row->AddChildView(activate_button);
       row->AddChildView(close_button);
@@ -142,7 +156,11 @@ struct AlloyTabStrip::State final : std::enable_shared_from_this<State> {
       bindings.push_back({tab_id, activate_button, close_button});
     }
 
-    new_button = Button(strings.new_tab, kNewTabCommandId, kCloseMinimumWidth);
+    new_button =
+        Button(strings.new_tab, kNewTabCommandId, kCloseMinimumWidth, true);
+    if (!ApplyAlloyIcon(new_button, AlloyIcon::kTabNew, strings.new_tab)) {
+      return false;
+    }
     new_button->SetEnabled(model.size() < kMaximumTabsPerWindow);
     panel->AddChildView(new_button);
     panel->Layout();
@@ -164,6 +182,10 @@ struct AlloyTabStrip::State final : std::enable_shared_from_this<State> {
     }
     for (const auto &binding : bindings) {
       if (binding.activate->IsSame(sender)) {
+        if (active_tab == binding.tab_id) {
+          dispatching = false;
+          return;
+        }
         if (callbacks.activate_tab) {
           callbacks.activate_tab(binding.tab_id);
         }

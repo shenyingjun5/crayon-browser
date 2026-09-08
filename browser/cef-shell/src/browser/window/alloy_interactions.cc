@@ -4,6 +4,7 @@
 #include <utility>
 
 #include "browser/branding/about_destination.h"
+#include "browser/window/alloy_icon.h"
 #include "crayon/browser_localization/locale_catalog.h"
 #include "include/wrapper/cef_helpers.h"
 
@@ -29,6 +30,8 @@ constexpr int kControlO = 'O';
 constexpr int kControlN = 'N';
 constexpr int kControlC = 'C';
 constexpr int kControlV = 'V';
+constexpr int kToolbarButtonWidth = 36;
+constexpr int kToolbarHeight = 48;
 
 std::optional<AlloyMainCommand> CommandForId(int id) {
   switch (id) {
@@ -83,14 +86,13 @@ bool AlloyInteractions::Attach(CefRefPtr<CefWindow> window,
   }
   const std::string menu_label = String("app.menu");
   if (menu_label.empty() || String("menu.open_markdown").empty() ||
-      String("privacy.incognito").empty() ||
-      String("menu.copy").empty() || String("menu.paste").empty() ||
-      String("app.about").empty() || String("menu.licenses").empty() ||
-      String("tabs.pin").empty() || String("tabs.unpin").empty() ||
-      String("tabs.duplicate").empty() || String("tabs.mute").empty() ||
-      String("tabs.unmute").empty() || String("tabs.add_group").empty() ||
-      String("tabs.remove_group").empty() || String("tabs.search").empty() ||
-      String("bookmarks.add_page").empty() ||
+      String("privacy.incognito").empty() || String("menu.copy").empty() ||
+      String("menu.paste").empty() || String("app.about").empty() ||
+      String("menu.licenses").empty() || String("tabs.pin").empty() ||
+      String("tabs.unpin").empty() || String("tabs.duplicate").empty() ||
+      String("tabs.mute").empty() || String("tabs.unmute").empty() ||
+      String("tabs.add_group").empty() || String("tabs.remove_group").empty() ||
+      String("tabs.search").empty() || String("bookmarks.add_page").empty() ||
       String("bookmarks.remove_page").empty() ||
       String("bookmarks.show_bar").empty() ||
       String("bookmarks.hide_bar").empty()) {
@@ -100,16 +102,19 @@ bool AlloyInteractions::Attach(CefRefPtr<CefWindow> window,
   view_ = std::move(view);
   browser_ = std::move(browser);
   toolbar_ = std::move(toolbar);
-  bookmark_button_ = CefLabelButton::CreateLabelButton(
-      this, String("bookmarks.add_page"));
+  bookmark_button_ = CefLabelButton::CreateLabelButton(this, {});
   if (!bookmark_button_) {
     Shutdown();
     return false;
   }
   bookmark_button_->SetID(AlloyInteractions::kBookmarkButtonId);
   bookmark_button_->SetFocusable(true);
+  bookmark_button_->SetMinimumSize(
+      CefSize(kToolbarButtonWidth, kToolbarHeight));
+  bookmark_button_->SetMaximumSize(
+      CefSize(kToolbarButtonWidth, kToolbarHeight));
   toolbar_->AddChildView(bookmark_button_);
-  menu_button_ = CefMenuButton::CreateMenuButton(this, menu_label);
+  menu_button_ = CefMenuButton::CreateMenuButton(this, {});
   if (!menu_button_) {
     Shutdown();
     return false;
@@ -117,6 +122,12 @@ bool AlloyInteractions::Attach(CefRefPtr<CefWindow> window,
   menu_button_->SetID(kMenuButtonId);
   menu_button_->SetAccessibleName(menu_label);
   menu_button_->SetTooltipText(menu_label);
+  menu_button_->SetMinimumSize(CefSize(kToolbarButtonWidth, kToolbarHeight));
+  menu_button_->SetMaximumSize(CefSize(kToolbarButtonWidth, kToolbarHeight));
+  if (!ApplyAlloyIcon(menu_button_, AlloyIcon::kMenu, menu_label)) {
+    Shutdown();
+    return false;
+  }
   toolbar_->AddChildView(menu_button_);
   if (!RefreshDailyControls()) {
     Shutdown();
@@ -132,18 +143,22 @@ bool AlloyInteractions::RefreshDailyControls() {
       !bookmark_button_->IsValid()) {
     return false;
   }
-  if (menu_open_) return true;
+  if (menu_open_)
+    return true;
   const AlloyBookmarkCommandState state = callbacks_.bookmark_state
                                               ? callbacks_.bookmark_state()
                                               : AlloyBookmarkCommandState{};
-  const std::string label = String(state.starred ? "bookmarks.remove_page"
-                                                 : "bookmarks.add_page");
-  bookmark_button_->SetText(label);
-  bookmark_button_->SetAccessibleName(label);
-  bookmark_button_->SetTooltipText(label);
+  const std::string label =
+      String(state.starred ? "bookmarks.remove_page" : "bookmarks.add_page");
+  if (!ApplyAlloyIcon(bookmark_button_,
+                      state.starred ? AlloyIcon::kBookmarkFilled
+                                    : AlloyIcon::kBookmarkOutline,
+                      label)) {
+    return false;
+  }
   bookmark_button_->SetEnabled(state.writable);
 
-  for (const auto& button : bookmark_bar_buttons_) {
+  for (const auto &button : bookmark_bar_buttons_) {
     if (button && button->IsValid() && button->GetParentView() &&
         button->GetParentView()->IsSame(toolbar_)) {
       toolbar_->RemoveChildView(button);
@@ -151,16 +166,20 @@ bool AlloyInteractions::RefreshDailyControls() {
   }
   bookmark_bar_buttons_.clear();
   bookmark_bar_ids_.clear();
-  if (menu_button_ && menu_button_->IsValid() && menu_button_->GetParentView() &&
+  if (menu_button_ && menu_button_->IsValid() &&
+      menu_button_->GetParentView() &&
       menu_button_->GetParentView()->IsSame(toolbar_)) {
     toolbar_->RemoveChildView(menu_button_);
   }
   if (state.bar_visible) {
-    for (const auto& entry : state.entries) {
-      if (bookmark_bar_ids_.size() >= kMaximumVisibleBookmarkButtons) break;
-      if (entry.node_id == 0 || entry.label.empty()) continue;
+    for (const auto &entry : state.entries) {
+      if (bookmark_bar_ids_.size() >= kMaximumVisibleBookmarkButtons)
+        break;
+      if (entry.node_id == 0 || entry.label.empty())
+        continue;
       auto button = CefLabelButton::CreateLabelButton(this, entry.label);
-      if (!button) break;
+      if (!button)
+        break;
       button->SetID(AlloyInteractions::kBookmarkBarCommandBase +
                     static_cast<int>(bookmark_bar_ids_.size()));
       button->SetFocusable(true);
@@ -171,7 +190,8 @@ bool AlloyInteractions::RefreshDailyControls() {
       bookmark_bar_ids_.push_back(entry.node_id);
     }
   }
-  if (menu_button_) toolbar_->AddChildView(menu_button_);
+  if (menu_button_)
+    toolbar_->AddChildView(menu_button_);
   toolbar_->Layout();
   return true;
 }
@@ -245,13 +265,16 @@ bool AlloyInteractions::OnNavigation(CefRefPtr<CefBrowser> browser) {
 
 CefRefPtr<CefView> AlloyInteractions::GetView(int view_id) const {
   CEF_REQUIRE_UI_THREAD();
-  if (!active_) return nullptr;
-  if (menu_button_ && menu_button_->GetID() == view_id) return menu_button_;
+  if (!active_)
+    return nullptr;
+  if (menu_button_ && menu_button_->GetID() == view_id)
+    return menu_button_;
   if (bookmark_button_ && bookmark_button_->GetID() == view_id) {
     return bookmark_button_;
   }
-  for (const auto& button : bookmark_bar_buttons_) {
-    if (button && button->GetID() == view_id) return button;
+  for (const auto &button : bookmark_bar_buttons_) {
+    if (button && button->GetID() == view_id)
+      return button;
   }
   return nullptr;
 }
@@ -263,6 +286,7 @@ void AlloyInteractions::OnMenuButtonPressed(
   if (!active_ || !menu_button_ || !menu_button ||
       !menu_button->IsSame(menu_button_))
     return;
+  ReleaseAlloyIconFocus(menu_button);
   menu_model_ = CefMenuModel::CreateMenuModel(this);
   if (!menu_model_)
     return;
@@ -282,28 +306,29 @@ void AlloyInteractions::OnMenuButtonPressed(
       kToggleGroupId,
       String(state.grouped ? "tabs.remove_group" : "tabs.add_group"));
   search_tab_ids_.clear();
-  auto search_menu = menu_model_->AddSubMenu(kTabSearchMenuId,
-                                              String("tabs.search"));
+  auto search_menu =
+      menu_model_->AddSubMenu(kTabSearchMenuId, String("tabs.search"));
   const auto search_entries = callbacks_.tab_search_entries
                                   ? callbacks_.tab_search_entries()
                                   : std::vector<AlloyTabSearchEntry>{};
   if (search_menu) {
-    for (const auto& entry : search_entries) {
-      if (search_tab_ids_.size() >= kMaximumSearchEntries) break;
-      if (entry.tab_id == 0 || entry.label.empty()) continue;
-      const int command_id =
-          AlloyInteractions::kTabSearchCommandBase +
-          static_cast<int>(search_tab_ids_.size());
+    for (const auto &entry : search_entries) {
+      if (search_tab_ids_.size() >= kMaximumSearchEntries)
+        break;
+      if (entry.tab_id == 0 || entry.label.empty())
+        continue;
+      const int command_id = AlloyInteractions::kTabSearchCommandBase +
+                             static_cast<int>(search_tab_ids_.size());
       search_menu->AddItem(command_id, entry.label);
       search_menu->SetEnabled(command_id, !entry.active);
       search_tab_ids_.push_back(entry.tab_id);
     }
   }
   menu_model_->SetEnabled(kTabSearchMenuId, !search_tab_ids_.empty());
-  menu_model_->AddItem(
-      kToggleBookmarkBarId,
-      String(state.bookmark_bar_visible ? "bookmarks.hide_bar"
-                                        : "bookmarks.show_bar"));
+  menu_model_->AddItem(kToggleBookmarkBarId,
+                       String(state.bookmark_bar_visible
+                                  ? "bookmarks.hide_bar"
+                                  : "bookmarks.show_bar"));
   menu_model_->AddSeparator();
   menu_model_->AddItem(kCopyId, String("menu.copy"));
   menu_model_->AddItem(kPasteId, String("menu.paste"));
@@ -311,13 +336,14 @@ void AlloyInteractions::OnMenuButtonPressed(
   menu_model_->AddItem(kAboutId, String("app.about"));
   menu_model_->AddItem(kLicensesId, String("menu.licenses"));
   menu_open_ = true;
-  menu_button->ShowMenu(menu_model_, screen_point,
-                        CEF_MENU_ANCHOR_TOPRIGHT);
+  menu_button->ShowMenu(menu_model_, screen_point, CEF_MENU_ANCHOR_TOPRIGHT);
 }
 
 void AlloyInteractions::OnButtonPressed(CefRefPtr<CefButton> button) {
   CEF_REQUIRE_UI_THREAD();
-  if (!active_ || !button || !button->IsEnabled()) return;
+  if (!active_ || !button || !button->IsEnabled())
+    return;
+  ReleaseAlloyIconFocus(button);
   if (bookmark_button_ && bookmark_button_->IsSame(button)) {
     if (callbacks_.toggle_current_bookmark &&
         callbacks_.toggle_current_bookmark()) {
@@ -380,9 +406,10 @@ void AlloyInteractions::OnBeforeContextMenu(
   }
 }
 
-bool AlloyInteractions::OnContextMenuCommand(
-    CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame>,
-    CefRefPtr<CefContextMenuParams>, int command_id, EventFlags) {
+bool AlloyInteractions::OnContextMenuCommand(CefRefPtr<CefBrowser> browser,
+                                             CefRefPtr<CefFrame>,
+                                             CefRefPtr<CefContextMenuParams>,
+                                             int command_id, EventFlags) {
   CEF_REQUIRE_UI_THREAD();
   return context_menu_active_ && IsCurrent(browser) &&
          callbacks_.context_menu_command &&
@@ -390,7 +417,7 @@ bool AlloyInteractions::OnContextMenuCommand(
 }
 
 void AlloyInteractions::OnContextMenuDismissed(CefRefPtr<CefBrowser>,
-                                                CefRefPtr<CefFrame>) {
+                                               CefRefPtr<CefFrame>) {
   context_menu_active_ = false;
 }
 
@@ -413,7 +440,7 @@ bool AlloyInteractions::Shutdown() {
   search_tab_ids_.clear();
   if (callbacks_.cancel_transient)
     callbacks_.cancel_transient();
-  for (const auto& button : bookmark_bar_buttons_) {
+  for (const auto &button : bookmark_bar_buttons_) {
     if (toolbar_ && toolbar_->IsValid() && button && button->IsValid() &&
         button->GetParentView() && button->GetParentView()->IsSame(toolbar_)) {
       toolbar_->RemoveChildView(button);

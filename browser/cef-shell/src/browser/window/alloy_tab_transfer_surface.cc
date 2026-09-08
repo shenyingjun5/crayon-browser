@@ -3,10 +3,15 @@
 #include <set>
 #include <utility>
 
+#include "browser/window/alloy_icon.h"
 #include "crayon/browser_localization/locale_catalog.h"
 #include "include/wrapper/cef_helpers.h"
 
 namespace crayon::browser::cef_shell::window {
+namespace {
+constexpr int kToolbarButtonWidth = 36;
+constexpr int kToolbarHeight = 48;
+} // namespace
 
 AlloyTabTransferSurface::AlloyTabTransferSurface(
     localization::LocaleSnapshot locale, Callbacks callbacks)
@@ -23,14 +28,20 @@ bool AlloyTabTransferSurface::Attach(CefRefPtr<CefWindow> window,
     return false;
   }
   const auto label = String("tabs.move_to_window");
-  if (label.empty()) return false;
-  button_ = CefMenuButton::CreateMenuButton(this, label);
-  if (!button_) return false;
+  if (label.empty())
+    return false;
+  button_ = CefMenuButton::CreateMenuButton(this, {});
+  if (!button_)
+    return false;
   window_ = std::move(window);
   toolbar_ = std::move(toolbar);
   button_->SetID(kButtonId);
   button_->SetAccessibleName(label);
   button_->SetTooltipText(label);
+  button_->SetMinimumSize(CefSize(kToolbarButtonWidth, kToolbarHeight));
+  button_->SetMaximumSize(CefSize(kToolbarButtonWidth, kToolbarHeight));
+  if (!ApplyAlloyIcon(button_, AlloyIcon::kTabMoveWindow, label))
+    return false;
   toolbar_->AddChildView(button_);
   return Refresh();
 }
@@ -44,7 +55,8 @@ bool AlloyTabTransferSurface::Refresh() {
                            ? callbacks_.targets()
                            : std::vector<AlloyTabTransferTarget>{};
   button_->SetEnabled(!targets.empty());
-  if (toolbar_) toolbar_->Layout();
+  if (toolbar_)
+    toolbar_->Layout();
   return true;
 }
 
@@ -56,20 +68,23 @@ CefRefPtr<CefView> AlloyTabTransferSurface::button() const {
 void AlloyTabTransferSurface::OnButtonPressed(CefRefPtr<CefButton>) {}
 
 void AlloyTabTransferSurface::OnMenuButtonPressed(
-    CefRefPtr<CefMenuButton> menu_button, const CefPoint& screen_point,
+    CefRefPtr<CefMenuButton> menu_button, const CefPoint &screen_point,
     CefRefPtr<CefMenuButtonPressedLock>) {
   CEF_REQUIRE_UI_THREAD();
   if (!active_ || menu_model_ || !menu_button || !button_ ||
       !menu_button->IsSame(button_) || !callbacks_.targets) {
     return;
   }
+  ReleaseAlloyIconFocus(menu_button);
   const auto candidates = callbacks_.targets();
   auto model = CefMenuModel::CreateMenuModel(this);
-  if (!model) return;
+  if (!model)
+    return;
   std::set<std::string> unique;
   target_ids_.clear();
-  for (const auto& candidate : candidates) {
-    if (target_ids_.size() >= kMaximumTargets) break;
+  for (const auto &candidate : candidates) {
+    if (target_ids_.size() >= kMaximumTargets)
+      break;
     if (candidate.window_id.empty() || candidate.label.empty() ||
         !unique.insert(candidate.window_id).second) {
       continue;
@@ -78,7 +93,8 @@ void AlloyTabTransferSurface::OnMenuButtonPressed(
                    candidate.label);
     target_ids_.push_back(candidate.window_id);
   }
-  if (target_ids_.empty()) return;
+  if (target_ids_.empty())
+    return;
   menu_model_ = model;
   menu_button->ShowMenu(menu_model_, screen_point, CEF_MENU_ANCHOR_TOPRIGHT);
 }
@@ -106,7 +122,8 @@ void AlloyTabTransferSurface::ExecuteCommand(CefRefPtr<CefMenuModel>,
 
 void AlloyTabTransferSurface::MenuClosed(CefRefPtr<CefMenuModel> model) {
   CEF_REQUIRE_UI_THREAD();
-  if (!menu_model_ || !model || menu_model_.get() != model.get()) return;
+  if (!menu_model_ || !model || menu_model_.get() != model.get())
+    return;
   menu_model_ = nullptr;
   target_ids_.clear();
   static_cast<void>(Refresh());
@@ -114,7 +131,8 @@ void AlloyTabTransferSurface::MenuClosed(CefRefPtr<CefMenuModel> model) {
 
 bool AlloyTabTransferSurface::Shutdown() {
   CEF_REQUIRE_UI_THREAD();
-  if (!active_) return true;
+  if (!active_)
+    return true;
   active_ = false;
   menu_model_ = nullptr;
   target_ids_.clear();
@@ -129,10 +147,10 @@ bool AlloyTabTransferSurface::Shutdown() {
   return true;
 }
 
-std::string AlloyTabTransferSurface::String(const char* key) const {
+std::string AlloyTabTransferSurface::String(const char *key) const {
   const localization::LocaleCatalog catalog(locale_.locale);
   const auto value = catalog.Find(key ? key : "");
   return value ? std::string(*value) : std::string{};
 }
 
-}  // namespace crayon::browser::cef_shell::window
+} // namespace crayon::browser::cef_shell::window

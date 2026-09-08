@@ -14,6 +14,7 @@ struct AlloyNavigationProbeResult final {
   bool bookmark_passed = false;
   bool history_passed = false;
   bool download_passed = false;
+  bool icons_passed = false;
   bool window_closed = false;
 };
 

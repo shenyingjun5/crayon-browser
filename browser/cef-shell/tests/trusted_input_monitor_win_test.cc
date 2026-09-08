@@ -44,10 +44,47 @@ bool TrustedMouseLifecycle() {
          rejects_mouse_up && rejects_foreign_window && inputs == 0;
 }
 
+bool ExternalProtocolGenerationHandoff() {
+  using crayon::browser::cef_shell::windows::TrustedExternalProtocolInput;
+  constexpr std::string_view kOrigin = "http://127.0.0.1:8766";
+  constexpr std::string_view kTarget = "mailto:alloy-security@example.test";
+  TrustedExternalProtocolInput input(2'000);
+  if (!input.Note(7, 11, std::string(kOrigin), 100) ||
+      !input.Arm(7, 11, kOrigin, std::string(kTarget), true, 150)) {
+    return false;
+  }
+
+  // OnProtocolExecution may run after the tab has begun the failed external
+  // navigation. Consumption must return the bound source generation instead
+  // of comparing it with that newer tab generation.
+  const auto source_generation = input.Consume(7, kOrigin, kTarget, 200);
+  const bool generation_handoff = source_generation == 11;
+  const bool one_shot = !input.Consume(7, kOrigin, kTarget, 201);
+
+  const bool programmatic_rejected =
+      input.Note(7, 12, std::string(kOrigin), 300) &&
+      !input.Arm(7, 12, kOrigin, std::string(kTarget), false, 301) &&
+      !input.Consume(7, kOrigin, kTarget, 302);
+  const bool stale_rejected =
+      input.Note(7, 13, std::string(kOrigin), 400) &&
+      !input.Arm(7, 13, kOrigin, std::string(kTarget), true, 2'401);
+  const bool mismatch_consumes =
+      input.Note(7, 14, std::string(kOrigin), 500) &&
+      input.Arm(7, 14, kOrigin, std::string(kTarget), true, 501) &&
+      !input.Consume(8, kOrigin, kTarget, 502) &&
+      !input.Consume(7, kOrigin, kTarget, 503);
+  const bool unsupported_rejected =
+      input.Note(7, 15, std::string(kOrigin), 600) &&
+      !input.Arm(7, 15, kOrigin, "file:///tmp/blocked", true, 601);
+  return generation_handoff && one_shot && programmatic_rejected &&
+         stale_rejected && mismatch_consumes && unsupported_rejected;
+}
+
 }  // namespace
 
 int main() {
-  if (!TrustedMouseLifecycle()) return 1;
+  if (!TrustedMouseLifecycle() || !ExternalProtocolGenerationHandoff())
+    return 1;
   std::cout << "trusted_input_monitor_win_test passed\n";
   return 0;
 }

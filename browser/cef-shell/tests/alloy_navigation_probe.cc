@@ -227,7 +227,7 @@ public:
     result_->behavior_passed =
         passed_ && result_->real_navigation_passed &&
         result_->identity_passed && result_->rebind_passed &&
-        result_->fencing_passed &&
+        result_->fencing_passed && result_->icons_passed &&
         result_->bookmark_passed && result_->history_passed &&
         result_->download_passed;
     std::cout << "alloy_navigation_windows passed=" << result_->behavior_passed
@@ -384,6 +384,21 @@ private:
       return;
     }
     if (stage_ == 0) {
+      const auto back = navigation_->back_button();
+      const auto forward = navigation_->forward_button();
+      const auto reload = navigation_->reload_stop_button();
+      result_->icons_passed =
+          back && forward && reload && back->GetText().empty() &&
+          forward->GetText().empty() && reload->GetText().empty() &&
+          back->GetImage(CEF_BUTTON_STATE_NORMAL) &&
+          back->GetImage(CEF_BUTTON_STATE_NORMAL)->HasRepresentation(1.0F) &&
+          back->GetImage(CEF_BUTTON_STATE_NORMAL)->HasRepresentation(2.0F) &&
+          forward->GetImage(CEF_BUTTON_STATE_NORMAL) &&
+          reload->GetImage(CEF_BUTTON_STATE_NORMAL);
+      if (!result_->icons_passed) {
+        Finish(false, "icon-contract");
+        return;
+      }
       result_->fencing_passed =
           !navigation_->OnAddressChange(foreign_browser_,
                                         "https://forged.test/") &&

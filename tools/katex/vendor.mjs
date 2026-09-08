@@ -412,11 +412,19 @@ async function listFiles(root, relative = '') {
   return found.sort();
 }
 
+function canonicalLfText(value) {
+  const normalized = value.replace(/\r\n/g, '\n');
+  if (normalized.includes('\r')) {
+    throw new Error('vendored text contains an invalid carriage return');
+  }
+  return normalized;
+}
+
 export async function verifyVendorDirectory(root = vendorRoot()) {
   const manifestPath = path.join(root, 'manifest.json');
   if (!existsSync(manifestPath)) throw new Error('missing manifest');
   const expectedText = `${JSON.stringify(expectedManifest(), null, 2)}\n`;
-  if (await readFile(manifestPath, 'utf8') !== expectedText) {
+  if (canonicalLfText(await readFile(manifestPath, 'utf8')) !== expectedText) {
     throw new Error('manifest content mismatch');
   }
   const expectedFiles = new Set([
@@ -427,7 +435,8 @@ export async function verifyVendorDirectory(root = vendorRoot()) {
       actualFiles.some((item) => !expectedFiles.has(item))) {
     throw new Error('vendor file set mismatch');
   }
-  if (await readFile(path.join(root, 'VENDORED.md'), 'utf8') !==
+  if (canonicalLfText(
+          await readFile(path.join(root, 'VENDORED.md'), 'utf8')) !==
       vendoredReadme()) {
     throw new Error('vendored documentation mismatch');
   }

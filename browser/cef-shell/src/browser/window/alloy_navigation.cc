@@ -4,6 +4,7 @@
 #include <map>
 #include <utility>
 
+#include "browser/window/alloy_icon.h"
 #include "crayon/browser_navigation/navigation_controller.h"
 #include "include/cef_parser.h"
 #include "include/views/cef_box_layout.h"
@@ -14,9 +15,9 @@
 namespace crayon::browser::cef_shell::window {
 namespace {
 
-constexpr int kBarHeight = 40;
-constexpr int kButtonWidth = 52;
-constexpr int kIdentityWidth = 104;
+constexpr int kBarHeight = 48;
+constexpr int kButtonWidth = 36;
+constexpr int kIdentityWidth = 36;
 constexpr int kChildSpacing = 2;
 constexpr std::size_t kMaximumCachedBrowsers = 64;
 
@@ -71,7 +72,8 @@ struct AlloyNavigation::State final : std::enable_shared_from_this<State> {
     ButtonDelegate(std::weak_ptr<State> state, Command command)
         : state_(std::move(state)), command_(command) {}
 
-    void OnButtonPressed(CefRefPtr<CefButton>) override {
+    void OnButtonPressed(CefRefPtr<CefButton> button) override {
+      ReleaseAlloyIconFocus(button);
       if (auto state = state_.lock()) {
         state->Dispatch(command_);
       }
@@ -96,13 +98,17 @@ struct AlloyNavigation::State final : std::enable_shared_from_this<State> {
     back = Button(strings.back, Command::kBack);
     forward = Button(strings.forward, Command::kForward);
     reload_stop = Button(strings.reload, Command::kReloadStop);
+    ApplyAlloyIcon(back, AlloyIcon::kBack, strings.back);
+    ApplyAlloyIcon(forward, AlloyIcon::kForward, strings.forward);
+    ApplyAlloyIcon(reload_stop, AlloyIcon::kReload, strings.reload);
     identity_label = CefLabelButton::CreateLabelButton(
-        new ButtonDelegate(weak_from_this(), Command::kBack),
-        strings.identity_unknown);
+        new ButtonDelegate(weak_from_this(), Command::kBack), {});
     identity_label->SetMinimumSize(CefSize(kIdentityWidth, kBarHeight));
     identity_label->SetAccessibleName(strings.identity_unknown);
     identity_label->SetFocusable(false);
     identity_label->SetEnabled(false);
+    ApplyAlloyIcon(identity_label, AlloyIcon::kSiteInfo,
+                   strings.identity_unknown);
     panel->AddChildView(back);
     panel->AddChildView(forward);
     panel->AddChildView(reload_stop);
@@ -112,7 +118,7 @@ struct AlloyNavigation::State final : std::enable_shared_from_this<State> {
 
   CefRefPtr<CefLabelButton> Button(const std::string &label, Command command) {
     auto button = CefLabelButton::CreateLabelButton(
-        new ButtonDelegate(weak_from_this(), command), label);
+        new ButtonDelegate(weak_from_this(), command), {});
     button->SetMinimumSize(CefSize(kButtonWidth, kBarHeight));
     button->SetTooltipText(label);
     button->SetAccessibleName(label);
@@ -134,16 +140,16 @@ struct AlloyNavigation::State final : std::enable_shared_from_this<State> {
         browser_states.size() >= kMaximumCachedBrowsers) {
       browser_states.erase(browser_states.begin());
     }
-    browser_states[browser_id] = CachedBrowserState{
-        address,
-        identity,
-        navigation.CurrentNavigationId(tab_id),
-        next_navigation_id,
-        completion_succeeded,
-        navigation_failed,
-        navigation.IsLoading(tab_id),
-        navigation.CanGoBack(tab_id),
-        navigation.CanGoForward(tab_id)};
+    browser_states[browser_id] =
+        CachedBrowserState{address,
+                           identity,
+                           navigation.CurrentNavigationId(tab_id),
+                           next_navigation_id,
+                           completion_succeeded,
+                           navigation_failed,
+                           navigation.IsLoading(tab_id),
+                           navigation.CanGoBack(tab_id),
+                           navigation.CanGoForward(tab_id)};
   }
 
   bool RestoreCachedBrowser(int browser_id) {
@@ -151,7 +157,7 @@ struct AlloyNavigation::State final : std::enable_shared_from_this<State> {
     if (found == browser_states.end()) {
       return false;
     }
-    const CachedBrowserState& cached = found->second;
+    const CachedBrowserState &cached = found->second;
     address = cached.address;
     identity = cached.identity;
     next_navigation_id = cached.next_navigation_id;
@@ -443,12 +449,10 @@ struct AlloyNavigation::State final : std::enable_shared_from_this<State> {
     back->SetEnabled(bound && navigation.CanGoBack(tab_id));
     forward->SetEnabled(bound && navigation.CanGoForward(tab_id));
     const bool loading = bound && navigation.IsLoading(tab_id);
-    reload_stop->SetText(loading ? strings.stop : strings.reload);
-    reload_stop->SetTooltipText(loading ? strings.stop : strings.reload);
-    reload_stop->SetAccessibleName(loading ? strings.stop : strings.reload);
+    ApplyAlloyIcon(reload_stop, loading ? AlloyIcon::kStop : AlloyIcon::kReload,
+                   loading ? strings.stop : strings.reload);
     reload_stop->SetEnabled(bound && (loading || navigation.CanReload(tab_id)));
-    identity_label->SetText(IdentityText());
-    identity_label->SetAccessibleName(IdentityText());
+    ApplyAlloyIcon(identity_label, AlloyIcon::kSiteInfo, IdentityText());
     panel->Layout();
   }
 

@@ -26,10 +26,10 @@
 
 namespace {
 
-using crayon::browser::cef_shell::window::AlloyInteractions;
 using crayon::browser::cef_shell::window::AlloyActivitySurface;
 using crayon::browser::cef_shell::window::AlloyDownloads;
 using crayon::browser::cef_shell::window::AlloyHistory;
+using crayon::browser::cef_shell::window::AlloyInteractions;
 using crayon::browser::cef_shell::window::AlloyMainCommand;
 using crayon::browser::cef_shell::window::AlloyTabTransferSurface;
 
@@ -56,7 +56,7 @@ public:
   MediaStateFlags GetMediaStateFlags() override { return CM_MEDIAFLAG_NONE; }
   CefString GetSelectionText() override { return {}; }
   CefString GetMisspelledWord() override { return {}; }
-  bool GetDictionarySuggestions(std::vector<CefString>&) override {
+  bool GetDictionarySuggestions(std::vector<CefString> &) override {
     return false;
   }
   bool IsEditable() override { return false; }
@@ -106,8 +106,9 @@ public:
   cef_runtime_style_t GetWindowRuntimeStyle() override {
     return CEF_RUNTIME_STYLE_ALLOY;
   }
-  void OnBeforeCommandLineProcessing(const CefString &,
-                                     CefRefPtr<CefCommandLine> command) override {
+  void
+  OnBeforeCommandLineProcessing(const CefString &,
+                                CefRefPtr<CefCommandLine> command) override {
     command->AppendSwitch("disable-background-networking");
     command->AppendSwitch("disable-component-update");
     command->AppendSwitch("no-proxy-server");
@@ -157,13 +158,12 @@ public:
     window_->Show();
   }
   bool OnAccelerator(CefRefPtr<CefWindow>, int command_id) override {
-    return interactions_ &&
-           interactions_->HandleAccelerator(
-               command_id, static_cast<cef_event_flags_t>(EVENTFLAG_CONTROL_DOWN));
+    return interactions_ && interactions_->HandleAccelerator(
+                                command_id, static_cast<cef_event_flags_t>(
+                                                EVENTFLAG_CONTROL_DOWN));
   }
   bool CanClose(CefRefPtr<CefWindow>) override {
-    return finished_ &&
-           (!browser_ || browser_->GetHost()->TryCloseBrowser());
+    return finished_ && (!browser_ || browser_->GetHost()->TryCloseBrowser());
   }
   void OnWindowDestroyed(CefRefPtr<CefWindow>) override {
     activity_ = nullptr;
@@ -183,10 +183,11 @@ public:
 private:
   void Attach() {
     auto profile = crayon::browser_engine::ProfileId::TryCreate("probe");
-    if (!profile) return;
+    if (!profile)
+      return;
     history_ = std::make_unique<AlloyHistory>(
         *profile, false,
-        AlloyHistory::Callbacks{[this](const std::string& url) {
+        AlloyHistory::Callbacks{[this](const std::string &url) {
           restored_url_ = url;
           return true;
         }});
@@ -196,11 +197,11 @@ private:
     history_->RecordClosedTab("https://closed.test/", "Closed fixture", 20);
 
     AlloyDownloads::Callbacks download_callbacks;
-    download_callbacks.confirm_pending =
-        [this](std::uint64_t, const std::string&) {
-          ++kept_downloads_;
-          return true;
-        };
+    download_callbacks.confirm_pending = [this](std::uint64_t,
+                                                const std::string &) {
+      ++kept_downloads_;
+      return true;
+    };
     download_callbacks.discard_pending = [](std::uint64_t) { return true; };
     download_callbacks.pause = [this](std::uint64_t) {
       ++paused_downloads_;
@@ -208,9 +209,9 @@ private:
     };
     download_callbacks.resume = [](std::uint64_t) { return true; };
     download_callbacks.cancel = [](std::uint64_t) { return true; };
-    download_callbacks.open_location = [](const std::string&) { return true; };
+    download_callbacks.open_location = [](const std::string &) { return true; };
     downloads_ = std::make_unique<AlloyDownloads>(
-        "C:/verified-downloads", [](const std::string&) { return false; },
+        "C:/verified-downloads", [](const std::string &) { return false; },
         std::move(download_callbacks));
     downloads_->OnDownloadStarting(11, "danger.exe",
                                    "https://download.test/danger.exe");
@@ -218,7 +219,7 @@ private:
                                    "https://download.test/safe.txt");
 
     AlloyActivitySurface::Callbacks activity_callbacks;
-    activity_callbacks.navigate_current = [](const std::string&) {
+    activity_callbacks.navigate_current = [](const std::string &) {
       return true;
     };
     activity_callbacks.confirm_clear_history = [this] {
@@ -229,14 +230,15 @@ private:
       ++history_persists_;
       return allow_history_persist_;
     };
-    activity_callbacks.confirm_dangerous = [](const std::string& name) {
+    activity_callbacks.confirm_dangerous = [](const std::string &name) {
       return name == "danger.exe";
     };
     activity_ = new AlloyActivitySurface(
         crayon::browser::localization::SnapshotFor(
             crayon::browser::localization::AppLocale::kZhCn),
         history_.get(), downloads_.get(), std::move(activity_callbacks));
-    if (!activity_->Attach(window_, activity_toolbar_)) return;
+    if (!activity_->Attach(window_, activity_toolbar_))
+      return;
     transfer_ = new AlloyTabTransferSurface(
         crayon::browser::localization::SnapshotFor(
             crayon::browser::localization::AppLocale::kZhCn),
@@ -246,12 +248,14 @@ private:
                   crayon::browser::cef_shell::window::AlloyTabTransferTarget>{
                   {"popup-1", "窗口 1"}};
             },
-            [this](const std::string& target) {
-              if (target != "popup-1") return false;
+            [this](const std::string &target) {
+              if (target != "popup-1")
+                return false;
               ++transfer_commands_;
               return true;
             }});
-    if (!transfer_->Attach(window_, transfer_toolbar_)) return;
+    if (!transfer_->Attach(window_, transfer_toolbar_))
+      return;
 
     AlloyInteractions::Callbacks callbacks;
     callbacks.open_markdown = [this](CefRefPtr<CefBrowser> browser) {
@@ -278,10 +282,9 @@ private:
                                   CefDragHandler::DragOperationsMask) {
       std::vector<CefString> files;
       data->GetFileNames(files);
-      const bool accepted = files.size() == 1 &&
-                            files[0].ToString().size() >= 3 &&
-                            files[0].ToString().substr(
-                                files[0].ToString().size() - 3) == ".md";
+      const bool accepted =
+          files.size() == 1 && files[0].ToString().size() >= 3 &&
+          files[0].ToString().substr(files[0].ToString().size() - 3) == ".md";
       if (accepted)
         ++accepted_drags_;
       return accepted;
@@ -295,13 +298,13 @@ private:
           model->AddItem(kContextCommandId, "fixture-context-command");
           return true;
         };
-    callbacks.context_menu_command =
-        [this](CefRefPtr<CefBrowser>, int command_id) {
-          if (command_id != kContextCommandId)
-            return false;
-          ++context_commands_;
-          return true;
-        };
+    callbacks.context_menu_command = [this](CefRefPtr<CefBrowser>,
+                                            int command_id) {
+      if (command_id != kContextCommandId)
+        return false;
+      ++context_commands_;
+      return true;
+    };
     callbacks.daily_state = [this] {
       ++daily_state_reads_;
       return crayon::browser::cef_shell::window::AlloyDailyCommandState{
@@ -324,8 +327,10 @@ private:
     };
     callbacks.bookmark_state = [] {
       return crayon::browser::cef_shell::window::AlloyBookmarkCommandState{
-          true, true, true, {{0, "Invalid bookmark"},
-                             {41, "Fixture bookmark"}}};
+          true,
+          true,
+          true,
+          {{0, "Invalid bookmark"}, {41, "Fixture bookmark"}}};
     };
     callbacks.toggle_current_bookmark = [this] {
       ++bookmark_toggles_;
@@ -344,10 +349,9 @@ private:
   }
 
   void Schedule() {
-    CefPostDelayedTask(
-        TID_UI,
-        base::BindOnce(&Probe::Check, CefRefPtr<Probe>(this)),
-        kPollMilliseconds);
+    CefPostDelayedTask(TID_UI,
+                       base::BindOnce(&Probe::Check, CefRefPtr<Probe>(this)),
+                       kPollMilliseconds);
   }
   void Check() {
     if (finished_)
@@ -383,17 +387,20 @@ private:
       const bool command = interactions_->OnContextMenuCommand(
           browser_, browser_->GetMainFrame(), params, kContextCommandId,
           EVENTFLAG_NONE);
-      interactions_->OnContextMenuDismissed(browser_,
-                                             browser_->GetMainFrame());
+      interactions_->OnContextMenuDismissed(browser_, browser_->GetMainFrame());
       const int context_index =
           context_menu ? context_menu->GetIndexOf(kContextCommandId) : -1;
-      result_->context_menu_passed =
-          context_menu && context_augments_ == 1 &&
-          context_index >= 0 && command &&
-          context_commands_ == 1 && !interactions_->context_menu_active();
+      result_->context_menu_passed = context_menu && context_augments_ == 1 &&
+                                     context_index >= 0 && command &&
+                                     context_commands_ == 1 &&
+                                     !interactions_->context_menu_active();
       auto menu = interactions_->GetView(AlloyInteractions::kMenuButtonId);
-      if (!menu || !menu->IsDrawn() ||
-          menu->AsButton()->AsLabelButton()->GetText().ToString() != "菜单") {
+      const auto menu_label = menu && menu->AsButton()
+                                  ? menu->AsButton()->AsLabelButton()
+                                  : nullptr;
+      if (!menu || !menu->IsDrawn() || !menu_label ||
+          !menu_label->GetText().empty() ||
+          !menu_label->GetImage(CEF_BUTTON_STATE_NORMAL)) {
         Finish(false, "menu-view");
         return;
       }
@@ -401,7 +408,24 @@ private:
           interactions_->GetView(AlloyInteractions::kBookmarkButtonId);
       const auto bookmark_toggle =
           bookmark_toggle_view ? bookmark_toggle_view->AsButton() : nullptr;
+      const auto bookmark_label =
+          bookmark_toggle ? bookmark_toggle->AsLabelButton() : nullptr;
+      if (!bookmark_label || !bookmark_label->GetText().empty() ||
+          !bookmark_label->GetImage(CEF_BUTTON_STATE_NORMAL) ||
+          !bookmark_label->IsFocusable()) {
+        Finish(false, "bookmark-icon");
+        return;
+      }
+      bookmark_toggle->RequestFocus();
+      if (!bookmark_toggle->HasFocus()) {
+        Finish(false, "bookmark-focus-setup");
+        return;
+      }
       interactions_->OnButtonPressed(bookmark_toggle);
+      if (bookmark_toggle->HasFocus() || !bookmark_toggle->IsFocusable()) {
+        Finish(false, "bookmark-focus-release");
+        return;
+      }
       const auto bookmark_item_view =
           interactions_->GetView(AlloyInteractions::kBookmarkBarCommandBase);
       const auto bookmark_item =
@@ -421,21 +445,21 @@ private:
                                 EVENTFLAG_NONE);
       const auto history_view =
           activity_->GetView(AlloyActivitySurface::kHistoryButtonId);
-      const auto history_button = history_view
-                                      ? history_view->AsButton()
-                                            ->AsLabelButton()
-                                            ->AsMenuButton()
-                                      : nullptr;
+      const auto history_button =
+          history_view
+              ? history_view->AsButton()->AsLabelButton()->AsMenuButton()
+              : nullptr;
       const auto downloads_view =
           activity_->GetView(AlloyActivitySurface::kDownloadsButtonId);
-      const auto downloads_button = downloads_view
-                                        ? downloads_view->AsButton()
-                                              ->AsLabelButton()
-                                              ->AsMenuButton()
-                                        : nullptr;
+      const auto downloads_button =
+          downloads_view
+              ? downloads_view->AsButton()->AsLabelButton()->AsMenuButton()
+              : nullptr;
       if (!history_button || !downloads_button ||
-          history_button->GetText().ToString() != "历史记录" ||
-          downloads_button->GetText().ToString() != "下载" ||
+          !history_button->GetText().empty() ||
+          !downloads_button->GetText().empty() ||
+          !history_button->GetImage(CEF_BUTTON_STATE_NORMAL) ||
+          !downloads_button->GetImage(CEF_BUTTON_STATE_NORMAL) ||
           restored_url_ != "https://closed.test/" || history_persists_ != 2 ||
           clear_confirmations_ != 2 ||
           history_->store().entries().size() != 1) {
@@ -450,7 +474,10 @@ private:
       if (!transfer_button || !transfer_button->IsDrawn() ||
           !transfer_button->AsButton() ||
           !transfer_button->AsButton()->AsLabelButton() ||
-          !transfer_button->AsButton()->AsLabelButton()->AsMenuButton()) {
+          !transfer_button->AsButton()->AsLabelButton()->AsMenuButton() ||
+          !transfer_button->AsButton()->AsLabelButton()->GetText().empty() ||
+          !transfer_button->AsButton()->AsLabelButton()->GetImage(
+              CEF_BUTTON_STATE_NORMAL)) {
         Finish(false, "transfer-view");
         return;
       }
@@ -467,9 +494,8 @@ private:
         Schedule();
         return;
       }
-      transfer_->ExecuteCommand(nullptr,
-                                AlloyTabTransferSurface::kTargetCommandBase,
-                                EVENTFLAG_NONE);
+      transfer_->ExecuteCommand(
+          nullptr, AlloyTabTransferSurface::kTargetCommandBase, EVENTFLAG_NONE);
       window_->SendKeyPress(27, 0);
       stage_ = 2;
       Schedule();
@@ -499,9 +525,8 @@ private:
         Schedule();
         return;
       }
-      transfer_->ExecuteCommand(nullptr,
-                                AlloyTabTransferSurface::kTargetCommandBase,
-                                EVENTFLAG_NONE);
+      transfer_->ExecuteCommand(
+          nullptr, AlloyTabTransferSurface::kTargetCommandBase, EVENTFLAG_NONE);
       result_->transfer_passed = transfer_commands_ == 2;
       window_->SendKeyPress(27, 0);
       stage_ = 4;
@@ -550,21 +575,18 @@ private:
           'O', static_cast<cef_event_flags_t>(EVENTFLAG_CONTROL_DOWN));
       const bool rejected = !interactions_->HandleAccelerator(
           'O', static_cast<cef_event_flags_t>(EVENTFLAG_CONTROL_DOWN |
-                                               EVENTFLAG_SHIFT_DOWN));
+                                              EVENTFLAG_SHIFT_DOWN));
       const bool incognito = interactions_->HandleAccelerator(
           'N', static_cast<cef_event_flags_t>(EVENTFLAG_CONTROL_DOWN |
-                                               EVENTFLAG_SHIFT_DOWN));
+                                              EVENTFLAG_SHIFT_DOWN));
       const bool copied = interactions_->Execute(AlloyMainCommand::kCopy);
       const bool pasted = interactions_->Execute(AlloyMainCommand::kPaste);
       const bool about = interactions_->Execute(AlloyMainCommand::kAbout);
-      const bool licenses =
-          interactions_->Execute(AlloyMainCommand::kLicenses);
-      const bool pinned =
-          interactions_->Execute(AlloyMainCommand::kTogglePin);
+      const bool licenses = interactions_->Execute(AlloyMainCommand::kLicenses);
+      const bool pinned = interactions_->Execute(AlloyMainCommand::kTogglePin);
       const bool duplicated =
           interactions_->Execute(AlloyMainCommand::kDuplicateTab);
-      const bool muted =
-          interactions_->Execute(AlloyMainCommand::kToggleMute);
+      const bool muted = interactions_->Execute(AlloyMainCommand::kToggleMute);
       const bool grouped =
           interactions_->Execute(AlloyMainCommand::kToggleGroup);
       const bool bookmark_bar =
@@ -591,27 +613,22 @@ private:
           !interactions_->OnDragEnter(browser_, multiple,
                                       DRAG_OPERATION_COPY) &&
           accepted_drags_ == 1;
-      const bool navigation_cleared = interactions_->OnNavigation(browser_) &&
-                                      cancel_count_ == 1;
+      const bool navigation_cleared =
+          interactions_->OnNavigation(browser_) && cancel_count_ == 1;
       auto menu_view = interactions_->GetView(AlloyInteractions::kMenuButtonId);
       auto activity_history_view =
           activity_->GetView(AlloyActivitySurface::kHistoryButtonId);
-      result_->lifecycle_passed = activity_->Shutdown() &&
-                                  activity_->Shutdown() &&
-                                  activity_history_view &&
-                                  !activity_history_view->GetParentView() &&
-                                  interactions_->Shutdown() &&
-                                  interactions_->Shutdown() && menu_view &&
-                                  !menu_view->GetParentView() &&
-                                  navigation_cleared && cancel_count_ == 2 &&
-                                  transfer_->Shutdown() &&
-                                  transfer_->Shutdown() &&
-                                  !interactions_->Execute(
-                                      AlloyMainCommand::kOpenMarkdown);
+      result_->lifecycle_passed =
+          activity_->Shutdown() && activity_->Shutdown() &&
+          activity_history_view && !activity_history_view->GetParentView() &&
+          interactions_->Shutdown() && interactions_->Shutdown() && menu_view &&
+          !menu_view->GetParentView() && navigation_cleared &&
+          cancel_count_ == 2 && transfer_->Shutdown() &&
+          transfer_->Shutdown() &&
+          !interactions_->Execute(AlloyMainCommand::kOpenMarkdown);
       Finish(result_->menu_passed && result_->command_passed &&
                  result_->drag_passed && result_->context_menu_passed &&
-                 result_->activity_passed &&
-                 result_->transfer_passed &&
+                 result_->activity_passed && result_->transfer_passed &&
                  result_->lifecycle_passed,
              "complete");
     }

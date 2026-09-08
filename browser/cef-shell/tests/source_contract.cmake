@@ -620,7 +620,8 @@ foreach(required_alloy_product_security_token
         "OnBeforeDownload"
         "ProductResourceHandlerWin"
         "GetFirstPartyForCookies"
-        "trusted_input_generation_"
+        "external_protocol_input_.Arm"
+        "external_protocol_input_.Consume"
         "kExternalProtocolInputLifetimeMilliseconds"
         "allow_os_execution = false"
         "MessageBoxW")

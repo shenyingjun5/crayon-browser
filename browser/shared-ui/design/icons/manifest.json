@@ -63,6 +63,13 @@
       "mirrorInRtl": false
     },
     {
+      "id": "tab.move-window",
+      "file": "tab-move-window.svg",
+      "labelKey": "tabs.move_to_window",
+      "surfaces": ["navigation-bar", "overflow-menu"],
+      "mirrorInRtl": false
+    },
+    {
       "id": "nav.back",
       "file": "nav-back.svg",
       "labelKey": "nav.back",
@@ -143,7 +150,7 @@
       "id": "history.open",
       "file": "history-open.svg",
       "labelKey": "history.open",
-      "surfaces": ["overflow-menu", "new-tab"],
+      "surfaces": ["navigation-bar", "overflow-menu", "new-tab"],
       "mirrorInRtl": false
     },
     {

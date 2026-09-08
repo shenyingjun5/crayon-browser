@@ -31,7 +31,7 @@
 | MRT | [markdown-runtime-roadmap.md](markdown-runtime-roadmap.md) | Markdown Runtime Extension Framework：闭合扩展 API、Highlight/KaTeX 与后续图表/演示门禁 | `MRT-01..09 DONE`（09 为 Windows 首发口径，macOS addendum 待补）；`MRT-10..19` 属第二期 |
 | SDK | [cast-sdk-integration-roadmap.md](cast-sdk-integration-roadmap.md) | 固定源码 Cast-SDK facade、发现、连接和控制；后续 Partner Cast facade | `SDK-01..14 DONE`；`SDK-15/16` 等 HUB/外部已批准 API |
 | PLT | [desktop-platform-adapters-roadmap.md](desktop-platform-adapters-roadmap.md) | Windows/macOS 存储、网络、生命周期、更新和客户端交接 | `PLT-01/02/W04/M04 DONE`；`PLT-M05 IN_PROGRESS`（macOS 后续切片暂缓），`PLT-W05a/W05b/W05c0 DONE`、`W05c BLOCKED` |
-| PLT 内部切片 | [desktop-shell-roadmap.md](desktop-shell-roadmap.md) | 自定义外壳＋Alloy；一期全功能迁移、可替换内容视图与双平台门禁 | 共享 `00..02`、Windows `03W..21W` VERIFIED；下一原子项为 Cast R09 几何，不重复计入顶层总数 |
+| PLT 内部切片 | [desktop-shell-roadmap.md](desktop-shell-roadmap.md) | 自定义外壳＋Alloy；一期全功能迁移、可替换内容视图与双平台门禁 | 共享 `00..02`、Windows `03W..22W` VERIFIED；24W2b1 修复已 IMPLEMENTED，当前 `24W2b3b4 IN_PROGRESS` 收敛图标按钮焦点，随后恢复 24W3 总回归 |
 | PRV | [privacy-security-roadmap.md](privacy-security-roadmap.md) | Profile、隐私、安全、日志和删除语义 | `PRV-01..12` 已完成或 VERIFIED；一期核心 `PRV-13A`、第二期扩展 `PRV-13B` |
 | CNT | [content-intelligence-roadmap.md](content-intelligence-roadmap.md) | 页面数据/Markdown 与第二阶段模型总结 | C1 数据面 `CNT-01..10 DONE/VERIFIED`；一期产品装配 `CNT-17..20 DONE`，`CNT-21W` 等 `PRV-13AW` 后总 Review；`CNT-11..16` 第二期 |
 | AGT | [agent-access-roadmap.md](agent-access-roadmap.md) | CAAP、tool registry、CLI/MCP、高性能读页和授权操作 | A0 完成；`AGT-07/15 VERIFIED`，`AGT-12C/13/14` 按装配依赖后续推进 |
@@ -48,7 +48,7 @@
 
 ### 自定义外壳＋Alloy（2026-09-04 最新决策）
 
-- 用户批准长期自定义 Shell＋Alloy，一期同步调整；[PLT-SHELL](desktop-shell-roadmap.md) 是当前宿主迁移队列，REL §5 是一期总依赖。共享 00..02、Windows 03W..22W 与 PLT-CAST-R09/R10W 已 VERIFIED；23W 自动化与 Release artifact/guard 已闭合，真实系统语言/IME/Narrator/原生 200% DPI 仍为后续 `BLOCKED` 门禁。Windows `24W1/2a/2b2a/2b2b` 已将默认产品切到 Alloy，并接通 Cast、真实 popup/多窗口、global Default profile 与无痕隔离；`24W2b1 IMPLEMENTED` 已接安全 handler，正向外部协议仍待物理点击。下一原子项按 b2c 接 session checkpoint/restore 并处理 legacy Chrome session 迁移，再由 b3 汇合其余日用 surface。24W3 总回归前仍不是可发布完成态。Windows 首发政策不变，macOS 特有迁移与验证后续保留。
+- 用户批准长期自定义 Shell＋Alloy，一期同步调整；[PLT-SHELL](desktop-shell-roadmap.md) 是当前宿主迁移队列，REL §5 是一期总依赖。共享 00..02、Windows 03W..22W 与 PLT-CAST-R09/R10W 已 VERIFIED；23W 自动化与 Release artifact/guard 已闭合，真实系统语言/IME/Narrator/原生 200% DPI 仍为后续 `BLOCKED` 门禁。Windows `24W1/2a/2b2a/2b2b/2b2c` 已将默认产品切到 Alloy并接通 Cast、安全、popup/多窗口、Profile/无痕和 session；`24W2b1 IMPLEMENTED` 已修 external-navigation generation 时序，待新二进制物理复验。当前 `24W2b3b4 IN_PROGRESS` 收敛 Chrome-inspired 图标按钮点击后的持久焦点框，完成后恢复 `24W3 READY` 的最终 UI/artifact 总回归，再执行 25W/26W/27W。Windows 首发政策不变，macOS 特有迁移与验证后续保留。
 - 原 R02b/b2 LOCATION 多 Chrome view 方案及“等待选择宿主”由本决定取代；旧记录保留为历史，不标完成、不继续原路线。R08 候选宿主接线不等待最终默认切换，防止循环依赖。
 - 浏览器日用基线、三闭环、三语言和原隐私/设备/发布门禁全部保留。新增宿主相关证据不能复用旧 Chrome UI 通过结论；其他 WebView/Chrome 特殊容器只预留边界，不在一期伪造多引擎支持。
 - 测试先无 GUI，后续 Alloy Harness 同进程/专用窗口复用标签；不接管用户日用窗口，不默认抢焦点。需要前台输入/重启新原生二进制的例外须提前说明。

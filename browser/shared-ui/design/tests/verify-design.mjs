@@ -16,6 +16,7 @@ const requiredGlyphIds = [
   "tab.new",
   "tab.close",
   "tab.search",
+  "tab.move-window",
   "nav.back",
   "nav.forward",
   "nav.reload",
