@@ -113,7 +113,7 @@
 | 23W | BLOCKED | 09W、11W..19W、21W、22W VERIFIED | Windows 全外壳本地化/IME/键盘/读屏/缩放/主题回归 | P；LOC Windows 矩阵、UX-001..018；不擅改系统设置 |
 | 23M | VERIFIED | 09M、11M..19M、21M、22M VERIFIED | macOS 全外壳本地化/IME/键盘/读屏/缩放/主题回归 | P；LOC macOS 矩阵、UX-001..018；不擅改系统设置 |
 | 24W | IN_PROGRESS | Windows 01..22W VERIFIED；23W 系统语言/IME/Narrator/原生 DPI 矩阵经用户 2026-09-05 明确后置 | Windows 产品默认入口切至自定义 Shell＋Alloy | P；分 24W1..W3；三闭环和日用功能无回退、入口与 capability 真实性 Review |
-| 24M | TODO | macOS 01..23 对应项 VERIFIED | macOS 产品默认入口切至自定义 Shell＋Alloy | P；后续平台验证，不被 Windows 证据替代 |
+| 24M | READY | macOS 01..23 对应项 VERIFIED | macOS 产品默认入口切至自定义 Shell＋Alloy | P；分 24M1/M2/M3（见 §92 拆解）；后续平台验证，不被 Windows 证据替代 |
 | 25P | TODO | 24P VERIFIED | 移除该平台旧 Chrome 宿主/LOCATION 生产接线及临时迁移开关 | P＋artifact scan；另一平台仍需要的共享代码保留隔离，不删除他人改动 |
 | 26P | TODO | 25P VERIFIED | 在新默认宿主复验 Direct→Relay→拒绝/交接→稳定性 | R；映射 PLT-W05c..f / M05b4..b6/M05c 与 R11P；真实接收端、100 次/睡眠/退出 |
 | 27P | TODO | 23P、25P、26P VERIFIED | 新宿主三闭环/隐私/性能/发布证据汇总 | R；PRV/CNT/MRT/PLT/LOC/QAR/REL 对应平台完整门禁；无签名/真机不标 DONE |
@@ -1006,3 +1006,12 @@ Code Review：按 v0.9 独立检查唯一 owner、同步 callback reentrancy、t
 - 用户授权的人工门禁（如实记录，未冒充通过）：IME composition（简繁中文输入法组合态下标签标题/omnibox 输入）、Narrator/VoiceOver 朗读顺序、原生 OS 200% DPI、三语言完整重启切换——均为系统级状态，自动化不能替代，需用户逐步执行或授权后续实机会话执行。
 - Code Review：按 v0.9 复核需求边界（只回归不擅改系统设置）、正确性（每 locale 独立进程规避 factory 全局注册、accept_language 与 html lang 同源）、安全（无网络、无系统变更）、测试与可维护性（探针复用 builtin content 装配）。P0/P1/P2=0。
 - 未覆盖与风险：上述人工门禁；24M 依赖的 macOS 01..23 中本项以 VERIFIED 收口。`23M` 转为 `VERIFIED`。
+
+
+## 92. PLT-SHELL-24M 原子拆解（2026-09-10，为下会话准备的 READY 拆解）
+
+- 结构：对齐 Windows 24W1/24W2/24W3 的分波，但按 Mac 形态独立设计；禁止直接照抄 Windows host（HWND/Win32 专属逻辑不适用），共享逻辑只经 `browser/window/` 与 `browser/media_host/` 平台中立层复用。
+- 24M1（Alloy 产品根/生命周期，预算 ≤800 行生产净新增）：新增 `src/macos/alloy_product_host_mac.{h,mm}`（CefClient + LifeSpan/Load/Display/Request/ContextMenu/Drag/BrowserView/WindowDelegate），产品首窗改为真实 `CefWindow`＋`CefBrowserView`（runtime ALLOY）承载 `crayon://newtab`；`BrowserApp` 首窗创建改走该 host，TabController 的 CHROME `CreateBrowserWindow` 不再是首窗路径；关闭排空、Browser/Renderer 回调、`crayon://newtab` 首载、`use-mock-keychain`/`--remote-debugging-port` 透传保持。验收：Debug product build + 真实产品 smoke（首窗 runtime=ALLOY、newtab 200、关闭零残留）+ 全量 ctest + 合同 token（`alloy_product_host_mac` 存在、产品 app 引用）。
+- 24M2（功能面接入，分 24M2a/b/c）：a=媒体 observation/network bridge/可信输入/页面 Markdown 接线；b=MDV entry/editing、权限/下载/site-controls、session restore 接入同一 host；c=cast entry bridge + Browser-owned overlay（复用 22M 组件）+ 活动/书签/历史/下载 surface。全部只消费既有 owner，验收为各自真实 CEF probe + 全量 ctest。
+- 24M3（收口）：双配置 build、完整 ctest、首窗/关闭/退出零残留 smoke、三语言基础一致性（复用 23M locale 矩阵探针）、v0.9 Review。
+- 25P 依赖 24M VERIFIED；26P 需真实接收端；27P 汇总。上会话已固化的可复用证据：`use-mock-keychain` 为 Mac 一切真实 CEF 探针必备（19M 教训）、CEF 窗口关闭顺序（先 CloseBrowser 后 Close，见 22M）、`_Exit` 兜底仅限测试 target。
