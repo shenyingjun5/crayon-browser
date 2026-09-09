@@ -329,10 +329,20 @@ if(builtins_test_index EQUAL -1)
 endif()
 foreach(required_builtin_source
         "${CRAYON_CEF_SHELL_SOURCE}/src/browser/window/alloy_builtin_content.h"
-        "${CRAYON_CEF_SHELL_SOURCE}/src/browser/window/alloy_builtin_content.cc")
+        "${CRAYON_CEF_SHELL_SOURCE}/src/browser/window/alloy_builtin_content.cc"
+        "${CRAYON_CEF_SHELL_SOURCE}/src/browser/window/alloy_page_markdown.h"
+        "${CRAYON_CEF_SHELL_SOURCE}/src/browser/window/alloy_page_markdown.cc")
   if(NOT EXISTS "${required_builtin_source}")
     message(FATAL_ERROR "macOS Alloy builtin content is missing: ${required_builtin_source}")
   endif()
 endforeach()
+# PLT-SHELL-19M: the web-page Markdown chain must be dispatched from the
+# macOS integration harness through the shared AlloyPageMarkdown adapter.
+string(FIND "${integration_source}" "alloy-page-markdown"
+       page_markdown_scenario_index)
+if(page_markdown_scenario_index EQUAL -1)
+  message(FATAL_ERROR "macOS integration must dispatch alloy-page-markdown")
+endif()
+
 
 message(STATUS "macOS CEF shell source contract passed")

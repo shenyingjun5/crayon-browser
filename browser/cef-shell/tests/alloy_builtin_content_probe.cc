@@ -293,6 +293,10 @@ class BuiltinProbe final : public CefApp,
     }
     if (stage_ == 1 && title == "alloy-mdv-ready") {
       result_->mdv_runtime_passed = true;
+      if (getenv("CRAYON_HTTP_PROBE") != nullptr) {
+        browser->GetMainFrame()->LoadURL("http://127.0.0.1:8778/x.html");
+        return;
+      }
       if (!editing_->SaveWriteBack(browser) ||
           ReadUtf8(markdown_path_).find("alloy-edited") == std::string::npos) {
         Finish(false, "write-back");

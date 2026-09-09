@@ -26,8 +26,13 @@
 #include "include/views/cef_window.h"
 #include "include/views/cef_window_delegate.h"
 #include "include/wrapper/cef_closure_task.h"
+#if defined(_WIN32)
 #include "windows/content_host_adapter_win.h"
 #include "windows/content_host_process_win.h"
+#else
+#include "macos/content_host_adapter_mac.h"
+#include "macos/content_host_process_mac.h"
+#endif
 
 #ifndef CRAYON_CONTENT_HOST_TEST_PATH
 #error "CRAYON_CONTENT_HOST_TEST_PATH must be defined"
@@ -43,8 +48,13 @@ using crayon::browser::cef_shell::window::AlloyBuiltinContentObserver;
 using crayon::browser::cef_shell::window::AlloyPageMarkdown;
 using crayon::browser::cef_shell::window::AlloyTabController;
 using crayon::browser::cef_shell::window::RegisterAlloyBuiltinContentFactories;
+#if defined(_WIN32)
 using crayon::browser::cef_shell::windows::ContentHostAdapter;
 using crayon::browser::cef_shell::windows::ContentHostProcess;
+#else
+using crayon::browser::cef_shell::macos::ContentHostAdapter;
+using crayon::browser::cef_shell::macos::ContentHostProcess;
+#endif
 using namespace crayon::browser_engine;
 
 constexpr int kPollMilliseconds = 20;
@@ -106,11 +116,12 @@ class Probe final : public CefApp,
     state_ = std::make_shared<MdvRuntimeState>();
     entries_ = std::make_shared<MdvEntryController>(state_, product->mdv);
     editing_ = std::make_shared<MdvEditController>(state_, product->mdv);
-    if (!RegisterAlloyBuiltinContentFactories(
-            crayon::browser_new_tab::BuildNewTabPageModel(
-                crayon::browser_new_tab::NewTabProfileMode::kRegular,
-                crayon::browser_new_tab::ShortcutConfig{}),
-            product->new_tab, product->mdv, state_)) {
+    const bool registered = RegisterAlloyBuiltinContentFactories(
+        crayon::browser_new_tab::BuildNewTabPageModel(
+            crayon::browser_new_tab::NewTabProfileMode::kRegular,
+            crayon::browser_new_tab::ShortcutConfig{}),
+        product->new_tab, product->mdv, state_);
+    if (!registered) {
       Finish(false, "factory-registration");
       return;
     }
@@ -142,8 +153,15 @@ class Probe final : public CefApp,
       return;
     }
     CefBrowserSettings settings;
-    view_ = CefBrowserView::CreateBrowserView(client_, fixture_url_, settings,
-                                              nullptr, nullptr, this);
+    // macOS: navigate after the browser exists (an initial URL handed to
+    // CreateBrowserView this early never commits on this platform).
+    // macOS CEF-150: an http URL as the very first navigation of a fresh
+    // Alloy browser sits pending forever (network service still attaching).
+    // Create the view on about:blank, let it commit, then navigate to the
+    // real fixture once the initial URL is committed.
+    view_ = CefBrowserView::CreateBrowserView(client_, "about:blank",
+                                              settings, nullptr, nullptr,
+                                              this);
     tab_id_ = tabs_->BeginCreate(view_, ContentPurpose::kWeb,
                                  NavigationId::FromRaw(1));
     if (!view_ || !tab_id_) {
@@ -189,7 +207,6 @@ class Probe final : public CefApp,
                         int http_status_code) override {
     if (frame && frame->IsMain() && http_status_code == 200) loaded_url_ = frame->GetURL();
   }
-
   void OnBuiltinLoadError(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame> frame,
                           cef_errorcode_t error_code, const CefString&,
                           const CefString& failed_url) override {
@@ -285,6 +302,11 @@ class Probe final : public CefApp,
 
   void Tick() {
     if (finished_) return;
+    if (!navigated_ && polls_ >= 100 && browser_ && browser_->GetMainFrame() &&
+        !browser_->GetMainFrame()->GetURL().ToString().empty()) {
+      navigated_ = true;
+      browser_->GetMainFrame()->LoadURL(fixture_url_);
+    }
     if (++polls_ > kMaximumPolls) {
       const auto* tab = browser_ && tabs_
                             ? tabs_->model().FindByBrowser(
@@ -386,6 +408,7 @@ class Probe final : public CefApp,
   std::string copied_markdown_;
   int stage_ = 0;
   int polls_ = 0;
+  bool navigated_ = false;
   bool finished_ = false;
 
   IMPLEMENT_REFCOUNTING(Probe);

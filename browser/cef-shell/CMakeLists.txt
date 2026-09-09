@@ -1553,6 +1553,14 @@ if(CRAYON_BUILD_TESTS)
       tests/alloy_builtin_content_probe.h
       src/browser/window/alloy_builtin_content.cc
       src/browser/window/alloy_builtin_content.h
+      tests/alloy_page_markdown_probe.cc
+      tests/alloy_page_markdown_probe.h
+      src/browser/window/alloy_page_markdown.cc
+      src/browser/window/alloy_page_markdown.h
+      src/browser/page_markdown/cef_page_markdown_preview.cc
+      src/browser/page_markdown/cef_page_markdown_preview.h
+      src/browser/page_markdown/page_markdown_preview.cc
+      src/browser/page_markdown/page_markdown_preview.h
       src/browser/mdv/cef_mdv_editing.cc
       src/browser/mdv/cef_mdv_editing.h
       src/browser/new_tab/cef_new_tab_handler.cc

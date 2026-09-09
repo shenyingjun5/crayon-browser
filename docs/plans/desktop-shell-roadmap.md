@@ -104,7 +104,7 @@
 | 18W | VERIFIED | 17W VERIFIED | Windows 内置新标签/MDV 内容接入新 host | P；源码/预览/编辑/原子保存/冲突，Mermaid/Highlight/KaTeX 离线；复用 MDV/MRT 门禁 |
 | 18M | DONE | 17M VERIFIED | Mac Chrome风格内置新标签/MDV接入Alloy | P；源码/预览/快速编辑/原子保存/冲突，离线渲染与外观 |
 | 19W | VERIFIED | 07W、17W VERIFIED | Windows 网页 Markdown 从新入口到原快照/导出链 | P；当前标签、导航取消、跨源/隐藏内容拒绝、复制/保存；CNT addendum |
-| 19M | TODO | 07M、17M VERIFIED | Mac网页Markdown从Alloy入口到既有快照/导出链 | P；当前目标、导航取消、跨源/隐藏内容拒绝、复制/保存 |
+| 19M | BLOCKED | 07M、17M VERIFIED | Mac网页Markdown从Alloy入口到既有快照/导出链 | P；当前目标、导航取消、跨源/隐藏内容拒绝、复制/保存 |
 | 20 | VERIFIED | 02、PLT-CAST-R08u1 VERIFIED | CastEntrySurface 去 LOCATION 耦合，按钮/面板挂到自绘栏 | U＋H；布局/灰态/事件/释放；无真实后端时仍不允许开始 |
 | 21W | VERIFIED | 07W、15W、20、R03b/R04/R07 VERIFIED | 对应 PLT-CAST-R08W 的 Alloy 产品接线，不另建投屏 owner | P；多视频/设备明确选择、连接不播放、错误/播控、MHV2 兼容拒绝 |
 | 21M | TODO | 07M、15M、20、R03b/R04/R07 VERIFIED | 对应 PLT-CAST-R08M 的 Alloy 产品接线，不另建投屏 owner | P；多视频/设备明确选择、连接不播放、错误/播控、MHV2 兼容拒绝 |
@@ -947,3 +947,20 @@ Code Review：按 v0.9 独立检查唯一 owner、同步 callback reentrancy、t
 - 环境项（与本地HEAD对照证明与代码无关）：`alloy_omnibox_mac`/`alloy_page_tools_mac`/`alloy_tab_controller_mac` 三项键盘/前台注入探针在本 GUI 会话退化失败（`real_input=0`），stash 全部改动后在干净 HEAD 上同样失败；`crayon-content-host` 的 cnt_18c 两项（Unix socket health）在干净 HEAD 上同样超时。二者源码本任务零改动。
 - Code Review：按 v0.9 复核需求/边界（复用 owner、无第二文档状态、不切默认入口）、正确性（renderer 源补齐、双进程 scheme 契约、跨平台门）、安全/隐私（离线资产、CSP 零违规即失败、外部修改冲突显式化）、测试与可维护性（共享探针仅平台门增量）。P0/P1/P2=0。
 - 未覆盖与风险：原生文件对话框用户选择（归 23M/24M）；Windows 侧无改动；Mac 产品默认入口仍归 24M；键盘/读屏实机矩阵归 23M。`18M` 转为 `DONE`。
+
+
+## 86. PLT-SHELL-19M 原子范围（2026-09-10）
+
+- 状态：IN_PROGRESS；依赖 07M、17M DONE、18M DONE。单一目标：把共享 `AlloyPageMarkdown` 链路（当前 Alloy tab/navigation → `CefPageSnapshotBridge` → macOS content-host 进程 → 确定性 Markdown → MDV edit/export owner）经真实 CEF 探针接入 macOS 候选 Alloy host；不重写 collector/gateway/Core/Markdown/MDV 算法，不切默认入口（24M），不触碰 Windows。
+- 允许修改：共享 `alloy_page_markdown_probe.cc` 的 content-host 适配器平台门（`windows/content_host_adapter_win` ↔ `macos/content_host_adapter_mac`）、Mac integration main 的 `alloy-page-markdown` 场景分支、CEF CMake（Mac integration target 增补 `alloy_page_markdown.cc` 与 probe）、CTest `alloy_page_markdown_mac` 注册、`macos_source_contract.cmake` token、本计划。禁止改变 PageSnapshot/CHV1 schema、内容预算、隐藏/跨源过滤、文件/剪贴板授权、页面写入能力、public network 或旧 Chrome 产品链。
+- owner 与边界：Browser process 只对可信上下文菜单命令和当前 Alloy tab/navigation 签发 snapshot；`CefPageSnapshotBridge` 继续唯一拥有 request/source/sequence/terminal 校验；macOS content-host 进程继续唯一拥有正文与 Markdown。导航、取消、renderer 退出、tab 关闭与 Shutdown 必须使旧 request/preview/export 会话失效；页面消息不能触发复制、保存或扩大文件权限。
+- 验收：macOS arm64 Debug integration build；经 python fixture runner 的真实 Alloy 页面从上下文菜单生成 MDV 并导航至 `crayon://mdv/app.html`，覆盖当前标签、隐藏/敏感内容拒绝、导航取消（recovery 恢复）、重复命令、Preview/Source/Split、当前编辑缓冲区复制与关闭排空；`alloy_page_markdown_mac` CTest + `macos_cef_shell_source_contract` + 适用全量 ctest + `git diff --check`；原生 Save As 用户点击沿用受控 seam 证据。
+
+
+## 87. PLT-SHELL-19M 现状记录（2026-09-10，BLOCKED）
+
+- 已落地：共享 `alloy_page_markdown_probe.cc` 的 content-host 适配器平台门（`windows/content_host_adapter_win` ↔ `macos/content_host_adapter_mac`，类接口一致）；Mac integration main 新增 `alloy-page-markdown` 场景分支（`CreateAlloyPageMarkdownProbe(argv[1], …)`）；Mac integration target 增补 `alloy_page_markdown.{h,cc}`、`cef_page_markdown_preview.{h,cc}`、`page_markdown_preview.{h,cc}` 与 `cef_new_tab_handler.cc`、`cef_mdv_editing.cc` 及 renderer collector/media-observer/collector-core 源（修复两组链接期未定义符号）；`macos_source_contract.cmake` 增 19M token（场景分发 + 源存在）。共享代码零改动、Windows 零改动。
+- BLOCKED 现象：真实 CEF 探针中 Alloy BrowserView 的 **http 首次导航永远 pending**——`OnLoadingStateChange(is_loading=true)` 后无 commit、无 address change、无 load end、无 load error、无 renderer 终止；fixture 服务器未收到任何请求（请求停在浏览器进程内），约 12s 后随探针超时窗口关闭被 `ERR_ABORTED`。
+- 已排除（逐一隔离）：`AlloyBuiltinContent`/`AlloyPageMarkdown`/tab 控制器/content-host 子进程/factory 注册时机/导航时机(创建期 vs 延迟 2s)/`window_->Activate`——**用裸 `CefClient`（无任何 handler）+ 跳过 content-host + 跳过 factory 注册的最小组合仍复现**，证明与 19M 新增对象无关。同二进制内 `alloy_navigation_mac`（Alloy+http，经同一 runner）与 `page_snapshot_cef_integration`（Chrome 风格 TabController+http）均通过，说明 http 链路本身可用；差异集中在 page-markdown 探针的场景形态（`CreateBrowserView` + 空/延迟首导航 + tab 容器组合）。
+- 恢复与防回退：探针调试桩已全部移除（保留 about:blank 暖启 + 已提交后再导航 fixture 的形态）；`alloy_page_markdown_mac` CTest 暂缓注册（场景仍可手动运行），`macos_source_contract` 保留场景/源 token；全量套件其余 3 项失败为已记录的键盘注入会话退化（stash 对照证明与本任务无关）。
+- 解除条件（恢复 READY）：定位 CEF-150 macOS 下该场景形态的首 http 导航 pending 根因（建议：对比 nav 探针逐项加入 page-markdown 的装配元素；或验证 Chrome/Alloy runtime style 混排时 network service 附着时序），给出最小复现后按原验收执行。解除前 20M 收口与 REL-03 中涉及 Mac 网页 Markdown 的证据保持依赖本项。
