@@ -1763,6 +1763,15 @@ if(CRAYON_BUILD_TESTS)
       alloy_cast_bridge_mac
       PROPERTIES LABELS "cef;shell;macos;alloy;cast;integration;dpi"
                  TIMEOUT 240)
+    add_test(NAME alloy_page_markdown_mac
+             COMMAND "${CRAYON_PYTHON3_EXECUTABLE}"
+                     "${PROJECT_SOURCE_DIR}/tests/e2e/desktop/browser/run_page_snapshot_fixture.py"
+                     "$<TARGET_FILE:crayon_page_snapshot_cef_integration_test>"
+                     alloy-page-markdown)
+    set_tests_properties(
+      alloy_page_markdown_mac
+      PROPERTIES LABELS "cef;shell;macos;alloy;content;mdv;integration"
+                 TIMEOUT 240)
     add_test(NAME alloy_cast_overlay_mac
              COMMAND crayon_page_snapshot_cef_integration_test
                      --alloy-cast-overlay-probe)

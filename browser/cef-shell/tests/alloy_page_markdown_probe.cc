@@ -97,6 +97,12 @@ class Probe final : public CefApp,
 
   void OnBeforeCommandLineProcessing(
       const CefString&, CefRefPtr<CefCommandLine> command) override {
+#if defined(__APPLE__)
+    // macOS probes must use the product mock-keychain semantics; without it
+    // the network service stalls on real Keychain access and http
+    // navigations never commit (see 19M record).
+    command->AppendSwitch("use-mock-keychain");
+#endif
     command->AppendSwitch("disable-background-networking");
     command->AppendSwitch("disable-component-update");
     command->AppendSwitch("disable-default-apps");

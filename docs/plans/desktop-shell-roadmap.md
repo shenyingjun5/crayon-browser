@@ -104,7 +104,7 @@
 | 18W | VERIFIED | 17W VERIFIED | Windows 内置新标签/MDV 内容接入新 host | P；源码/预览/编辑/原子保存/冲突，Mermaid/Highlight/KaTeX 离线；复用 MDV/MRT 门禁 |
 | 18M | DONE | 17M VERIFIED | Mac Chrome风格内置新标签/MDV接入Alloy | P；源码/预览/快速编辑/原子保存/冲突，离线渲染与外观 |
 | 19W | VERIFIED | 07W、17W VERIFIED | Windows 网页 Markdown 从新入口到原快照/导出链 | P；当前标签、导航取消、跨源/隐藏内容拒绝、复制/保存；CNT addendum |
-| 19M | BLOCKED | 07M、17M VERIFIED | Mac网页Markdown从Alloy入口到既有快照/导出链 | P；当前目标、导航取消、跨源/隐藏内容拒绝、复制/保存 |
+| 19M | DONE | 07M、17M VERIFIED | Mac网页Markdown从Alloy入口到既有快照/导出链 | P；当前目标、导航取消、跨源/隐藏内容拒绝、复制/保存 |
 | 20 | VERIFIED | 02、PLT-CAST-R08u1 VERIFIED | CastEntrySurface 去 LOCATION 耦合，按钮/面板挂到自绘栏 | U＋H；布局/灰态/事件/释放；无真实后端时仍不允许开始 |
 | 21W | VERIFIED | 07W、15W、20、R03b/R04/R07 VERIFIED | 对应 PLT-CAST-R08W 的 Alloy 产品接线，不另建投屏 owner | P；多视频/设备明确选择、连接不播放、错误/播控、MHV2 兼容拒绝 |
 | 21M | DONE | 07M、15M、20、R03b/R04/R07 VERIFIED | 对应 PLT-CAST-R08M 的 Alloy 产品接线，不另建投屏 owner | P；多视频/设备明确选择、连接不播放、错误/播控、MHV2 兼容拒绝 |
@@ -990,3 +990,10 @@ Code Review：按 v0.9 独立检查唯一 owner、同步 callback reentrancy、t
 - 验证：macOS arm64 Debug integration build PASS；`alloy_cast_overlay_mac` 1/1 PASS（0.54–2.4s，九位全真）；`macos_cef_shell_source_contract` PASS；全量 ctest 117/120——4 项失败（omnibox/page-tools/tab-controller 键盘注入 + security 超时）均为本 GUI 会话退化类（此前多次通过，17M/18M 记录已含 stash 对照方法），本任务源码与其零交集；`git diff --check` 通过。
 - Code Review：按 v0.9 复核 owner（唯一 overlay，无第二 owner）、安全（点击只回传 opaque ref、controller 拒绝即隐藏、页面只能影响位置、无 URL/路径/SDK handle 进 UI）、放置边界（共享引擎判定、缩放界限、重复/超页拒绝）、生命周期（懒求值无通知竞态、Detach/Invalidate 幂等）。P0/P1/P2=0。
 - 未覆盖与风险：OS 级 key 移交、读屏朗读、三语言、原生 DPI 矩阵归 23M；19M BLOCKED（见 §87）仍在迁移关键路径；Windows 零改动。`22M` 转为 `DONE`。
+
+
+## 91. PLT-SHELL-19M 解除记录（2026-09-10，BLOCKED → DONE）
+
+- 根因定位（解除 §87 阻塞）：19M 探针的 `OnBeforeCommandLineProcessing` 缺少 macOS 产品语义开关 **`use-mock-keychain`**（nav 探针与产品 `app.cc` 均有）。缺失时 CEF 网络服务在真实 Keychain 访问路径上初始化停滞——`OnLoadingStateChange(true)` 后导航永远 pending、请求不出进程、无任何 error/abort 事件，且与页内容、加载时机、AlloyBuiltinContent/tab/工厂/content-host 均无关（§87 的隔离记录正是因此未命中）。补上开关后同二进制一次通过。教训固化为规则：**macOS 的一切真实 CEF 探针必须携带 `use-mock-keychain`**。
+- 解除后结果：`alloy_page_markdown_mac` 1/1 PASS（3.40s，context=1 cancellation=1 preview=1 export=1 lifecycle=1）——当前 Alloy tab 经上下文菜单命令签发 snapshot，经 macOS content-host 进程与确定性 Markdown 链导航至 `crayon://mdv/app.html`；隐藏 secret 拒绝、GFM 表格、Preview/Source/Split、当前编辑缓冲区复制、导航取消后 recovery 恢复、重复命令有界、关闭排空全部断言。`macos_cef_shell_source_contract`（含恢复的 CTest 注册 token）PASS。
+- 遗留收口：原生 Save As 对话框用户点击、公网真实站点归 23M/24M 实机矩阵。`19M` 转为 `DONE`；MRT-09 的 Mac addendum 依赖相应解锁。
