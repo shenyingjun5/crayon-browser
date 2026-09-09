@@ -316,4 +316,23 @@ if(interactions_test_index EQUAL -1)
   message(FATAL_ERROR "macOS integration must register alloy_interactions_mac")
 endif()
 
+# PLT-SHELL-18M: the built-in newtab/MDV pages must reach the candidate
+# Alloy host through the shared AlloyBuiltinContent seam.
+string(FIND "${integration_source}" "alloy-builtins" builtins_scenario_index)
+if(builtins_scenario_index EQUAL -1)
+  message(FATAL_ERROR "macOS integration must dispatch the builtins scenario")
+endif()
+string(FIND "${cmake_source}" "alloy_builtin_content_mac"
+       builtins_test_index)
+if(builtins_test_index EQUAL -1)
+  message(FATAL_ERROR "macOS integration must register alloy_builtin_content_mac")
+endif()
+foreach(required_builtin_source
+        "${CRAYON_CEF_SHELL_SOURCE}/src/browser/window/alloy_builtin_content.h"
+        "${CRAYON_CEF_SHELL_SOURCE}/src/browser/window/alloy_builtin_content.cc")
+  if(NOT EXISTS "${required_builtin_source}")
+    message(FATAL_ERROR "macOS Alloy builtin content is missing: ${required_builtin_source}")
+  endif()
+endforeach()
+
 message(STATUS "macOS CEF shell source contract passed")

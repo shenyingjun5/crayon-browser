@@ -102,7 +102,7 @@
 | 17W | VERIFIED | 15W VERIFIED | Windows 主菜单/上下文菜单/拖放/剪贴板/本地文件入口迁移 | H；平台快捷键、About/许可、安全文件选择、取消与来源约束 |
 | 17M | DONE | 15M VERIFIED | Mac主菜单/上下文菜单/拖放/剪贴板/本地文件入口迁移 | H；复用已有Mac平台入口，原生选择/取消、来源与命令目标约束 |
 | 18W | VERIFIED | 17W VERIFIED | Windows 内置新标签/MDV 内容接入新 host | P；源码/预览/编辑/原子保存/冲突，Mermaid/Highlight/KaTeX 离线；复用 MDV/MRT 门禁 |
-| 18M | TODO | 17M VERIFIED | Mac Chrome风格内置新标签/MDV接入Alloy | P；源码/预览/快速编辑/原子保存/冲突，离线渲染与外观 |
+| 18M | DONE | 17M VERIFIED | Mac Chrome风格内置新标签/MDV接入Alloy | P；源码/预览/快速编辑/原子保存/冲突，离线渲染与外观 |
 | 19W | VERIFIED | 07W、17W VERIFIED | Windows 网页 Markdown 从新入口到原快照/导出链 | P；当前标签、导航取消、跨源/隐藏内容拒绝、复制/保存；CNT addendum |
 | 19M | TODO | 07M、17M VERIFIED | Mac网页Markdown从Alloy入口到既有快照/导出链 | P；当前目标、导航取消、跨源/隐藏内容拒绝、复制/保存 |
 | 20 | VERIFIED | 02、PLT-CAST-R08u1 VERIFIED | CastEntrySurface 去 LOCATION 耦合，按钮/面板挂到自绘栏 | U＋H；布局/灰态/事件/释放；无真实后端时仍不允许开始 |
@@ -929,3 +929,21 @@ Code Review：按 v0.9 独立检查唯一 owner、同步 callback reentrancy、t
 - 验证：macOS arm64 Debug integration build PASS；`alloy_interactions_mac` 1/1 PASS（0.39–3.17s，三次复跑稳定）+ `macos_cef_shell_source_contract` PASS；全量 ctest 115/118——3 项失败（`alloy_omnibox_mac`/`alloy_page_tools_mac`/`alloy_tab_controller_mac`）为键盘/前台注入依赖探针在本 GUI 会话退化（`real_input=0`），已用 stash 全部 17M 改动后重建复现同样失败证明与本次代码无关（三者源码零改动，且在更早的同日满套件运行中通过）；恢复改动后非键盘探针（tab-strip/content-view-host）与本任务两项全部通过。`bash scripts/check.sh fast`（全步骤）与 `bash scripts/check.sh security` 通过；`git diff --check` 通过。
 - Code Review：按 v0.9 复核需求/边界（闭集命令、唯一本地文件入口、无 Chrome 命令依赖）、正确性（CEF 引用计数、关闭舞步顺序、fencing）、安全/隐私（原生文件选择不被自动化驱动、路径不入日志/DOM、剪贴板仅主 frame 闭集命令）、性能与可维护性（生产净新增约 200 行，探针为测试 target）。P0/P1/P2=0。
 - 未覆盖与风险：原生文件对话框的真实用户选择（含取消面板交互）为人工门禁，归 23M/24M 实机矩阵；本探针的 `_Exit` 兜底仅限测试 target，产品宿主（24M 接线时）仍须走完整 `CefShutdown` 并届时复核该竞态；CEF-150 macOS helper 收割竞态作为平台已知问题记录。MDV 内容 host（18M）、网页 Markdown（19M）、Cast 接线（21M/22M）、默认入口（24M）未做。`17M` 转为 `DONE`。
+
+
+## 84. PLT-SHELL-18M 原子范围（2026-09-09）
+
+- 状态：IN_PROGRESS；依赖 17M DONE。单一目标：将共享 `AlloyBuiltinContent` CEF client seam（既有 `crayon://newtab`/`crayon://mdv` scheme factories、`MdvRuntimeState`、entry/edit owner 与 browser-side mdvQuery router）接入 macOS 候选 Alloy host，并以真实 CEF 探针证明宿主迁移不改变内置页协议、文件 owner 或离线资产边界；不切产品默认入口（24M），不重写 newtab/MDV/MRT 算法，不触碰 Windows。
+- 允许修改：共享 `alloy_builtin_content_probe.cc` 的跨平台门（进程 id/路径、快捷键平台、输出标签）、Mac integration main 的 `alloy-builtins` 场景分支、CEF CMake（Mac integration target 增补 `alloy_builtin_content.cc`、`cef_mdv_editing.cc`、`cef_new_tab_handler.cc`、probe 与 `crayon::browser-new-tab`/`crayon::browser-product-strings` 链接）、CTest `alloy_builtin_content_mac` 注册、`macos_source_contract.cmake` token、本计划。禁止复制页面 HTML/JS、改变 `crayon` scheme 安全标志、引入公网资源、自动替用户选择本地文件、放宽原子保存/冲突 gate、新增第二份文档状态或依赖升级。
+- owner 与边界：scheme 仍由既有 `cef_new_tab_handler`/`cef_mdv_handler` 注册，MDV snapshot/path/generation 仍由 `MdvRuntimeState`、entry/edit controller 唯一持有；adapter 只负责候选 host 的创建、导航、视图挂载与生命周期接线；导航或关闭后旧编辑消息不得污染新 generation。
+- 验收：macOS arm64 Debug integration build；真实 Alloy 窗口离线加载 newtab 与 MDV：zh-CN newtab、`Source/Preview/Split` 三视图切换、恶意 `<script>` 保持文本、Highlight/KaTeX/Mermaid 完成标记、亮暗主题 CSS、快速连续编辑不丢后缀、`SaveWriteBack` 原子回写、外部修改冲突确认投影、关闭排空；`alloy_builtin_content_mac` CTest + `macos_cef_shell_source_contract` + 适用全量 ctest + `git diff --check`；键盘注入退化的三项既有探针（omnibox/page-tools/tab-controller，与本任务无关、已由 stash 对照证明）如实报告。
+
+
+## 85. PLT-SHELL-18M 完成记录（2026-09-10）
+
+- 实现：共享 `AlloyBuiltinContent` client seam 与 `RegisterAlloyBuiltinContentFactories` 零改动复用于 macOS 候选 Alloy host；共享探针 `alloy_builtin_content_probe.cc` 增加跨平台门（进程 id/路径、`kMacOS` 快捷键平台、`alloy_builtin_content_mac` 输出标签）；Mac integration main 新增 `about:blank alloy-builtins` 场景（argc==3 直接 COMMAND，与 Windows 注册形态一致）并复用 17M 的确定性退出兜底；CMake Mac integration target 增补 `alloy_builtin_content.cc`、`cef_mdv_editing.cc`、`cef_new_tab_handler.cc`、renderer collector/media-observer 源与 `crayon::browser-new-tab`、`crayon::browser-product-strings` 链接，注册 `alloy_builtin_content_mac`（TIMEOUT 240）；`macos_source_contract.cmake` 增加 18M token（场景分发、CTest 注册、builtin content 源存在）。
+- 失败基线：链接期两组未定义符号——`cef_new_tab_handler.cc`（浏览器+渲染双进程 app）引用 renderer 侧 `CefPageSnapshotRenderer`/`CefMediaObserverRenderer`/`PageSnapshotCollector`，这些源此前只编入 helper 目标；补齐 `cef_page_snapshot_renderer.cc`、`page_snapshot_collector.cc`、`cef_media_observer_renderer.cc` 后链接通过。
+- 验证：macOS arm64 Debug integration build PASS；`alloy_builtin_content_mac` 1/1 PASS（0.84–3.26s 多次稳定，`detail=complete`，六位 newtab/runtime/save/conflict/browser_closed/window_closed 全真）：zh-CN newtab 与 regular 模式离线加载且注入 `<script>` 未执行、MDV 真实临时文件经 E1 seam 加载后 Highlight `hljs`/KaTeX `data-mdv-math-rendered`/Mermaid `data-mdv-mermaid-rendered` 就绪、Source/Preview/Split 三视图切换、亮暗主题 CSS、快速连续编辑后缀不丢、`SaveWriteBack` 原子回写文件含 `alloy-edited`、外部修改后二次编辑触发 dirty+确认投影、browser/window 关闭排空；全程零 console error（CSP 违规即失败）与零公网请求。`macos_cef_shell_source_contract` PASS；`git diff --check` 通过。
+- 环境项（与本地HEAD对照证明与代码无关）：`alloy_omnibox_mac`/`alloy_page_tools_mac`/`alloy_tab_controller_mac` 三项键盘/前台注入探针在本 GUI 会话退化失败（`real_input=0`），stash 全部改动后在干净 HEAD 上同样失败；`crayon-content-host` 的 cnt_18c 两项（Unix socket health）在干净 HEAD 上同样超时。二者源码本任务零改动。
+- Code Review：按 v0.9 复核需求/边界（复用 owner、无第二文档状态、不切默认入口）、正确性（renderer 源补齐、双进程 scheme 契约、跨平台门）、安全/隐私（离线资产、CSP 零违规即失败、外部修改冲突显式化）、测试与可维护性（共享探针仅平台门增量）。P0/P1/P2=0。
+- 未覆盖与风险：原生文件对话框用户选择（归 23M/24M）；Windows 侧无改动；Mac 产品默认入口仍归 24M；键盘/读屏实机矩阵归 23M。`18M` 转为 `DONE`。

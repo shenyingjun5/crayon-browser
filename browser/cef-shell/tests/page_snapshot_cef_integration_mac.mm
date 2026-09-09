@@ -29,6 +29,7 @@
 #include "alloy_tab_strip_probe.h"
 #include "alloy_content_view_host_probe.h"
 #include "alloy_tab_controller_probe.h"
+#include "alloy_builtin_content_probe.h"
 #include "alloy_interactions_mac_probe.h"
 #include "alloy_omnibox_probe.h"
 #include "media_observation_cef_message_checks.h"
@@ -1017,6 +1018,8 @@ int main(int argc, char *argv[]) {
       argc == 2 && std::string(argv[1]) == "--alloy-omnibox-probe";
   const bool interactions_probe =
       argc == 2 && std::string(argv[1]) == "--alloy-interactions-probe";
+  const bool builtins_probe =
+      argc == 3 && std::string(argv[2]) == "alloy-builtins";
   const bool navigation_probe =
       argc == 3 && std::string(argv[2]) == "alloy-navigation";
   const bool profile_context_probe =
@@ -1041,7 +1044,8 @@ int main(int argc, char *argv[]) {
       toolbar_close_probe ||
       (argc == 2 && std::string(argv[1]) == "--cast-toolbar-host-probe");
   if (argc != 3 && !toolbar_probe && !entry_probe && !tab_strip_probe &&
-      !content_view_probe && !omnibox_probe && !interactions_probe)
+      !content_view_probe && !omnibox_probe && !interactions_probe &&
+      !builtins_probe)
     return 2;
   CefScopedLibraryLoader library_loader;
   if (!library_loader.LoadInMain())
@@ -1090,6 +1094,8 @@ int main(int argc, char *argv[]) {
     auto omnibox_result = std::make_shared<AlloyOmniboxProbeResult>();
     auto interactions_result =
         std::make_shared<AlloyInteractionsMacProbeResult>();
+    auto builtins_result =
+        std::make_shared<AlloyBuiltinContentProbeResult>();
     auto navigation_result = std::make_shared<AlloyNavigationProbeResult>();
     auto profile_context_result = std::make_shared<AlloyProfileContextProbeResult>();
     auto security_result = std::make_shared<AlloySecurityProbeResult>();
@@ -1102,6 +1108,8 @@ int main(int argc, char *argv[]) {
       app = CreateAlloyOmniboxProbe(omnibox_result);
     } else if (interactions_probe) {
       app = CreateAlloyInteractionsMacProbe(interactions_result);
+    } else if (builtins_probe) {
+      app = CreateAlloyBuiltinContentProbe(builtins_result);
     } else if (navigation_probe) {
       app = CreateAlloyNavigationProbe(argv[1], navigation_result);
     } else if (profile_context_probe) {
@@ -1145,6 +1153,13 @@ int main(int argc, char *argv[]) {
                   interactions_result->shutdown_passed &&
                   interactions_result->browser_closed &&
                   interactions_result->window_closed
+            : builtins_probe
+            ? builtins_result->new_tab_passed &&
+                  builtins_result->mdv_runtime_passed &&
+                  builtins_result->edit_save_passed &&
+                  builtins_result->conflict_passed &&
+                  builtins_result->browser_closed &&
+                  builtins_result->window_closed
             : navigation_probe
             ? navigation_result->behavior_passed &&
                   navigation_result->real_navigation_passed &&
@@ -1198,9 +1213,9 @@ int main(int argc, char *argv[]) {
                          toolbar_result->cancellation_verified)
                   : snapshot_app->passed();
     if (profile_context_probe || security_probe || page_tools_probe ||
-        interactions_probe)
+        interactions_probe || builtins_probe)
       app = nullptr;
-    if (interactions_probe) {
+    if (interactions_probe || builtins_probe) {
       // CEF-150 macOS teardown race: CefShutdown blocks indefinitely on an
       // already-exited helper child (unreaped zombie, waitpid ECHILD); the
       // race reproduces with a bare window+browser probe, so it is not

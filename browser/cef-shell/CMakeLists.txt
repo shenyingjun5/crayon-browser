@@ -1549,6 +1549,16 @@ if(CRAYON_BUILD_TESTS)
       tests/alloy_interactions_mac_probe.mm
       src/browser/window/alloy_interactions.cc
       src/browser/window/alloy_interactions.h
+      tests/alloy_builtin_content_probe.cc
+      tests/alloy_builtin_content_probe.h
+      src/browser/window/alloy_builtin_content.cc
+      src/browser/window/alloy_builtin_content.h
+      src/browser/mdv/cef_mdv_editing.cc
+      src/browser/mdv/cef_mdv_editing.h
+      src/browser/new_tab/cef_new_tab_handler.cc
+      src/renderer/page_snapshot_collector/cef_page_snapshot_renderer.cc
+      src/renderer/page_snapshot_collector/page_snapshot_collector.cc
+      src/renderer/media_observer/cef_media_observer_renderer.cc
       src/macos/alloy_menu_bridge_mac.cc
       src/macos/alloy_menu_bridge_mac.h
       src/macos/application_menu_mac.mm
@@ -1636,6 +1646,8 @@ if(CRAYON_BUILD_TESTS)
               crayon::browser-omnibox-provider
               crayon::browser-navigation
               crayon::browser-mdv
+              crayon::browser-new-tab
+              crayon::browser-product-strings
               crayon::browser-bookmarks
               crayon::browser-bookmarks-view
               crayon::browser-history
@@ -1719,6 +1731,13 @@ if(CRAYON_BUILD_TESTS)
     set_tests_properties(
       alloy_interactions_mac
       PROPERTIES LABELS "cef;shell;macos;alloy;menu;files;integration"
+                 TIMEOUT 240)
+    add_test(NAME alloy_builtin_content_mac
+             COMMAND crayon_page_snapshot_cef_integration_test about:blank
+                     alloy-builtins)
+    set_tests_properties(
+      alloy_builtin_content_mac
+      PROPERTIES LABELS "cef;shell;macos;alloy;newtab;mdv;integration"
                  TIMEOUT 240)
     add_test(NAME alloy_navigation_mac
              COMMAND "${CRAYON_PYTHON3_EXECUTABLE}"

@@ -7,7 +7,11 @@
 #include <string>
 #include <utility>
 
+#if defined(_WIN32)
 #include <windows.h>
+#else
+#include <unistd.h>
+#endif
 
 #include "browser/mdv/cef_mdv_editing.h"
 #include "browser/mdv/cef_mdv_entries.h"
@@ -27,6 +31,12 @@
 #include "include/wrapper/cef_closure_task.h"
 
 namespace {
+
+#if defined(_WIN32)
+constexpr char kProbeLabel[] = "alloy_builtin_content_windows";
+#else
+constexpr char kProbeLabel[] = "alloy_builtin_content_mac";
+#endif
 
 using crayon::browser::cef_shell::mdv::MdvEditController;
 using crayon::browser::cef_shell::mdv::MdvEntryController;
@@ -92,7 +102,11 @@ class BuiltinProbe final : public CefApp,
     const auto strings = crayon::browser::product_strings::BuildProductStrings(
         crayon::browser::localization::SnapshotFor(
             crayon::browser::localization::AppLocale::kZhCn),
+#if defined(_WIN32)
         crayon::browser_mdv::MdvShortcutPlatform::kWindows);
+#else
+        crayon::browser_mdv::MdvShortcutPlatform::kMacOS);
+#endif
     if (!strings) {
       Finish(false, "strings");
       return;
@@ -109,9 +123,16 @@ class BuiltinProbe final : public CefApp,
       Finish(false, "factory-registration");
       return;
     }
+#if defined(_WIN32)
     markdown_path_ = std::filesystem::temp_directory_path() /
                      (L"crayon-alloy-builtins-" +
                       std::to_wstring(GetCurrentProcessId()) + L".md");
+#else
+    markdown_path_ = std::filesystem::temp_directory_path() /
+                     ("crayon-alloy-builtins-" +
+                      std::to_string(static_cast<long long>(getpid())) +
+                      ".md");
+#endif
     const std::string markdown =
         "# Alloy 内置页\n\n```cpp\nint main() { return 0; }\n```\n\n"
         "$x^2$\n\n```mermaid\ngraph TD; A-->B;\n```\n\n"
@@ -328,7 +349,7 @@ class BuiltinProbe final : public CefApp,
     state_.reset();
     std::error_code ignored;
     std::filesystem::remove(markdown_path_, ignored);
-    std::cout << "alloy_builtin_content_windows newtab="
+    std::cout << kProbeLabel << " newtab="
               << result_->new_tab_passed
               << " runtime=" << result_->mdv_runtime_passed
               << " save=" << result_->edit_save_passed
@@ -410,7 +431,7 @@ class BuiltinProbe final : public CefApp,
       return;
     }
     finished_ = true;
-    std::cout << "alloy_builtin_content_windows detail=" << detail
+    std::cout << kProbeLabel << " detail=" << detail
               << " passed=" << passed << std::endl;
     if (!passed) {
       result_->conflict_passed = false;
