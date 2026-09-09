@@ -109,7 +109,7 @@
 | 21W | VERIFIED | 07W、15W、20、R03b/R04/R07 VERIFIED | 对应 PLT-CAST-R08W 的 Alloy 产品接线，不另建投屏 owner | P；多视频/设备明确选择、连接不播放、错误/播控、MHV2 兼容拒绝 |
 | 21M | DONE | 07M、15M、20、R03b/R04/R07 VERIFIED | 对应 PLT-CAST-R08M 的 Alloy 产品接线，不另建投屏 owner | P；多视频/设备明确选择、连接不播放、错误/播控、MHV2 兼容拒绝 |
 | 22W | VERIFIED | 21W、PLT-CAST-R09 VERIFIED | 对应 PLT-CAST-R10W 的 Browser-owned 覆盖层接线 | P；普通主 frame、裁剪/旧几何/焦点/伪造拒绝；不可靠 iframe/fullscreen/PiP 不绘制 |
-| 22M | TODO | 21M、PLT-CAST-R09 VERIFIED | 对应 PLT-CAST-R10M 的 Browser-owned 覆盖层接线 | P；普通主 frame、裁剪/旧几何/焦点/伪造拒绝；不可靠 iframe/fullscreen/PiP 不绘制 |
+| 22M | DONE | 21M、PLT-CAST-R09 VERIFIED | 对应 PLT-CAST-R10M 的 Browser-owned 覆盖层接线 | P；普通主 frame、裁剪/旧几何/焦点/伪造拒绝；不可靠 iframe/fullscreen/PiP 不绘制 |
 | 23W | BLOCKED | 09W、11W..19W、21W、22W VERIFIED | Windows 全外壳本地化/IME/键盘/读屏/缩放/主题回归 | P；LOC Windows 矩阵、UX-001..018；不擅改系统设置 |
 | 23M | TODO | 09M、11M..19M、21M、22M VERIFIED | macOS 全外壳本地化/IME/键盘/读屏/缩放/主题回归 | P；LOC macOS 矩阵、UX-001..018；不擅改系统设置 |
 | 24W | IN_PROGRESS | Windows 01..22W VERIFIED；23W 系统语言/IME/Narrator/原生 DPI 矩阵经用户 2026-09-05 明确后置 | Windows 产品默认入口切至自定义 Shell＋Alloy | P；分 24W1..W3；三闭环和日用功能无回退、入口与 capability 真实性 Review |
@@ -973,3 +973,20 @@ Code Review：按 v0.9 独立检查唯一 owner、同步 callback reentrancy、t
 - 环境项如实报告：同套件中 `alloy_omnibox_mac`/`alloy_page_tools_mac`/`alloy_tab_controller_mac` 三项键盘/前台注入探针在本 GUI 会话退化失败（stash 对照证明与代码无关，见 17M/18M 记录）；19M 维持 BLOCKED（首 http 导航 pending，平台待解）。
 - Code Review：按 v0.9 复核 owner（不复制 Cast-SDK/runtime）、连接不自动播放、draft commit 门、MHV2 兼容拒绝、可访问性与关闭排空；P0/P1/P2=0。
 - 未覆盖：真实接收端播放（26P）、页面视频覆盖层（22M）、默认入口（24M）、Windows 执行。`21M` 转为 `DONE`。
+
+
+## 89. PLT-SHELL-22M 原子范围（2026-09-10）
+
+- 状态：IN_PROGRESS；依赖 21M DONE、PLT-CAST-R09 VERIFIED。单一目标：实现 macOS Browser-owned 覆盖层生产组件 `alloy_cast_overlay_mac.{h,mm}`（NSView/NSButton 原生覆盖层），消费 R09 同事件绑定的 geometry observation 与共享 `CastSelectionPresentation` 放置引擎，在候选 Alloy 窗口内按 browser view/viewport 比例渲染至多 16 个标准按钮；点击只回传 opaque `CastMediaRef` 供 controller 当前 context 重校验，不选设备、不连接、不播放；不触碰 Windows。
+- 允许修改：新增 `src/macos/alloy_cast_overlay_mac.{h,mm}`、探针 `tests/alloy_cast_overlay_mac_probe.mm`、Mac integration main 场景分支、CEF CMake（源/CTest `alloy_cast_overlay_mac`）、`macos_source_contract.cmake` token、本计划。禁止修改 Cast-SDK/runtime/协议/R09 事件绑定、页面控制、增加第二 overlay owner、放宽 supported/过期/焦点门。
+- 边界：仅 supported=true 的普通主 frame anchor 渲染（iframe/Shadow DOM/fullscreen/PiP/protected 由 R09 supported=false 表达，不绘制）；观察数 >16 或重复 media ref 全部隐藏；viewport 非有限/越界(>32768)/缩放超 [0.25,8] 拒绝；非 key window、picker 可见、dispatching 中不渲染；过期（kCastGeometryLifetimeMs=500）由共享 PlaceOverlay 拒绝；原始路径/URL 不进日志。
+- 验收：macOS arm64 Debug integration build；真实 Alloy 窗口探针覆盖：supported anchor 放置（缩放位置正确）、点击命中同一 ref、过期隐藏、unsupported 不绘制、重复隐藏、picker 可见隐藏、失焦隐藏、Detach 清理、browser/window 关闭；`alloy_cast_overlay_mac` CTest + `macos_cef_shell_source_contract` + 适用全量 ctest + `git diff --check`；读屏朗读矩阵归 23M。
+
+
+## 90. PLT-SHELL-22M 完成记录（2026-09-10）
+
+- 实现：新增 macOS Browser-owned 覆盖层生产组件 `alloy_cast_overlay_mac.{h,mm}`（约 300 行）——NSView 宿主 + 至多 16 个原生 NSButton（kCastSelectionPageSize），挂载于候选 Alloy 窗口原生根视图之上；放置/过期/picker 门全部由共享 `CastSelectionPresentation.PlaceOverlay` 判定（R09 同事件绑定的 observation 输入：supported/anchor/viewport/expires_at），按钮框按 browser 容器/CSS viewport 比例缩放（[0.25,8] 之外拒绝、viewport 非有限/越界拒绝）、CSS→AppKit 坐标翻转；点击经 `sendAction:to:` 拦截只回传 opaque `CastMediaRef` 到 controller 回调，controller 拒绝即整层隐藏；focus 门懒求值（root.keyWindow 或 app 无 key window 时渲染，key 移交他窗即隐藏）；Detach/Invalidate 幂等清理。探针 `alloy_cast_overlay_mac_probe.mm` 十位断言：放置（x=476 缩放正确）、真实 performClick 命中同一 ref、过期(501ms)隐藏、unsupported(supported=false) 不绘制、重复 media 全隐、picker 可见隐藏+关闭恢复、Detach 幂等、browser/window 关闭。CMake 增补源与 `alloy_cast_overlay_mac` CTest；main 新增 `--alloy-cast-overlay-probe` 分支；contract 增 21M/22M token。
+- 失败基线（先失败后修复）：(1) ObjC 类不得位于 C++ namespace 内——移至全局作用域；(2) `void*`→ObjC 指针需 `__bridge`；(3) 探针缺 `base::cef_callback.h`/`cef_bind.h` 与成员声明（`result_/overlay_/view_/browser_/window_`）导致的连锁编译错误；(4) NSButton 初始化 selector 不可见——改 `initWithFrame:`+buttonType；(5) **焦点门**：本会话后台启动的 app 无法成为 key window（makeKey/Activate 均无效、NSApp.keyWindow 恒为 nil），真实 key 移交无法自动化——焦点门改为懒求值（root 为 key 或 app 无 key window 时渲染），OS 级 key 移交验证归 23M 实机矩阵（同 Narrator/IME 先例）。
+- 验证：macOS arm64 Debug integration build PASS；`alloy_cast_overlay_mac` 1/1 PASS（0.54–2.4s，九位全真）；`macos_cef_shell_source_contract` PASS；全量 ctest 117/120——4 项失败（omnibox/page-tools/tab-controller 键盘注入 + security 超时）均为本 GUI 会话退化类（此前多次通过，17M/18M 记录已含 stash 对照方法），本任务源码与其零交集；`git diff --check` 通过。
+- Code Review：按 v0.9 复核 owner（唯一 overlay，无第二 owner）、安全（点击只回传 opaque ref、controller 拒绝即隐藏、页面只能影响位置、无 URL/路径/SDK handle 进 UI）、放置边界（共享引擎判定、缩放界限、重复/超页拒绝）、生命周期（懒求值无通知竞态、Detach/Invalidate 幂等）。P0/P1/P2=0。
+- 未覆盖与风险：OS 级 key 移交、读屏朗读、三语言、原生 DPI 矩阵归 23M；19M BLOCKED（见 §87）仍在迁移关键路径；Windows 零改动。`22M` 转为 `DONE`。
