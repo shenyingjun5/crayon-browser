@@ -277,4 +277,43 @@ foreach(production_file IN LISTS production_files)
   endforeach()
 endforeach()
 
+# PLT-SHELL-17M: the Alloy menu bridge owns the closed ApplicationCommand
+# mapping. The local-file entry must keep using the runtime-neutral MDV seam
+# and must never depend on a Chrome command identifier.
+set(alloy_menu_bridge
+    "${macos_source_root}/alloy_menu_bridge_mac.h"
+    "${macos_source_root}/alloy_menu_bridge_mac.cc")
+foreach(required_bridge_file IN LISTS alloy_menu_bridge)
+  if(NOT EXISTS "${required_bridge_file}")
+    message(FATAL_ERROR "macOS Alloy menu bridge is missing: ${required_bridge_file}")
+  endif()
+endforeach()
+file(READ "${macos_source_root}/alloy_menu_bridge_mac.cc" menu_bridge_source)
+foreach(required_bridge_token
+        "AlloyMenuBridgeMac"
+        "ApplicationCommand::kOpenFile"
+        "open_markdown"
+        "kAboutBrowserUrl")
+  string(FIND "${menu_bridge_source}" "${required_bridge_token}" bridge_token_index)
+  if(bridge_token_index EQUAL -1)
+    message(FATAL_ERROR
+            "macOS Alloy menu bridge is missing token ${required_bridge_token}")
+  endif()
+endforeach()
+string(FIND "${menu_bridge_source}" "IDC_OPEN_FILE" chrome_command_index)
+if(NOT chrome_command_index EQUAL -1)
+  message(FATAL_ERROR
+          "macOS Alloy menu bridge must not depend on Chrome command identifiers")
+endif()
+string(FIND "${integration_source}" "--alloy-interactions-probe"
+       interactions_probe_index)
+if(interactions_probe_index EQUAL -1)
+  message(FATAL_ERROR "macOS integration must dispatch the interactions probe")
+endif()
+string(FIND "${cmake_source}" "alloy_interactions_mac"
+       interactions_test_index)
+if(interactions_test_index EQUAL -1)
+  message(FATAL_ERROR "macOS integration must register alloy_interactions_mac")
+endif()
+
 message(STATUS "macOS CEF shell source contract passed")

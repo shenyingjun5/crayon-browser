@@ -1546,6 +1546,17 @@ if(CRAYON_BUILD_TESTS)
       src/browser/context/profile_id_validator.h
       tests/alloy_omnibox_probe.cc
       src/browser/window/alloy_omnibox.cc
+      tests/alloy_interactions_mac_probe.mm
+      src/browser/window/alloy_interactions.cc
+      src/browser/window/alloy_interactions.h
+      src/macos/alloy_menu_bridge_mac.cc
+      src/macos/alloy_menu_bridge_mac.h
+      src/macos/application_menu_mac.mm
+      src/macos/application_menu_mac.h
+      src/browser/mdv/cef_mdv_entries.cc
+      src/browser/mdv/cef_mdv_entries.h
+      src/browser/mdv/cef_mdv_handler.cc
+      src/browser/mdv/cef_mdv_handler.h
       tests/alloy_navigation_probe.cc
       src/browser/window/alloy_navigation.cc
       tests/alloy_page_tools_probe.cc
@@ -1603,6 +1614,8 @@ if(CRAYON_BUILD_TESTS)
       tests/page_snapshot_cef_integration_mac.mm
       src/macos/cast_chrome_mac.mm
       src/macos/trusted_input_monitor_mac.mm
+      src/macos/application_menu_mac.mm
+      tests/alloy_interactions_mac_probe.mm
       PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
     target_include_directories(crayon_page_snapshot_cef_integration_test
                                PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -1622,6 +1635,7 @@ if(CRAYON_BUILD_TESTS)
               crayon::browser-omnibox-core
               crayon::browser-omnibox-provider
               crayon::browser-navigation
+              crayon::browser-mdv
               crayon::browser-bookmarks
               crayon::browser-bookmarks-view
               crayon::browser-history
@@ -1699,6 +1713,13 @@ if(CRAYON_BUILD_TESTS)
     add_test(NAME alloy_omnibox_mac
              COMMAND crayon_page_snapshot_cef_integration_test --alloy-omnibox-probe)
     set_tests_properties(alloy_omnibox_mac PROPERTIES TIMEOUT 30 LABELS "cef;shell;macos")
+    add_test(NAME alloy_interactions_mac
+             COMMAND crayon_page_snapshot_cef_integration_test
+                     --alloy-interactions-probe)
+    set_tests_properties(
+      alloy_interactions_mac
+      PROPERTIES LABELS "cef;shell;macos;alloy;menu;files;integration"
+                 TIMEOUT 240)
     add_test(NAME alloy_navigation_mac
              COMMAND "${CRAYON_PYTHON3_EXECUTABLE}"
                      "${PROJECT_SOURCE_DIR}/tests/e2e/desktop/browser/run_page_snapshot_fixture.py"

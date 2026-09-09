@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <unistd.h>
+
 #include <filesystem>
 #include <iostream>
 #include <memory>
@@ -27,6 +29,7 @@
 #include "alloy_tab_strip_probe.h"
 #include "alloy_content_view_host_probe.h"
 #include "alloy_tab_controller_probe.h"
+#include "alloy_interactions_mac_probe.h"
 #include "alloy_omnibox_probe.h"
 #include "media_observation_cef_message_checks.h"
 #include "include/base/cef_callback.h"
@@ -1012,6 +1015,8 @@ class SnapshotFixtureApp final : public CefApp,
 int main(int argc, char *argv[]) {
   const bool omnibox_probe =
       argc == 2 && std::string(argv[1]) == "--alloy-omnibox-probe";
+  const bool interactions_probe =
+      argc == 2 && std::string(argv[1]) == "--alloy-interactions-probe";
   const bool navigation_probe =
       argc == 3 && std::string(argv[2]) == "alloy-navigation";
   const bool profile_context_probe =
@@ -1036,7 +1041,7 @@ int main(int argc, char *argv[]) {
       toolbar_close_probe ||
       (argc == 2 && std::string(argv[1]) == "--cast-toolbar-host-probe");
   if (argc != 3 && !toolbar_probe && !entry_probe && !tab_strip_probe &&
-      !content_view_probe && !omnibox_probe)
+      !content_view_probe && !omnibox_probe && !interactions_probe)
     return 2;
   CefScopedLibraryLoader library_loader;
   if (!library_loader.LoadInMain())
@@ -1083,6 +1088,8 @@ int main(int argc, char *argv[]) {
     auto content_view_result = std::make_shared<AlloyContentViewHostProbeResult>();
     auto tab_controller_result = std::make_shared<AlloyTabControllerProbeResult>();
     auto omnibox_result = std::make_shared<AlloyOmniboxProbeResult>();
+    auto interactions_result =
+        std::make_shared<AlloyInteractionsMacProbeResult>();
     auto navigation_result = std::make_shared<AlloyNavigationProbeResult>();
     auto profile_context_result = std::make_shared<AlloyProfileContextProbeResult>();
     auto security_result = std::make_shared<AlloySecurityProbeResult>();
@@ -1093,6 +1100,8 @@ int main(int argc, char *argv[]) {
     CefRefPtr<CefApp> app;
     if (omnibox_probe) {
       app = CreateAlloyOmniboxProbe(omnibox_result);
+    } else if (interactions_probe) {
+      app = CreateAlloyInteractionsMacProbe(interactions_result);
     } else if (navigation_probe) {
       app = CreateAlloyNavigationProbe(argv[1], navigation_result);
     } else if (profile_context_probe) {
@@ -1126,6 +1135,16 @@ int main(int argc, char *argv[]) {
     const bool passed =
         omnibox_probe
             ? omnibox_result->behavior_passed && omnibox_result->window_closed
+            : interactions_probe
+            ? interactions_result->attach_passed &&
+                  interactions_result->native_menu_passed &&
+                  interactions_result->context_passed &&
+                  interactions_result->drag_passed &&
+                  interactions_result->commands_passed &&
+                  interactions_result->fencing_passed &&
+                  interactions_result->shutdown_passed &&
+                  interactions_result->browser_closed &&
+                  interactions_result->window_closed
             : navigation_probe
             ? navigation_result->behavior_passed &&
                   navigation_result->real_navigation_passed &&
@@ -1178,8 +1197,25 @@ int main(int argc, char *argv[]) {
                         (!toolbar_close_probe ||
                          toolbar_result->cancellation_verified)
                   : snapshot_app->passed();
-    if (profile_context_probe || security_probe || page_tools_probe)
+    if (profile_context_probe || security_probe || page_tools_probe ||
+        interactions_probe)
       app = nullptr;
+    if (interactions_probe) {
+      // CEF-150 macOS teardown race: CefShutdown blocks indefinitely on an
+      // already-exited helper child (unreaped zombie, waitpid ECHILD); the
+      // race reproduces with a bare window+browser probe, so it is not
+      // caused by the interaction surfaces. All behavior bits above were
+      // observed live; browsers and the window were destroyed before this
+      // point. Exit without CefShutdown and record the workaround here.
+      std::cout << "alloy_interactions_mac_exit cef_shutdown_skipped=1"
+                << std::endl;
+      std::error_code cleanup_error;
+      std::filesystem::remove_all(cache_path, cleanup_error);
+      std::cout.flush();
+      // _Exit skips the libcef exit hook whose DCHECK would otherwise
+      // abort the process after the skipped CefShutdown.
+      _Exit(passed ? 0 : 1);
+    }
     CefShutdown();
     std::error_code cleanup_error;
     std::filesystem::remove_all(cache_path, cleanup_error);
