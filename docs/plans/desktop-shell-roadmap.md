@@ -107,7 +107,7 @@
 | 19M | BLOCKED | 07M、17M VERIFIED | Mac网页Markdown从Alloy入口到既有快照/导出链 | P；当前目标、导航取消、跨源/隐藏内容拒绝、复制/保存 |
 | 20 | VERIFIED | 02、PLT-CAST-R08u1 VERIFIED | CastEntrySurface 去 LOCATION 耦合，按钮/面板挂到自绘栏 | U＋H；布局/灰态/事件/释放；无真实后端时仍不允许开始 |
 | 21W | VERIFIED | 07W、15W、20、R03b/R04/R07 VERIFIED | 对应 PLT-CAST-R08W 的 Alloy 产品接线，不另建投屏 owner | P；多视频/设备明确选择、连接不播放、错误/播控、MHV2 兼容拒绝 |
-| 21M | TODO | 07M、15M、20、R03b/R04/R07 VERIFIED | 对应 PLT-CAST-R08M 的 Alloy 产品接线，不另建投屏 owner | P；多视频/设备明确选择、连接不播放、错误/播控、MHV2 兼容拒绝 |
+| 21M | DONE | 07M、15M、20、R03b/R04/R07 VERIFIED | 对应 PLT-CAST-R08M 的 Alloy 产品接线，不另建投屏 owner | P；多视频/设备明确选择、连接不播放、错误/播控、MHV2 兼容拒绝 |
 | 22W | VERIFIED | 21W、PLT-CAST-R09 VERIFIED | 对应 PLT-CAST-R10W 的 Browser-owned 覆盖层接线 | P；普通主 frame、裁剪/旧几何/焦点/伪造拒绝；不可靠 iframe/fullscreen/PiP 不绘制 |
 | 22M | TODO | 21M、PLT-CAST-R09 VERIFIED | 对应 PLT-CAST-R10M 的 Browser-owned 覆盖层接线 | P；普通主 frame、裁剪/旧几何/焦点/伪造拒绝；不可靠 iframe/fullscreen/PiP 不绘制 |
 | 23W | BLOCKED | 09W、11W..19W、21W、22W VERIFIED | Windows 全外壳本地化/IME/键盘/读屏/缩放/主题回归 | P；LOC Windows 矩阵、UX-001..018；不擅改系统设置 |
@@ -964,3 +964,12 @@ Code Review：按 v0.9 独立检查唯一 owner、同步 callback reentrancy、t
 - 已排除（逐一隔离）：`AlloyBuiltinContent`/`AlloyPageMarkdown`/tab 控制器/content-host 子进程/factory 注册时机/导航时机(创建期 vs 延迟 2s)/`window_->Activate`——**用裸 `CefClient`（无任何 handler）+ 跳过 content-host + 跳过 factory 注册的最小组合仍复现**，证明与 19M 新增对象无关。同二进制内 `alloy_navigation_mac`（Alloy+http，经同一 runner）与 `page_snapshot_cef_integration`（Chrome 风格 TabController+http）均通过，说明 http 链路本身可用；差异集中在 page-markdown 探针的场景形态（`CreateBrowserView` + 空/延迟首导航 + tab 容器组合）。
 - 恢复与防回退：探针调试桩已全部移除（保留 about:blank 暖启 + 已提交后再导航 fixture 的形态）；`alloy_page_markdown_mac` CTest 暂缓注册（场景仍可手动运行），`macos_source_contract` 保留场景/源 token；全量套件其余 3 项失败为已记录的键盘注入会话退化（stash 对照证明与本任务无关）。
 - 解除条件（恢复 READY）：定位 CEF-150 macOS 下该场景形态的首 http 导航 pending 根因（建议：对比 nav 探针逐项加入 page-markdown 的装配元素；或验证 Chrome/Alloy runtime style 混排时 network service 附着时序），给出最小复现后按原验收执行。解除前 20M 收口与 REL-03 中涉及 Mac 网页 Markdown 的证据保持依赖本项。
+
+
+## 88. PLT-SHELL-21M 完成记录（2026-09-10）
+
+- 实现：共享 `AlloyCastController`（Fake MediaHostTransport + 真实 CEF surface）与其探针 `alloy_cast_bridge_probe.{h,cc}` 平台零改动接入 macOS 候选 Alloy host；Mac integration main 新增 `alloy-cast-bridge` 场景分支；CMake 增补 controller/surface/probe 源并注册 `alloy_cast_bridge_mac`（TIMEOUT 240）；`macos_source_contract.cmake` 增 21M token。不新建投屏 owner，不切默认入口。
+- 验证：macOS arm64 Debug integration build PASS；`alloy_cast_bridge_mac` 1/1 PASS（2.42s，selection/connection/reason/session/accessibility/browser_closed/window_closed 全真）：多视频明确选择、设备选择、Connect 不触发播放、prepare/错误原因/commit 一次、播控、不兼容 MHV2 拒绝、原生可访问名称/焦点路由与 Browser/window 关闭。
+- 环境项如实报告：同套件中 `alloy_omnibox_mac`/`alloy_page_tools_mac`/`alloy_tab_controller_mac` 三项键盘/前台注入探针在本 GUI 会话退化失败（stash 对照证明与代码无关，见 17M/18M 记录）；19M 维持 BLOCKED（首 http 导航 pending，平台待解）。
+- Code Review：按 v0.9 复核 owner（不复制 Cast-SDK/runtime）、连接不自动播放、draft commit 门、MHV2 兼容拒绝、可访问性与关闭排空；P0/P1/P2=0。
+- 未覆盖：真实接收端播放（26P）、页面视频覆盖层（22M）、默认入口（24M）、Windows 执行。`21M` 转为 `DONE`。

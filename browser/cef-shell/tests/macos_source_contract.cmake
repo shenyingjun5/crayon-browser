@@ -343,6 +343,18 @@ string(FIND "${integration_source}" "alloy-page-markdown"
 if(page_markdown_scenario_index EQUAL -1)
   message(FATAL_ERROR "macOS integration must dispatch alloy-page-markdown")
 endif()
+# PLT-SHELL-21M: the cast entry surface must be wired through the shared
+# AlloyCastController bridge in the macOS candidate host.
+string(FIND "${integration_source}" "alloy-cast-bridge"
+       cast_bridge_scenario_index)
+if(cast_bridge_scenario_index EQUAL -1)
+  message(FATAL_ERROR "macOS integration must dispatch alloy-cast-bridge")
+endif()
+string(FIND "${cmake_source}" "alloy_cast_bridge_mac"
+       cast_bridge_test_index)
+if(cast_bridge_test_index EQUAL -1)
+  message(FATAL_ERROR "macOS integration must register alloy_cast_bridge_mac")
+endif()
 
 
 message(STATUS "macOS CEF shell source contract passed")

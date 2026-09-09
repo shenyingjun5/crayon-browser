@@ -577,8 +577,6 @@ if(OS_WINDOWS)
       tests/alloy_security_probe.h
       tests/cast_entry_surface_probe.cc
       tests/cast_entry_surface_probe.h
-      tests/alloy_cast_bridge_probe.cc
-      tests/alloy_cast_bridge_probe.h
       tests/alloy_cast_overlay_probe.cc
       tests/alloy_cast_overlay_probe.h
       tests/alloy_navigation_probe.cc
@@ -1594,6 +1592,12 @@ if(CRAYON_BUILD_TESTS)
       src/browser/window/alloy_tab_strip.cc
       tests/cast_toolbar_host_probe.cc
       tests/cast_entry_surface_probe.cc
+      tests/alloy_cast_bridge_probe.cc
+      tests/alloy_cast_bridge_probe.h
+      src/browser/media_host/alloy_cast_controller.cc
+      src/browser/media_host/alloy_cast_controller.h
+      src/browser/media_host/cast_entry_surface.cc
+      src/browser/media_host/cast_entry_surface.h
       tests/media_observation_cef_message_checks.cc
       src/browser/network_observer/cef_network_observer_adapter.cc
       src/browser/observation_gateway/cef_observation_bridge.cc
@@ -1746,6 +1750,13 @@ if(CRAYON_BUILD_TESTS)
     set_tests_properties(
       alloy_builtin_content_mac
       PROPERTIES LABELS "cef;shell;macos;alloy;newtab;mdv;integration"
+                 TIMEOUT 240)
+    add_test(NAME alloy_cast_bridge_mac
+             COMMAND crayon_page_snapshot_cef_integration_test about:blank
+                     alloy-cast-bridge)
+    set_tests_properties(
+      alloy_cast_bridge_mac
+      PROPERTIES LABELS "cef;shell;macos;alloy;cast;integration;dpi"
                  TIMEOUT 240)
     add_test(NAME alloy_navigation_mac
              COMMAND "${CRAYON_PYTHON3_EXECUTABLE}"

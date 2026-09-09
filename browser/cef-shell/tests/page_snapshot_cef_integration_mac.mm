@@ -30,6 +30,7 @@
 #include "alloy_content_view_host_probe.h"
 #include "alloy_tab_controller_probe.h"
 #include "alloy_builtin_content_probe.h"
+#include "alloy_cast_bridge_probe.h"
 #include "alloy_interactions_mac_probe.h"
 #include "alloy_page_markdown_probe.h"
 #include "alloy_omnibox_probe.h"
@@ -1023,6 +1024,8 @@ int main(int argc, char *argv[]) {
       argc == 3 && std::string(argv[2]) == "alloy-builtins";
   const bool page_markdown_probe =
       argc == 3 && std::string(argv[2]) == "alloy-page-markdown";
+  const bool cast_bridge_probe =
+      argc == 3 && std::string(argv[2]) == "alloy-cast-bridge";
   const bool navigation_probe =
       argc == 3 && std::string(argv[2]) == "alloy-navigation";
   const bool profile_context_probe =
@@ -1101,6 +1104,8 @@ int main(int argc, char *argv[]) {
         std::make_shared<AlloyBuiltinContentProbeResult>();
     auto page_markdown_result =
         std::make_shared<AlloyPageMarkdownProbeResult>();
+    auto cast_bridge_result =
+        std::make_shared<AlloyCastBridgeProbeResult>();
     auto navigation_result = std::make_shared<AlloyNavigationProbeResult>();
     auto profile_context_result = std::make_shared<AlloyProfileContextProbeResult>();
     auto security_result = std::make_shared<AlloySecurityProbeResult>();
@@ -1117,6 +1122,8 @@ int main(int argc, char *argv[]) {
       app = CreateAlloyBuiltinContentProbe(builtins_result);
     } else if (page_markdown_probe) {
       app = CreateAlloyPageMarkdownProbe(argv[1], page_markdown_result);
+    } else if (cast_bridge_probe) {
+      app = CreateAlloyCastBridgeProbe(cast_bridge_result);
     } else if (navigation_probe) {
       app = CreateAlloyNavigationProbe(argv[1], navigation_result);
     } else if (profile_context_probe) {
@@ -1174,6 +1181,14 @@ int main(int argc, char *argv[]) {
                   page_markdown_result->export_passed &&
                   page_markdown_result->lifecycle_passed &&
                   page_markdown_result->window_closed
+            : cast_bridge_probe
+            ? cast_bridge_result->selection_passed &&
+                  cast_bridge_result->connection_passed &&
+                  cast_bridge_result->reason_passed &&
+                  cast_bridge_result->session_passed &&
+                  cast_bridge_result->accessibility_passed &&
+                  cast_bridge_result->browser_closed &&
+                  cast_bridge_result->window_closed
             : navigation_probe
             ? navigation_result->behavior_passed &&
                   navigation_result->real_navigation_passed &&
