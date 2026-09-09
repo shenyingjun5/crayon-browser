@@ -1015,3 +1015,6 @@ Code Review：按 v0.9 独立检查唯一 owner、同步 callback reentrancy、t
 - 24M2（功能面接入，分 24M2a/b/c）：a=媒体 observation/network bridge/可信输入/页面 Markdown 接线；b=MDV entry/editing、权限/下载/site-controls、session restore 接入同一 host；c=cast entry bridge + Browser-owned overlay（复用 22M 组件）+ 活动/书签/历史/下载 surface。全部只消费既有 owner，验收为各自真实 CEF probe + 全量 ctest。
 - 24M3（收口）：双配置 build、完整 ctest、首窗/关闭/退出零残留 smoke、三语言基础一致性（复用 23M locale 矩阵探针）、v0.9 Review。
 - 25P 依赖 24M VERIFIED；26P 需真实接收端；27P 汇总。上会话已固化的可复用证据：`use-mock-keychain` 为 Mac 一切真实 CEF 探针必备（19M 教训）、CEF 窗口关闭顺序（先 CloseBrowser 后 Close，见 22M）、`_Exit` 兜底仅限测试 target。
+
+
+- 24M1 首次尝试记录（2026-09-10，未完成即回退）：host 组件（CefWindow+CefBrowserView+WindowClient 复用）与 `ContinueContentHostStartup` 切换均可编译并执行（路径日志确认 Start 被调用），但产品进程内 Alloy 浏览器未产生页面 target（CDP /json/list 为空），窗口亦未出现；对照组：同二进制的 21M/22M/23M 探针（同为 Alloy BrowserView）全部正常。可疑方向（下会话优先排查）：(1) 产品原生 NSApp 事件循环下 CefBrowserView 首导航的提交时序（对照 23M/22M 探针的延迟导航模式——先 about:blank 提交、再导航目标 URL）；(2) `ContinueContentHostStartup` 的 content-host/media-host 健康门与首窗创建的先后；(3) WindowClient（Chrome 时代 client）在 Alloy runtime 下是否存在未适配的 OnBeforeBrowse/CommandHandler 拦截。中间产物已回退，host 代码需按上述结论重写。
