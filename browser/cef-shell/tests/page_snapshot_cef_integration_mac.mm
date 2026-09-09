@@ -32,6 +32,7 @@
 #include "alloy_builtin_content_probe.h"
 #include "alloy_cast_bridge_probe.h"
 #include "alloy_cast_overlay_mac_probe.h"
+#include "alloy_locale_matrix_mac_probe.h"
 #include "alloy_interactions_mac_probe.h"
 #include "alloy_page_markdown_probe.h"
 #include "alloy_omnibox_probe.h"
@@ -1029,6 +1030,8 @@ int main(int argc, char *argv[]) {
       argc == 3 && std::string(argv[2]) == "alloy-cast-bridge";
   const bool cast_overlay_probe =
       argc == 2 && std::string(argv[1]) == "--alloy-cast-overlay-probe";
+  const bool loc_matrix_probe =
+      argc == 3 && std::string(argv[2]).rfind("alloy-loc-", 0) == 0;
   const bool navigation_probe =
       argc == 3 && std::string(argv[2]) == "alloy-navigation";
   const bool profile_context_probe =
@@ -1054,7 +1057,7 @@ int main(int argc, char *argv[]) {
       (argc == 2 && std::string(argv[1]) == "--cast-toolbar-host-probe");
   if (argc != 3 && !toolbar_probe && !entry_probe && !tab_strip_probe &&
       !content_view_probe && !omnibox_probe && !interactions_probe &&
-      !builtins_probe && !cast_overlay_probe)
+      !builtins_probe && !cast_overlay_probe && !loc_matrix_probe)
     return 2;
   CefScopedLibraryLoader library_loader;
   if (!library_loader.LoadInMain())
@@ -1077,6 +1080,14 @@ int main(int argc, char *argv[]) {
     CefString(&settings.root_cache_path).FromString(cache_path.string());
     if (profile_context_probe)
       CefString(&settings.cache_path).FromString((cache_path / "Default").string());
+    if (loc_matrix_probe && getenv("CRAYON_SKIP_ACCEPT_LANG") == nullptr) {
+      const std::string scenario = argv[2];
+      std::string tag = "en-US";
+      if (scenario.find("zh-CN") != std::string::npos) tag = "zh-CN";
+      else if (scenario.find("zh-TW") != std::string::npos) tag = "zh-TW";
+      else if (scenario.find("en-US") != std::string::npos) tag = "en-US";
+      CefString(&settings.accept_language_list).FromString(tag);
+    }
     CefString(&settings.browser_subprocess_path)
         .FromString(CRAYON_SNAPSHOT_TEST_HELPER_PATH);
     if (security_probe) {
@@ -1111,6 +1122,8 @@ int main(int argc, char *argv[]) {
         std::make_shared<AlloyCastBridgeProbeResult>();
     auto cast_overlay_result =
         std::make_shared<AlloyCastOverlayMacProbeResult>();
+    auto locale_matrix_result =
+        std::make_shared<AlloyLocaleMatrixMacProbeResult>();
     auto navigation_result = std::make_shared<AlloyNavigationProbeResult>();
     auto profile_context_result = std::make_shared<AlloyProfileContextProbeResult>();
     auto security_result = std::make_shared<AlloySecurityProbeResult>();
@@ -1131,6 +1144,10 @@ int main(int argc, char *argv[]) {
       app = CreateAlloyCastBridgeProbe(cast_bridge_result);
     } else if (cast_overlay_probe) {
       app = CreateAlloyCastOverlayMacProbe(cast_overlay_result);
+    } else if (loc_matrix_probe) {
+      app = CreateAlloyLocaleMatrixMacProbe(
+          std::string(argv[2]).substr(sizeof("alloy-loc-") - 1),
+          locale_matrix_result);
     } else if (navigation_probe) {
       app = CreateAlloyNavigationProbe(argv[1], navigation_result);
     } else if (profile_context_probe) {
@@ -1206,6 +1223,10 @@ int main(int argc, char *argv[]) {
                   cast_overlay_result->detach_passed &&
                   cast_overlay_result->browser_closed &&
                   cast_overlay_result->window_closed
+            : loc_matrix_probe
+            ? locale_matrix_result->new_tab_passed &&
+                  locale_matrix_result->browser_closed &&
+                  locale_matrix_result->window_closed
             : navigation_probe
             ? navigation_result->behavior_passed &&
                   navigation_result->real_navigation_passed &&
@@ -1260,10 +1281,10 @@ int main(int argc, char *argv[]) {
                   : snapshot_app->passed();
     if (profile_context_probe || security_probe || page_tools_probe ||
         interactions_probe || builtins_probe || page_markdown_probe ||
-        cast_overlay_probe)
+        cast_overlay_probe || loc_matrix_probe)
       app = nullptr;
     if (interactions_probe || builtins_probe || page_markdown_probe ||
-        cast_overlay_probe) {
+        cast_overlay_probe || loc_matrix_probe) {
       // CEF-150 macOS teardown race: CefShutdown blocks indefinitely on an
       // already-exited helper child (unreaped zombie, waitpid ECHILD); the
       // race reproduces with a bare window+browser probe, so it is not

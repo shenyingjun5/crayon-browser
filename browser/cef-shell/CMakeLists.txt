@@ -1601,6 +1601,8 @@ if(CRAYON_BUILD_TESTS)
       src/macos/alloy_cast_overlay_mac.mm
       src/macos/alloy_cast_overlay_mac.h
       tests/alloy_cast_overlay_mac_probe.mm
+      tests/alloy_locale_matrix_mac_probe.mm
+      tests/alloy_locale_matrix_mac_probe.h
       tests/media_observation_cef_message_checks.cc
       src/browser/network_observer/cef_network_observer_adapter.cc
       src/browser/observation_gateway/cef_observation_bridge.cc
@@ -1643,6 +1645,7 @@ if(CRAYON_BUILD_TESTS)
       tests/alloy_interactions_mac_probe.mm
       src/macos/alloy_cast_overlay_mac.mm
       tests/alloy_cast_overlay_mac_probe.mm
+      tests/alloy_locale_matrix_mac_probe.mm
       PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
     target_include_directories(crayon_page_snapshot_cef_integration_test
                                PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -1779,6 +1782,16 @@ if(CRAYON_BUILD_TESTS)
       alloy_cast_overlay_mac
       PROPERTIES LABELS "cef;shell;macos;alloy;cast;integration"
                  TIMEOUT 240)
+    foreach(crayon_loc_tag IN ITEMS zh-CN en-US zh-TW)
+      string(REPLACE "-" "" crayon_loc_suffix "${crayon_loc_tag}")
+      add_test(NAME alloy_locale_matrix_${crayon_loc_suffix}
+               COMMAND crayon_page_snapshot_cef_integration_test about:blank
+                       alloy-loc-${crayon_loc_tag})
+      set_tests_properties(
+        alloy_locale_matrix_${crayon_loc_suffix}
+        PROPERTIES LABELS "cef;shell;macos;alloy;localization;integration"
+                   TIMEOUT 240)
+    endforeach()
     add_test(NAME alloy_navigation_mac
              COMMAND "${CRAYON_PYTHON3_EXECUTABLE}"
                      "${PROJECT_SOURCE_DIR}/tests/e2e/desktop/browser/run_page_snapshot_fixture.py"

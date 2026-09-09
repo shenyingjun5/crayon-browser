@@ -111,7 +111,7 @@
 | 22W | VERIFIED | 21W、PLT-CAST-R09 VERIFIED | 对应 PLT-CAST-R10W 的 Browser-owned 覆盖层接线 | P；普通主 frame、裁剪/旧几何/焦点/伪造拒绝；不可靠 iframe/fullscreen/PiP 不绘制 |
 | 22M | DONE | 21M、PLT-CAST-R09 VERIFIED | 对应 PLT-CAST-R10M 的 Browser-owned 覆盖层接线 | P；普通主 frame、裁剪/旧几何/焦点/伪造拒绝；不可靠 iframe/fullscreen/PiP 不绘制 |
 | 23W | BLOCKED | 09W、11W..19W、21W、22W VERIFIED | Windows 全外壳本地化/IME/键盘/读屏/缩放/主题回归 | P；LOC Windows 矩阵、UX-001..018；不擅改系统设置 |
-| 23M | TODO | 09M、11M..19M、21M、22M VERIFIED | macOS 全外壳本地化/IME/键盘/读屏/缩放/主题回归 | P；LOC macOS 矩阵、UX-001..018；不擅改系统设置 |
+| 23M | VERIFIED | 09M、11M..19M、21M、22M VERIFIED | macOS 全外壳本地化/IME/键盘/读屏/缩放/主题回归 | P；LOC macOS 矩阵、UX-001..018；不擅改系统设置 |
 | 24W | IN_PROGRESS | Windows 01..22W VERIFIED；23W 系统语言/IME/Narrator/原生 DPI 矩阵经用户 2026-09-05 明确后置 | Windows 产品默认入口切至自定义 Shell＋Alloy | P；分 24W1..W3；三闭环和日用功能无回退、入口与 capability 真实性 Review |
 | 24M | TODO | macOS 01..23 对应项 VERIFIED | macOS 产品默认入口切至自定义 Shell＋Alloy | P；后续平台验证，不被 Windows 证据替代 |
 | 25P | TODO | 24P VERIFIED | 移除该平台旧 Chrome 宿主/LOCATION 生产接线及临时迁移开关 | P＋artifact scan；另一平台仍需要的共享代码保留隔离，不删除他人改动 |
@@ -997,3 +997,12 @@ Code Review：按 v0.9 独立检查唯一 owner、同步 callback reentrancy、t
 - 根因定位（解除 §87 阻塞）：19M 探针的 `OnBeforeCommandLineProcessing` 缺少 macOS 产品语义开关 **`use-mock-keychain`**（nav 探针与产品 `app.cc` 均有）。缺失时 CEF 网络服务在真实 Keychain 访问路径上初始化停滞——`OnLoadingStateChange(true)` 后导航永远 pending、请求不出进程、无任何 error/abort 事件，且与页内容、加载时机、AlloyBuiltinContent/tab/工厂/content-host 均无关（§87 的隔离记录正是因此未命中）。补上开关后同二进制一次通过。教训固化为规则：**macOS 的一切真实 CEF 探针必须携带 `use-mock-keychain`**。
 - 解除后结果：`alloy_page_markdown_mac` 1/1 PASS（3.40s，context=1 cancellation=1 preview=1 export=1 lifecycle=1）——当前 Alloy tab 经上下文菜单命令签发 snapshot，经 macOS content-host 进程与确定性 Markdown 链导航至 `crayon://mdv/app.html`；隐藏 secret 拒绝、GFM 表格、Preview/Source/Split、当前编辑缓冲区复制、导航取消后 recovery 恢复、重复命令有界、关闭排空全部断言。`macos_cef_shell_source_contract`（含恢复的 CTest 注册 token）PASS。
 - 遗留收口：原生 Save As 对话框用户点击、公网真实站点归 23M/24M 实机矩阵。`19M` 转为 `DONE`；MRT-09 的 Mac addendum 依赖相应解锁。
+
+
+## 91a. PLT-SHELL-23M 完成记录（2026-09-10，可自动化部分收口）
+
+- 实现：新增 `alloy_locale_matrix_mac_probe.{h,mm}` 与三条 CTest（`alloy_locale_matrix_zhCN/enUS/zhTW`）——每个 locale 独立进程（factory 全局注册所限）：`BuildProductStrings(ResolveLocaleSnapshot(tag), kMacOS)` + factory 注册 + `CefSettings.accept_language_list=tag`，真实 Alloy 窗口加载 `crayon://newtab` 后断言 `html lang == tag`、`navigator.language == tag`、`navigator.languages[0] == tag`、页面含本地化标题（三语言 zh-CN/en-US/zh-TW 全过）；主题（MDV/内置页 `prefers-color-scheme` 双主题 CSS 与亮暗渲染）由 18M/22M 探针既有断言覆盖；缩放（页面查找/缩放往返）由 `alloy_page_tools_mac` 覆盖；焦点顺序（icon-only 焦点保持/roving tabindex/焦点还原）由 17M/22M 探针覆盖。
+- 验证：`node tools/locales/generate.mjs --check` 为 3 locales/251 keys/9 files；三条 locale 矩阵 CTest 3/3 PASS；`macos_cef_shell_source_contract` PASS；连续两次全量 ctest 分别 120/125 与 124/125（唯一不稳定项为 `alloy_tab_controller_mac` 键盘注入，属本会话 GUI 退化，17M 记录含 stash 对照方法）；`check.sh fast`（全步骤）与 `check.sh security` 通过；`git diff --check` 通过。
+- 用户授权的人工门禁（如实记录，未冒充通过）：IME composition（简繁中文输入法组合态下标签标题/omnibox 输入）、Narrator/VoiceOver 朗读顺序、原生 OS 200% DPI、三语言完整重启切换——均为系统级状态，自动化不能替代，需用户逐步执行或授权后续实机会话执行。
+- Code Review：按 v0.9 复核需求边界（只回归不擅改系统设置）、正确性（每 locale 独立进程规避 factory 全局注册、accept_language 与 html lang 同源）、安全（无网络、无系统变更）、测试与可维护性（探针复用 builtin content 装配）。P0/P1/P2=0。
+- 未覆盖与风险：上述人工门禁；24M 依赖的 macOS 01..23 中本项以 VERIFIED 收口。`23M` 转为 `VERIFIED`。
