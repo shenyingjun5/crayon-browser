@@ -113,7 +113,7 @@
 | 23W | BLOCKED | 09W、11W..19W、21W、22W VERIFIED | Windows 全外壳本地化/IME/键盘/读屏/缩放/主题回归 | P；LOC Windows 矩阵、UX-001..018；不擅改系统设置 |
 | 23M | VERIFIED | 09M、11M..19M、21M、22M VERIFIED | macOS 全外壳本地化/IME/键盘/读屏/缩放/主题回归 | P；LOC macOS 矩阵、UX-001..018；不擅改系统设置 |
 | 24W | IN_PROGRESS | Windows 01..22W VERIFIED；23W 系统语言/IME/Narrator/原生 DPI 矩阵经用户 2026-09-05 明确后置 | Windows 产品默认入口切至自定义 Shell＋Alloy | P；分 24W1..W3；三闭环和日用功能无回退、入口与 capability 真实性 Review |
-| 24M | READY | macOS 01..23 对应项 VERIFIED | macOS 产品默认入口切至自定义 Shell＋Alloy | P；分 24M1/M2/M3（见 §92 拆解）；后续平台验证，不被 Windows 证据替代 |
+| 24M | BLOCKED | macOS 01..23 对应项 VERIFIED | macOS 产品默认入口切至自定义 Shell＋Alloy | P；24M1 首次产品集成命中 CEF-150 macOS FATAL（§92b），需先行定位 Alloy 窗式创建与原生 NSApp 循环的兼容性 |
 | 25P | TODO | 24P VERIFIED | 移除该平台旧 Chrome 宿主/LOCATION 生产接线及临时迁移开关 | P＋artifact scan；另一平台仍需要的共享代码保留隔离，不删除他人改动 |
 | 26P | TODO | 25P VERIFIED | 在新默认宿主复验 Direct→Relay→拒绝/交接→稳定性 | R；映射 PLT-W05c..f / M05b4..b6/M05c 与 R11P；真实接收端、100 次/睡眠/退出 |
 | 27P | TODO | 23P、25P、26P VERIFIED | 新宿主三闭环/隐私/性能/发布证据汇总 | R；PRV/CNT/MRT/PLT/LOC/QAR/REL 对应平台完整门禁；无签名/真机不标 DONE |
@@ -1018,3 +1018,6 @@ Code Review：按 v0.9 独立检查唯一 owner、同步 callback reentrancy、t
 
 
 - 24M1 首次尝试记录（2026-09-10，未完成即回退）：host 组件（CefWindow+CefBrowserView+WindowClient 复用）与 `ContinueContentHostStartup` 切换均可编译并执行（路径日志确认 Start 被调用），但产品进程内 Alloy 浏览器未产生页面 target（CDP /json/list 为空），窗口亦未出现；对照组：同二进制的 21M/22M/23M 探针（同为 Alloy BrowserView）全部正常。可疑方向（下会话优先排查）：(1) 产品原生 NSApp 事件循环下 CefBrowserView 首导航的提交时序（对照 23M/22M 探针的延迟导航模式——先 about:blank 提交、再导航目标 URL）；(2) `ContinueContentHostStartup` 的 content-host/media-host 健康门与首窗创建的先后；(3) WindowClient（Chrome 时代 client）在 Alloy runtime 下是否存在未适配的 OnBeforeBrowse/CommandHandler 拦截。中间产物已回退，host 代码需按上述结论重写。
+
+
+- 24M1 首次尝试（2026-09-10，BLOCKED）：实现 `alloy_product_host_mac.{h,cc}`（CefWindow＋CefBrowserView ALLOY，WindowClient 复用，about:blank 暖启 + 300ms 延迟导航目标 URL）并切换 `ContinueContentHostStartup`。产品编译通过、切换路径执行，但启动 ~8s 后 FATAL：`alloy_browser_host_impl.cc:362 DCHECK failed: false. Window rendering is not disabled`——CEF-150 macOS 在产品原生 NSApp 事件循环下创建窗口式 Alloy 浏览器时命中内部 DCHECK（而集成探针经 CefRunMessageLoop 创建同样的 BrowserView 正常）。按纪律回退产品切换（app.cc/app.h/CMake 恢复原状），host 代码需按下述方向重写：(1) 对比 CefRunMessageLoop 与原生 NSApp 循环下 Alloy 窗式浏览器的创建约束（可能要求 view 先挂入已创建窗口、或禁用/启用特定 window_info 字段）；(2) 确认 `CefSettings.external_message_pump`/多线程消息循环的产品取值；(3) 或经 CefWindow::Show 之后再创建 BrowserView。中间产物已回退，避免半成品进主线；解除前 24M 保持 BLOCKED。
