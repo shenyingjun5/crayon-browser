@@ -19,7 +19,7 @@ use std::io::{Read, Write};
 
 use crayon_domain::{AgentCapability, CaapError};
 use crayon_ipc_schema::{
-    CaapCancel, CaapErrorReply, CaapHello, CaapRequest, CaapWelcome, SchemaVersion,
+    CaapCancel, CaapChunk, CaapErrorReply, CaapHello, CaapRequest, CaapWelcome, SchemaVersion,
 };
 use crayon_platform_api::local_agent_ipc::{
     LocalAgentIpcConnection, LocalAgentIpcEndpoint, LocalAgentIpcError,
@@ -475,6 +475,12 @@ impl<'a> CaapConnection<'a> {
     /// Writes a stable CAAP error reply without exposing diagnostic text.
     pub fn write_error(&mut self, id: u64, error: CaapError) -> Result<(), ConnectionError> {
         self.write_json_frame(&CaapErrorReply::new(id, error))
+    }
+
+    /// Writes one validated response chunk. Part of the AGT-12Ca server
+    /// surface: the response half of the wire, bounded by the chunk schema.
+    pub fn write_chunk(&mut self, chunk: &CaapChunk) -> Result<(), ConnectionError> {
+        self.write_json_frame(chunk)
     }
 
     /// Releases the client slot and OS connection. Repeated calls are

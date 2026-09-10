@@ -9,6 +9,7 @@ pub mod grant;
 pub mod page_stream;
 pub mod receipt;
 pub mod registry;
+pub mod server;
 pub mod session;
 pub mod tools;
 pub mod transport;

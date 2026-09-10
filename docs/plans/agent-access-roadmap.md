@@ -356,3 +356,20 @@
 4. `AGT-16 TODO`：等待 `AGT-13/14` 与现有 `AGT-15 VERIFIED`，执行 CAAP/CLI/MCP 总 Review 与独立 GO/NO-GO。
 
 `AGT-15` 不再是下一开发项；其真实 CEF executor/confirm/receipt 接线属于上述产品装配，不回填为已经完成。
+
+## AGT-12C 装配切片拆解（2026-09-11，roadmap 修订）
+
+- 宿主选型决策：CAAP 端点与 accept loop 由 **CEF 产品进程内的 Rust 线程**承载（新 staticlib crate `crayon-agent-host` 暴露最小 C ABI；`browser/cef-shell` 新增平台 adapter 链接并驱动）。理由：(1) AGT-04/05 的 grant 签发与确认 UI 需要与 CEF UI 线程低延迟往返，helper 进程方案要多一跳自定义协议且弱化确认语义；(2) AGT-12B 端点/连接运行时已在 Rust 侧闭合，FFI 面可以收窄到 start/stop/dispatch 三个入口；(3) 不引入第三个 helper 进程，投屏/内容两个 helper 的边界不动。FFI 纪律：`catch_unwind` 全包、回调不携带 payload、stop 幂等、所有跨边界字节有界。
+- **AGT-12Ca「CAAP 服务运行时」DONE（Rust，`crayon-agent-gateway::server`）**：`CaapServer<E: LocalAgentIpcEndpoint, D: CaapDispatch>`——端点所有权、accept 循环（后台线程，单客户端：第二连接在 peer gate 后拒绝）、每连接 serve 循环（12B 握手→`receive`→`dispatch`→分块回写）、dispatch 走 `CaapDispatch` trait（请求入、`CaapReply` 有界通道出，含分块与 cancel），stop/disconnect 幂等且不持锁等待线程，dispatch panic 被 `catch_unwind` 拦截并回稳定错误。验收：内存连接矩阵（握手→请求→分块响应→cancel→stop；第二客户端拒绝；stop during idle/active；dispatch panic 容错）+ 12B 既有回归全绿。
+- **AGT-12Cb「session/grant/tool dispatch」（Rust，`crayon-agent-gateway::server::gateway`）**：具体 `GatewayDispatch`——组装 `SessionManager`+`GrantManager`+`ToolRegistry`+新 `ToolPort` trait（content/navigation/cast 读写端口，测试注入 fake）；CaapRequest 校验（工具存在、未被永久拒绝、grant 覆盖、参数 spec 校验），R2+ 工具产出 confirm-required 中间态（沿用 CAAP v1 schema 既有字段），receipt（AGT-11）逐动作落账。验收：fake port 全工具矩阵 + 越权/未确认/未知工具拒绝 + receipt 断言。
+- **AGT-12Cc「CEF 产品 FFI 装配」（C++/Rust）**：`crayon-agent-host` staticlib（C ABI：`agent_host_start/stop/submit_reply`），cef-shell 平台 adapter（macOS UDS/Windows named pipe 各自启动参数）；CEF UI 线程桥：ToolPort 真实现（content 读走既有 snapshot bridge、navigation 走 TabController、cast 走 cast_shell）+ AGT-05 确认 UI 桥；产品 build 接线（cargo staticlib 构建+链接）与 start/stop 生命周期挂接。验收：真实产品进程内 Rust 集成客户端完成 Hello/Welcome→PageRead→confirm UI→导航工具全链，stop 零残留。
+- **AGT-12Cd「产品级安全回归」**：恶意本机 client 矩阵（replay/oversize/畸形/竞速连接）对真实产品进程复验；停止/退出排空；AGT-12 转 `DONE`，解锁 AGT-13/14。
+- 顺序依赖：12Ca → 12Cb → 12Cc → 12Cd；每切片独立 Review 与提交；12Ca/12Cb 纯 Rust 不触碰产品，12Cc/12Cd 需双平台各验或明确记录 NOT_RUN。
+
+### AGT-12Ca 完成记录（2026-09-11）
+
+- 切片设计先行：AGT-12C 拆为 12Ca（服务运行时）/12Cb（session/grant/tool dispatch）/12Cc（CEF FFI 装配）/12Cd（产品级安全回归），宿主选型决策（CEF 进程内 Rust 线程 + staticlib C ABI）与理由已写入本 Roadmap AGT-12C 拆解节。
+- 实现：`crayon-agent-gateway/src/server/{mod.rs,server_tests.rs}`——`run(endpoint, dispatch, stop, clock, schema, capabilities)` 阻塞式 accept/serve 循环（线程策略留给宿主层）；`StopFlag` 协作式停机（消息间检查）；`CancelFlag` 传递给在途 dispatch 轮询；`CaapDispatch` trait（dispatch/notify_cancel），`DispatchOutcome::{Completed,Failed(CaapError)}`，sink 流式写 chunk；dispatch panic 经 `catch_unwind` 降级为稳定 `InvalidMessage` 回复，连接与客户端槽位不受影响；成功 dispatch 未写 final chunk 时服务器合成空 final；`NotRunning` 端点错误映射为干净退出（Stopped），其他端点错误区分 stop 标志；transport.rs 增公开 `write_chunk`（响应半边，chunk schema 有界）。每条连接以幂等 `stop` 收尾；payload 零日志。
+- 验证：`cargo test -p crayon-agent-gateway --lib` 109/109（新增 8：握手→分块响应→顺序双客户端、缺 final 合成、失败映射稳定错误、panic 容错、cancel 送达、stop 先于 accept、NotRunning 干净退出、握手失败不杀服务器）；clippy `-D warnings` 零告警；`cargo fmt --all -- --check`、`git diff --check` 通过。
+- Code Review：按 v0.9 复核——单客户端顺序服务语义、协作停机边界（消息间）、cancel 只到 trait 不放大权限、panic 隔离、错误面稳定无内容。P0/P1/P2=0。
+- 未覆盖与风险：真实线程宿主与 FFI 归 12Cc；server 层不解析 tool 语义。`AGT-12Ca` 转 `DONE`，下一切片 `AGT-12Cb`。
