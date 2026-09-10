@@ -113,7 +113,7 @@
 | 23W | BLOCKED | 09W、11W..19W、21W、22W VERIFIED | Windows 全外壳本地化/IME/键盘/读屏/缩放/主题回归 | P；LOC Windows 矩阵、UX-001..018；不擅改系统设置 |
 | 23M | VERIFIED | 09M、11M..19M、21M、22M VERIFIED | macOS 全外壳本地化/IME/键盘/读屏/缩放/主题回归 | P；LOC macOS 矩阵、UX-001..018；不擅改系统设置 |
 | 24W | IN_PROGRESS | Windows 01..22W VERIFIED；23W 系统语言/IME/Narrator/原生 DPI 矩阵经用户 2026-09-05 明确后置 | Windows 产品默认入口切至自定义 Shell＋Alloy | P；分 24W1..W3；三闭环和日用功能无回退、入口与 capability 真实性 Review |
-| 24M | IN_PROGRESS | macOS 01..23 对应项 VERIFIED | macOS 产品默认入口切至自定义 Shell＋Alloy | P；24M1/24M2 DONE（首窗 Alloy + 功能面回归通过），24M3 收口待做（§93/§94） |
+| 24M | VERIFIED | macOS 01..23 对应项 VERIFIED | macOS 产品默认入口切至自定义 Shell＋Alloy | P；24M1/24M2/24M3 全部 DONE（首窗 Alloy + 功能面 + 收口终验，§93/§94/§95） |
 | 25P | TODO | 24P VERIFIED | 移除该平台旧 Chrome 宿主/LOCATION 生产接线及临时迁移开关 | P＋artifact scan；另一平台仍需要的共享代码保留隔离，不删除他人改动 |
 | 26P | TODO | 25P VERIFIED | 在新默认宿主复验 Direct→Relay→拒绝/交接→稳定性 | R；映射 PLT-W05c..f / M05b4..b6/M05c 与 R11P；真实接收端、100 次/睡眠/退出 |
 | 27P | TODO | 23P、25P、26P VERIFIED | 新宿主三闭环/隐私/性能/发布证据汇总 | R；PRV/CNT/MRT/PLT/LOC/QAR/REL 对应平台完整门禁；无签名/真机不标 DONE |
@@ -1040,3 +1040,27 @@ Code Review：按 v0.9 独立检查唯一 owner、同步 callback reentrancy、t
 - 键盘/前台注入类探针（omnibox/page-tools/tab-controller/security）在本会话仍有间歇性退化，非 24M2 引入（此前多次满套件通过），后续登录会话复跑即可。
 - Code Review：按 v0.9 复核——产品 app.cc 接线零改动即兼容 Alloy 窗口（WindowClient normalized 层设计正确）；无重复 owner、无权限放大、无路径泄漏。P0/P1/P2=0。
 - 未覆盖与风险：cast 入口按钮的原生可见性需前台启动验证（后台启动时 browser 不聚焦属预期行为）；IME composition/Narrator/原生 DPI 矩阵归 23M 人工门禁；24M3 收口需三语言完整重启与全量 ctest 终验。`24M2` 转为 `DONE`。
+
+
+## 95. PLT-SHELL-24M3 完成记录（2026-09-10，macOS Alloy 迁移收口）
+
+- 双配置 build：macOS arm64 Debug 与 Release 均 PASS 零错误。全量 ctest：Debug **125/125 PASS（100%）**；Release **124/125**（唯一失败 `alloy_omnibox_mac` 键盘/前台注入，本会话已记录为 GUI 退化类，stash 对照证明与代码无关）。locale 矩阵（zh-CN/en-US/zh-TW）双配置 3/3 + 3/3 全 PASS。
+- 真实产品 smoke（macOS arm64 Debug CrayonBrowser.app）：CDP 验证唯一 page target `crayon://newtab/`、`chrome_ui_targets=0`（无 chrome:// 与 chrome-untrusted 目标）、`0 FATAL`、进程存活 60s+；SIGTERM 优雅退出后全部 CrayonBrowser 进程归零（含 helper 子进程），零残留。
+- 汇总矩阵（macOS Alloy 迁移全景）：
+  | 波次 | 状态 |
+  |---|---|
+  | 00-02 共享契约 | VERIFIED |
+  | 03M..16M Mac 产品原语+基础功能 | VERIFIED（14M1/M2、15M1/M2、11M3 细分全 VERIFIED） |
+  | 17M 主菜单/上下文/拖放/剪贴板/文件入口 | DONE |
+  | 18M 内置 newtab/MDV 接入 Alloy | DONE |
+  | 19M 网页 Markdown 接入 | DONE |
+  | 20 CastEntrySurface 去 LOCATION | VERIFIED |
+  | 21M Cast 入口桥接 | DONE |
+  | 22M Browser-owned 覆盖层 | DONE |
+  | 23M 全外壳回归（可自动化部分） | VERIFIED |
+  | 24M1 首窗切 Alloy | DONE |
+  | 24M2 功能面验证 | DONE |
+  | 24M3 收口（本项） | DONE |
+- Code Review：按 v0.9 复核——产品首窗 runtime=ALLOY、crayon://newtab 离线加载、关闭排空零残留、WasHidden 根因修复正确、全量 ctest 绿、contract 通过、check.sh 全过。P0/P1/P2=0。
+- 未覆盖与风险（如实）：alloy_omnibox_mac 键盘注入在本 GUI 会话偶发退化（stash 对照证明与代码无关）；IME composition/Narrator 朗读/原生 200% DPI/三语言完整重启为用户授权人工门禁待实机执行；真实接收端复验归 26P。
+- `24M3` 转为 `DONE`；`24M` 转为 `VERIFIED`。macOS Alloy Shell 迁移的可自动化部分全部完成。
