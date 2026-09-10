@@ -38,7 +38,7 @@ MRT 是用户侧 MDV 基础设施，不进入 `crayon-page-data`、CNT 的确定
 | MRT-08 | DONE | MRT-07 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | KaTeX inline/block extension：按需加载、局部错误、主题/字体离线与编辑 generation | MR-005；公式 golden/注入/实机 |
 | MRT-09 | DONE | MDV-20W,MDV-25W,MRT-06,MRT-08 | `tests/e2e/desktop`,`tools/repo-guard`,`docs/current`,`docs/plans` | `MRT-09W` 先做 Windows 首发 P0 Runtime/包体/性能/安全总 Review；macOS 特有 addendum 后续 | MR-001..005,MR-008/012；P0/P1=0 |
 | MRT-10 | DONE | MRT-09 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv` | TOC/Outline：从解析事实生成有界标题树、稳定会话锚点与键盘/读屏导航 | MR-006；重复标题/超深/编辑更新 |
-| MRT-11 | TODO | MRT-09 | `browser/shared-ui/mdv` | 当前文档本地 Search：只查内存源码/安全文本，结果/高亮有界，不持久化 query | MR-006；Unicode/大文档/取消 |
+| MRT-11 | DONE | MRT-09 | `browser/shared-ui/mdv` | 当前文档本地 Search：只查内存源码/安全文本，结果/高亮有界，不持久化 query | MR-006；Unicode/大文档/取消 |
 | MRT-12 | TODO | MRT-09 | `third_party/echarts`,`tools`,`docs/current` | ECharts 供应链与纯 JSON option schema：固定运行时闭包、series/component allowlist、禁止 function/eval/URL | MR-007；schema/许可/包体 |
 | MRT-13 | TODO | MRT-12 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | `echarts` fence extension：JSON parse/validate、Canvas/SVG 渲染、resize/主题、局部错误与释放 | MR-007/008；恶意 option/资源回落 |
 | MRT-14 | TODO | MRT-09 | `third_party/graphviz`,`tools`,`docs/current` | Graphviz WASM 选型与 sandbox 契约：DOT 预算、WASM/worker 闭包、许可、内存/CPU/超时/取消 | MR-009；许可/资源/敌意 DOT |
@@ -279,3 +279,19 @@ Gate:       MRT-18 TV/Cast gap / MRT-19 AI source-producer gap only
 - 验证：`markdown_outline_facts` 8 项（抽取/锚点格式与 revision 敏感/截断/512 上限/setext+深层级/fence 内不收/空文档）；`mdv_outline` 6 项（树深规整/跳降压平/导航边界与越界/aria/空与单条目/ordinal 序）；`mdv_page/viewer/edit/save/entry_guard/images/transform` 与 markdown 全量（render/extension/math/runtime 5 项）18/18 PASS；真实产品 CDP E2E：`mdvPush` 注入 4 标题文档后面板 4 条目、缩进 8/22/36/22px 对应规整深度 0/1/2/1、aria `(level N)`、toggle aria-pressed 正确；SIGTERM 零残留；`node tools/locales/generate.mjs --check` 3 locales/252 keys/9 files；`git diff --check` 通过。
 - Code Review：按 v0.9 复核——解析事实有界（512/256B 截断）、锚点确定性、不改写渲染 HTML（无 id 注入路径）、键盘导航闭合语义、面板内容全部转义、零网络零持久化。P0/P1/P2=0。
 - 未覆盖与风险：大纲面板的可视化样式为最小实现（键盘/读屏行为已自动化，视觉打磨归后续 MDV 任务）；`MRT-10` 转 `DONE`，解锁 `MRT-16`（与 MRT-11 一起）。
+
+## MRT-11 原子范围（当前文档本地 Search）
+
+- 状态：`DONE`；依赖 `MRT-09 DONE`。
+- 单一目标：`browser/shared-ui/mdv` 交付有界的文档内搜索——`mdv_search.{h,cc}` 模型层：对内存源码文本的大小写不敏感（ASCII 折叠、非 ASCII 精确字节匹配）子串搜索，闭合预算（query ≤128B、≤200 个匹配、源 ≤文档上限），`FindAll/Next/Previous` 环绕导航与 `x/y` 计数；`mdv_page` 集成搜索条（输入+prev/next+计数显示，Escape 清除=取消，textarea `setSelectionRange` 定位高亮，不注入预览 DOM、不持久化 query/路径）。
+- 边界：UTF-8 字节级匹配不产生假跨字符匹配（多字节首字节不可能与 ASCII 折叠集冲突）；空 query/无结果为合法态；搜索纯函数、零 IO、零网络；query 不进日志不落盘。
+- 验收：`mdv_search_test`（ASCII 大小写折叠、CJK/emoji 精确匹配与不跨字节、重叠匹配右移推进、200 上限、空 query/空文档、环绕、Unicode/超大文档、取消清除）；`mdv_page` 回归；locale parity；`git diff --check`；产品 smoke 中源码视图搜索计数与定位可用。
+- 明确不做：预览 HTML 高亮注入、正则/跨行、持久化最近搜索、跨文件/目录搜索（归 MRT-16 前 UI 需求之外）、替换。
+
+### MRT-11 完成记录（2026-09-11）
+
+- 实现：`mdv_search.{h,cc}` 模型层——`SearchDocument` 对内存源码的 ASCII 折叠（仅 A-Z）字节级子串搜索；UTF-8 边界守卫（匹配起止不得落在 continuation byte 内，杜绝跨字符假匹配）；预算 query ≤128B、≤200 匹配（超出 `truncated=true`）、匹配右移防重叠；`SearchStep` 双向环绕且无状态。页面集成：view-bar 搜索条（placeholder/prev/next/计数 `role=status`），JS 侧 toLowerCase 镜像实现（200 上限+`+` 截断标记），Enter/Shift+Enter 与 prev/next 导航，`setSelectionRange` 定位源码视图并滚动到行，Escape 清除=取消；query 零持久化零日志。新 locale keys `mdv.search_placeholder/prev/next` 三语言（255 keys parity）。
+- 实现期发现并修复：python 生成 C++ 续行字符串时 `\\n` 少一层转义，使 JS 字符串字面量断开、整个 app.js 语法错误（mdvPush 等全部未定义）——产品 E2E 抓出后修复，并确认修复后 outline 功能同页共存。
+- 验证：`mdv_search` 9 项（ASCII 折叠偏移、CJK/emoji 精确、跨字节拒绝×2、重叠防重、200 截断、空 query/文档/超长 query、双向环绕、5MiB 级线性、query 预算）；mdv/markdown 全量 19/19；真实产品 CDP E2E：计数 1/2→2/2、选区 0-7→13-20（大小写不敏感）、Escape 清空；SIGTERM 零残留；locale parity 3/255/9；`git diff --check` 通过。
+- Code Review：按 v0.9 复核——纯函数零 IO、UTF-8 边界 fail-closed、预算闭合、query 不持久化、JS 与 C++ 语义一致（预算/清除/环绕）。P0/P1/P2=0。
+- 未覆盖与风险：预览侧高亮未做（scope 明确排除，源码视图定位已满足）；`MRT-11` 转 `DONE`，与 MRT-10 一起解锁 `MRT-16`。

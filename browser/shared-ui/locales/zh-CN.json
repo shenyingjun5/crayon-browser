@@ -250,5 +250,8 @@
   "cast.rejected.no_route": "没有可用的投屏方式，可尝试其他接收端。",
   "cast.rejected.drm": "DRM 保护内容不能投屏。",
   "cast.retry": "重新选择接收端并重试",
-  "mdv.outline": "大纲"
+  "mdv.outline": "大纲",
+  "mdv.search_placeholder": "搜索文档",
+  "mdv.search_prev": "上一个匹配",
+  "mdv.search_next": "下一个匹配"
 }

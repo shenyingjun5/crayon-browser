@@ -75,6 +75,9 @@ struct MdvPageStrings {
   std::string mermaid_close;
   std::string mermaid_error;
   std::string outline_label;
+  std::string search_placeholder;
+  std::string search_prev;
+  std::string search_next;
   MdvShortcutPlatform shortcut_platform = MdvShortcutPlatform::kWindows;
 };
 

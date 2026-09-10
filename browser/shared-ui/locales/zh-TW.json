@@ -250,5 +250,8 @@
   "cast.rejected.no_route": "沒有可用的投影方式，可嘗試其他接收端。",
   "cast.rejected.drm": "DRM 保護內容無法投影。",
   "cast.retry": "重新選擇接收端並重試",
-  "mdv.outline": "大綱"
+  "mdv.outline": "大綱",
+  "mdv.search_placeholder": "搜尋文件",
+  "mdv.search_prev": "上一個符合",
+  "mdv.search_next": "下一個符合"
 }

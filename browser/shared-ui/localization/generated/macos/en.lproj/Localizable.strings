@@ -250,3 +250,6 @@
 "cast.rejected.drm" = "DRM-protected content cannot be cast.";
 "cast.retry" = "Choose a receiver and retry";
 "mdv.outline" = "Outline";
+"mdv.search_placeholder" = "Search document";
+"mdv.search_prev" = "Previous match";
+"mdv.search_next" = "Next match";
