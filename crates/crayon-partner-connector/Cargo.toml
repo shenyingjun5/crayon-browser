@@ -1,0 +1,10 @@
+[package]
+name = "crayon-partner-connector"
+version = "0.1.0"
+edition = "2021"
+license = "LicenseRef-Proprietary"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]

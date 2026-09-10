@@ -24,7 +24,7 @@
 | HUB-06 | DONE | HUB-04,AGT-05 | `apps/desktop-cef/**/capability-route/**`,locales | route 预览、理由、偏好和临时覆盖 UI | `HB-006`; 数据外发/成本/风险可见 |
 | HUB-07 | TODO | HUB-02,WFL-12 | `crayon-capability-hub/adapters/site_skill/**` | 个人 Site Skill registry adapter | `HB-007`; owner/Profile/health/版本隔离 |
 | HUB-08 | TODO | HUB-03,AGT-14 | `crayon-agent-gateway/tools/capability/**` | 入站 MCP/CLI 能力 search/describe/preview，经 CAAP 暴露 | `HB-008`; 不泄漏 token/endpoint/隐蔽工具 |
-| HUB-09 | TODO | HUB-01,PRV-10 | `crayon-partner-connector/api/**` | 与入站 MCP 分离的出站 Partner connector interface | `HB-009`; crate/dependency/session 隔离 |
+| HUB-09 | DONE | HUB-01,PRV-10 | `crayon-partner-connector/api/**` | 与入站 MCP 分离的出站 Partner connector interface | `HB-009`; crate/dependency/session 隔离 |
 | HUB-10 | TODO | HUB-09 | `crayon-partner-connector/trust/**` | 来源、版本、签名、兼容、revoke、disable 和 kill switch | `HB-010`; 篡改/降级/撤销/离线 |
 | HUB-11 | TODO | HUB-09,PRV-07 | `crayon-partner-connector/oauth/**`,`crayon-platform-api/**` | OAuth state/PKCE、最小 scope 和 provider/tenant token vault | `HB-011`; redirect/CSRF/scope/清除/串租户 |
 | HUB-12 | TODO | HUB-09,PLT-02 | `crayon-partner-connector/network/**` | endpoint allowlist、DNS/重定向重验、SSRF 与消息预算 | `HB-012`; rebinding/private/metadata/oversize |
@@ -169,3 +169,26 @@
 - 验证：独立 configure/build 零告警（MSVC /W4 /WX 与 -Wall -Wextra -Wpedantic -Werror 双口径）；`capability_route` 契约测试通过（Present 校验矩阵含 revision 不被失败污染、生命周期与一次性覆盖语义（Proceed 二次失败/Cancel 后覆盖不可取回）、外发标注渲染含 none-selected 行、locale en/zh parity 60=60 且必需键齐全、5000 步风暴不变量）；全目标编译后 ctest 共享层回归 **40/40 通过**（含新用例）；`git diff --check` 通过。
 - Code Review：P0 0、P1 0、P2 1——成本可见性缺数据源未建模（已登记，HUB-09+ 补齐时需同步扩展模型与 locale）；其余维度无发现。
 - 未覆盖与风险：策略重算由调用方持 Proceed 输出回 HUB-04 执行（本层不计算）；CEF 弹窗呈现/键盘读屏实机验证归 QAR/BUX。`HUB-06` 转为 `DONE`。
+
+## HUB-09 原子范围（出站 Partner connector 接口层）
+
+- 状态：`IN_PROGRESS`；依赖 `HUB-01 DONE`、`PRV-10 DONE`。
+- 单一目标：新 crate `crayon-partner-connector`（workspace member）交付出站 connector 的**接口层** `api`——`ConnectorDescriptor`（partner 自有 id/version，闭合 charset/版本校验）、`ConnectorSessionId`（出站会话令牌，与入站 CAAP session 无任何类型互通）、`ConnectorScope`（最小 scope 集，禁 `*` 通配）、`ConnectorCall`（端点引用+payload 预算的出站调用描述）与三个边界 trait `TrustPort`（HUB-10 签名/撤销）、`TokenVaultPort`（HUB-11 provider/tenant token vault）、`NetworkPort`（HUB-12 端点 allowlist/SSRF 防护）+ `ConnectorAuditEvent`（provider/能力/结果脱敏事件，无正文/token）。
+- 隔离不变量（HB-009 crate/依赖/session/token/审计隔离的接口面表达）：本 crate 不得依赖 `crayon-agent-gateway`/`crayon-ipc-schema` 等入站 crate（workspace 成员级隔离）；session id 类型不可从入站会话字符串构造（无互通构造器）；registry namespace 为 `partner_connector::*`，与入站 registry 无共享符号。
+- 输入与输出：允许修改 `crates/crayon-partner-connector/**`、workspace `Cargo.toml` members 与本 Roadmap。实现 trait 的具体逻辑分属 HUB-10..12；本层只定义类型与 trait，零 IO。
+- 边界：描述符校验 fail-closed（空/超长/非法 charset 拒绝）；scope 禁通配与空集；调用预算字段必有界；审计事件只含闭合枚举与 hash 字段；不触网、不持久化。
+- 验收：`cargo test -p crayon-partner-connector`（描述符校验矩阵、session 令牌不可互通的类型级断言、scope 通配拒绝、调用预算边界、审计事件无正文）;依赖隔离静态断言（Cargo.toml 无入站 crate 依赖）；clippy `-D warnings`、fmt、`check.sh security`、`git diff --check`。
+- 明确不做：trust/oauth/network/mcp/runtime 具体实现（HUB-10..14）、审计 sink 接线（HUB-15）、任何真实网络请求。
+
+## HUB-09 完成记录（2026-09-11）
+
+- 实现：新 crate `crayon-partner-connector`（workspace member，`src/api/mod.rs` + `api_tests.rs`，约 380 行）——接口层，零 IO 零实现：
+  - `ConnectorId`：`<namespace>.<name>` 强制 partner 自有命名空间（`[a-z0-9_-]`，各 ≤64B），无缺省命名空间。
+  - `ConnectorDescriptor`：version 校验（`[0-9A-Za-z.+-]`）、scope 集合（≤16 条、禁通配 `*`、禁空白、排序去重）——描述符无法自行扩权。
+  - `ConnectorSessionId`：出站会话令牌为单调计数包装，私有字段、无字符串构造器/访问器——与入站 CAAP session 类型级不可互通（HB-009 session 隔离）。
+  - `ConnectorCall`：endpoint 引用 + ASCII payload，预算 ≤64KiB（PayloadTooLarge/NotUtf8 fail-closed）。
+  - 边界 trait：`TrustPort`（HUB-10）、`TokenVaultPort`（HUB-11，token 只出 opaque handle）、`NetworkPort`（HUB-12，allowlist/SSRF 归实现）；`ConnectorAuditEvent` 只含 namespace/name/outcome/payload 字节数（无正文/token）。
+  - **依赖隔离静态断言**：crate 自身 manifest 测试断言不依赖 `crayon-agent-gateway`/`crayon-ipc-schema`/`crayon-app-runtime`/`crayon-semantic-action`（HB-009 crate 隔离的自动化表达）。
+- 验证：`cargo test -p crayon-partner-connector` 8/8（id 命名空间矩阵、version/scope 校验、通配拒绝、scope 预算、session 令牌单调性与类型隔离、payload 预算、审计事件无正文、TrustPort 默认拒绝、依赖隔离断言）；clippy `-D warnings` 零告警；fmt、`check.sh security`、`git diff --check` 通过。
+- Code Review：按 v0.9 复核——接口零实现零 IO、入站/出站命名空间与依赖隔离、描述符不可扩权、审计脱敏字段闭合。P0/P1/P2=0。
+- 未覆盖与风险：具体实现分属 HUB-10（trust）/11（token vault）/12（network）/13（出站 MCP namespace）/14（runtime）；审计 sink 接线归 HUB-15。`HUB-09` 转 `DONE`，解锁 `HUB-10/11/12`。

@@ -648,6 +648,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "crayon-partner-connector"
+version = "0.1.0"
+
+[[package]]
 name = "crayon-platform-api"
 version = "0.1.0"
 
