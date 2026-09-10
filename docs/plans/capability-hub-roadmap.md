@@ -30,7 +30,7 @@
 | HUB-12 | DONE | HUB-09,PLT-02 | `crayon-partner-connector/network/**` | endpoint allowlist、DNS/重定向重验、SSRF 与消息预算 | `HB-012`; rebinding/private/metadata/oversize |
 | HUB-13 | DONE | HUB-10,HUB-11,HUB-12 | `crayon-partner-connector/mcp/**` | 出站 Partner MCP namespace、tool/schema 过滤和不可信响应 | `HB-013`; description injection 不可扩权 |
 | HUB-14 | DONE | HUB-09,HUB-12 | `crayon-partner-connector/runtime/**` | health、rate/quota、retry budget、熔断、取消 | `HB-014`; 副作用默认不 retry；资源有界 |
-| HUB-15 | TODO | HUB-05,HUB-13,HUB-14,AGT-11 | `crayon-capability-hub/audit/**`,`diagnostics/**` | provider/tenant hash/capability/route/结果的脱敏审计指标 | `HB-015`; 无正文/token/完整参数 |
+| HUB-15 | DONE | HUB-05,HUB-13,HUB-14,AGT-11 | `crayon-capability-hub/audit/**`,`diagnostics/**` | provider/tenant hash/capability/route/结果的脱敏审计指标 | `HB-015`; 无正文/token/完整参数 |
 | HUB-16 | TODO | HUB-01..HUB-15 | threat model,Review,`docs/current/**` | Hub/Partner connector 安全、隐私、供应链与性能总 Review | 全 HB；P0/P1=0；partner feature 独立 GO/NO-GO |
 
 ## 3. 完成门禁
@@ -283,3 +283,21 @@
 - 验证：`cargo test -p crayon-partner-connector` **44/44**（新增 6：配额窗口 Shed/恢复、最小间隔、熔断全转换（含半开单探测与探测失败重开）、副作用永不重试+预算耗尽+refill、取消共享状态）；clippy `-D warnings` 零告警；fmt、`check.sh security`、`git diff --check` 通过。
 - Code Review：按 v0.9 复核——熔断转换闭合、重试语义（副作用默认不重试）与预算 fail-closed、注入时钟无墙钟依赖。P0/P1/P2=0。
 - 未覆盖与风险：分布式熔断状态（单进程语义）；真实 IO 组装归产品装配。`HUB-14` 转 `DONE`。
+
+## HUB-15 原子范围（provider/tenant 脱敏审计指标）
+
+- 状态：`IN_PROGRESS`；依赖 `HUB-05 DONE`、`HUB-13 DONE`、`HUB-14 DONE`、`AGT-11 VERIFIED`。
+- 单一目标：`crayon-capability-hub/src/audit/{mod.rs,audit_tests.rs}`——`AuditLedger`：有界脱敏审计账本，键为 `(provider_hash, tenant_hash, capability, route, outcome)` 的**64-bit hash 维度**（调用方注入 hash，本层不见 provider/tenant 明文），值为计数器（次数、失败次数、累计 payload 字节数上限截断）；`emit` 产出 `DiagnosticEvent`（`DataClass::Diagnostic`，属性只含闭合 token 与 hash 十六进制）；容量 LRU 淘汰并计 `dropped` 计数（同 AGT-11 模式）。`record_call` 直接消费 `crayon-partner-connector::api::ConnectorAuditEvent`（跨 crate 只传闭合事件）。
+- 隔离与脱敏：维度必须是 hash 而非明文（类型签名强制 u64）；事件属性集闭合（namespace_hash/provider_hash/tenant_hash/capability/route/outcome/bytes），无正文/token/完整参数（HB-015）。
+- 验收：`audit_tests`（维度记账、LRU 淘汰与 dropped 计数、DiagnosticEvent 产出与属性闭合性、partner 事件转换、零明文断言——序列化输出不含 provider/tenant 原文）；既有 hub 回归；clippy/fmt/security/diff-check。
+- 明确不做：audit sink 落盘/上报（产品装配）、真实 hash 算法（调用方注入 u64）、HB-016 总 Review。
+
+## HUB-15 完成记录（2026-09-11）
+
+- 实现：`crayon-capability-hub/src/audit/{mod.rs,audit_tests.rs}`（约 350 行）——`AuditLedger`：有界（≤128 维度）脱敏审计账本。
+  - `AuditDimension`：`(provider_hash, tenant_hash, capability, route, outcome)` 全部 u64/u16 hash/闭合索引——**类型签名强制，明文不可进入**。
+  - `record`：容量满时淘汰最老维度并计 `dropped`（fail-closed 语义：损失被计数）；`record_connector` 直接消费 `ConnectorAuditEvent`（跨 crate 闭合事件，crayon-capability-hub 新增对 crayon-partner-connector 的依赖——出站接口 → hub 审计方向，无反向依赖）。
+  - `to_diagnostic`：产出 `DataClass::Diagnostic` 的 `DiagnosticEvent`（`hub.partner.audit`），属性闭合=provider/tenant hash 十六进制 + capability/route/outcome/calls/failures/payload_bytes 计数——**无正文、无 token、无完整参数**（HB-015）。
+- 验证：`cargo test -p crayon-capability-hub` **51/51**（新增 7：维度聚合、失败分列、LRU 淘汰+dropped、诊断事件仅 hash+计数断言、partner 事件转换、空账本、错误 content-free）；hub+connector 95/95；clippy `-D warnings` 零告警；fmt、`check.sh security`、`git diff --check` 通过。
+- Code Review：按 v0.9 复核——hash 维度类型强制、闭合属性集、LRU+dropped、依赖方向单向（connector→hub）。P0/P1/P2=0。
+- 未覆盖与风险：真实 hash 算法与 sink 落盘/上报归产品装配；HUB-16 总 Review 消费本模块。`HUB-15` 转 `DONE`，解锁 `HUB-16`。

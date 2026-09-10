@@ -489,6 +489,7 @@ version = "0.1.0"
 dependencies = [
  "crayon-agent-gateway",
  "crayon-domain",
+ "crayon-partner-connector",
 ]
 
 [[package]]
