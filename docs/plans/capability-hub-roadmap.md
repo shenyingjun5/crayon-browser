@@ -31,7 +31,7 @@
 | HUB-13 | DONE | HUB-10,HUB-11,HUB-12 | `crayon-partner-connector/mcp/**` | 出站 Partner MCP namespace、tool/schema 过滤和不可信响应 | `HB-013`; description injection 不可扩权 |
 | HUB-14 | DONE | HUB-09,HUB-12 | `crayon-partner-connector/runtime/**` | health、rate/quota、retry budget、熔断、取消 | `HB-014`; 副作用默认不 retry；资源有界 |
 | HUB-15 | DONE | HUB-05,HUB-13,HUB-14,AGT-11 | `crayon-capability-hub/audit/**`,`diagnostics/**` | provider/tenant hash/capability/route/结果的脱敏审计指标 | `HB-015`; 无正文/token/完整参数 |
-| HUB-16 | TODO | HUB-01..HUB-15 | threat model,Review,`docs/current/**` | Hub/Partner connector 安全、隐私、供应链与性能总 Review | 全 HB；P0/P1=0；partner feature 独立 GO/NO-GO |
+| HUB-16 | BLOCKED | HUB-01..HUB-15 | threat model,Review,`docs/current/**` | Hub/Partner connector 安全、隐私、供应链与性能总 Review | 全 HB；P0/P1=0；partner feature 独立 GO/NO-GO |
 
 ## 3. 完成门禁
 
@@ -301,3 +301,17 @@
 - 验证：`cargo test -p crayon-capability-hub` **51/51**（新增 7：维度聚合、失败分列、LRU 淘汰+dropped、诊断事件仅 hash+计数断言、partner 事件转换、空账本、错误 content-free）；hub+connector 95/95；clippy `-D warnings` 零告警；fmt、`check.sh security`、`git diff --check` 通过。
 - Code Review：按 v0.9 复核——hash 维度类型强制、闭合属性集、LRU+dropped、依赖方向单向（connector→hub）。P0/P1/P2=0。
 - 未覆盖与风险：真实 hash 算法与 sink 落盘/上报归产品装配；HUB-16 总 Review 消费本模块。`HUB-15` 转 `DONE`，解锁 `HUB-16`。
+
+## HUB-16 原子范围（Hub/Partner 总 Review）
+
+- 状态：`BLOCKED`（HUB-07 未闭合，见下方依赖审计）；依赖 `HUB-01..15`。
+- 单一目标：对 Hub（registry/builtin/router/policy/fallback/UI）与 Partner connector（api/trust/oauth/network/mcp/runtime/audit）做安全、隐私、供应链与性能总 Review——按 v0.9 顺序逐模块复核 owner/隔离（入站 vs 出站）、默认拒绝语义、预算闭合、脱敏面、依赖方向；核对 HB-001..015 全部用例有对应实现与测试；结论记入本 Roadmap；feature 默认关闭（GO/NO-GO：partner feature 保持 NOT_IN_RELEASE，直至确认流 UI 装配与真机矩阵完成）。
+- 验收：全 HB 用例映射表无缺口；`cargo test -p crayon-capability-hub -p crayon-partner-connector` 全绿；`scripts/check.sh security`；Review 结论 P0/P1=0；Roadmap 记录。
+- 明确不做：新功能实现、入站 MCP 改动、provider 接入。
+
+### HUB-16 依赖审计与修正（2026-09-11）
+
+- 依赖审计结论：HUB-16 声明依赖 HUB-01..15，但 **HUB-07（Site Skill registry adapter）依赖 WFL-12（runner），而 WFL-12 依赖 WFL-09→10→11 链尚未实现**——HUB-16 在 HUB-07 闭合前无法做出完整的 HB-007 用例（两 Profile Site Skill adapter）映射，故**转 BLOCKED**（原误标可领取，按审计事实修正）。
+- 解除路径：WFL-09（skill-preview）→ WFL-10（store）→ WFL-11（validation）→ WFL-12（runner）→ HUB-07 → HUB-16。
+- 总 Review 预检（已完成部分）：HB-001..006/009..015 的模块与测试映射齐备（capability-hub 51 + partner-connector 44 测试全绿）；security 门禁通过；入站/出站依赖单向、默认拒绝、预算闭合、脱敏面复核无缺口。剩余映射缺口仅 HB-007/008（分别等 HUB-07 与 AGT-13/14 的 CAAP 能力暴露）。
+- 供应链预检：connector 依赖仅 crayon-platform-api + crayon-domain（无新外部依赖），无下载/许可审计项。
