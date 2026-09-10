@@ -23,7 +23,7 @@
 | WFL-05 | VERIFIED | WFL-03,WFL-04,ACT-08 | `crayon-workflow/resume/**` | 用户完成后的重新 snapshot/risk/grant/precondition 与幂等恢复 | `WF-005`; challenge 仍在/漂移/未知副作用终止 |
 | WFL-06 | VERIFIED | WFL-01,ACT-08,AGT-11 | `crayon-workflow/trace/**` | 仅记录已授权步骤、语义意图和 verified effect 的有界 trace | `WF-006`; cancel/fail/旧结果/TTL |
 | WFL-07 | VERIFIED | WFL-06,PRV-10 | `crayon-workflow/redaction/**` | 写盘前敏感值移除与参数 placeholder | `WF-007`; seeded secret/canary 零泄漏 |
-| WFL-08 | TODO | WFL-06,WFL-07 | `crayon-workflow/recipe/**` | 仅从 verified success 生成候选 Recipe | `WF-008`; fail/cancel/indeterminate 不学习 |
+| WFL-08 | VERIFIED | WFL-06,WFL-07 | `crayon-workflow/recipe/**` | 仅从 verified success 生成候选 Recipe | `WF-008`; fail/cancel/indeterminate 不学习 |
 | WFL-09 | TODO | WFL-08,AGT-05 | `apps/desktop-cef/**/skill-preview/**`,locales | 技能名称、站点、参数、步骤、风险、权限、数据流预览和保存确认 | `WF-009`; 拒绝/过期/变更后重确认 |
 | WFL-10 | TODO | WFL-09,PRV-07 | `crayon-workflow/store/**`,`crayon-platform-api/**` | 按 OS user/Profile 隔离的加密个人 Skill Store | `WF-010`; migration/corrupt/quota/无痕清除 |
 | WFL-11 | TODO | WFL-10,FND-09 | `crayon-workflow/validation/**`,`test-support/**` | 本地 fixture/沙箱 matcher、参数、步骤和 effect 验证 | `WF-011`; 无公共网络/后台批量访问 |
@@ -156,3 +156,19 @@
 - 验证：`cargo test -p crayon-workflow` 40/40（新增 12：匹配恢复、challenge 仍在优先级、origin 变化、漂移、未知快照 fail-closed、grant 四失效变体、未知副作用、幂等三重放、Approved 幂等不再转换、非 AwaitingHuman 两态拒绝、非法 origin 三例拒绝、handoff 控制器集成）；`cargo test -p crayon-workflow -p crayon-domain` 107/107；clippy `-D warnings` 零告警；`cargo fmt --all -- --check`、`bash scripts/check.sh security`（guard/relay-unit/relay-security）、`git diff --check` 通过。
 - Code Review：按 v0.9 复核——边界（纯决策无 IO 无执行面）、fail-closed（Unknown/缺省一律终止）、幂等（首裁决后回放）、状态机对齐（Resumed/Cancelled 终态唯一路径）、零内容泄漏。P0/P1/P2=0。
 - 未覆盖与风险：新鲜事实的采集方（快照、detector、grant 检查）由 app-runtime/Browser adapter 装配，属 AGT-12C/后续装配切片；checkpoint 消费编排不在本层。`WFL-05` 转 `VERIFIED`，解锁 `WFL-09`（依赖 WFL-08）链外无变化；`WFL-08` 成为本模块下一个可领任务。
+
+## WFL-08 原子范围（仅从 verified success 生成候选 Recipe）
+
+- 状态：`VERIFIED`；依赖 `WFL-06 VERIFIED`、`WFL-07 VERIFIED`。
+- 单一目标：`crayon-workflow/recipe/**` 交付候选 Recipe 生成门——输入一次任务尝试的闭合结局（`VerifiedSuccess/Failed/Cancelled/ChallengeIncomplete/Indeterminate`）与该次 `WorkflowTrace`，只有 `VerifiedSuccess` 且每一步 `outcome == Verified` 且步数 ≤ Recipe 预算时，才把 trace 步骤映射为候选 `Recipe`（node/action/summary 一一对应）；其余结局与空 trace 产出确定性 `Rejected(reason)`，不学习。
+- 输入与输出：允许修改 `crates/crayon-workflow/src/recipe/{mod.rs,recipe_tests.rs}`、`lib.rs` re-export 与本 Roadmap。输入为 domain 冻结类型与闭合枚举；生成经 `Recipe::new` 复验（origin/name `[a-z0-9_-]` ≤64B/version ∈ [1,65535]/预算），身份字段非法是唯一 `Err` 路径。
+- 边界：无状态纯函数、零 IO；trace 中任何非 Verified 步骤拒绝（WFL-06 已保证写入侧，此处防篡改）；summary 原样迁移（WFL-07 redaction 已在上游生效，本层不处理值）；不写盘、不建 Skill（WFL-09/10）、不判风险。
+- 验收：`WF-008`（verified success 生成、failed/cancelled/challenge 未完成/indeterminate 拒绝、空 trace/非 Verified 步/超预算拒绝、身份字段非法 Err、映射保真、schema_version 一致）；`cargo test -p crayon-workflow`、clippy `-D warnings`、`cargo fmt --all -- --check`、workspace 安全脚本、`git diff --check`。
+- 明确不做：Skill 存储（WFL-10）、预览 UI（WFL-09）、从失败学习、参数/值/secret 捕获、模型参与决策。
+
+### WFL-08 完成记录（2026-09-11）
+
+- 实现：`crayon-workflow/src/recipe/{mod.rs,recipe_tests.rs}`（约 300 行）——`generate_candidate(attempt, trace, name, version)` 纯函数：仅 `AttemptOutcome::VerifiedSuccess` 进入学习路径；空 trace、任何非 `EffectOutcome::Verified` 步骤（防篡改，WFL-06 写入侧之上）、超 Recipe 预算（类型层不可达的防御分支）产出确定性 `Rejected(reason)`；映射 node/action/summary 一一对应并经 `Recipe::new` 复验 origin/name/version/schema_version；身份字段非法是唯一 `Err(InvalidIdentity)` 路径；`learnable()` 闭合辅助。零 IO、零内容捕获。
+- 验证：`cargo test -p crayon-workflow` 48/48（新增 8：保真映射＋wire roundtrip、四种非成功结局拒绝、空 trace、Failed/Indeterminate 毒步全 trace 拒绝、64 步满预算边界＋65 步类型层拒绝、身份字段四例 Err、learnable 闭合）；workflow+domain+semantic-action 170/170；clippy `-D warnings` 零告警；fmt、`check.sh security`、`git diff --check` 通过。
+- Code Review：按 v0.9 复核——只从 verified success 学习（结局门＋步骤门双重）、纯函数确定性、预算/身份边界走 domain 冻结校验、summary 原样迁移不解释值。P0/P1/P2=0。
+- 未覆盖与风险：候选 Recipe 的预览 UI（WFL-09）与加密存储（WFL-10）后续；trace 记录侧质量归 WFL-06/07。`WFL-08` 转 `VERIFIED`，解锁 `WFL-09`。
