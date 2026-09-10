@@ -24,7 +24,7 @@
 | WFL-06 | VERIFIED | WFL-01,ACT-08,AGT-11 | `crayon-workflow/trace/**` | 仅记录已授权步骤、语义意图和 verified effect 的有界 trace | `WF-006`; cancel/fail/旧结果/TTL |
 | WFL-07 | VERIFIED | WFL-06,PRV-10 | `crayon-workflow/redaction/**` | 写盘前敏感值移除与参数 placeholder | `WF-007`; seeded secret/canary 零泄漏 |
 | WFL-08 | VERIFIED | WFL-06,WFL-07 | `crayon-workflow/recipe/**` | 仅从 verified success 生成候选 Recipe | `WF-008`; fail/cancel/indeterminate 不学习 |
-| WFL-09 | TODO | WFL-08,AGT-05 | `apps/desktop-cef/**/skill-preview/**`,locales | 技能名称、站点、参数、步骤、风险、权限、数据流预览和保存确认 | `WF-009`; 拒绝/过期/变更后重确认 |
+| WFL-09 | VERIFIED | WFL-08,AGT-05 | `apps/desktop-cef/**/skill-preview/**`,locales | 技能名称、站点、参数、步骤、风险、权限、数据流预览和保存确认 | `WF-009`; 拒绝/过期/变更后重确认 |
 | WFL-10 | TODO | WFL-09,PRV-07 | `crayon-workflow/store/**`,`crayon-platform-api/**` | 按 OS user/Profile 隔离的加密个人 Skill Store | `WF-010`; migration/corrupt/quota/无痕清除 |
 | WFL-11 | TODO | WFL-10,FND-09 | `crayon-workflow/validation/**`,`test-support/**` | 本地 fixture/沙箱 matcher、参数、步骤和 effect 验证 | `WF-011`; 无公共网络/后台批量访问 |
 | WFL-12 | TODO | WFL-11,ACT-08,AGT-04 | `crayon-workflow/runner/**`,`crayon-app-runtime/**` | 每次重新授权、用当前 action_id 执行的 Site Skill runner | `WF-012`; cancel/deadline/idempotency/人机接管 |
@@ -172,3 +172,23 @@
 - 验证：`cargo test -p crayon-workflow` 48/48（新增 8：保真映射＋wire roundtrip、四种非成功结局拒绝、空 trace、Failed/Indeterminate 毒步全 trace 拒绝、64 步满预算边界＋65 步类型层拒绝、身份字段四例 Err、learnable 闭合）；workflow+domain+semantic-action 170/170；clippy `-D warnings` 零告警；fmt、`check.sh security`、`git diff --check` 通过。
 - Code Review：按 v0.9 复核——只从 verified success 学习（结局门＋步骤门双重）、纯函数确定性、预算/身份边界走 domain 冻结校验、summary 原样迁移不解释值。P0/P1/P2=0。
 - 未覆盖与风险：候选 Recipe 的预览 UI（WFL-09）与加密存储（WFL-10）后续；trace 记录侧质量归 WFL-06/07。`WFL-08` 转 `VERIFIED`，解锁 `WFL-09`。
+
+## WFL-09 原子范围（skill-preview 预览与保存确认）
+
+- 状态：`IN_PROGRESS`；依赖 `WFL-08 VERIFIED`、`AGT-05 VERIFIED`。
+- 单一目标：`crayon-workflow/preview/**` 交付技能预览与保存确认状态机——`SkillPreviewController`：开启预览（消费 WFL-08 候选 `Recipe` + 宿主任命的 `RiskLevel`），预览面披露 name/origin/version/步骤摘要/**权限面**（ SemanticAction 能力）/**数据流标志**（SetText/Clear→字段写入面；按动作闭合映射派生）与 TTL；`confirm()` 单次消费返回确认的 Recipe（交付 WFL-10 store），`reject()`/过期收敛为闭合终态（Rejected/Expired），**新候选（指纹变化）作废旧预览须重新确认**；终态幂等。
+- 路径修订：原 `apps/desktop-cef/**/skill-preview/**` 同 WFL-03 先例——view model 落 `crayon-workflow`（状态机单一 owner），CEF widget/焦点环装配归后续桌面 app-runtime 任务（完成口径 VERIFIED 非 DONE）。
+- 边界：预览不新增数据（只转述 Recipe 既有字段+闭合派生标志）；TTL 注入时钟；终态后一切转换拒绝；错误/Display 无正文；无锁/IO/网络。
+- 验收：`preview_tests`（预览字段完整性、数据流派生闭合映射、confirm 单次、过期拒绝、候选变更作废、终态幂等、零值泄露断言——序列化不含参数值）；既有回归；clippy/fmt/security/diff-check。
+- 明确不做：store 落盘（WFL-10）、运行（WFL-12）、真实 CEF widget（装配任务）、模型参与决策。
+
+### WFL-09 完成记录（2026-09-11）
+
+- 实现：`crayon-workflow/src/preview/{mod.rs,preview_tests.rs}`（约 320 行）——`SkillPreviewController`：单一 owner 的预览与保存确认状态机。
+  - `open(candidate, risk, capability, now, expires_at)`：经 `Recipe::new` 域复验 fail-closed，TTL 校验（≤`MAX_PREVIEW_TTL_MS`=300s，与 handoff 上限一致）；FNV-1a 指纹（origin/name/version/步骤摘要+动作）支撑「变更后重确认」。
+  - 预览披露 `PreviewData`：name/origin/version/步骤摘要/宿主任命 `RiskLevel`/capability 索引/**数据流派生标志**（闭合一一映射：Click→activates、SetText/Clear→writes_fields、SelectOption/Check/Uncheck→changes_choices）——WF-009 数据流预览，只转述不新增数据。
+  - `confirm(now)`：单次消费，释放 `Arc<Recipe>` 交 WFL-10；过期（注入时钟）→Expired 拒绝；重复确认→SessionClosed。`reject()/expire()` 幂等终态。
+- 路径修订（同 WFL-03 先例成文）：view model 落 `crayon-workflow`；CEF widget/焦点环/Narrator 实机装配归后续桌面 app-runtime/UI 任务，因此完成口径 **VERIFIED 非 DONE**。
+- 验证：`cargo test -p crayon-workflow` **55/55**（新增 7：披露完整性与数据流派生、confirm 单次释放、过期拒绝+终态、TTL 边界两例、变更候选拒绝匹配+旧预览不受污染、reject/expire 幂等、单动作派生映射）；clippy `-D warnings` 零告警；fmt、`check.sh security`、`git diff --check` 通过。
+- Code Review：按 v0.9 复核——状态机闭合幂等、指纹确定性（变更必 Different）、确认单次消费、宿主任命 risk 不受候选影响、零参数值零 secret。P0/P1/P2=0。
+- 未覆盖与风险：真实 CEF widget/焦点环/Narrator 实机装配（后续任务）；store 落盘归 WFL-10。`WFL-09` 转 `VERIFIED`，解锁 `WFL-10`。

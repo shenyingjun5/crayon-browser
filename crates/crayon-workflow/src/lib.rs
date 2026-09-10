@@ -7,6 +7,7 @@
 pub mod challenge;
 pub mod checkpoint;
 pub mod handoff;
+pub mod preview;
 pub mod recipe;
 pub mod redaction;
 pub mod resume;
