@@ -381,3 +381,18 @@
 - 验证：`cargo test -p crayon-agent-gateway --lib` 119/109→**119/119**（新增 10 项 gateway 矩阵：未授权拒绝且不执行、未知工具、R2 无确认拒绝→grant 后成功、成功读回 final chunk+receipt、未知 tab fail-closed、port 错误映射、幂等重放不二次执行、close 撤销 grant、取消落账、拒绝 receipt 断言）；gateway+platform-api+ipc-schema 180/180；clippy `-D warnings` 零告警；fmt、`check.sh security`、`git diff --check` 通过。
 - Code Review：按 v0.9 复核——默认deny次序（unknown→target→deadline→grant→confirm 隐含于 grant 存在性）、幂等重放不二次执行、receipt 全决策落账且拒绝路径零号 grant 标记、错误码稳定映射。P0/P1/P2=0。
 - 未覆盖与风险：真实 ToolPort（CEF 页面读/导航/cast 端口）归 12Cc；墙钟 benchmark 归 QAR-05B。`AGT-12Cb` 转 `DONE`，下一切片 `AGT-12Cc`。
+
+### AGT-12Cc 拆分为 12Cc1/12Cc2（2026-09-11，roadmap 修订）
+
+- **AGT-12Cc1「agent-host staticlib 宿主」DONE（Rust）**：新 crate `crayon-agent-host`（`crate-type = ["lib", "staticlib"]`）——安全层 `AgentHost`（start/stop/issue_grant/socket_path，持有 GatewayDispatch 的 Arc<Mutex> 与 serve 线程；stop = StopFlag + 关闭/自连解除 accept 阻塞 + join）与最小 C ABI（`crayon_agent_host_start/stop/issue_grant/socket_path/string_free`，FFI 入口 `catch_unwind` 全包，回调契约：execute(tool, request_json, tab, cancel_poll, user) -> {status, text}）；macOS UDS 经 `MacUdsEndpoint`（purpose 参数），Windows named pipe 留待 12Cd 平台矩阵。验收：Rust 集成测试以真实 UDS 客户端（UnixStream 同用户）走完整 Hello/Welcome→Request→execute 回调→final chunk→stop 零残留；clippy/fmt/security。
+- **AGT-12Cc2「CEF 产品装配」**：cef-shell 平台 adapter（链接 staticlib、AGT-05 确认 UI → issue_grant 桥、ToolPort 真实现走 TabController/页面快照桥）、产品 start/stop 生命周期挂接、真实产品进程 E2E。
+
+### AGT-12Cc1 完成记录（2026-09-11）
+
+- 实现：新 crate `crates/crayon-agent-host`（`crate-type = ["lib", "staticlib"]`，加入 workspace members）。
+  - 安全层（`lib.rs`）：`AgentHost::start_with_endpoint`（端点所有权移入 serve 线程、start→run→退出）与 `start_macos_uds`（macOS UDS 便捷构造，返回 socket path）；`SharedDispatch` 以 `Arc<Mutex<GatewayDispatch>>` + `active_client` 使 AGT-05 确认流的 `issue_grant`/`issue_grant_to_active_client` 可与 serve 循环交错（锁界=单请求/单签发）；`stop_and_join(timeout)` 有界等待，超时分离线程（阻塞读的连接由客户端断开触发 EOF 收尾）。
+  - C ABI（`ffi.rs`）：`crayon_agent_host_start/stop/issue_grant/socket_path/string_alloc/string_free`，稳定整数状态码（OK/ALREADY_RUNNING/INVALID_CONFIG/ENDPOINT_FAILED/UNSUPPORTED_PLATFORM/NOT_RUNNING/POISONED/UNKNOWN_CAPABILITY）；`CrayonAgentHostConfig`（purpose/profile/grant_ttl_ms/capabilities 白名单/resolve_active_tab/tab_known/execute 回调+user_data）；`FfiPort` 实现 `ToolPort`（回调封送+请求 JSON 序列化+cancel trampoline），execute 结果 {status, text} 映射 OK/Cancelled/CAAP 错误表；全部入口 `catch_unwind`，所有权与 # Safety 契约成文。
+- 验证（macOS arm64）：`cargo test -p crayon-agent-host` 1/1——**真实 UDS E2E**：C ABI start（重复 start 拒绝）→ 同用户 UnixStream 客户端 → Hello/Welcome（能力交集含 PageRead）→ issue_grant → Request → FfiPort execute 回调命中 → final chunk "The Title"（id=41）→ 客户端断开 → stop OK → 二次 stop NOT_RUNNING；`cargo build -p crayon-agent-host` 产出 `libcrayon_agent_host.a`（staticlib 链接产物就绪）；gateway+host+platform-api+platform-macos 178/178；clippy `-D warnings` 零告警；fmt、`check.sh security`、`git diff --check` 通过。
+- 实现期修复：stop 阻塞于在途连接读（12Ca 协作式停机语义的宿主侧补全——有界等待+超时分离）；测试客户端 EOF 先于 stop 以触发干净收尾。
+- Code Review：按 v0.9 复核——FFI 面最小化（6 入口）、单例生命周期（重复 start 拒绝、stop 幂等）、回调所有权契约（string_alloc/free 配对）、Send 边界（FfiPort unsafe impl Send 有 SAFETY 论证）。P0/P1/P2=0。
+- 未覆盖与风险：Windows named pipe 宿主启动归 12Cd 平台矩阵；CEF C++ adapter 与产品构建接线归 12Cc2。`AGT-12Cc1` 转 `DONE`。

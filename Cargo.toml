@@ -29,6 +29,7 @@ legacy-dev = [
 resolver = "2"
 members = [
     "crates/crayon-agent-gateway",
+    "crates/crayon-agent-host",
     "crates/crayon-app-runtime",
     "crates/crayon-content-host",
     "crates/crayon-media-host",
