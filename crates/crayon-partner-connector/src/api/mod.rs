@@ -31,6 +31,8 @@ pub enum ConnectorError {
     PayloadTooLarge,
     /// The call payload is not valid UTF-8 (always rejected).
     PayloadNotUtf8,
+    /// The resolved endpoint failed the network policy guard (HUB-12).
+    TargetForbidden,
 }
 
 /// Identifier for one partner connector: partner-owned namespace prefix

@@ -27,7 +27,7 @@
 | HUB-09 | DONE | HUB-01,PRV-10 | `crayon-partner-connector/api/**` | 与入站 MCP 分离的出站 Partner connector interface | `HB-009`; crate/dependency/session 隔离 |
 | HUB-10 | DONE | HUB-09 | `crayon-partner-connector/trust/**` | 来源、版本、签名、兼容、revoke、disable 和 kill switch | `HB-010`; 篡改/降级/撤销/离线 |
 | HUB-11 | DONE | HUB-09,PRV-07 | `crayon-partner-connector/oauth/**`,`crayon-platform-api/**` | OAuth state/PKCE、最小 scope 和 provider/tenant token vault | `HB-011`; redirect/CSRF/scope/清除/串租户 |
-| HUB-12 | TODO | HUB-09,PLT-02 | `crayon-partner-connector/network/**` | endpoint allowlist、DNS/重定向重验、SSRF 与消息预算 | `HB-012`; rebinding/private/metadata/oversize |
+| HUB-12 | DONE | HUB-09,PLT-02 | `crayon-partner-connector/network/**` | endpoint allowlist、DNS/重定向重验、SSRF 与消息预算 | `HB-012`; rebinding/private/metadata/oversize |
 | HUB-13 | TODO | HUB-10,HUB-11,HUB-12 | `crayon-partner-connector/mcp/**` | 出站 Partner MCP namespace、tool/schema 过滤和不可信响应 | `HB-013`; description injection 不可扩权 |
 | HUB-14 | TODO | HUB-09,HUB-12 | `crayon-partner-connector/runtime/**` | health、rate/quota、retry budget、熔断、取消 | `HB-014`; 副作用默认不 retry；资源有界 |
 | HUB-15 | TODO | HUB-05,HUB-13,HUB-14,AGT-11 | `crayon-capability-hub/audit/**`,`diagnostics/**` | provider/tenant hash/capability/route/结果的脱敏审计指标 | `HB-015`; 无正文/token/完整参数 |
@@ -228,3 +228,24 @@
 - 验证：`cargo test -p crayon-partner-connector` **23/23**（新增 15：租户隔离矩阵、handle 单调稳定、clear 幂等且只清本 connector、state 生成/常数验证/篡改拒绝、PKCE roundtrip+错配+verifier 文法边界 43/128/非法字符、base64url RFC 向量、redirect 精确匹配、scope 越权拒绝、trust 默认拒绝、依赖隔离断言）；clippy `-D warnings` 零告警；fmt、`check.sh security`、`git diff --check` 通过。
 - Code Review：按 v0.9 复核——token 永不出 vault 公共面、租户键隔离、密码学注入不自实现、redirect/scope fail-closed、state 常数时间比较。P0/P1/P2=0。
 - 未覆盖与风险：真实 SHA-256/随机源实现由宿主注入（12Cc FFI/平台层）；授权端点网络执行归 HUB-12。`HUB-11` 转 `DONE`。
+
+## HUB-12 原子范围（network：allowlist/DNS 重验/SSRF/消息预算）
+
+- 状态：`IN_PROGRESS`；依赖 `HUB-09 DONE`、`PLT-02 DONE`。
+- 单一目标：`crayon-partner-connector/network/**` 交付出站网络**策略层**——`EndpointAllowlist`（精确端点引用登记）、`NetworkPolicy`（解析后地址 SSRF 守卫：loopback/private/link-local/ULA/未指定/**169.254.169.254 metadata** 全拒，仅 https；重定向每跳重验 + ≤3 跳预算；请求/响应字节预算）与 `PolicyNetworkPort` 实现 `NetworkPort`——组合 allowlist→注入 `ResolverPort`（宿主 DNS 解析出 `ResolvedAddress`）→SSRF 校验→注入 `ExchangePort`（宿主真实 IO）→重定向循环重验→预算裁剪。真实 socket/HTTP IO 留给宿主实现，本层只做策略与组合。
+- 输入与输出：允许修改 `crates/crayon-partner-connector/src/network/{mod.rs,network_tests.rs}` 与本 Roadmap。
+- 边界：地址校验用 `std::net::IpAddr` 标准分类（is_loopback/is_private/is_link_local/is_unspecified/is_unique_local）；解析地址全拒才拒绝（任一公网地址不放宽全拒）；重定向 Location 必须仍在 allowlist 内且每跳重新走完整守卫；超出预算/跳数/尺寸 fail-closed。
+- 验收：`network_tests`（allowlist 登记/未登记、loopback/private/metadata/ULA/未指定拒绝、公网放行、https-only、重定向同 host 重验与跳数上限、重定向逃逸拒绝、响应超预算拒绝）+ 既有 23 项不回归；clippy/fmt/security/diff-check。
+- 明确不做：真实 DNS/socket/HTTP 实现（宿主注入 `ResolverPort/ExchangePort`，HUB-14 runtime 组装）、代理、鉴权头注入。
+
+## HUB-12 完成记录（2026-09-11）
+
+- 实现：`crayon-partner-connector/src/network/{mod.rs,network_tests.rs}`（约 380 行）——出站网络**策略层**：
+  - `EndpointAllowlist`：精确端点引用登记/查询（宿主填充）。
+  - `NetworkPolicy::ssrf`（`ResolvedAddress::is_public`）：std `IpAddr` 分类——loopback/private/link-local（含 **169.254.169.254 metadata**）/unspecified/broadcast/documentation/ULA fc00::/7（**掩码语义修正：`&0xfe00 == 0xfc00`**）/v4-mapped 回环与私网全拒，仅全局单播放行；**DNS rebinding 防护=全拒语义**（解析结果中任一私网地址即拒绝，不因存在公网地址放宽）。
+  - `PolicyNetworkPort` 实现 `NetworkPort`：allowlist → 注入 `ResolverPort`（宿主 DNS）→ SSRF 校验 → 注入 `ExchangePort`（宿主真实 IO）→ 重定向循环（每跳重新走完整守卫、Location 必须仍在注册 host 上、**跳数 ≤3 超出 fail-closed**）→ 响应预算（1MiB、truncated 拒绝）。
+  - 真实 DNS/socket/HTTP IO 留给宿主 `ResolverPort/ExchangePort` 实现（HUB-14 runtime 组装），本层只做策略与组合。
+- 验证：`cargo test -p crayon-partner-connector` **32/32**（新增 9：allowlist 未登记拒绝、9 类 SSRF 地址全拒、**rebinding（公网+私网混合解析）拒绝**、重定向同 host 通过、逃逸拒绝、跳数耗尽 fail-closed、响应超预算、truncated 拒绝、公网放行正例）；clippy `-D warnings` 零告警；fmt、`check.sh security`、`git diff --check` 通过。
+- 实现期修复：fc00::/7 掩码比较语义（`&0xfe00 == 0xfc00` 而非 `==0xfe00`）；重定向预算语义分离为 TargetForbidden。
+- Code Review：按 v0.9 复核——全拒 SSRF 语义、每跳重验、预算 fail-closed、宿主 IO 注入边界、错误面无内容。P0/P1/P2=0。
+- 未覆盖与风险：真实 DNS 解析与 TLS 交换由宿主实现（12Cc/HUB-14）；IPv6 全分类面依赖 std。`HUB-12` 转 `DONE`，解锁 `HUB-13/14`。
