@@ -25,7 +25,7 @@
 | HUB-07 | TODO | HUB-02,WFL-12 | `crayon-capability-hub/adapters/site_skill/**` | 个人 Site Skill registry adapter | `HB-007`; owner/Profile/health/版本隔离 |
 | HUB-08 | TODO | HUB-03,AGT-14 | `crayon-agent-gateway/tools/capability/**` | 入站 MCP/CLI 能力 search/describe/preview，经 CAAP 暴露 | `HB-008`; 不泄漏 token/endpoint/隐蔽工具 |
 | HUB-09 | DONE | HUB-01,PRV-10 | `crayon-partner-connector/api/**` | 与入站 MCP 分离的出站 Partner connector interface | `HB-009`; crate/dependency/session 隔离 |
-| HUB-10 | TODO | HUB-09 | `crayon-partner-connector/trust/**` | 来源、版本、签名、兼容、revoke、disable 和 kill switch | `HB-010`; 篡改/降级/撤销/离线 |
+| HUB-10 | DONE | HUB-09 | `crayon-partner-connector/trust/**` | 来源、版本、签名、兼容、revoke、disable 和 kill switch | `HB-010`; 篡改/降级/撤销/离线 |
 | HUB-11 | TODO | HUB-09,PRV-07 | `crayon-partner-connector/oauth/**`,`crayon-platform-api/**` | OAuth state/PKCE、最小 scope 和 provider/tenant token vault | `HB-011`; redirect/CSRF/scope/清除/串租户 |
 | HUB-12 | TODO | HUB-09,PLT-02 | `crayon-partner-connector/network/**` | endpoint allowlist、DNS/重定向重验、SSRF 与消息预算 | `HB-012`; rebinding/private/metadata/oversize |
 | HUB-13 | TODO | HUB-10,HUB-11,HUB-12 | `crayon-partner-connector/mcp/**` | 出站 Partner MCP namespace、tool/schema 过滤和不可信响应 | `HB-013`; description injection 不可扩权 |
@@ -192,3 +192,19 @@
 - 验证：`cargo test -p crayon-partner-connector` 8/8（id 命名空间矩阵、version/scope 校验、通配拒绝、scope 预算、session 令牌单调性与类型隔离、payload 预算、审计事件无正文、TrustPort 默认拒绝、依赖隔离断言）；clippy `-D warnings` 零告警；fmt、`check.sh security`、`git diff --check` 通过。
 - Code Review：按 v0.9 复核——接口零实现零 IO、入站/出站命名空间与依赖隔离、描述符不可扩权、审计脱敏字段闭合。P0/P1/P2=0。
 - 未覆盖与风险：具体实现分属 HUB-10（trust）/11（token vault）/12（network）/13（出站 MCP namespace）/14（runtime）；审计 sink 接线归 HUB-15。`HUB-09` 转 `DONE`，解锁 `HUB-10/11/12`。
+
+## HUB-10 原子范围（trust：来源/版本/revoke/disable/kill switch）
+
+- 状态：`IN_PROGRESS`；依赖 `HUB-09 DONE`。
+- 单一目标：`crayon-partner-connector/trust/**` 交付 `TrustRegistry` 实现 `TrustPort`——验证过的 (connector, 精确 version) 允许表 + 每 connector 撤销 + 全局 kill switch；`is_trusted` 仅在「kill switch 关 && 未撤销 && 存在精确版本匹配」时为真（版本降级/篡改/不匹配一律拒绝），无任何网络或文件 IO（签名验证产物由宿主安装流注入，本层只做策略）。
+- 输入与输出：允许修改 `crates/crayon-partner-connector/src/trust/{mod.rs,trust_tests.rs}`、`lib.rs`/`api` 导出与本 Roadmap。
+- 边界：允许表有界（≤256 条，满载拒绝新 allow 且保留既有）；`revoke` 优先于 allow；`kill_switch` 优先于一切（开启时全部拒绝且 allow 表保留以便恢复）；全部操作幂等；离线行为=纯内存策略（无网络查询，"离线"即策略本地完备）。
+- 验收：`trust_tests`（allow→信任、版本不匹配/降级拒绝、revoke 后拒绝、kill switch 全拒与恢复、幂等、容量上界、未知 connector 默认拒绝）；既有 8 项不回归；clippy `-D warnings`、fmt、`check.sh security`、`git diff --check`。
+- 明确不做：真实签名/证书校验（宿主安装流职责）、网络查询 CRL/OCSP、持久化（重启即空表，宿主可重注）。
+
+## HUB-10 完成记录（2026-09-11）
+
+- 实现：`crayon-partner-connector/src/trust/{mod.rs,trust_tests.rs}`（约 260 行）——`TrustRegistry` 实现 `TrustPort`：宿主安装流验证后的 (connector, 精确 version) 允许表（≤256 条，满载拒绝新 allow、保留既有）+ 每 connector `revoke`/`revoke_all` + 全局 kill switch（优先级最高，开启时拒绝新 allow 但保留 allow 表以便恢复）；`verdict()` 给出闭合诊断（KillSwitch/Revoked/UnknownConnector/VersionMismatch——精确版本匹配使降级/篡改 re-build/不兼容升级全拒）；策略纯内存（离线完备），revoke 在 kill switch 关闭后仍生效，重 allow 是显式 operator 恢复动作。`ConnectorId` 增 `key()`（`<namespace>.<name>` 注册表键）。
+- 验证：`cargo test -p crayon-partner-connector` **16/16**（新增 8：精确版本信任、篡改/降级拒绝、未知默认拒绝、revoke 优先于 allow 且幂等、revoke_all、kill switch 全拒+恢复+先期 revoke 存活、容量上界 fail-closed、空版本拒绝）；clippy `-D warnings` 零告警；fmt、`check.sh security`、`git diff --check` 通过。
+- Code Review：按 v0.9 复核——deny-by-default 次序（kill switch→revoked→unknown→version）、优先级语义闭合、容量 fail-closed、零 IO 零持久化（重启空表，宿主重注）、无签名/网络职责越界。P0/P1/P2=0。
+- 未覆盖与风险：真实签名/证书校验归宿主安装流（本层策略只消费其结论）；CRL/OCSP 明确不做。`HUB-10` 转 `DONE`。

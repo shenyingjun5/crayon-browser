@@ -63,6 +63,12 @@ impl ConnectorId {
     pub fn name(&self) -> &str {
         &self.name
     }
+
+    /// Stable registry key `<namespace>.<name>` (HUB-10 trust registry).
+    #[must_use]
+    pub fn key(&self) -> String {
+        format!("{}.{}", self.namespace, self.name)
+    }
 }
 
 fn valid_token(value: &str) -> bool {
