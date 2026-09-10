@@ -21,6 +21,7 @@
 | [Markdown Runtime v1 契约](markdown-runtime.md) | `markdown-runtime-v1` ExtensionNode/manifest/registry、能力、预算、generation、错误与 current/previous golden |
 | [Code Highlight 供应链契约](code-highlight.md) | `code-highlight-assets-v1` 选型、固定离线 grammar/别名/dependency、hash/许可/包体与安全输出边界 |
 | [KaTeX 数学语法与供应链契约](math-katex.md) | `math-katex-assets-v1` 的 `$`/`$$` 定界、固定 option/宏禁令、ESM/CSS/WOFF2 离线闭包与 MRT-08 输出门禁 |
+| [本地 Presentation v1 契约](presentation-contract.md) | `presentation-v1` 分节规则、Normal/Presenting 状态机、节导航与焦点意图（MRT-16） |
 | [总 Roadmap](../crayon-private-cast-browser-roadmap.md) | 297 项活跃任务、Windows 首发候选、第一期/第二期阶段和当前领取顺序 |
 | [第一期发布 Roadmap](../plans/release-v1-roadmap.md) | 网页 Markdown、LAN 投屏、本地 Markdown 编辑三大闭环、平台顺序与关闭 feature |
 | [自定义外壳迁移 Roadmap](../plans/desktop-shell-roadmap.md) | 一期自绘标签/导航/面板＋Alloy，内容视图边界、原子迁移、旧宿主退出与双平台验证 |

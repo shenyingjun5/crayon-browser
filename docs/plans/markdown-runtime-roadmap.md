@@ -43,7 +43,7 @@ MRT 是用户侧 MDV 基础设施，不进入 `crayon-page-data`、CNT 的确定
 | MRT-13 | TODO | MRT-12 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | `echarts` fence extension：JSON parse/validate、Canvas/SVG 渲染、resize/主题、局部错误与释放 | MR-007/008；恶意 option/资源回落 |
 | MRT-14 | TODO | MRT-09 | `third_party/graphviz`,`tools`,`docs/current` | Graphviz WASM 选型与 sandbox 契约：DOT 预算、WASM/worker 闭包、许可、内存/CPU/超时/取消 | MR-009；许可/资源/敌意 DOT |
 | MRT-15 | TODO | MRT-14 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | `dot/graphviz` fence extension：WASM lazy load、SVG policy、worker 终止与局部错误 | MR-008/009；超时/取消/资源回落 |
-| MRT-16 | TODO | MRT-10,MRT-11 | `docs/current`,`browser/shared-ui/mdv` | 本地 Presentation v1 契约与状态机：分节规则、Normal/Presentation 切换、导航/焦点/退出；不含 TV/Cast | MR-010；契约/状态风暴 |
+| MRT-16 | DONE | MRT-10,MRT-11 | `docs/current`,`browser/shared-ui/mdv` | 本地 Presentation v1 契约与状态机：分节规则、Normal/Presentation 切换、导航/焦点/退出；不含 TV/Cast | MR-010；契约/状态风暴 |
 | MRT-17 | TODO | MRT-16,MRT-13,MRT-15 | `browser/shared-ui/mdv`,`browser/shared-ui/locales`,`tests/e2e/desktop` | Presentation UI：16:9/自适应布局、键盘翻页、图表重排、speaker-note 明确不做、双平台实机 | MR-010；a11y/主题/resize/退出 |
 | MRT-18 | TODO | MRT-17,SDK-15 | `docs/current`,`docs/plans` | TV/Cast gap analysis：明确接收端/Cast-SDK facade、内容类型、会话、遥控器与失败语义；只产出外部独立 Roadmap 触发条件 | MR-011；无浏览器私有协议/媒体伪装 |
 | MRT-19 | TODO | MRT-09,CNT-11 | `docs/current`,`docs/plans` | AI Source Producer gap analysis：冻结候选 Markdown、发送预览、provenance、取消与用户保存边界；只产出 CNT 后续任务触发条件 | MR-013；无 registry/文件/保存/投屏权限 |
@@ -295,3 +295,21 @@ Gate:       MRT-18 TV/Cast gap / MRT-19 AI source-producer gap only
 - 验证：`mdv_search` 9 项（ASCII 折叠偏移、CJK/emoji 精确、跨字节拒绝×2、重叠防重、200 截断、空 query/文档/超长 query、双向环绕、5MiB 级线性、query 预算）；mdv/markdown 全量 19/19；真实产品 CDP E2E：计数 1/2→2/2、选区 0-7→13-20（大小写不敏感）、Escape 清空；SIGTERM 零残留；locale parity 3/255/9；`git diff --check` 通过。
 - Code Review：按 v0.9 复核——纯函数零 IO、UTF-8 边界 fail-closed、预算闭合、query 不持久化、JS 与 C++ 语义一致（预算/清除/环绕）。P0/P1/P2=0。
 - 未覆盖与风险：预览侧高亮未做（scope 明确排除，源码视图定位已满足）；`MRT-11` 转 `DONE`，与 MRT-10 一起解锁 `MRT-16`。
+
+## MRT-16 原子范围（本地 Presentation v1 契约与状态机）
+
+- 状态：`DONE`；依赖 `MRT-10 DONE`、`MRT-11 DONE`。
+- 单一目标：冻结本地 Presentation v1 契约（`docs/current/presentation-contract.md`）并交付状态机 `mdv_presentation.{h,cc}`——分节规则（v1 以 level≤2 的标题分节；无标题文档=单节；CommonMark HR `---` 不是分节边界，parser 不改写）、`Normal ⇄ Presenting` 闭合状态机（Enter/Exit 可逆幂等）、有界节导航（First/Last/Next/Previous 与 goto，索引钳制）、文档变更即强制退出（revision 变化不携带跨版本状态）。
+- 输入与输出：允许修改 `browser/shared-ui/mdv/include/crayon/browser_mdv/mdv_presentation.h`、`src/mdv_presentation.cc`、`tests/mdv_presentation_test.cc`、`docs/current/presentation-contract.md` 与本 Roadmap。输入为 MRT-10 事实层 `OutlineHeading` 列表（只读 level/ordinal）与源 revision；无 IO、无渲染改写、零网络。
+- 边界：状态可逆且有界（节索引 ∈ [0, section_count)）；`Presenting` 中文档 revision 变化 → 自动 Exit（编辑不跨版本呈现）；退出语义为返回 Normal，焦点归属由 UI 层执行（模型只声明意图）；重复 Enter/Exit 幂等返回当前相位；不含 TV/Cast 会话、speaker-note（MRT-17 明确不做）、渲染布局。
+- 验收：`mdv_presentation_test`（分节规则矩阵：h1/h2 分节、h3 不分、HR 不分、无标题单节、512 上限继承事实层；状态机：Enter/Exit 可逆与幂等、节导航边界钳制、goto 钳制、revision 变化强制退出、空大纲）；`mdv_` 既有回归；契约文档与模型行为一致；`git diff --check`。
+- 明确不做：Presentation UI/布局/翻页动画（MRT-17）、图表重排（MRT-13/15 之后）、speaker-note、TV/Cast（MRT-18）、渲染器/parser 改写。
+
+### MRT-16 完成记录（2026-09-11）
+
+- 实现：
+  - 契约冻结：`docs/current/presentation-contract.md`（`presentation-v1`）——分节规则（level≤2 标题分节、h3+ 节内、CommonMark HR 永不分节、无标题文档单节、节上限 512 继承事实层）、`Normal⇄Presenting` 闭合状态机（Enter/Exit 幂等可逆、revision 变化强制退出并归零索引）、节导航（First/Last/Next/Previous 钳制不环绕、GoTo 钳制、Normal 相位空操作）、焦点意图（进入=stage、退出=入口控件，UI 层执行）与明确不做清单。`docs/current/README.md` 索引已登记。
+  - 状态机：`mdv_presentation.{h,cc}`——`MdvPresentationModel::Build(headings, revision)` 消费 MRT-10 事实层（不持有文档内容），`Enter/Exit/OnDocumentChanged/Move/GoTo` 全部有界幂等；`[[nodiscard]]` 相位与索引访问器。
+- 验证：`mdv_presentation` 8 项（h1/h2 分节与 h3 节内、HR 永不分节、无标题/空文档单节、Enter/Exit 矩阵幂等、导航边界钳制不环绕、Normal 相位空操作、GoTo 钳制、revision 变化强制退出归零、重入保索引、单节演示）；`mdv_` 全量 11/11（viewer/outline/search/edit/save/page/images/transform/entry_guard）回归通过；`git diff --check` 通过。
+- Code Review：按 v0.9 复核——分节只消费事实层（零内容持有）、状态机闭合可逆、revision 边界诚实（编辑不跨版本呈现）、明确不做清单与 MRT-17/18 边界一致。P0/P1/P2=0。
+- 未覆盖与风险：Presentation UI/布局/键盘翻页实机归 MRT-17（依赖 MRT-13/15 图表扩展）；无 TV/Cast 会话语义（MRT-18）。`MRT-16` 转 `DONE`。

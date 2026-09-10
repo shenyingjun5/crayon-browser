@@ -47,6 +47,7 @@ add_library(crayon-browser-mdv STATIC
   src/mdv_images.cc
   src/mdv_transform.cc
   src/mdv_outline.cc
+  src/mdv_presentation.cc
   src/mdv_search.cc
 )
 add_library(crayon::browser-mdv ALIAS crayon-browser-mdv)
@@ -146,6 +147,23 @@ if(CRAYON_BUILD_TESTS)
       PRIVATE -Wall -Wextra -Wpedantic -Werror)
   endif()
   add_test(NAME mdv_search COMMAND crayon_browser_mdv_search_test)
+
+  add_executable(crayon_browser_mdv_presentation_test
+    tests/mdv_presentation_test.cc
+  )
+  target_compile_features(crayon_browser_mdv_presentation_test
+    PRIVATE cxx_std_17)
+  target_link_libraries(crayon_browser_mdv_presentation_test
+    PRIVATE crayon::browser-mdv
+  )
+  if(MSVC)
+    target_compile_options(crayon_browser_mdv_presentation_test
+      PRIVATE /W4 /WX /permissive-)
+  else()
+    target_compile_options(crayon_browser_mdv_presentation_test
+      PRIVATE -Wall -Wextra -Wpedantic -Werror)
+  endif()
+  add_test(NAME mdv_presentation COMMAND crayon_browser_mdv_presentation_test)
 
   add_executable(crayon_browser_mdv_edit_test
     tests/mdv_edit_test.cc
