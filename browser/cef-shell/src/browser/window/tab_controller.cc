@@ -446,6 +446,57 @@ void TabController::SetChromeCommandCallback(ChromeCommandCallback callback) {
   chrome_command_callback_ = std::move(callback);
 }
 
+void TabController::SetTabUiUpdateCallback(TabUiUpdateCallback callback) {
+  CEF_REQUIRE_UI_THREAD();
+  tab_ui_update_callback_ = std::move(callback);
+}
+
+bool TabController::ActivateTab(TabId tab_id) {
+  CEF_REQUIRE_UI_THREAD();
+  if (!model_.Activate(tab_id)) {
+    return false;
+  }
+  const TabSnapshot* tab = model_.Find(tab_id);
+  if (tab) {
+    client_->SetActiveMediaObservationTab(static_cast<std::uint32_t>(tab->id));
+  }
+  NotifyTabUiUpdate(tab ? tab->browser_id : 0);
+  return true;
+}
+
+bool TabController::RequestCloseTab(TabId tab_id) {
+  CEF_REQUIRE_UI_THREAD();
+  const TabSnapshot* tab = model_.Find(tab_id);
+  if (!tab || tab->lifecycle == TabLifecycle::kClosing) {
+    return false;
+  }
+  const auto found = browsers_.find(tab->browser_id);
+  if (found == browsers_.end()) {
+    return false;
+  }
+  model_.RequestClose(tab_id);
+  found->second->GetHost()->TryCloseBrowser();
+  return true;
+}
+
+void TabController::NotifyTabUiUpdate(int browser_id) {
+  if (!tab_ui_update_callback_) {
+    return;
+  }
+  const TabSnapshot* tab =
+      browser_id != 0 ? model_.FindByBrowser(browser_id) : nullptr;
+  if (!tab) {
+    const std::optional<TabId> active = model_.active_tab();
+    tab = active.has_value() ? model_.Find(*active) : nullptr;
+  }
+  if (tab) {
+    tab_ui_update_callback_(tab->browser_id, tab->url, tab->loading,
+                            tab->can_go_back, tab->can_go_forward);
+  } else {
+    tab_ui_update_callback_(0, std::string(), false, false, false);
+  }
+}
+
 void TabController::SetBrowserFocusedCallback(BrowserFocusedCallback callback) {
   CEF_REQUIRE_UI_THREAD();
   browser_focused_callback_ = std::move(callback);
@@ -865,6 +916,7 @@ void TabController::OnBrowserClosing(CefRefPtr<CefBrowser> browser) {
   }
   model_.DetachBrowser(browser_id);
   browsers_.erase(browser_id);
+  NotifyTabUiUpdate(0);
   if (model_.empty()) {
     if (browsers_closed_callback_) {
       browsers_closed_callback_();
@@ -889,6 +941,7 @@ void TabController::OnAddressUpdated(CefRefPtr<CefBrowser> browser,
                                      const std::string& url) {
   CEF_REQUIRE_UI_THREAD();
   model_.UpdateAddress(browser->GetIdentifier(), url);
+  NotifyTabUiUpdate(browser->GetIdentifier());
 }
 
 void TabController::OnLoadingUpdated(CefRefPtr<CefBrowser> browser,
@@ -919,6 +972,7 @@ void TabController::OnLoadingUpdated(CefRefPtr<CefBrowser> browser,
       page_load_completed_callback_(browser);
     }
   }
+  NotifyTabUiUpdate(browser_id);
 }
 
 void TabController::OnRenderProcessGone(CefRefPtr<CefBrowser> browser) {

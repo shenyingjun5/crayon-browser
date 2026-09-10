@@ -1026,10 +1026,20 @@ if(OS_MAC)
       src/renderer/page_snapshot_collector/cef_page_snapshot_renderer.h
       src/browser/window/tab_controller.cc
       src/browser/window/tab_model.cc
+      src/browser/window/alloy_icon.cc
+      src/browser/window/alloy_icon.h
+      src/browser/window/alloy_tab_strip.cc
+      src/browser/window/alloy_tab_strip.h
+      src/browser/window/alloy_omnibox.cc
+      src/browser/window/alloy_omnibox.h
+      src/browser/window/alloy_navigation.cc
+      src/browser/window/alloy_navigation.h
       src/macos/alloy_session_restore_mac.h
       src/macos/alloy_session_restore_mac.cc
       src/macos/alloy_product_host_mac.h
       src/macos/alloy_product_host_mac.cc
+      src/macos/alloy_toolbar_mac.h
+      src/macos/alloy_toolbar_mac.cc
       src/macos/app.cc
       src/macos/app.h
       src/macos/cast_chrome_mac.h
@@ -1156,6 +1166,11 @@ if(OS_MAC)
                         PRIVATE libcef_dll_wrapper ${CEF_STANDARD_LIBS}
                                 crayon::browser-new-tab
                                 crayon::browser-product-strings
+                                crayon::browser-localization
+                                crayon::browser-omnibox-core
+                                crayon::browser-omnibox-provider
+                                crayon::browser-navigation
+                                crayon::browser-privacy-standard
                                 crayon::browser-session
                                 crayon::browser-windows
                                 crayon::browser-cast-view

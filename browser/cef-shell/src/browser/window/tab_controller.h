@@ -231,6 +231,20 @@ class TabController final : public CefBaseRefCounted {
   void SetBrowserFocusedCallback(BrowserFocusedCallback callback);
   void SetBrowserClosingCallback(BrowserClosingCallback callback);
 
+  // PLT-SHELL-24M2: Alloy UI projection hook. Fired after the model absorbs
+  // an address or loading-state change, and after a tab detaches. browser_id
+  // is 0 when no single browser owns the update (e.g. close reshuffle).
+  using TabUiUpdateCallback = std::function<void(
+      int browser_id, const std::string& url, bool is_loading,
+      bool can_go_back, bool can_go_forward)>;
+  void SetTabUiUpdateCallback(TabUiUpdateCallback callback);
+
+  // Alloy host tab commands: model activation plus the media observation
+  // focus swap; view switching stays with the window host.
+  bool ActivateTab(TabId tab_id);
+  // Mirrors CloseActiveTab for an arbitrary tab.
+  bool RequestCloseTab(TabId tab_id);
+
   // MDV-09 local-entry hooks: consulted by WindowClient before the
   // default behavior; a true return swallows the command/navigation.
   // Both optional, owned by the shell assembly.
@@ -334,6 +348,9 @@ class TabController final : public CefBaseRefCounted {
   void OnBrowserClosing(CefRefPtr<CefBrowser> browser);
   void OnBrowserFocused(CefRefPtr<CefBrowser> browser);
   void OnAddressUpdated(CefRefPtr<CefBrowser> browser, const std::string& url);
+  // Emits the registered TabUiUpdateCallback from the freshest model state;
+  // browser_id 0 falls back to the active tab (or a bare reshuffle signal).
+  void NotifyTabUiUpdate(int browser_id);
   void OnLoadingUpdated(CefRefPtr<CefBrowser> browser, bool is_loading,
                         bool can_go_back, bool can_go_forward);
   void OnRenderProcessGone(CefRefPtr<CefBrowser> browser);
@@ -379,6 +396,7 @@ class TabController final : public CefBaseRefCounted {
   ContextMenuCommandHandler context_menu_command_handler_;
   SaveCommandHandler save_command_handler_;
   BrowsersClosedCallback browsers_closed_callback_;
+  TabUiUpdateCallback tab_ui_update_callback_;
   PageLoadCompletedCallback page_load_completed_callback_;
   PageSnapshotEventsReadyCallback page_snapshot_events_ready_callback_;
   MediaObservationEventsReadyCallback media_observation_events_ready_callback_;

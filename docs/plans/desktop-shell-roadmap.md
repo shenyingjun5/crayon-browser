@@ -113,7 +113,7 @@
 | 23W | BLOCKED | 09W、11W..19W、21W、22W VERIFIED | Windows 全外壳本地化/IME/键盘/读屏/缩放/主题回归 | P；LOC Windows 矩阵、UX-001..018；不擅改系统设置 |
 | 23M | VERIFIED | 09M、11M..19M、21M、22M VERIFIED | macOS 全外壳本地化/IME/键盘/读屏/缩放/主题回归 | P；LOC macOS 矩阵、UX-001..018；不擅改系统设置 |
 | 24W | IN_PROGRESS | Windows 01..22W VERIFIED；23W 系统语言/IME/Narrator/原生 DPI 矩阵经用户 2026-09-05 明确后置 | Windows 产品默认入口切至自定义 Shell＋Alloy | P；分 24W1..W3；三闭环和日用功能无回退、入口与 capability 真实性 Review |
-| 24M | VERIFIED | macOS 01..23 对应项 VERIFIED | macOS 产品默认入口切至自定义 Shell＋Alloy | P；24M1/24M2/24M3 全部 DONE（首窗 Alloy + 功能面 + 收口终验，§93/§94/§95） |
+| 24M | VERIFIED | macOS 01..23 对应项 VERIFIED | macOS 产品默认入口切至自定义 Shell＋Alloy | P；24M1/24M2/24M3 全部 DONE（首窗 Alloy + 功能面 + 收口终验，§93/§94/§95）；24M2UI 工具栏组装 DONE（§98） |
 | 25P | IN_PROGRESS | 24P VERIFIED | 移除该平台旧 Chrome 宿主/LOCATION 生产接线及临时迁移开关 | P＋artifact scan；另一平台仍需要的共享代码保留隔离，不删除他人改动 |
 | 26P | TODO | 25P VERIFIED | 在新默认宿主复验 Direct→Relay→拒绝/交接→稳定性 | R；映射 PLT-W05c..f / M05b4..b6/M05c 与 R11P；真实接收端、100 次/睡眠/退出 |
 | 27P | TODO | 23P、25P、26P VERIFIED | 新宿主三闭环/隐私/性能/发布证据汇总 | R；PRV/CNT/MRT/PLT/LOC/QAR/REL 对应平台完整门禁；无签名/真机不标 DONE |
@@ -1078,3 +1078,23 @@ Code Review：按 v0.9 独立检查唯一 owner、同步 callback reentrancy、t
 - 验证基线（24M1 smoke，CDP）：newtab readyState=complete、lang=zh-CN、MDV 正确加载、导航往返正常、零 console error、SIGTERM 零残留。
 - CDP 逐面验证结果（24M2 verification, 3d47b6d）：S1-newtab ✓ S2-mdv ✓ S3-nav ✓ S4-back ✓ S5-input ✓ 0 errors。
 
+
+
+## 98. PLT-SHELL-24M2UI 完成记录（2026-09-10，产品 Alloy 窗口 UI 工具栏组装）
+
+- 领取依据：§97 交接——"在产品 Alloy 窗口中组装 UI 工具栏（AlloyOmnibox + AlloyNavigation + CastEntrySurface + AlloyTabStrip），使产品不再依赖 Chrome runtime 的原生 UI"。状态 IN_PROGRESS。
+- 实现（净新增约 380 行，9 文件改动 + 2 新文件）：
+  - 新增 `src/macos/alloy_toolbar_mac.{h,cc}`（约 210 行）：产品工具栏装配组件——持有共享 `AlloyTabStrip`＋`AlloyOmnibox`＋`AlloyNavigation` 与水平 toolbar panel（nav | omnibox flex=1），字符串全部来自 LocaleCatalog（tabs.*/nav.*/address.*/omnibox.* 三语言在位）；omnibox submit→`navigation_->Navigate`，navigation address_changed→`omnibox_->SetAddress`；`OnTabUiUpdate` 将 TabController 的地址/加载状态投影进导航与地址栏（Bind 已自带首帧地址 priming，避免身份态降级）；`Shutdown` 幂等。
+  - `alloy_product_host_mac.{h,cc}` 扩展为多 tab 窗口宿主：Dependencies 增 `tab_strip_view/toolbar_view`，窗口竖排 tab strip→toolbar→内容容器（flex=1）；`views_`（browser_id→BrowserView）+ `CreateTab(url)`（CreateBrowserView 入容器、SetVisible(false)，WindowClient OnAfterCreated 自动建模型 tab 并自动激活）；`ShowBrowser` 按 id 切换可见 view；`CanCloseWindow` 传播 `TryCloseBrowser` 结果（见下修复）；`Close()` 全量 CloseBrowser(true)。
+  - `tab_controller.{h,cc}`（共享，两平台共用）：新增 `TabUiUpdateCallback`（地址/加载/关闭重排后统一投影钩子，browser_id=0 表示无单一归属）与 `ActivateTab(TabId)`（模型激活＋media observation 焦点切换，视图切换留给窗口宿主）、`RequestCloseTab(TabId)`（镜像 CloseActiveTab）。
+  - `app.{h,cc}`：持有 `locale_snapshot_`；ContinueContentHostStartup 先建 toolbar_（注册 TabUiUpdateCallback：OnTabUiUpdate＋SyncTabs）再建 product_host_（Dependencies 注入两块视图）；BrowserCreated 回调扩展为 cast attach＋`product_host_->ShowBrowser`＋`toolbar_->AttachBrowser/SyncTabs`；新增 `SyncToolbarToActiveTab()` 与 `ExecuteAppCommand()`（⌘T/⌘W/⌘L/⌘R/⌘[ /⌘] 在 Alloy 窗口的真路由），`main_mac.mm` 菜单 lambda 先问 app 再走 Chrome 命令兜底（popup 兼容保留）。
+  - CMake（macOS 产品源增 alloy_toolbar_mac 与共享 window 组件 alloy_icon/tab_strip/omnibox/navigation 源；链接增 browser-localization/omnibox-core/omnibox-provider/navigation/privacy-standard）＋ `macos_source_contract.cmake`（toolbar 文件存在与 app.cc token）。
+- **附带修复 1（关闭挂起 P1）**：多 tab 版 `CanCloseWindow` 初版无条件 `return false`——CEF-150 macOS 下 `TryCloseBrowser()` 会同步关闭浏览器并返回 true，吞掉该返回值会中止窗口关闭并使整条退出链挂起（SIGTERM 后 8 进程残留）。修复为传播 `TryCloseBrowser` 返回值（cefclient 官方模式）；stash 对照（HEAD+仅 include 修复）证明该挂起为本改动引入、非环境。SIGTERM 现零残留。
+- **附带修复 2（主线潜在损坏）**：HEAD `e401645` 的 `alloy_product_host_mac.h` 缺 `cef_window.h` include（前会话"注释清理"提交后未重编）——干净重建 app.cc/main_mac.mm 失败（scoped_refptr<CefWindow> incomplete type）。本提交补上 include。
+- 验证（macOS arm64 Debug，远程调试端口真实产品进程）：
+  - 产品 CDP smoke：S1 单一 Alloy page target `crayon://newtab/`（title 蜡笔浏览器）✓；S2 newtab readyState=complete/lang=zh-CN ✓；S3 `crayon://mdv/app.html` 加载（蜡笔文档）✓；S4 data URL→newtab 多次导航往返 ✓（每次导航都穿过新增 TabUiUpdate→toolbar→navigation→omnibox 投影链）；S6 零 chrome://、零 chrome-untrusted 目标 ✓。
+  - 多 tab：CDP `Target.createTarget` 经 `GetDefaultClient`→WindowClient→模型 CreateTab+Bind+toolbar 重绑定，第二 tab 创建/关闭后主 tab 存活 ✓；随后 SIGTERM 8→0 进程零残留 ✓。
+  - ctest：全量 125 项中 119 PASS；5 项键盘/前台注入类失败（alloy_omnibox_mac display-or-input、alloy_navigation_mac timeout、alloy_page_tools_mac timeout、alloy_tab_controller_mac timeout、alloy_tab_strip_mac timeout）经 **stash 对照证明与代码无关**（无本改动的对照二进制同 detail 失败，本会话 Screen Recording/Accessibility 权限被拒，同 17M/18M/24M2 先例）；`cast_toolbar_host_probe` 并行跑 SIGTRAP、单跑 PASS；contract/page_snapshot_cef_integration(141s)/cast bridge/overlay/builtin content/locale 矩阵全 PASS；`git diff --check` 通过。
+- Code Review：按 v0.9 复核——需求边界（只做工具栏装配与多 tab 宿主，cast 表面不动）、正确性（关闭链传播、模型自动激活与视图切换一致性、Bind priming 不降级身份态）、架构（宿主无业务逻辑、组件消费共享层、共享 tab_controller 钩子两平台兼容）、安全（无新权限、URL 不落日志）、性能（UI 投影仅导航事件频次）。P0=0；P1=1（关闭挂起，已修复并有对照证据）；P2=0。APPROVE。
+- 未覆盖与风险（如实）：cast 入口按钮仍未进工具栏——CastEntrySurface 消费 MHV2 `CastSelectionSnapshot`，而 macOS `MediaHostProcess` 未实现 v2 draft 协议（`supports_drafts()=false`），将 MHV1 CastShellController 状态伪装成 MHV2 snapshot 属协议造假，已禁止；cast 按钮仍在标题栏 accessory（页面有验证媒体时才显示，CastButtonModel kHidden 语义）。**新任务 PLT-SHELL-24M2CAST（cast entry bridge）待 macOS media-host v2 draft 支持后领取**。产品窗口内 tab strip/omnibox 的键盘/AX 探针需登录会话复跑；IME/Narrator/DPI/三语言重启归 23M 人工门禁；26P 真实接收端复验不受本改动影响。
+- `24M2UI` 转为 `DONE`；`24M` 维持 `VERIFIED`（工具栏为追加交付）。

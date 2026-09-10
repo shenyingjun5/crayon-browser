@@ -9,7 +9,9 @@ set(macos_source_root "${CRAYON_CEF_SHELL_SOURCE}/src/macos")
 set(alloy_host_root "${CRAYON_CEF_SHELL_SOURCE}/src/macos")
 foreach(required_host_file
         "${alloy_host_root}/alloy_product_host_mac.h"
-        "${alloy_host_root}/alloy_product_host_mac.cc")
+        "${alloy_host_root}/alloy_product_host_mac.cc"
+        "${alloy_host_root}/alloy_toolbar_mac.h"
+        "${alloy_host_root}/alloy_toolbar_mac.cc")
   if(NOT EXISTS "${required_host_file}")
     message(FATAL_ERROR "macOS Alloy product host is missing: ${required_host_file}")
   endif()
@@ -18,6 +20,10 @@ file(READ "${alloy_host_root}/app.cc" app_source_for_host)
 foreach(required_host_token
         "AlloyProductHostMac"
         "product_host_"
+        "AlloyToolbarMac"
+        "toolbar_"
+        "SetTabUiUpdateCallback"
+        "ExecuteAppCommand"
         )
   string(FIND "${app_source_for_host}" "${required_host_token}" host_token_index)
   if(host_token_index EQUAL -1)

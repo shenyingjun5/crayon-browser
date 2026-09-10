@@ -147,7 +147,13 @@ int main(int argc, char* argv[]) {
           return id > 0 ? CefResourceBundle::GetGlobal()->GetLocalizedString(id).ToString()
                         : std::string{};
         },
-        [controller = app->tab_controller()](ApplicationCommand command) {
+        [app](ApplicationCommand command) {
+          // PLT-SHELL-24M2: Alloy-window commands (tab strip, omnibox,
+          // navigation buttons) route through the app assembly first.
+          if (app->ExecuteAppCommand(command)) {
+            return;
+          }
+          const auto controller = app->tab_controller();
           const auto browser = controller->ActiveBrowser();
           if (!browser) return;
           if (command == ApplicationCommand::kSave && controller->HandleSaveKey(browser)) {

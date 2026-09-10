@@ -17,6 +17,8 @@
 #include "crayon/browser_product_strings/product_strings.h"
 #include "include/cef_app.h"
 #include "macos/alloy_product_host_mac.h"
+#include "macos/alloy_toolbar_mac.h"
+#include "macos/application_menu_mac.h"
 #include "macos/cast_chrome_mac.h"
 #include "browser/media_host/cast_shell_controller.h"
 #include "macos/content_host_adapter_mac.h"
@@ -59,14 +61,20 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
     return tab_controller_;
   }
   bool product_strings_valid() const;
+  // AppKit menu routing for commands with an Alloy-window surface (tab
+  // strip, omnibox, navigation). Unhandled commands fall back to the
+  // caller's Chrome-command path (popup compatibility).
+  bool ExecuteAppCommand(macos::ApplicationCommand command);
 
  private:
   void ContinueContentHostStartup();
   void ScheduleContentHostTick();
   void ContentHostTick();
   void ConsumeMediaObservations();
+  void SyncToolbarToActiveTab();
 
   const CefRefPtr<branding::AboutBrowserResources> about_resources_;
+  const ::crayon::browser::localization::LocaleSnapshot locale_snapshot_;
   const ::crayon::browser::product_strings::ProductStrings product_strings_;
   const page_markdown::PageMarkdownStrings page_markdown_strings_;
   const macos::CastChromeStrings cast_strings_;
@@ -80,6 +88,7 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   std::unique_ptr<macos::CastChromeMac> cast_chrome_;
   std::unique_ptr<macos::TrustedInputMonitor> trusted_input_monitor_;
   std::unique_ptr<macos::AlloyProductHostMac> product_host_;
+  std::unique_ptr<macos::AlloyToolbarMac> toolbar_;
   CefRefPtr<window::TabController> tab_controller_;
   std::unique_ptr<page_markdown::CefPageMarkdownPreviewController>
       page_markdown_preview_;

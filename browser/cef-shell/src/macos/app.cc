@@ -118,6 +118,7 @@ BrowserApp::BrowserApp(
     ::crayon::browser::localization::LocaleSnapshot locale_snapshot)
     : about_resources_(
           new branding::AboutBrowserResources(locale_snapshot.locale)),
+      locale_snapshot_(locale_snapshot),
       product_strings_(BuildProductStringsOrEmpty(locale_snapshot)),
       page_markdown_strings_(
           BuildPageMarkdownStrings(product_strings_.page_markdown)),
@@ -158,15 +159,26 @@ BrowserApp::BrowserApp(
       tab_controller_(new window::TabController(
           kInitialUrl,
           [this](CefRefPtr<CefBrowser> browser) {
-            if (!cast_chrome_)
-              return;
-            active_browser_id_ = browser->GetIdentifier();
-            static_cast<void>(cast_chrome_->AttachWindow(
-                active_browser_id_, browser->GetHost()->GetWindowHandle()));
-            cast_chrome_->SetActiveWindow(active_browser_id_);
-            cast_chrome_->Render(
-                cast_shell_->coordinator(),
-                CastChromePresentation(cast_shell_->presentation()));
+            const int browser_id = browser->GetIdentifier();
+            const window::TabSnapshot* tab =
+                tab_controller_->model().FindByBrowser(browser_id);
+            if (cast_chrome_ && tab) {
+              active_browser_id_ = browser_id;
+              static_cast<void>(cast_chrome_->AttachWindow(
+                  browser_id, browser->GetHost()->GetWindowHandle()));
+              cast_chrome_->SetActiveWindow(browser_id);
+              cast_chrome_->Render(
+                  cast_shell_->coordinator(),
+                  CastChromePresentation(cast_shell_->presentation()));
+            }
+            // TabModel::CreateTab auto-activated the new tab: surface it.
+            if (tab && product_host_) {
+              product_host_->ShowBrowser(browser_id);
+            }
+            if (tab && toolbar_) {
+              static_cast<void>(toolbar_->AttachBrowser(tab->id, browser));
+              static_cast<void>(toolbar_->SyncTabs(tab_controller_->model()));
+            }
           },
           std::string(kInitialUrl), permission_store_.get())) {}
 
@@ -347,13 +359,50 @@ void BrowserApp::OnContextInitialized() {
 void BrowserApp::ContinueContentHostStartup() {
   CEF_REQUIRE_UI_THREAD();
   if (content_host_->healthy() && media_host_->healthy()) {
+    // PLT-SHELL-24M2: the product toolbar assembly (tab strip + navigation +
+    // omnibox) shares the Alloy window with the TabController WindowClient.
+    if (!toolbar_) {
+      toolbar_ = std::make_unique<macos::AlloyToolbarMac>(
+          locale_snapshot_,
+          macos::AlloyToolbarMac::Callbacks{
+              [this] {
+                if (product_host_) {
+                  static_cast<void>(product_host_->CreateTab(kInitialUrl));
+                }
+              },
+              [this](window::TabId tab_id) {
+                if (tab_controller_->ActivateTab(tab_id)) {
+                  SyncToolbarToActiveTab();
+                }
+              },
+              [this](window::TabId tab_id) {
+                static_cast<void>(tab_controller_->RequestCloseTab(tab_id));
+              },
+              [this](window::TabId tab_id) {
+                const window::TabSnapshot* tab =
+                    tab_controller_->model().Find(tab_id);
+                return tab ? tab->url : std::string{};
+              }});
+      tab_controller_->SetTabUiUpdateCallback(
+          [this](int browser_id, const std::string& url, bool is_loading,
+                 bool can_go_back, bool can_go_forward) {
+            if (!toolbar_) {
+              return;
+            }
+            static_cast<void>(toolbar_->OnTabUiUpdate(browser_id, url,
+                                                      is_loading, can_go_back,
+                                                      can_go_forward));
+            static_cast<void>(toolbar_->SyncTabs(tab_controller_->model()));
+          });
+    }
     // PLT-SHELL-24M1: the product first window is the macOS Alloy host; the
     // TabController WindowClient keeps every normalized callback surface.
     if (!product_host_) {
       product_host_ = std::make_unique<macos::AlloyProductHostMac>(
           macos::AlloyProductHostMac::Dependencies{
               tab_controller_->client(), kInitialUrl,
-              product_strings_.new_tab.document_title},
+              product_strings_.new_tab.document_title,
+              toolbar_->tab_strip_view(), toolbar_->toolbar_view()},
           macos::AlloyProductHostMac::Callbacks{
               [] { CefQuitMessageLoop(); }});
     }
@@ -440,6 +489,48 @@ void BrowserApp::ConsumeMediaObservations() {
 
 CefRefPtr<CefClient> BrowserApp::GetDefaultClient() {
   return tab_controller_->client();
+}
+
+void BrowserApp::SyncToolbarToActiveTab() {
+  CEF_REQUIRE_UI_THREAD();
+  if (!toolbar_) {
+    return;
+  }
+  if (CefRefPtr<CefBrowser> browser = tab_controller_->ActiveBrowser()) {
+    const window::TabSnapshot* tab =
+        tab_controller_->model().FindByBrowser(browser->GetIdentifier());
+    if (tab) {
+      static_cast<void>(toolbar_->AttachBrowser(tab->id, browser));
+    }
+  }
+  static_cast<void>(toolbar_->SyncTabs(tab_controller_->model()));
+}
+
+bool BrowserApp::ExecuteAppCommand(macos::ApplicationCommand command) {
+  CEF_REQUIRE_UI_THREAD();
+  switch (command) {
+    case macos::ApplicationCommand::kNewTab:
+      return product_host_ && product_host_->CreateTab(kInitialUrl);
+    case macos::ApplicationCommand::kCloseTab:
+      if (!tab_controller_->ActiveBrowser()) {
+        return false;
+      }
+      tab_controller_->CloseActiveTab();
+      return true;
+    case macos::ApplicationCommand::kFocusLocation:
+      return toolbar_ && toolbar_->FocusOmnibox();
+    case macos::ApplicationCommand::kReload:
+      tab_controller_->Reload();
+      return true;
+    case macos::ApplicationCommand::kBack:
+      tab_controller_->GoBack();
+      return true;
+    case macos::ApplicationCommand::kForward:
+      tab_controller_->GoForward();
+      return true;
+    default:
+      return false;
+  }
 }
 
 bool BrowserApp::product_strings_valid() const {
