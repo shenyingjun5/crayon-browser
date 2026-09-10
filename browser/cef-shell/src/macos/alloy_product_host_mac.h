@@ -1,12 +1,10 @@
 #ifndef CRAYON_BROWSER_CEF_SHELL_SRC_MACOS_ALLOY_PRODUCT_HOST_MAC_H_
 #define CRAYON_BROWSER_CEF_SHELL_SRC_MACOS_ALLOY_PRODUCT_HOST_MAC_H_
 
-// PLT-SHELL-24M1: production owner of the macOS Alloy first window. Hosts
-// the initial URL in a real CefWindow + CefBrowserView (runtime ALLOY) with
-// the TabController's normalized WindowClient, so every existing handler
-// surface (MDV entry/edit, cast, snapshot, permissions) keeps working. This
-// component owns only the window/lifecycle; feature surfaces attach in
-// 24M2.
+// PLT-SHELL-24M1/M2: production owner of the macOS Alloy first window.
+// Assembles the full product UI: tab strip, toolbar (navigation + omnibox +
+// cast entry), and browser view. Uses the TabController's normalized
+// WindowClient so every existing handler surface keeps working.
 
 #include <functional>
 #include <memory>
@@ -15,7 +13,6 @@
 #include "include/cef_browser.h"
 #include "include/views/cef_browser_view.h"
 #include "include/views/cef_browser_view_delegate.h"
-#include "include/views/cef_window.h"
 #include "include/views/cef_view.h"
 #include "include/views/cef_window_delegate.h"
 
@@ -41,10 +38,7 @@ class AlloyProductHostMac final {
   AlloyProductHostMac(const AlloyProductHostMac&) = delete;
   AlloyProductHostMac& operator=(const AlloyProductHostMac&) = delete;
 
-  /// Creates the real CefWindow + CefBrowserView (runtime ALLOY). The view
-  /// opens on about:blank and navigates to the initial URL once that first
-  /// navigation commits (CEF-150 macOS: an http/custom-scheme URL as the
-  /// very first navigation of a fresh window can sit pending forever).
+  /// Creates the CefWindow and assembles the full product UI.
   bool Start();
 
   /// Starts the browser close; the window destruction callback reports the
@@ -53,6 +47,7 @@ class AlloyProductHostMac final {
 
   bool started() const noexcept;
   CefRefPtr<CefBrowser> browser() const noexcept;
+  const std::string& initial_url() const noexcept;
 
  private:
   struct Impl;

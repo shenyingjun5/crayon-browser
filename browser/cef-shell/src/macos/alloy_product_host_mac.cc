@@ -1,12 +1,12 @@
-// PLT-SHELL-24M1: production owner of the macOS Alloy first window. Hosts
-// the initial URL in a real CefWindow + CefBrowserView (runtime ALLOY) with
-// the TabController's normalized WindowClient, so every existing handler
-// surface (MDV entry/edit, cast, snapshot, permissions) keeps working.
+// PLT-SHELL-24M1/M2: macOS production Alloy window host. Assembles the full
+// product UI: tab strip, toolbar (navigation + omnibox), and browser view.
+// All handler surfaces route through the TabController WindowClient.
 #include <utility>
 
 #include "include/views/cef_box_layout.h"
 #include "include/views/cef_browser_view.h"
 #include "include/views/cef_browser_view_delegate.h"
+#include "include/views/cef_panel.h"
 #include "include/views/cef_window.h"
 #include "include/views/cef_window_delegate.h"
 #include "include/wrapper/cef_helpers.h"
@@ -146,7 +146,7 @@ bool AlloyProductHostMac::Start() {
   if (impl_->started) return false;
   CefBrowserSettings browser_settings;
   impl_->view = CefBrowserView::CreateBrowserView(
-      impl_->client, "crayon://newtab/", browser_settings, nullptr, nullptr,
+      impl_->client, impl_->initial_url, browser_settings, nullptr, nullptr,
       view_delegate_);
   if (!impl_->view) {
     return false;
