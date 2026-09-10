@@ -249,3 +249,4 @@
 "cast.rejected.no_route" = "No playable cast route. Try another receiver.";
 "cast.rejected.drm" = "DRM-protected content cannot be cast.";
 "cast.retry" = "Choose a receiver and retry";
+"mdv.outline" = "Outline";

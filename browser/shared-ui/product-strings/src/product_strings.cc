@@ -85,6 +85,7 @@ std::optional<ProductStrings> BuildProductStrings(
           Required(catalog, "mdv.mermaid.source", &complete),
           Required(catalog, "mdv.mermaid.close", &complete),
           Required(catalog, "mdv.mermaid.error", &complete),
+          Required(catalog, "mdv.outline", &complete),
           shortcut_platform},
       PageMarkdownStrings{
           Required(catalog, "page_markdown.preview_command", &complete),
@@ -156,6 +157,7 @@ bool ProductStringsAreComplete(const ProductStrings& strings) noexcept {
          present(mdv.tooltip_table_alignment) &&
          present(mdv.mermaid_fullscreen) && present(mdv.mermaid_source) &&
          present(mdv.mermaid_close) && present(mdv.mermaid_error) &&
+         present(mdv.outline_label) &&
          present(page.preview_command) && present(page.copy_command) &&
          present(page.save_as_command) && present(page.copied_status) &&
          present(page.copy_failed_status) &&

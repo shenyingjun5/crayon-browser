@@ -37,7 +37,7 @@ MRT 是用户侧 MDV 基础设施，不进入 `crayon-page-data`、CNT 的确定
 | MRT-07 | DONE | MRT-04 | `third_party/katex`,`tools`,`docs/current` | KaTeX 语法与供应链契约：明确 inline/block 定界、转义、宏/URL/HTML 禁令、字体/CSS 本地闭包 | MR-005；许可/语法/安全矩阵 |
 | MRT-08 | DONE | MRT-07 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | KaTeX inline/block extension：按需加载、局部错误、主题/字体离线与编辑 generation | MR-005；公式 golden/注入/实机 |
 | MRT-09 | DONE | MDV-20W,MDV-25W,MRT-06,MRT-08 | `tests/e2e/desktop`,`tools/repo-guard`,`docs/current`,`docs/plans` | `MRT-09W` 先做 Windows 首发 P0 Runtime/包体/性能/安全总 Review；macOS 特有 addendum 后续 | MR-001..005,MR-008/012；P0/P1=0 |
-| MRT-10 | TODO | MRT-09 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv` | TOC/Outline：从解析事实生成有界标题树、稳定会话锚点与键盘/读屏导航 | MR-006；重复标题/超深/编辑更新 |
+| MRT-10 | DONE | MRT-09 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv` | TOC/Outline：从解析事实生成有界标题树、稳定会话锚点与键盘/读屏导航 | MR-006；重复标题/超深/编辑更新 |
 | MRT-11 | TODO | MRT-09 | `browser/shared-ui/mdv` | 当前文档本地 Search：只查内存源码/安全文本，结果/高亮有界，不持久化 query | MR-006；Unicode/大文档/取消 |
 | MRT-12 | TODO | MRT-09 | `third_party/echarts`,`tools`,`docs/current` | ECharts 供应链与纯 JSON option schema：固定运行时闭包、series/component allowlist、禁止 function/eval/URL | MR-007；schema/许可/包体 |
 | MRT-13 | TODO | MRT-12 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | `echarts` fence extension：JSON parse/validate、Canvas/SVG 渲染、resize/主题、局部错误与释放 | MR-007/008；恶意 option/资源回落 |
@@ -260,3 +260,22 @@ Gate:       MRT-18 TV/Cast gap / MRT-19 AI source-producer gap only
 - 验证命令与结果：`ctest --preset windows-cef-debug` Debug 85/85、`-C Release` 85/85（MDV-20W 记录，本任务复证 Release 集成测试在门控后通过）；`node tests/e2e/desktop/browser/run_mdv_zero_load.mjs --port=9333` failures=[]；`run_mdv_mermaid_perf.mjs`/`run_mdv_theme_viewport.mjs` failures=[]（MDV-20W 原始输出）；`cargo test -p repo-guard` 33/33；`scripts/check.ps1 -Mode fast` passed、`-Mode security` passed（MDV-20W 记录）；真实手势 fixture 渲染终态 hlDone/mathDone×2/mmdSvg 全 true。
 - Code Review：按标准顺序复核后 APPROVE；P0 0、P1 0（两项 gate 缺陷均已修复并带回归测试）、P2 0、P3 1（上述 adapter import 行为）。
 - 未覆盖与风险：macOS addendum（签名/公证/VoiceOver/Keychain/安装包）后续单独记录；`MDV-24W` 的 Narrator/IME/DPI 真机不属于本 Review；ECharts/Graphviz/Presentation/AI/TV 均第二期。`MRT-09W` 转为 `DONE`，MRT 第一期 P0 完成口径闭合。
+
+## MRT-10 原子范围（TOC/Outline：解析事实、会话锚点与键盘/读屏导航）
+
+- 状态：`DONE`；依赖 `MRT-09 DONE`。
+- 单一目标：MDV 文档大纲——markdown 库新增 `markdown_outline_facts.{h,cc}`（md4c 解析事实收集 MD_BLOCK_H 标题：level/纯文本/序号，全部有界）；mdv 库新增 `mdv_outline.{h,cc}`（有界大纲模型：树深规整、锚点命名、next/prev/first/last 键盘导航与 aria 标签）；`mdv_page` 大纲面板（`<nav role="navigation">` + 有序列表 + 键盘导航 JS，滚动定位经 `querySelectorAll('h1..h6')[ordinal]`，不改写已渲染 HTML、不引入 id 注入路径）。
+- 锚点语义：稳定会话锚点 `h-<generation:016x>-<revision:016x>-<ordinal:04x>`——同一 source_revision 重渲染稳定，源变更后诚实变化；ordinal 是渲染文档中 h1..h6 的出现序，与 facts 收集共用同一确定性计数。
+- 边界与预算：≤512 个标题、单个标题文本 ≤256B（超界截断为前 253B+`...`）、树深规整（相邻层级跳降 >1 压平）；大纲条目 HTML 转义后输出；解析失败/超界降级为无大纲面板（文档仍可读）；不持久化、不进日志、零网络。
+- 验收：新 `markdown_outline_facts_test`（层级/文本抽取、截断、512 上限、锚点稳定与 revision 敏感、解析失败）与 `mdv_outline_test`（树深规整、锚点格式、键盘导航边界、aria、空/单条目）；既有 mdv/markdown 全量回归、contract（若登记）、`git diff --check`。
+- 明确不做：TOC 持久化/导出、搜索（MRT-11）、Presentation（MRT-16/17）、ECharts/Graphviz（MRT-12..15）、渲染 HTML 的 id 属性注入。
+
+### MRT-10 完成记录（2026-09-11）
+
+- 实现（三层）：
+  - markdown 解析事实层 `markdown_outline_facts.{h,cc}`：md4c 走一遍收集 MD_BLOCK_H——level/纯文本（≤256B，超界截 253B+`...`）/ordinal/会话锚点 `h-<gen:016x>-<rev:016x>-<ordinal:04x>`；≤512 条优雅截断；锚点同一 generation+revision 确定性稳定、revision 变化诚实变化；span 回调 no-op（md4c 需非空，否则 SIGSEGV——实现期发现并修复）。
+  - mdv 模型层 `mdv_outline.{h,cc}`：`MdvOutlineModel::Build` 层级栈规整树深（层级跳降压平：h1→h3 只嵌套一层），`Move(First/Last/Next/Previous)` 键盘导航带边界钳制与越界语义，`AccessibleLabel`（文本+`(level N)`）。
+  - 页面集成 `mdv_page.cc`：view-bar 大纲 toggle（aria-pressed）+ `<nav id="md-outline" role="navigation" aria-label="mdv.outline" hidden><ol>`；JS 在每次 `mdvPush` 渲染后从渲染 DOM 重建（`querySelectorAll('h1..h6')[ordinal]` 滚动定位，不改写已渲染 HTML）；ArrowUp/Down/Home/End roving focus，Enter 跳转；无标题文档自动隐藏面板并禁用 toggle。新 locale key `mdv.outline` 三语言（252 keys parity），MdvPageStrings 增 `outline_label`。
+- 验证：`markdown_outline_facts` 8 项（抽取/锚点格式与 revision 敏感/截断/512 上限/setext+深层级/fence 内不收/空文档）；`mdv_outline` 6 项（树深规整/跳降压平/导航边界与越界/aria/空与单条目/ordinal 序）；`mdv_page/viewer/edit/save/entry_guard/images/transform` 与 markdown 全量（render/extension/math/runtime 5 项）18/18 PASS；真实产品 CDP E2E：`mdvPush` 注入 4 标题文档后面板 4 条目、缩进 8/22/36/22px 对应规整深度 0/1/2/1、aria `(level N)`、toggle aria-pressed 正确；SIGTERM 零残留；`node tools/locales/generate.mjs --check` 3 locales/252 keys/9 files；`git diff --check` 通过。
+- Code Review：按 v0.9 复核——解析事实有界（512/256B 截断）、锚点确定性、不改写渲染 HTML（无 id 注入路径）、键盘导航闭合语义、面板内容全部转义、零网络零持久化。P0/P1/P2=0。
+- 未覆盖与风险：大纲面板的可视化样式为最小实现（键盘/读屏行为已自动化，视觉打磨归后续 MDV 任务）；`MRT-10` 转 `DONE`，解锁 `MRT-16`（与 MRT-11 一起）。

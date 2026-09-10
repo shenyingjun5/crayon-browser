@@ -14,7 +14,7 @@ struct LocaleCatalogEntry {
   std::string_view zh_tw;
 };
 
-inline constexpr std::array<LocaleCatalogEntry, 251> kLocaleCatalogEntries{{
+inline constexpr std::array<LocaleCatalogEntry, 252> kLocaleCatalogEntries{{
     {"cast.selection.unavailable", "Casting is not ready in this window", "此窗口的投屏入口尚未就绪", "此視窗的投屏入口尚未就緒"},
     {"cast.selection.expired", "Selection expired. Prepare again.", "选择已过期，请重新准备", "選擇已過期，請重新準備"},
     {"cast.selection.connecting", "Connecting to device…", "正在连接设备…", "正在連線裝置…"},
@@ -266,6 +266,7 @@ inline constexpr std::array<LocaleCatalogEntry, 251> kLocaleCatalogEntries{{
     {"cast.rejected.no_route", "No playable cast route. Try another receiver.", "没有可用的投屏方式，可尝试其他接收端。", "沒有可用的投影方式，可嘗試其他接收端。"},
     {"cast.rejected.drm", "DRM-protected content cannot be cast.", "DRM 保护内容不能投屏。", "DRM 保護內容無法投影。"},
     {"cast.retry", "Choose a receiver and retry", "重新选择接收端并重试", "重新選擇接收端並重試"},
+    {"mdv.outline", "Outline", "大纲", "大綱"},
 }};
 
 inline constexpr std::string_view kCatalogVersion = "desktop-localization-v1";
