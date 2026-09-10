@@ -1070,3 +1070,11 @@ Code Review：按 v0.9 独立检查唯一 owner、同步 callback reentrancy、t
 - 验证结论：macOS 产品确认完全运行于 Alloy 宿主——CDP 检查唯一 page target `crayon://newtab/`、`chrome_runtime_targets=0`（零 chrome:// 与 chrome-untrusted 目标）、进程稳定。旧 TabController::CreateMainWindow/CreateBrowserWindow 路径在 macOS 产品中不再被调用（24M1 已由 `product_host_->Start()` 替代）。
 - 保留项（另一平台或 popup 兼容所需）：`GetDefaultClient()` 返回 TabController WindowClient（CEF popup 路由需要）；AppKit 菜单的 `ExecuteChromeCommand` 路径保留（popup 兼容 + 24M2 后续接入 Alloy 路由）；`TabController::CreateBrowserWindow` 共享代码保留（Windows 侧仍引用）。
 - `25P` macOS 侧转 `DONE`（Windows 侧归 24W 收口后另启）。
+
+## 97. PLT-SHELL-24M2 交接（2026-09-10，待新会话领取）
+
+- 产品 `app.cc` 已完整接线所有功能面（media observation/trusted input/page markdown/MDV entry/editing/permissions/cast/session restore），且 WindowClient 为 runtime 无关的 normalized 回调层——Alloy 窗口与 Chrome 窗口共用同一 client，零改动兼容。
+- 24M2 的实质工作：在产品 Alloy 窗口中组装 UI 工具栏（AlloyOmnibox + AlloyNavigation + CastEntrySurface + AlloyTabStrip），使产品不再依赖 Chrome runtime 的原生 UI。共享组件全部就绪。
+- 验证基线（24M1 smoke，CDP）：newtab readyState=complete、lang=zh-CN、MDV 正确加载、导航往返正常、零 console error、SIGTERM 零残留。
+- CDP 逐面验证结果（24M2 verification, 3d47b6d）：S1-newtab ✓ S2-mdv ✓ S3-nav ✓ S4-back ✓ S5-input ✓ 0 errors。
+
