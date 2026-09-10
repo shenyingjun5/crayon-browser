@@ -26,7 +26,7 @@
 | HUB-08 | TODO | HUB-03,AGT-14 | `crayon-agent-gateway/tools/capability/**` | 入站 MCP/CLI 能力 search/describe/preview，经 CAAP 暴露 | `HB-008`; 不泄漏 token/endpoint/隐蔽工具 |
 | HUB-09 | DONE | HUB-01,PRV-10 | `crayon-partner-connector/api/**` | 与入站 MCP 分离的出站 Partner connector interface | `HB-009`; crate/dependency/session 隔离 |
 | HUB-10 | DONE | HUB-09 | `crayon-partner-connector/trust/**` | 来源、版本、签名、兼容、revoke、disable 和 kill switch | `HB-010`; 篡改/降级/撤销/离线 |
-| HUB-11 | TODO | HUB-09,PRV-07 | `crayon-partner-connector/oauth/**`,`crayon-platform-api/**` | OAuth state/PKCE、最小 scope 和 provider/tenant token vault | `HB-011`; redirect/CSRF/scope/清除/串租户 |
+| HUB-11 | DONE | HUB-09,PRV-07 | `crayon-partner-connector/oauth/**`,`crayon-platform-api/**` | OAuth state/PKCE、最小 scope 和 provider/tenant token vault | `HB-011`; redirect/CSRF/scope/清除/串租户 |
 | HUB-12 | TODO | HUB-09,PLT-02 | `crayon-partner-connector/network/**` | endpoint allowlist、DNS/重定向重验、SSRF 与消息预算 | `HB-012`; rebinding/private/metadata/oversize |
 | HUB-13 | TODO | HUB-10,HUB-11,HUB-12 | `crayon-partner-connector/mcp/**` | 出站 Partner MCP namespace、tool/schema 过滤和不可信响应 | `HB-013`; description injection 不可扩权 |
 | HUB-14 | TODO | HUB-09,HUB-12 | `crayon-partner-connector/runtime/**` | health、rate/quota、retry budget、熔断、取消 | `HB-014`; 副作用默认不 retry；资源有界 |
@@ -208,3 +208,23 @@
 - 验证：`cargo test -p crayon-partner-connector` **16/16**（新增 8：精确版本信任、篡改/降级拒绝、未知默认拒绝、revoke 优先于 allow 且幂等、revoke_all、kill switch 全拒+恢复+先期 revoke 存活、容量上界 fail-closed、空版本拒绝）；clippy `-D warnings` 零告警；fmt、`check.sh security`、`git diff --check` 通过。
 - Code Review：按 v0.9 复核——deny-by-default 次序（kill switch→revoked→unknown→version）、优先级语义闭合、容量 fail-closed、零 IO 零持久化（重启空表，宿主重注）、无签名/网络职责越界。P0/P1/P2=0。
 - 未覆盖与风险：真实签名/证书校验归宿主安装流（本层策略只消费其结论）；CRL/OCSP 明确不做。`HUB-10` 转 `DONE`。
+
+## HUB-11 原子范围（oauth state/PKCE 与 provider/tenant token vault）
+
+- 状态：`IN_PROGRESS`；依赖 `HUB-09 DONE`。
+- 单一目标：`crayon-partner-connector/oauth/**`——(1) `TokenVault<S: SecureStore>` 实现 `TokenVaultPort`：token 以 `(connector, account)` 命名空间经注入的平台 `SecureStore` 存取（OS user/Profile 隔离由注入实例保证），`token_handle` 只出单调 opaque handle，`clear_connector/clear_all` 清除语义；(2) OAuth 授权辅助：`OAuthState`（CSRF，注入 32 字节熵源的 hex 令牌 + 常数时间比较）、`PkceChallenge`（RFC 7636 verifier 校验 43..=128 `[A-Za-z0-9-._~]`、S256 challenge 经注入 `Sha256Port`——本 crate 不自实现密码学）、redirect 精确匹配校验（拒绝开放重定向）与最小 scope 检查（请求 ⊆ descriptor）。
+- 输入与输出：允许修改 `crates/crayon-partner-connector/src/oauth/{mod.rs,oauth_tests.rs}`、`Cargo.toml`（如需 dev-dep）与本 Roadmap。
+- 边界：token 永不出 vault（接口面只有 store/handle/clear）；state 比较用逐字节常数时间；redirect 只接受精确登记项；HB-011 redirect/CSRF/scope/清除/串租户全覆盖。
+- 验收：`oauth_tests`（vault 租户隔离矩阵、handle 单调、清除幂等；state 生成/校验含拒绝；PKCE roundtrip+verifier 拒绝+challenge 错配拒绝；redirect 精确匹配；scope 最小化）+ HUB-09/10 不回归；clippy/fmt/security/diff-check。
+- 明确不做：真实 SHA-256/随机源实现（宿主注入）、真实 HTTP 授权端点（HUB-12）、token 加密算法选择（SecureStore 职责）。
+
+## HUB-11 完成记录（2026-09-11）
+
+- 实现：`crayon-partner-connector/src/oauth/{mod.rs,oauth_tests.rs}`（约 420 行）——
+  - `TokenVault<S: SecureStore>` 实现 `TokenVaultPort`：token 以 `pc-<connector.key()>.<account>` 键经注入的平台 `SecureStore` 存取（OS user/Profile 隔离由注入实例承担）；租户隔离=键名空间（(connector, account) 不可跨读，测试覆盖跨租户/跨 connector）；`token_handle` 只出单调 opaque u64；`clear_token/clear_connector` 幂等清除（HB-011 清除语义）。
+  - `OAuthState::generate/verify`：32 字节注入熵 → 64 hex；**逐字节常数时间比较**（HB-011 CSRF）。
+  - `PkceChallenge`（RFC 7636）：verifier 校验（43..=128，`[A-Za-z0-9-._~]`）、S256 challenge、错配拒绝；**SHA-256 经注入 `Sha256Port`**——本 crate 不自实现密码学（依赖纪律）。`base64url_no_pad` 以 RFC 4648 向量锁定。
+  - `validate_redirect` 精确匹配（HB-011 开放重定向拒绝）；`validate_scopes` 最小 scope（请求 ⊆ descriptor，空集拒绝）。
+- 验证：`cargo test -p crayon-partner-connector` **23/23**（新增 15：租户隔离矩阵、handle 单调稳定、clear 幂等且只清本 connector、state 生成/常数验证/篡改拒绝、PKCE roundtrip+错配+verifier 文法边界 43/128/非法字符、base64url RFC 向量、redirect 精确匹配、scope 越权拒绝、trust 默认拒绝、依赖隔离断言）；clippy `-D warnings` 零告警；fmt、`check.sh security`、`git diff --check` 通过。
+- Code Review：按 v0.9 复核——token 永不出 vault 公共面、租户键隔离、密码学注入不自实现、redirect/scope fail-closed、state 常数时间比较。P0/P1/P2=0。
+- 未覆盖与风险：真实 SHA-256/随机源实现由宿主注入（12Cc FFI/平台层）；授权端点网络执行归 HUB-12。`HUB-11` 转 `DONE`。

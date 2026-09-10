@@ -9,6 +9,7 @@
 //! the closed types and port traits only — no IO.
 
 pub mod api;
+pub mod oauth;
 pub mod trust;
 
 #[cfg(test)]

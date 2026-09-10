@@ -8,3 +8,4 @@ license = "LicenseRef-Proprietary"
 path = "src/lib.rs"
 
 [dependencies]
+crayon-platform-api = { path = "../crayon-platform-api" }
