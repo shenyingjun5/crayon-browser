@@ -347,7 +347,17 @@ void BrowserApp::OnContextInitialized() {
 void BrowserApp::ContinueContentHostStartup() {
   CEF_REQUIRE_UI_THREAD();
   if (content_host_->healthy() && media_host_->healthy()) {
-    if (!tab_controller_->CreateMainWindow()) {
+    // PLT-SHELL-24M1: the product first window is the macOS Alloy host; the
+    // TabController WindowClient keeps every normalized callback surface.
+    if (!product_host_) {
+      product_host_ = std::make_unique<macos::AlloyProductHostMac>(
+          macos::AlloyProductHostMac::Dependencies{
+              tab_controller_->client(), kInitialUrl,
+              product_strings_.new_tab.document_title},
+          macos::AlloyProductHostMac::Callbacks{
+              [] { CefQuitMessageLoop(); }});
+    }
+    if (!product_host_->Start()) {
       content_host_->Stop();
       media_host_->Stop();
       CefQuitMessageLoop();

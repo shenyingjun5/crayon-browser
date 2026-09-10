@@ -123,7 +123,15 @@ bool WindowClient::DoClose(CefRefPtr<CefBrowser> browser) {
 
 void WindowClient::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
-  browser->GetHost()->WasHidden(true);
+  // PLT-SHELL-24M1: WasHidden is windowless-only in the Alloy runtime and
+  // DCHECK-aborts for windowed browsers; the closing window's visibility is
+  // owned by the platform, so the hide notification is skipped here.
+  if (browser && browser->GetHost()->GetRuntimeStyle() ==
+                     CEF_RUNTIME_STYLE_ALLOY) {
+    // Alloy: view visibility is managed by the host; nothing to do.
+  } else {
+    browser->GetHost()->WasHidden(true);
+  }
   const TabSnapshot* tab =
       controller_->model().FindByBrowser(browser->GetIdentifier());
   if (tab) {
@@ -385,8 +393,13 @@ bool WindowClient::OnPreKeyEvent(CefRefPtr<CefBrowser> browser,
 
 void WindowClient::OnGotFocus(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
-  // Focusing implies the browser is shown; re-mark visible.
-  browser->GetHost()->WasHidden(false);
+  // PLT-SHELL-24M1: WasHidden is windowless-only in the Alloy runtime; the
+  // show notification is skipped for Alloy browsers (view mounting owns
+  // visibility), Chrome-runtime browsers keep the legacy call.
+  if (browser && browser->GetHost()->GetRuntimeStyle() ==
+                     CEF_RUNTIME_STYLE_CHROME) {
+    browser->GetHost()->WasHidden(false);
+  }
   controller_->OnBrowserFocused(browser);
 }
 

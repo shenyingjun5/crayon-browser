@@ -1028,6 +1028,8 @@ if(OS_MAC)
       src/browser/window/tab_model.cc
       src/macos/alloy_session_restore_mac.h
       src/macos/alloy_session_restore_mac.cc
+      src/macos/alloy_product_host_mac.h
+      src/macos/alloy_product_host_mac.cc
       src/macos/app.cc
       src/macos/app.h
       src/macos/cast_chrome_mac.h

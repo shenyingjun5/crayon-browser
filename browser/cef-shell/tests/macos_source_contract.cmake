@@ -4,6 +4,26 @@ if(NOT DEFINED CRAYON_CEF_SHELL_SOURCE OR
 endif()
 
 set(macos_source_root "${CRAYON_CEF_SHELL_SOURCE}/src/macos")
+# PLT-SHELL-24M1: the macOS Alloy production host must exist and be wired
+# into the product app.
+set(alloy_host_root "${CRAYON_CEF_SHELL_SOURCE}/src/macos")
+foreach(required_host_file
+        "${alloy_host_root}/alloy_product_host_mac.h"
+        "${alloy_host_root}/alloy_product_host_mac.cc")
+  if(NOT EXISTS "${required_host_file}")
+    message(FATAL_ERROR "macOS Alloy product host is missing: ${required_host_file}")
+  endif()
+endforeach()
+file(READ "${alloy_host_root}/app.cc" app_source_for_host)
+foreach(required_host_token
+        "AlloyProductHostMac"
+        "product_host_"
+        )
+  string(FIND "${app_source_for_host}" "${required_host_token}" host_token_index)
+  if(host_token_index EQUAL -1)
+    message(FATAL_ERROR "macOS app is missing Alloy host token ${required_host_token}")
+  endif()
+endforeach()
 set(macos_resource_root "${CRAYON_CEF_SHELL_SOURCE}/resources/macos")
 cmake_path(ABSOLUTE_PATH CRAYON_CEF_SHELL_SOURCE
            BASE_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}" NORMALIZE
@@ -91,6 +111,16 @@ foreach(required_cast_token
   string(FIND "${app_source}" "${required_cast_token}" token_index)
   if(token_index EQUAL -1)
     message(FATAL_ERROR "macOS app is missing Cast wiring ${required_cast_token}")
+  endif()
+endforeach()
+
+foreach(required_host_token
+        "AlloyProductHostMac"
+        "product_host_"
+        )
+  string(FIND "${app_source}" "${required_host_token}" host_token_index)
+  if(host_token_index EQUAL -1)
+    message(FATAL_ERROR "macOS app is missing Alloy host token ${required_host_token}")
   endif()
 endforeach()
 

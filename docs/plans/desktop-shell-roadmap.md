@@ -113,7 +113,7 @@
 | 23W | BLOCKED | 09W、11W..19W、21W、22W VERIFIED | Windows 全外壳本地化/IME/键盘/读屏/缩放/主题回归 | P；LOC Windows 矩阵、UX-001..018；不擅改系统设置 |
 | 23M | VERIFIED | 09M、11M..19M、21M、22M VERIFIED | macOS 全外壳本地化/IME/键盘/读屏/缩放/主题回归 | P；LOC macOS 矩阵、UX-001..018；不擅改系统设置 |
 | 24W | IN_PROGRESS | Windows 01..22W VERIFIED；23W 系统语言/IME/Narrator/原生 DPI 矩阵经用户 2026-09-05 明确后置 | Windows 产品默认入口切至自定义 Shell＋Alloy | P；分 24W1..W3；三闭环和日用功能无回退、入口与 capability 真实性 Review |
-| 24M | BLOCKED | macOS 01..23 对应项 VERIFIED | macOS 产品默认入口切至自定义 Shell＋Alloy | P；24M1 首次产品集成命中 CEF-150 macOS FATAL（§92b），需先行定位 Alloy 窗式创建与原生 NSApp 循环的兼容性 |
+| 24M | IN_PROGRESS | macOS 01..23 对应项 VERIFIED | macOS 产品默认入口切至自定义 Shell＋Alloy | P；24M1 VERIFIED（首窗已切 Alloy），24M2 功能面接入与 24M3 收口进行中（§92b/§93） |
 | 25P | TODO | 24P VERIFIED | 移除该平台旧 Chrome 宿主/LOCATION 生产接线及临时迁移开关 | P＋artifact scan；另一平台仍需要的共享代码保留隔离，不删除他人改动 |
 | 26P | TODO | 25P VERIFIED | 在新默认宿主复验 Direct→Relay→拒绝/交接→稳定性 | R；映射 PLT-W05c..f / M05b4..b6/M05c 与 R11P；真实接收端、100 次/睡眠/退出 |
 | 27P | TODO | 23P、25P、26P VERIFIED | 新宿主三闭环/隐私/性能/发布证据汇总 | R；PRV/CNT/MRT/PLT/LOC/QAR/REL 对应平台完整门禁；无签名/真机不标 DONE |
@@ -1022,3 +1022,12 @@ Code Review：按 v0.9 独立检查唯一 owner、同步 callback reentrancy、t
 
 
 - 24M1 首次尝试（2026-09-10，BLOCKED）：实现 `alloy_product_host_mac.{h,cc}`（CefWindow＋CefBrowserView ALLOY，WindowClient 复用，about:blank 暖启 + 300ms 延迟导航目标 URL）并切换 `ContinueContentHostStartup`。产品编译通过、切换路径执行，但启动 ~8s 后 FATAL：`alloy_browser_host_impl.cc:362 DCHECK failed: false. Window rendering is not disabled`——CEF-150 macOS 在产品原生 NSApp 事件循环下创建窗口式 Alloy 浏览器时命中内部 DCHECK（而集成探针经 CefRunMessageLoop 创建同样的 BrowserView 正常）。按纪律回退产品切换（app.cc/app.h/CMake 恢复原状），host 代码需按下述方向重写：(1) 对比 CefRunMessageLoop 与原生 NSApp 循环下 Alloy 窗式浏览器的创建约束（可能要求 view 先挂入已创建窗口、或禁用/启用特定 window_info 字段）；(2) 确认 `CefSettings.external_message_pump`/多线程消息循环的产品取值；(3) 或经 CefWindow::Show 之后再创建 BrowserView。中间产物已回退，避免半成品进主线；解除前 24M 保持 BLOCKED。
+
+
+## 93. PLT-SHELL-24M1 完成记录（2026-09-10）
+
+- 实现：新增 `src/macos/alloy_product_host_mac.{h,cc}`（约 280 行）——macOS Alloy 产品首窗宿主：真实 `CefWindow`＋`CefBrowserView`（runtime ALLOY，首导航 about:blank 暖启后延迟提交 `crayon://newtab/`），client 为 TabController 的 `WindowClient`（全部既有 handler 面保持：MDV entry/editing、cast、snapshot observer、context menu、drag、keyboard、page query）；`ContinueContentHostStartup` 首窗创建由 `CreateMainWindow()`（CHROME）切换为该 host；`macos_source_contract.cmake` 增 host 文件存在、app 引用（AlloyProductHostMac/product_host_）token。
+- 附带修复（根因修复之一）：`TabController::WindowClient::OnBeforeClose/OnGotFocus` 中对窗口式浏览器调用 `WasHidden` 会命中 CEF-150 `AlloyBrowserHostImpl::WasHidden` 的 `DCHECK(false) "Window rendering is not disabled"`（WasHidden 仅支持 windowless）——已按 runtime style 分流：Alloy 浏览器跳过 WasHidden（view 挂载即可见性），Chrome 浏览器保持原调用。这正是此前 24M1 两次尝试 FATAL/挂起的根因链：Alloy 首窗 + newtab 聚焦后任一可见性事件即触发。
+- 验证：macOS arm64 Debug product build PASS；真实产品 smoke（CDP）：唯一 page target `crayon://newtab/`、`readyState=complete`、title/lang=`蜡笔浏览器`/`zh-CN`、`data-profile-mode=regular`、零 chrome:// 与 chrome-untrusted 目标（Chrome UI 不存在）；SIGTERM 优雅退出后进程零残留；全量 ctest **125/125 PASS**（含 alloy_page_markdown_mac、alloy_cast_overlay_mac、locale 矩阵 3/3 与此前退化的键盘探针——本会话环境恢复后全部通过）；`check.sh fast`（全步骤）+ `check.sh security` + `git diff --check` 通过。
+- Code Review：按 v0.9 复核需求/边界（仅首窗切换，UI 功能面归 24M2/M3）、正确性（WindowClient 复用、关闭舞步、model 一致性）、安全（无新权限、无路径/URL 泄漏）、可维护性（宿主仅窗口/生命周期，无业务逻辑）。P0/P1/P2=0。
+- 未覆盖与风险：产品窗口内尚无 tab strip/omnibox 等自有 UI（24M2 接入，当前首窗为纯内容窗）；多窗口/popup 的 Alloy 化归 24M2；`WasHidden` 的 Chrome 路径保持不变。`24M1` 转为 `DONE`，`24M` 转 `IN_PROGRESS`。

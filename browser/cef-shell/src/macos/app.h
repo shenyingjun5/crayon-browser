@@ -16,6 +16,7 @@
 #include "crayon/browser_mdv/mdv_page.h"
 #include "crayon/browser_product_strings/product_strings.h"
 #include "include/cef_app.h"
+#include "macos/alloy_product_host_mac.h"
 #include "macos/cast_chrome_mac.h"
 #include "browser/media_host/cast_shell_controller.h"
 #include "macos/content_host_adapter_mac.h"
@@ -78,6 +79,7 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   std::unique_ptr<media_host::CastShellController> cast_shell_;
   std::unique_ptr<macos::CastChromeMac> cast_chrome_;
   std::unique_ptr<macos::TrustedInputMonitor> trusted_input_monitor_;
+  std::unique_ptr<macos::AlloyProductHostMac> product_host_;
   CefRefPtr<window::TabController> tab_controller_;
   std::unique_ptr<page_markdown::CefPageMarkdownPreviewController>
       page_markdown_preview_;
