@@ -29,7 +29,7 @@
 | HUB-11 | DONE | HUB-09,PRV-07 | `crayon-partner-connector/oauth/**`,`crayon-platform-api/**` | OAuth state/PKCE、最小 scope 和 provider/tenant token vault | `HB-011`; redirect/CSRF/scope/清除/串租户 |
 | HUB-12 | DONE | HUB-09,PLT-02 | `crayon-partner-connector/network/**` | endpoint allowlist、DNS/重定向重验、SSRF 与消息预算 | `HB-012`; rebinding/private/metadata/oversize |
 | HUB-13 | DONE | HUB-10,HUB-11,HUB-12 | `crayon-partner-connector/mcp/**` | 出站 Partner MCP namespace、tool/schema 过滤和不可信响应 | `HB-013`; description injection 不可扩权 |
-| HUB-14 | TODO | HUB-09,HUB-12 | `crayon-partner-connector/runtime/**` | health、rate/quota、retry budget、熔断、取消 | `HB-014`; 副作用默认不 retry；资源有界 |
+| HUB-14 | DONE | HUB-09,HUB-12 | `crayon-partner-connector/runtime/**` | health、rate/quota、retry budget、熔断、取消 | `HB-014`; 副作用默认不 retry；资源有界 |
 | HUB-15 | TODO | HUB-05,HUB-13,HUB-14,AGT-11 | `crayon-capability-hub/audit/**`,`diagnostics/**` | provider/tenant hash/capability/route/结果的脱敏审计指标 | `HB-015`; 无正文/token/完整参数 |
 | HUB-16 | TODO | HUB-01..HUB-15 | threat model,Review,`docs/current/**` | Hub/Partner connector 安全、隐私、供应链与性能总 Review | 全 HB；P0/P1=0；partner feature 独立 GO/NO-GO |
 
@@ -264,3 +264,22 @@
 - 验证：`cargo test -p crayon-partner-connector` **38/38**（新增 6：命名空间强制与入站隔离、重复登记、tool 名文法三例、描述预算+换行/DEL 注入载体拒绝+干净通过、authority 宿主所有且重复注册不改写、响应预算/截断/多字节完整）；clippy `-D warnings` 零告警；fmt、`check.sh security`、`git diff --check` 通过。
 - Code Review：按 v0.9 复核——description injection 不可扩权（capability/risk 宿主所有+注入载体拒绝）、namespace 隔离、响应只读 opaque、预算 fail-closed。P0/P1/P2=0。
 - 未覆盖与风险：真实 MCP 协议栈网络执行归 HUB-14 runtime + 宿主 IO；description 语义分析（LLM 层防护）不在本层。`HUB-13` 转 `DONE`，解锁 `HUB-14`（runtime：health/quota/retry/熔断）。
+
+## HUB-14 原子范围（runtime：health/quota/retry/熔断/取消）
+
+- 状态：`IN_PROGRESS`；依赖 `HUB-09 DONE`、`HUB-12 DONE`。
+- 单一目标：`crayon-partner-connector/runtime/**` 交付 connector 调用运行时策略——`CallLimiter`（窗口内调用配额与最小间隔，注入时钟）、`CircuitBreaker`（连续失败熔断：闭→开→半开试探→闭，半开只放行一次探测）、`RetryBudget`（有界重试预算：**副作用调用默认不重试**、幂等只读在预算内重试、预算耗尽拒绝）与 `CancellationFlag`（协作取消， polled by host）。全部纯内存、注入时钟、fail-closed。
+- 验收：`runtime_tests`（配额窗口拒绝与恢复、最小间隔、熔断开/半开/闭全转换、副作用不重试、只读重试预算耗尽、取消传递）+ 既有回归；clippy/fmt/security/diff-check。
+- 明确不做：真实 HTTP/定时器线程（宿主注入时钟与 IO）、持久化熔断状态（进程内）。
+
+## HUB-14 完成记录（2026-09-11）
+
+- 实现：`crayon-partner-connector/src/runtime/{mod.rs,runtime_tests.rs}`（约 300 行）——
+  - `CallLimiter`：滑动窗口配额 + 最小调用间隔，注入时钟，窗口滑出自动回收。
+  - `CircuitBreaker`：Closed→Open（连续失败达阈值）→冷却后半开（只放行一次探测）→探测成功闭/失败重开；`admit` 惰性转换 + `state()` 诊断。
+  - `RetryBudget`：**副作用调用永不重试**（`can_retry(is_idempotent_read)` 门控），幂等只读在预算内重试，`consume/refill` 有界。
+  - `CancellationFlag`：协作取消（clone 共享状态，宿主端口轮询）。
+  - 全部纯内存、注入时钟、无线程无定时器无持久化。
+- 验证：`cargo test -p crayon-partner-connector` **44/44**（新增 6：配额窗口 Shed/恢复、最小间隔、熔断全转换（含半开单探测与探测失败重开）、副作用永不重试+预算耗尽+refill、取消共享状态）；clippy `-D warnings` 零告警；fmt、`check.sh security`、`git diff --check` 通过。
+- Code Review：按 v0.9 复核——熔断转换闭合、重试语义（副作用默认不重试）与预算 fail-closed、注入时钟无墙钟依赖。P0/P1/P2=0。
+- 未覆盖与风险：分布式熔断状态（单进程语义）；真实 IO 组装归产品装配。`HUB-14` 转 `DONE`。

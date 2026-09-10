@@ -12,6 +12,7 @@ pub mod api;
 pub mod mcp;
 pub mod network;
 pub mod oauth;
+pub mod runtime;
 pub mod trust;
 
 #[cfg(test)]
