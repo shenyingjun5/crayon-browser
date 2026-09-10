@@ -20,7 +20,7 @@
 | WFL-02 | VERIFIED | WFL-01,ACT-06 | `crayon-workflow/challenge/**` | 确定性 Challenge Detector，仅输出检测证据 | `WF-001`,`WF-002`; 禁止解题/绕过 surface |
 | WFL-03 | VERIFIED | WFL-02,AGT-05 | `crayon-workflow/handoff/**`,`apps/desktop-cef/**/handoff/**`,locales | `AwaitingHuman` UI 与继续/取消状态 | `WF-003`; 无障碍/关闭/导航/超时 |
 | WFL-04 | VERIFIED | WFL-01,PRV-07,PRV-08 | `crayon-workflow/checkpoint/**`,`crayon-platform-api/**` | 加密、短期、最小 checkpoint store | `WF-004`; 无 secret/正文；过期/清除/损坏 |
-| WFL-05 | TODO | WFL-03,WFL-04,ACT-08 | `crayon-workflow/resume/**` | 用户完成后的重新 snapshot/risk/grant/precondition 与幂等恢复 | `WF-005`; challenge 仍在/漂移/未知副作用终止 |
+| WFL-05 | VERIFIED | WFL-03,WFL-04,ACT-08 | `crayon-workflow/resume/**` | 用户完成后的重新 snapshot/risk/grant/precondition 与幂等恢复 | `WF-005`; challenge 仍在/漂移/未知副作用终止 |
 | WFL-06 | VERIFIED | WFL-01,ACT-08,AGT-11 | `crayon-workflow/trace/**` | 仅记录已授权步骤、语义意图和 verified effect 的有界 trace | `WF-006`; cancel/fail/旧结果/TTL |
 | WFL-07 | VERIFIED | WFL-06,PRV-10 | `crayon-workflow/redaction/**` | 写盘前敏感值移除与参数 placeholder | `WF-007`; seeded secret/canary 零泄漏 |
 | WFL-08 | TODO | WFL-06,WFL-07 | `crayon-workflow/recipe/**` | 仅从 verified success 生成候选 Recipe | `WF-008`; fail/cancel/indeterminate 不学习 |
@@ -140,3 +140,19 @@
 - 验证：`cargo test -p crayon-workflow` 28/28（27 unit + 1 Windows DPAPI integration）；WF-007 覆盖 password/email/token/body/full-query/account 六类 canary、误分类、伪造 summary、空/非法/重复/超量 name、wrong schema/non-verified，序列化零 canary/value/length/digest/hash surface。`cargo test --workspace` 全量通过；`cargo fmt --all -- --check`、`cargo clippy -p crayon-workflow --all-targets --no-deps -- -D warnings`、`scripts/check.ps1 security`（guard/relay-unit/relay-security 全绿）、`git diff --check` 通过。
 - Code Review：按 v0.8 检查持久化输出类型、误分类 fail-safe、schema/effect 复检、账户标识与低熵 hash 风险、预算、依赖和测试；无 IO、锁、网络、额外依赖、正文日志或可恢复值。P0/P1/P2 = 0/0/0。
 - 未覆盖与风险：真正的 store 写入点尚未存在，barrier 由 WFL-08 Recipe 生成和 WFL-10 Skill Store/app-runtime 装配时强制消费，因此状态为 VERIFIED；当前不提供跨记录账户关联 hash，这是主动隐私最小化而非功能缺失。
+
+## WFL-05 原子范围（用户完成挑战后的恢复门）
+
+- 状态：`VERIFIED`；依赖 `WFL-03 VERIFIED`、`WFL-04 VERIFIED`、`ACT-12 DONE`。
+- 单一目标：`crayon-workflow/resume/**` 交付确定性的恢复决策门——`HandoffOutcome::ResumeRequested` 之后，用闭合的新鲜事实（重新快照的页面匹配、重新检测的 challenge 仍在、重新签发的 grant 新鲜度、precondition/效果可知性）产出 `Approved | Terminated(reason)`，并把 `ChallengeSession` 推进到对应终态（Resumed/Cancelled）；同一会话的重复评估幂等返回同一决策。
+- 输入与输出：允许修改 `crates/crayon-workflow/src/resume/mod.rs`、`resume_tests.rs`、`lib.rs` re-export 与本 Roadmap。输入只接受闭合枚举与已验证 origin 字符串，不引入页面内容、selector、挑战值或正文；不直接调用 detector/store/grant 层——新鲜事实由受信 adapter 提供。
+- 边界：评估顺序固定 fail-closed（origin 校验 → challenge 仍在 → origin 变化 → 页面漂移/未知 → grant 失效 → 副作用未知）；`PageMatch::Unknown`、`EffectKnowledge::Unknown` 一律终止；非 `AwaitingHuman` 会话拒绝评估；终止映射 `session.cancel()`（诚实终态），不重开、不静默；错误与 Debug 输出零 origin/正文；不在锁内做 IO（本层无 IO）。
+- 验收：`WF-005`（匹配恢复、漂移/仍有挑战/副作用未知终止、grant 四种失效、幂等重评估、非 AwaitingHuman 拒绝、非法 origin 拒绝、决策顺序确定性、零内容泄漏断言）；`cargo test -p crayon-workflow`、`cargo clippy -p crayon-workflow --all-targets -- -D warnings`、`cargo fmt --all -- --check`、workspace 安全脚本、`git diff --check`。
+- 明确不做：快照采集、grant 签发、动作执行、checkpoint 消费编排（app-runtime 装配）、challenge 检测（WFL-02）、重复 handoff UI（WFL-03）。
+
+### WFL-05 完成记录（2026-09-11）
+
+- 实现：`crayon-workflow/src/resume/{mod.rs,resume_tests.rs}`（约 300 行）——`ResumeFacts`（闭合新鲜事实：重新快照 PageMatch、重新检测 challenge_still_present、GrantFreshness 五态、EffectKnowledge 两态＋双 origin）、`ResumeGate::evaluate` 固定 fail-closed 顺序（origin 校验→challenge 仍在→origin 变化→漂移/未知→grant 失效→副作用未知）产出 `Approved|Terminated(reason)`；Approved 推进 `session.resume()`，Terminated 映射 `session.cancel()`；门记录首个裁决，重复评估幂等回放且不再触碰会话；非 AwaitingHuman 会话 `SessionNotAwaiting` 拒绝且不记录裁决；`requires_resume_gate` 只认 `HandoffOutcome::ResumeRequested`。错误/Display 零 origin 零正文。
+- 验证：`cargo test -p crayon-workflow` 40/40（新增 12：匹配恢复、challenge 仍在优先级、origin 变化、漂移、未知快照 fail-closed、grant 四失效变体、未知副作用、幂等三重放、Approved 幂等不再转换、非 AwaitingHuman 两态拒绝、非法 origin 三例拒绝、handoff 控制器集成）；`cargo test -p crayon-workflow -p crayon-domain` 107/107；clippy `-D warnings` 零告警；`cargo fmt --all -- --check`、`bash scripts/check.sh security`（guard/relay-unit/relay-security）、`git diff --check` 通过。
+- Code Review：按 v0.9 复核——边界（纯决策无 IO 无执行面）、fail-closed（Unknown/缺省一律终止）、幂等（首裁决后回放）、状态机对齐（Resumed/Cancelled 终态唯一路径）、零内容泄漏。P0/P1/P2=0。
+- 未覆盖与风险：新鲜事实的采集方（快照、detector、grant 检查）由 app-runtime/Browser adapter 装配，属 AGT-12C/后续装配切片；checkpoint 消费编排不在本层。`WFL-05` 转 `VERIFIED`，解锁 `WFL-09`（依赖 WFL-08）链外无变化；`WFL-08` 成为本模块下一个可领任务。

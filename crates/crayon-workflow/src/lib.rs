@@ -8,6 +8,7 @@ pub mod challenge;
 pub mod checkpoint;
 pub mod handoff;
 pub mod redaction;
+pub mod resume;
 pub mod trace;
 
 #[cfg(test)]
