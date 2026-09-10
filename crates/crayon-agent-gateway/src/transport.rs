@@ -472,6 +472,13 @@ impl<'a> CaapConnection<'a> {
         Err(self.invalid_message(ConnectionError::InvalidMessage))
     }
 
+    /// The client name bound by the handshake (AGT-12Cb dispatch key).
+    /// `None` before a successful Hello/Welcome exchange.
+    #[must_use]
+    pub fn bound_client(&self) -> Option<&str> {
+        self.guard.bound_client()
+    }
+
     /// Writes a stable CAAP error reply without exposing diagnostic text.
     pub fn write_error(&mut self, id: u64, error: CaapError) -> Result<(), ConnectionError> {
         self.write_json_frame(&CaapErrorReply::new(id, error))

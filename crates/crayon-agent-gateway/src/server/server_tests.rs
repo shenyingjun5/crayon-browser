@@ -213,8 +213,14 @@ impl FakeDispatch {
 }
 
 impl CaapDispatch for FakeDispatch {
+    fn open_client(&mut self, _client: &str, _schema: SchemaVersion, _granted: &[AgentCapability]) {
+    }
+
+    fn close_client(&mut self, _client: &str) {}
+
     fn dispatch(
         &mut self,
+        _client: &str,
         request: &CaapRequest,
         cancel: &CancelFlag,
         sink: &mut dyn FnMut(CaapChunk),
@@ -236,7 +242,7 @@ impl CaapDispatch for FakeDispatch {
         DispatchOutcome::Completed
     }
 
-    fn notify_cancel(&mut self, _request_id: u64) {
+    fn notify_cancel(&mut self, _client: &str, _request_id: u64) {
         self.cancel_seen.store(true, Ordering::SeqCst);
     }
 }

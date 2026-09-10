@@ -7,12 +7,19 @@
 //! policy arrive in AGT-12Cb. Payload bytes are never logged and stop is
 //! cooperative: the flag is re-checked between every message.
 
+pub mod gateway;
+
+#[cfg(test)]
+mod gateway_tests;
+#[cfg(test)]
+mod server_tests;
+
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use crayon_domain::{AgentCapability, CaapError};
 use crayon_ipc_schema::{CaapChunk, CaapRequest, SchemaVersion};
-use crayon_platform_api::local_agent_ipc::LocalAgentIpcError;
+use crayon_platform_api::local_agent_ipc::{LocalAgentIpcEndpoint, LocalAgentIpcError};
 
 use crate::transport::{CaapConnection, ConnectionError, InboundMessage};
 
@@ -70,13 +77,23 @@ pub enum DispatchOutcome {
 
 /// Tool/session dispatch surface. Implementations run on the serve thread
 /// and may block within the request deadline, polling [`CancelFlag`] at
-/// their bounded checkpoints.
+/// their bounded checkpoints. AGT-12Cb adds the client identity: the
+/// handshake-bound name is the session key.
 pub trait CaapDispatch {
+    /// A client completed the handshake. Invoked once per connection; a
+    /// reconnect with the same name replaces the previous session.
+    fn open_client(&mut self, client: &str, schema: SchemaVersion, granted: &[AgentCapability]);
+
+    /// The client disconnected or the connection failed. Always paired
+    /// with a prior successful `open_client`.
+    fn close_client(&mut self, client: &str);
+
     /// Streams response chunks through |sink|. The final chunk must carry
     /// `is_final`; the server synthesizes an empty final chunk when a
     /// successful dispatch forgot one.
     fn dispatch(
         &mut self,
+        client: &str,
         request: &CaapRequest,
         cancel: &CancelFlag,
         sink: &mut dyn FnMut(CaapChunk),
@@ -84,7 +101,7 @@ pub trait CaapDispatch {
 
     /// A cancel arrived for a request that is not in flight. Best-effort;
     /// late cancels are idempotent no-ops.
-    fn notify_cancel(&mut self, request_id: u64);
+    fn notify_cancel(&mut self, client: &str, request_id: u64);
 }
 
 /// Why the serve loop returned.
@@ -108,8 +125,7 @@ pub fn run<E, D, F>(
     allowed_capabilities: Vec<AgentCapability>,
 ) -> ServerExit
 where
-    E: crayon_platform_api::local_agent_ipc::LocalAgentIpcEndpoint,
-    // NotRunning (host stop) maps to a clean exit; see the match below.
+    E: LocalAgentIpcEndpoint,
     D: CaapDispatch,
     F: Fn() -> u64,
 {
@@ -157,23 +173,35 @@ where
     D: CaapDispatch,
     F: Fn() -> u64,
 {
-    if connection.handshake(clock()).is_err() {
-        return ServeEnd::Disconnected;
-    }
+    let welcome = match connection.handshake(clock()) {
+        Ok(welcome) => welcome,
+        Err(_) => return ServeEnd::Disconnected,
+    };
+    let client = match connection.bound_client() {
+        Some(client) => client.to_owned(),
+        None => return ServeEnd::Disconnected,
+    };
+    dispatch.open_client(&client, welcome.schema(), welcome.capabilities());
     loop {
         if stop.is_stopped() {
+            dispatch.close_client(&client);
+            let _ = connection.stop();
             return ServeEnd::Stopped;
         }
         match connection.receive(clock()) {
             Ok(InboundMessage::Request(request)) => {
-                if dispatch_request(connection, dispatch, &request) == DispatchEnd::ConnectionDead {
+                if dispatch_request(connection, dispatch, &client, &request)
+                    == DispatchEnd::ConnectionDead
+                {
+                    dispatch.close_client(&client);
                     return ServeEnd::Disconnected;
                 }
             }
-            Ok(InboundMessage::Cancel(cancel)) => dispatch.notify_cancel(cancel.id()),
+            Ok(InboundMessage::Cancel(cancel)) => dispatch.notify_cancel(&client, cancel.id()),
             Err(ConnectionError::Closed | ConnectionError::Io)
             | Err(ConnectionError::Endpoint(_)) => {
                 let _ = connection.stop();
+                dispatch.close_client(&client);
                 return ServeEnd::Disconnected;
             }
             Err(_) => {
@@ -194,6 +222,7 @@ enum DispatchEnd {
 fn dispatch_request<D>(
     connection: &mut CaapConnection<'_>,
     dispatch: &mut D,
+    client: &str,
     request: &CaapRequest,
 ) -> DispatchEnd
 where
@@ -215,7 +244,7 @@ where
         // A panicking dispatch must not kill the product: it degrades to a
         // stable error reply, matching the fail-closed error surface.
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            dispatch.dispatch(request, &cancel, &mut sink)
+            dispatch.dispatch(client, request, &cancel, &mut sink)
         }))
         .unwrap_or(DispatchOutcome::Failed(CaapError::InvalidMessage));
         if connection_dead {
@@ -242,6 +271,3 @@ where
     }
     DispatchEnd::Completed
 }
-
-#[cfg(test)]
-mod server_tests;
