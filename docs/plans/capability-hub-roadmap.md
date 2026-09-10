@@ -28,7 +28,7 @@
 | HUB-10 | DONE | HUB-09 | `crayon-partner-connector/trust/**` | 来源、版本、签名、兼容、revoke、disable 和 kill switch | `HB-010`; 篡改/降级/撤销/离线 |
 | HUB-11 | DONE | HUB-09,PRV-07 | `crayon-partner-connector/oauth/**`,`crayon-platform-api/**` | OAuth state/PKCE、最小 scope 和 provider/tenant token vault | `HB-011`; redirect/CSRF/scope/清除/串租户 |
 | HUB-12 | DONE | HUB-09,PLT-02 | `crayon-partner-connector/network/**` | endpoint allowlist、DNS/重定向重验、SSRF 与消息预算 | `HB-012`; rebinding/private/metadata/oversize |
-| HUB-13 | TODO | HUB-10,HUB-11,HUB-12 | `crayon-partner-connector/mcp/**` | 出站 Partner MCP namespace、tool/schema 过滤和不可信响应 | `HB-013`; description injection 不可扩权 |
+| HUB-13 | DONE | HUB-10,HUB-11,HUB-12 | `crayon-partner-connector/mcp/**` | 出站 Partner MCP namespace、tool/schema 过滤和不可信响应 | `HB-013`; description injection 不可扩权 |
 | HUB-14 | TODO | HUB-09,HUB-12 | `crayon-partner-connector/runtime/**` | health、rate/quota、retry budget、熔断、取消 | `HB-014`; 副作用默认不 retry；资源有界 |
 | HUB-15 | TODO | HUB-05,HUB-13,HUB-14,AGT-11 | `crayon-capability-hub/audit/**`,`diagnostics/**` | provider/tenant hash/capability/route/结果的脱敏审计指标 | `HB-015`; 无正文/token/完整参数 |
 | HUB-16 | TODO | HUB-01..HUB-15 | threat model,Review,`docs/current/**` | Hub/Partner connector 安全、隐私、供应链与性能总 Review | 全 HB；P0/P1=0；partner feature 独立 GO/NO-GO |
@@ -249,3 +249,18 @@
 - 实现期修复：fc00::/7 掩码比较语义（`&0xfe00 == 0xfc00` 而非 `==0xfe00`）；重定向预算语义分离为 TargetForbidden。
 - Code Review：按 v0.9 复核——全拒 SSRF 语义、每跳重验、预算 fail-closed、宿主 IO 注入边界、错误面无内容。P0/P1/P2=0。
 - 未覆盖与风险：真实 DNS 解析与 TLS 交换由宿主实现（12Cc/HUB-14）；IPv6 全分类面依赖 std。`HUB-12` 转 `DONE`，解锁 `HUB-13/14`。
+
+## HUB-13 原子范围（出站 Partner MCP namespace 与不可信响应）
+
+- 状态：`IN_PROGRESS`；依赖 `HUB-10/11/12 DONE`。
+- 单一目标：`crayon-partner-connector/mcp/**`——出站 MCP 工具命名空间与不可信数据面：`OutboundMcpRegistry`（partner 工具强制登记为 `<namespace>.<name>`，与入站 registry 无共享符号）；`ToolFilter`（partner 提供的 description/schema 元数据是不可信数据：长度有界、控制字符拒绝、**capability/risk 由宿主侧配置决定而非 partner 数据**）；`McpResponse`（响应是纯数据：不可触发新能力、不进错误面、预算裁剪）。
+- 边界：partner 元数据永远不能扩权（能力映射宿主所有）；响应只作为 opaque 文本透传给调用者，绝不解释执行；全部 fail-closed。
+- 验收：`mcp_tests`（命名空间强制与冲突、描述长度/控制字符拒绝、能力宿主所有不可被 partner 覆盖、响应预算与只读性）+ 既有回归；clippy/fmt/security/diff-check。
+- 明确不做：真实 MCP 协议栈、网络执行（HUB-12 边界）、入站 MCP 改动。
+
+## HUB-13 完成记录（2026-09-11）
+
+- 实现：`crayon-partner-connector/src/mcp/{mod.rs,mcp_tests.rs}`（约 300 行）——`OutboundMcpRegistry`：partner 工具强制登记为 `<connector-namespace>.<connector-name>.<tool>`（与入站 registry 命名空间无交集，测试断言不含 `agent.`/`caap`）；`ToolFilterError` 拒绝面：tool 名文法（≤64B `[a-z0-9_-]`）、description 预算（≤2048B）与**控制字符拒绝**（`\n`/DEL 等注入载体 fail-closed）、重复登记拒绝；**authority 宿主所有**（`ToolAuthority` 由宿主传入，partner 元数据不可影响，测试断言注册后不可变）；`McpResponse::from_untrusted`：响应是预算裁剪的 opaque 数据（多字节字符不撕裂、truncated 标记、不可触发新能力）。
+- 验证：`cargo test -p crayon-partner-connector` **38/38**（新增 6：命名空间强制与入站隔离、重复登记、tool 名文法三例、描述预算+换行/DEL 注入载体拒绝+干净通过、authority 宿主所有且重复注册不改写、响应预算/截断/多字节完整）；clippy `-D warnings` 零告警；fmt、`check.sh security`、`git diff --check` 通过。
+- Code Review：按 v0.9 复核——description injection 不可扩权（capability/risk 宿主所有+注入载体拒绝）、namespace 隔离、响应只读 opaque、预算 fail-closed。P0/P1/P2=0。
+- 未覆盖与风险：真实 MCP 协议栈网络执行归 HUB-14 runtime + 宿主 IO；description 语义分析（LLM 层防护）不在本层。`HUB-13` 转 `DONE`，解锁 `HUB-14`（runtime：health/quota/retry/熔断）。
