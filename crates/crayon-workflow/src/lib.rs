@@ -6,6 +6,7 @@
 
 pub mod challenge;
 pub mod checkpoint;
+pub mod drift;
 pub mod handoff;
 pub mod health;
 pub mod preview;

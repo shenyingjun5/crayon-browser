@@ -29,7 +29,7 @@
 | WFL-11 | VERIFIED | WFL-10,FND-09 | `crayon-workflow/validation/**`,`test-support/**` | 本地 fixture/沙箱 matcher、参数、步骤和 effect 验证 | `WF-011`; 无公共网络/后台批量访问 |
 | WFL-12 | DONE | WFL-11,ACT-08,AGT-04 | `crayon-workflow/runner/**`,`crayon-app-runtime/**` | 每次重新授权、用当前 action_id 执行的 Site Skill runner | `WF-012`; cancel/deadline/idempotency/人机接管 |
 | WFL-13 | DONE | WFL-10,WFL-12 | `crayon-workflow/health/**`,`crayon-workflow/version/**` | health、失败窗口、禁用、版本和回滚 | `WF-013`; restart/crash/rollback/配额 |
-| WFL-14 | TODO | WFL-13,ACT-10 | `crayon-workflow/drift/**` | drift 分类与修复候选，区分 challenge/permission/network/effect | `WF-014`; 低置信度不误报健康 |
+| WFL-14 | DONE | WFL-13,ACT-10 | `crayon-workflow/drift/**` | drift 分类与修复候选，区分 challenge/permission/network/effect | `WF-014`; 低置信度不误报健康 |
 | WFL-15 | TODO | WFL-14,ACT-06,ACT-08 | `crayon-workflow/heal/**` | 仅低风险、唯一匹配、效果可验证的受控修复 | `WF-015`; 高风险/跨源/语义变化必须人工确认 |
 | WFL-16 | TODO | WFL-01..WFL-15 | threat model,Review,`docs/current/**` | Workflow/Challenge/Site Skill 隐私、安全、性能总 Review | 全 WF；P0/P1=0；feature 独立 GO/NO-GO |
 
@@ -266,3 +266,18 @@
 - 验证：`cargo test -p crayon-workflow` **84/84**（新增 5：阈值触发 Disable、成功重置连败、窗口滑动失效、per-skill 独立、禁用后清零；版本 3 项：roundtrip 栈式回滚、per-skill 隔离、容量淘汰最旧+最新保留）；clippy `-D warnings` 零告警；fmt、security、diff-check 全过。
 - Code Review：按 v0.9 复核——health 只判定不执行（禁用由宿主调用 store）、注入时钟无墙钟、历史只存 Recipe 无值、回滚版本单调。P0/P1/P2=0。
 - 未覆盖与风险：持久化 health 归产品装配；drift 分类归 WFL-14。`WFL-13` 转 `DONE`，解锁 `WFL-14`。
+
+## WFL-14 原子范围（drift 分类）
+
+- 状态：`IN_PROGRESS`；依赖 `WFL-13 DONE`、`ACT-10 DONE`。
+- 单一目标：`crayon-workflow/drift/**`——`DriftClassifier`：闭合信号（challenge 检出/权限拒绝/网络失败/effect 错配/origin 变化）→ 闭合 `DriftKind` 分类（Challenge/Permission/Network/Effect/Origin/Unknown）；**多信号并存或零信号一律 Unknown**（低置信度不误报健康）；`heal_candidate_allowed`：仅低风险（R0/R1）+ 唯一匹配才产出修复候选位，高风险/跨源/语义变化返回人工确认要求。
+- 边界：纯函数分类器，无 IO；Unknown 不进入修复通道；分类不触发任何执行。
+- 验收：`drift_tests`（五类单信号分类、多信号/零信号 Unknown、低风险候选允许、高风险/跨源人工确认）+ 回归；clippy/fmt/security/diff-check。
+- 明确不做：修复执行（WFL-15）、自动重启用、challenge 求解。
+
+### WFL-14 完成记录（2026-09-11）
+
+- 实现：`crayon-workflow/src/drift/{mod.rs,drift_tests.rs}`（约 190 行）——`DriftSignals`（闭合信号：challenge/permission/network/effect/origin）+ `classify`（**唯一单信号才分类**；多信号冲突或零信号一律 `Unknown`，低置信度不误报健康）→ 闭合 `DriftKind` 五分类；`heal_candidate_allowed(risk, kind)`：仅 `Low` 风险 + `Effect` 漂移可进入 WFL-15 受控修复通道，其余（challenge/permission/network/origin 或高风险）一律人工处理。
+- 验证：`cargo test -p crayon-workflow` **88/88**（新增 6：五类单信号唯一分类、零信号 Unknown、两组多信号冲突 Unknown、heal 通道 risk×kind 门控矩阵）；clippy `-D warnings` 零告警；fmt、security、diff-check 全过。
+- Code Review：按 v0.9 复核——纯函数分类、唯一信号语义、Unknown 不误报、heal 门控闭合。P0/P1/P2=0。
+- 未覆盖与风险：信号来源的真实探测归 WFL-02/权限层/网络层装配。`WFL-14` 转 `DONE`，解锁 `WFL-15`。
