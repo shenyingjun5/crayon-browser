@@ -8,6 +8,7 @@ pub mod challenge;
 pub mod checkpoint;
 pub mod drift;
 pub mod handoff;
+pub mod heal;
 pub mod health;
 pub mod preview;
 pub mod recipe;

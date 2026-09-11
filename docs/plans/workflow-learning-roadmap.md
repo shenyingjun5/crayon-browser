@@ -30,8 +30,8 @@
 | WFL-12 | DONE | WFL-11,ACT-08,AGT-04 | `crayon-workflow/runner/**`,`crayon-app-runtime/**` | 每次重新授权、用当前 action_id 执行的 Site Skill runner | `WF-012`; cancel/deadline/idempotency/人机接管 |
 | WFL-13 | DONE | WFL-10,WFL-12 | `crayon-workflow/health/**`,`crayon-workflow/version/**` | health、失败窗口、禁用、版本和回滚 | `WF-013`; restart/crash/rollback/配额 |
 | WFL-14 | DONE | WFL-13,ACT-10 | `crayon-workflow/drift/**` | drift 分类与修复候选，区分 challenge/permission/network/effect | `WF-014`; 低置信度不误报健康 |
-| WFL-15 | TODO | WFL-14,ACT-06,ACT-08 | `crayon-workflow/heal/**` | 仅低风险、唯一匹配、效果可验证的受控修复 | `WF-015`; 高风险/跨源/语义变化必须人工确认 |
-| WFL-16 | TODO | WFL-01..WFL-15 | threat model,Review,`docs/current/**` | Workflow/Challenge/Site Skill 隐私、安全、性能总 Review | 全 WF；P0/P1=0；feature 独立 GO/NO-GO |
+| WFL-15 | DONE | WFL-14,ACT-06,ACT-08 | `crayon-workflow/heal/**` | 仅低风险、唯一匹配、效果可验证的受控修复 | `WF-015`; 高风险/跨源/语义变化必须人工确认 |
+| WFL-16 | TODO | WFL-01..WFL-15（01..15 全 DONE，READY）| threat model,Review,`docs/current/**` | Workflow/Challenge/Site Skill 隐私、安全、性能总 Review | 全 WF；P0/P1=0；feature 独立 GO/NO-GO |
 
 ## 3. 完成门禁
 
@@ -281,3 +281,21 @@
 - 验证：`cargo test -p crayon-workflow` **88/88**（新增 6：五类单信号唯一分类、零信号 Unknown、两组多信号冲突 Unknown、heal 通道 risk×kind 门控矩阵）；clippy `-D warnings` 零告警；fmt、security、diff-check 全过。
 - Code Review：按 v0.9 复核——纯函数分类、唯一信号语义、Unknown 不误报、heal 门控闭合。P0/P1/P2=0。
 - 未覆盖与风险：信号来源的真实探测归 WFL-02/权限层/网络层装配。`WFL-14` 转 `DONE`，解锁 `WFL-15`。
+
+## WFL-15 原子范围（受控修复 heal）
+
+- 状态：`IN_PROGRESS`；依赖 `WFL-14 DONE`。
+- 单一目标：`crayon-workflow/heal/**`——`HealGate`：对唯一匹配、低风险（R0/R1）、效果可验证的 **Effect drift** 候选产出**受控修复计划**（重新执行单一步骤，最多 1 次，无副作用扩散），任一前提（唯一匹配/低风险/效果可验证/取消/无新 challenge）不满足即拒绝并转人工确认；`HealOutcome` 闭合（Healed/NeedsHuman/Refused）。
+- 边界：修复=同一 action 在同一 node 上重试一次（经 WFL-11 validate_effect 判定）；高风险/跨源/语义变化必须人工确认（不自动执行）；不学习、不持久化。
+- 验收：`heal_tests`（唯一匹配低风险修复成功、非唯一/高风险/跨源拒绝、重复修复拒绝、取消拒绝、effect 未验证拒绝）+ 回归；clippy/fmt/security/diff-check。
+- 明确不做：高风险修复、自动重启用、多步修复计划、challenge 求解。
+
+### WFL-15 完成记录（2026-09-11）
+
+- 实现：`crayon-workflow/src/heal/{mod.rs,heal_tests.rs}`（约 300 行）——`attempt_heal(&HealRequest, retry)`：
+  - 五道门 fail-closed：RunStopped（取消/ challenge 活跃）→ OutsideHealChannel（非 Effect kind 或 fixture 不支持）→ RiskTooHigh（非 Low）→ NotUnique（attempts ≥1）→ retry 效果 validate_effect 未 Verified → UnverifiedRetry。
+  - 通过全部门后 retry 重执行单步，新 effect validate_effect Verified → `Healed`；否则全部转 `NeedsHuman` 人工处理。
+  - `HealRequest` 打包参数（低于 arity 门）；fixture 门（node 已知 + action 支持）阻止跨源/未知节点修复。
+- 验证：`cargo test -p crayon-workflow` **96/96**（新增 8：低风险 Effect 修复成功、四非 Effect kind 拒绝、高风险需人工、二次修复唯一拒绝、challenge/取消停止、未验证 retry 转人工、未知 node 拒绝、MAX=1 锁定）；clippy `-D warnings` 零告警；fmt、security、diff-check 全过。
+- Code Review：按 v0.9 复核——五道门 fail-closed、单步单次修复、challenge/取消优先于修复、fixture 阻断跨源、无学习无持久化。P0/P1/P2=0。
+- 未覆盖与风险：retry 的真实执行归宿主 RunnerPort 装配；drift 分类质量归 WFL-14。`WFL-15` 转 `DONE`，WFL-01..15 全部完成，解锁 `HUB-07`。
