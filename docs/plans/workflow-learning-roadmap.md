@@ -27,7 +27,7 @@
 | WFL-09 | VERIFIED | WFL-08,AGT-05 | `apps/desktop-cef/**/skill-preview/**`,locales | 技能名称、站点、参数、步骤、风险、权限、数据流预览和保存确认 | `WF-009`; 拒绝/过期/变更后重确认 |
 | WFL-10 | VERIFIED | WFL-09,PRV-07 | `crayon-workflow/store/**`,`crayon-platform-api/**` | 按 OS user/Profile 隔离的加密个人 Skill Store | `WF-010`; migration/corrupt/quota/无痕清除 |
 | WFL-11 | VERIFIED | WFL-10,FND-09 | `crayon-workflow/validation/**`,`test-support/**` | 本地 fixture/沙箱 matcher、参数、步骤和 effect 验证 | `WF-011`; 无公共网络/后台批量访问 |
-| WFL-12 | TODO | WFL-11,ACT-08,AGT-04 | `crayon-workflow/runner/**`,`crayon-app-runtime/**` | 每次重新授权、用当前 action_id 执行的 Site Skill runner | `WF-012`; cancel/deadline/idempotency/人机接管 |
+| WFL-12 | DONE | WFL-11,ACT-08,AGT-04 | `crayon-workflow/runner/**`,`crayon-app-runtime/**` | 每次重新授权、用当前 action_id 执行的 Site Skill runner | `WF-012`; cancel/deadline/idempotency/人机接管 |
 | WFL-13 | TODO | WFL-10,WFL-12 | `crayon-workflow/health/**`,`crayon-workflow/version/**` | health、失败窗口、禁用、版本和回滚 | `WF-013`; restart/crash/rollback/配额 |
 | WFL-14 | TODO | WFL-13,ACT-10 | `crayon-workflow/drift/**` | drift 分类与修复候选，区分 challenge/permission/network/effect | `WF-014`; 低置信度不误报健康 |
 | WFL-15 | TODO | WFL-14,ACT-06,ACT-08 | `crayon-workflow/heal/**` | 仅低风险、唯一匹配、效果可验证的受控修复 | `WF-015`; 高风险/跨源/语义变化必须人工确认 |
@@ -229,3 +229,23 @@
 - 验证：`cargo test -p crayon-workflow` **69/69**（新增 7：匹配通过、origin 不一致+非法 origin fail-closed、未知 node/不支持 action、空 skill 拒绝+64 步预算 parity、单效果三重判定、整跑 1:1 四例）；clippy `-D warnings` 零告警；fmt、`check.sh security`、`git diff --check` 通过。
 - Code Review：按 v0.9 复核——纯函数只读、fixture 闭合无网络、错误面闭合、预算 parity 断言。P0/P1/P2=0。
 - 未覆盖与风险：真实页面执行归 WFL-12；drift/修复归 WFL-14/15。`WFL-11` 转 `VERIFIED`，解锁 `WFL-12`。
+
+## WFL-12 原子范围（Site Skill runner）
+
+- 状态：`IN_PROGRESS`；依赖 `WFL-11 VERIFIED`、`ACT-08 DONE`、`AGT-04 VERIFIED`。
+- 单一目标：`crayon-workflow/runner/**`——`SkillRunner`：对 **Enabled** 且**本次运行已获新授权**（`ApprovedAction` 按 action_id/step 供给，复用=拒绝）的 SiteSkill 顺序执行：每步 pre-validate（WFL-11 fixture）→ 执行经注入 `RunnerPort`（宿主/12Cc 装配）→ effect 判定（单步）→ 全跑 post `validate_run`；取消（注入 flag 轮询）与 deadline 超时 fail-closed；challenge/未知副作用 → 立即终止并产出 `Terminated(reason)`，绝不静默恢复（衔接 WFL-05）。
+- 边界：runner 不签 grant、不点确认、不重试副作用；执行只在注入端口上发生；结果不学习（WFL-08 只消费 verified trace，由 WFL-06 trace 层记录）；错误面闭合。
+- 验收：`runner_tests`（Enabled 门、授权缺失/复用拒绝、顺序执行与 effect 对齐、取消立即停、deadline 停、端口失败终止、challenge 终止、副作用不重试）+ 既有回归；clippy/fmt/security/diff-check。
+- 明确不做：真实 CEF 执行（RunnerPort 由 12Cc/装配注入）、确认 UI、重试、学习。
+
+### WFL-12 完成记录（2026-09-11）
+
+- 实现：`crayon-workflow/src/runner/{mod.rs,runner_tests.rs}`（约 330 行）——`SkillRunner::prepare/run`：
+  - **Enabled 门**：非 Enabled skill 直接 fail-closed。
+  - **每步新鲜授权**：`approvals(step_index)` 每步注入 `ApprovedAction`，runner 校验 node/action/tab/generation 一致且 deadline 在界内（≤run deadline、≥now）；复用/错配在执行前拒绝。
+  - **顺序执行**：`RunnerPort::execute_step`（宿主注入，AGT-12Cc 装配），effect 校验（tab/generation/node/action/outcome=Verified）后推进。
+  - **fail-closed 终止**：取消（消息间检查）、deadline 超时、challenge 检出（注入闭包，WFL-02/05 衔接）、端口失败、post-run `validate_run` 不对齐 → 全部 `Terminated(reason)`；错误面无内容。
+  - `RunCancel` 协作取消（clone 共享）；run 结束后 `validate_run` 做 1:1 对齐终验（WFL-11）。
+- 验证：`cargo test -p crayon-workflow --lib` **76/76**（新增 7：非 Enabled 拒绝、顺序执行对齐、缺授权/端口失败终止、取消在下一步前生效、deadline 超时、challenge 立即终止、授权复用拒绝且首步已执行）；clippy `-D warnings` 零告警；fmt、`check.sh security`、`git diff --check` 通过。
+- Code Review：按 v0.9 复核——每次运行新授权（复用拒绝）、无重试、challenge/取消/deadline fail-closed、执行只在注入端口、错误面闭合。P0/P1/P2=0。
+- 未覆盖与风险：真实 CEF 执行归 RunnerPort 产品装配（AGT-12Cc）；challenge 探测的真实信号源归 WFL-02 检测器装配。`WFL-12` 转 `DONE`，解锁 `WFL-13/14/15` 与 `HUB-07`。
