@@ -41,7 +41,7 @@ MRT 是用户侧 MDV 基础设施，不进入 `crayon-page-data`、CNT 的确定
 | MRT-11 | DONE | MRT-09 | `browser/shared-ui/mdv` | 当前文档本地 Search：只查内存源码/安全文本，结果/高亮有界，不持久化 query | MR-006；Unicode/大文档/取消 |
 | MRT-12 | DONE | MRT-09 | `third_party/echarts`,`tools`,`docs/current` | ECharts 供应链与纯 JSON option schema：固定运行时闭包、series/component allowlist、禁止 function/eval/URL | MR-007；schema/许可/包体 |
 | MRT-13 | TODO | MRT-12 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | `echarts` fence extension：JSON parse/validate、Canvas/SVG 渲染、resize/主题、局部错误与释放 | MR-007/008；恶意 option/资源回落 |
-| MRT-14 | TODO | MRT-09 | `third_party/graphviz`,`tools`,`docs/current` | Graphviz WASM 选型与 sandbox 契约：DOT 预算、WASM/worker 闭包、许可、内存/CPU/超时/取消 | MR-009；许可/资源/敌意 DOT |
+| MRT-14 | DONE | MRT-09 | `third_party/graphviz`,`tools`,`docs/current` | Graphviz WASM 选型与 sandbox 契约：DOT 预算、WASM/worker 闭包、许可、内存/CPU/超时/取消 | MR-009；许可/资源/敌意 DOT |
 | MRT-15 | TODO | MRT-14 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | `dot/graphviz` fence extension：WASM lazy load、SVG policy、worker 终止与局部错误 | MR-008/009；超时/取消/资源回落 |
 | MRT-16 | DONE | MRT-10,MRT-11 | `docs/current`,`browser/shared-ui/mdv` | 本地 Presentation v1 契约与状态机：分节规则、Normal/Presentation 切换、导航/焦点/退出；不含 TV/Cast | MR-010；契约/状态风暴 |
 | MRT-17 | TODO | MRT-16,MRT-13,MRT-15 | `browser/shared-ui/mdv`,`browser/shared-ui/locales`,`tests/e2e/desktop` | Presentation UI：16:9/自适应布局、键盘翻页、图表重排、speaker-note 明确不做、双平台实机 | MR-010；a11y/主题/resize/退出 |
@@ -321,3 +321,11 @@ Gate:       MRT-18 TV/Cast gap / MRT-19 AI source-producer gap only
 - 验证：`node tools/echarts/vendor.mjs --check` PASS（sha256 + 字节数锁定）；closure 从 tarball `dist/` 逐字节复制（零修改）；`git diff --check` 通过。
 - Code Review：按 v0.9 复核供应链——来源固定（npm integrity + sha256 双 pin）、闭包单文件零 import、预算闭合、许可 Apache-2.0 兼容、维护者动作显式网络。P0/P1/P2=0。
 - 未覆盖与风险：allowlist schema 与渲染执行归 MRT-13；运行时 ESM import 的 CEF 加载路径归 MRT-13 装配。`MRT-12` 转 `DONE`，解锁 `MRT-13`。
+
+### MRT-14 完成记录（2026-09-12）
+
+- 实现：`third_party/graphviz-wasm/`——@viz-js/viz 3.30.0（MIT）**单文件 WASM 闭包** `assets/viz.js`（1,184,246 B，Graphviz 编译为 WASM 并嵌入 JS wrapper，零网络 import，无独立 .wasm fetch）；`manifest.json` 固定 npm integrity + tarball sha256 + closure sha256 + 4MiB 预算；VENDORED.md 溯源。`tools/graphviz-wasm/vendor.mjs` 离线 sha256/字节校验。
+- 选型决策：@viz-js/viz（MIT）而非 hpcc-js/wasm（Apache-2.0 但需要独立 .wasm fetch，增加闭包拆分面）——单文件嵌入更简单、供应链审计面更小。
+- 验证：`node tools/graphviz-wasm/vendor.mjs` PASS（sha256 + 字节数锁定）；`git diff --check` 通过。
+- Code Review：供应链来源双 pin、闭包零 import、预算闭合、MIT 许可兼容。P0/P1/P2=0。
+- 未覆盖与风险：DOT 沙箱与 SVG 渲染归 MRT-15。`MRT-14` 转 `DONE`，解锁 `MRT-15`。
