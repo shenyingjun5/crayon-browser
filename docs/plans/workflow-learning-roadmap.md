@@ -28,7 +28,7 @@
 | WFL-10 | VERIFIED | WFL-09,PRV-07 | `crayon-workflow/store/**`,`crayon-platform-api/**` | 按 OS user/Profile 隔离的加密个人 Skill Store | `WF-010`; migration/corrupt/quota/无痕清除 |
 | WFL-11 | VERIFIED | WFL-10,FND-09 | `crayon-workflow/validation/**`,`test-support/**` | 本地 fixture/沙箱 matcher、参数、步骤和 effect 验证 | `WF-011`; 无公共网络/后台批量访问 |
 | WFL-12 | DONE | WFL-11,ACT-08,AGT-04 | `crayon-workflow/runner/**`,`crayon-app-runtime/**` | 每次重新授权、用当前 action_id 执行的 Site Skill runner | `WF-012`; cancel/deadline/idempotency/人机接管 |
-| WFL-13 | TODO | WFL-10,WFL-12 | `crayon-workflow/health/**`,`crayon-workflow/version/**` | health、失败窗口、禁用、版本和回滚 | `WF-013`; restart/crash/rollback/配额 |
+| WFL-13 | DONE | WFL-10,WFL-12 | `crayon-workflow/health/**`,`crayon-workflow/version/**` | health、失败窗口、禁用、版本和回滚 | `WF-013`; restart/crash/rollback/配额 |
 | WFL-14 | TODO | WFL-13,ACT-10 | `crayon-workflow/drift/**` | drift 分类与修复候选，区分 challenge/permission/network/effect | `WF-014`; 低置信度不误报健康 |
 | WFL-15 | TODO | WFL-14,ACT-06,ACT-08 | `crayon-workflow/heal/**` | 仅低风险、唯一匹配、效果可验证的受控修复 | `WF-015`; 高风险/跨源/语义变化必须人工确认 |
 | WFL-16 | TODO | WFL-01..WFL-15 | threat model,Review,`docs/current/**` | Workflow/Challenge/Site Skill 隐私、安全、性能总 Review | 全 WF；P0/P1=0；feature 独立 GO/NO-GO |
@@ -249,3 +249,20 @@
 - 验证：`cargo test -p crayon-workflow --lib` **76/76**（新增 7：非 Enabled 拒绝、顺序执行对齐、缺授权/端口失败终止、取消在下一步前生效、deadline 超时、challenge 立即终止、授权复用拒绝且首步已执行）；clippy `-D warnings` 零告警；fmt、`check.sh security`、`git diff --check` 通过。
 - Code Review：按 v0.9 复核——每次运行新授权（复用拒绝）、无重试、challenge/取消/deadline fail-closed、执行只在注入端口、错误面闭合。P0/P1/P2=0。
 - 未覆盖与风险：真实 CEF 执行归 RunnerPort 产品装配（AGT-12Cc）；challenge 探测的真实信号源归 WFL-02 检测器装配。`WFL-12` 转 `DONE`，解锁 `WFL-13/14/15` 与 `HUB-07`。
+
+## WFL-13 原子范围（health、失败窗口、禁用、版本和回滚）
+
+- 状态：`IN_PROGRESS`；依赖 `WFL-10 VERIFIED`、`WFL-12 DONE`。
+- 单一目标：`crayon-workflow/health/**`+`version/**`——(1) `SkillHealth`：注入时钟的失败窗口追踪（窗口内连续/累计失败 ≥阈值 → `should_disable`，宿主执行 Disabled；成功重置连败；窗口滑动）；(2) `VersionHistory`：每 skill 有界（≤8）历史（recipe+revision），`rollback` 语义=恢复上一版内容但 revision 仍单调 +1（经 WFL-10 `upgrade`），无更早版本时拒绝。
+- 边界：health 只判定不建议执行动作（禁用由宿主对 store 调用）；历史只存 Recipe（无值）；容量淘汰最旧；注入时钟无墙钟。
+- 验收：`health_tests`/`version_tests`（窗口阈值/滑动/成功重置、历史入栈/回滚/耗尽拒绝、配额）+ 回归；clippy/fmt/security/diff-check。
+- 明确不做：自动重启用、drift 分类（WFL-14）、修复（WFL-15）、持久化 health（进程内）。
+
+### WFL-13 完成记录（2026-09-11）
+
+- 实现：
+  - `health/{mod.rs,health_tests.rs}`：`SkillHealth`（注入时钟、per-skill 滑动失败窗口）——窗口内失败 ≥阈值（默认 3/10min，可配置）→ `ShouldDisable`（宿主对 store 执行 Disabled）；成功重置连败；窗口滑动自动失效；`reset` 供禁用后清零。纯内存，进程重启即清零（持久态归 store）。
+  - `version/{mod.rs,version_tests.rs}`：`VersionHistory`——per-skill 有界（≤8）先版本历史，`capture/previous/pop_previous`；**回滚语义**：恢复上一版内容但存储 revision 经 WFL-10 `upgrade` 单调 +1，版本号永不回退；最老条目越界淘汰。
+- 验证：`cargo test -p crayon-workflow` **84/84**（新增 5：阈值触发 Disable、成功重置连败、窗口滑动失效、per-skill 独立、禁用后清零；版本 3 项：roundtrip 栈式回滚、per-skill 隔离、容量淘汰最旧+最新保留）；clippy `-D warnings` 零告警；fmt、security、diff-check 全过。
+- Code Review：按 v0.9 复核——health 只判定不执行（禁用由宿主调用 store）、注入时钟无墙钟、历史只存 Recipe 无值、回滚版本单调。P0/P1/P2=0。
+- 未覆盖与风险：持久化 health 归产品装配；drift 分类归 WFL-14。`WFL-13` 转 `DONE`，解锁 `WFL-14`。

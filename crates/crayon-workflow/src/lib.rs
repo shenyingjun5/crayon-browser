@@ -7,6 +7,7 @@
 pub mod challenge;
 pub mod checkpoint;
 pub mod handoff;
+pub mod health;
 pub mod preview;
 pub mod recipe;
 pub mod redaction;
@@ -15,6 +16,7 @@ pub mod runner;
 pub mod store;
 pub mod trace;
 pub mod validation;
+pub mod version;
 
 #[cfg(test)]
 mod challenge_tests;
