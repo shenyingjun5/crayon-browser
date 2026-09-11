@@ -25,7 +25,7 @@
 | WFL-07 | VERIFIED | WFL-06,PRV-10 | `crayon-workflow/redaction/**` | 写盘前敏感值移除与参数 placeholder | `WF-007`; seeded secret/canary 零泄漏 |
 | WFL-08 | VERIFIED | WFL-06,WFL-07 | `crayon-workflow/recipe/**` | 仅从 verified success 生成候选 Recipe | `WF-008`; fail/cancel/indeterminate 不学习 |
 | WFL-09 | VERIFIED | WFL-08,AGT-05 | `apps/desktop-cef/**/skill-preview/**`,locales | 技能名称、站点、参数、步骤、风险、权限、数据流预览和保存确认 | `WF-009`; 拒绝/过期/变更后重确认 |
-| WFL-10 | TODO | WFL-09,PRV-07 | `crayon-workflow/store/**`,`crayon-platform-api/**` | 按 OS user/Profile 隔离的加密个人 Skill Store | `WF-010`; migration/corrupt/quota/无痕清除 |
+| WFL-10 | VERIFIED | WFL-09,PRV-07 | `crayon-workflow/store/**`,`crayon-platform-api/**` | 按 OS user/Profile 隔离的加密个人 Skill Store | `WF-010`; migration/corrupt/quota/无痕清除 |
 | WFL-11 | TODO | WFL-10,FND-09 | `crayon-workflow/validation/**`,`test-support/**` | 本地 fixture/沙箱 matcher、参数、步骤和 effect 验证 | `WF-011`; 无公共网络/后台批量访问 |
 | WFL-12 | TODO | WFL-11,ACT-08,AGT-04 | `crayon-workflow/runner/**`,`crayon-app-runtime/**` | 每次重新授权、用当前 action_id 执行的 Site Skill runner | `WF-012`; cancel/deadline/idempotency/人机接管 |
 | WFL-13 | TODO | WFL-10,WFL-12 | `crayon-workflow/health/**`,`crayon-workflow/version/**` | health、失败窗口、禁用、版本和回滚 | `WF-013`; restart/crash/rollback/配额 |
@@ -192,3 +192,22 @@
 - 验证：`cargo test -p crayon-workflow` **55/55**（新增 7：披露完整性与数据流派生、confirm 单次释放、过期拒绝+终态、TTL 边界两例、变更候选拒绝匹配+旧预览不受污染、reject/expire 幂等、单动作派生映射）；clippy `-D warnings` 零告警；fmt、`check.sh security`、`git diff --check` 通过。
 - Code Review：按 v0.9 复核——状态机闭合幂等、指纹确定性（变更必 Different）、确认单次消费、宿主任命 risk 不受候选影响、零参数值零 secret。P0/P1/P2=0。
 - 未覆盖与风险：真实 CEF widget/焦点环/Narrator 实机装配（后续任务）；store 落盘归 WFL-10。`WFL-09` 转 `VERIFIED`，解锁 `WFL-10`。
+
+## WFL-10 原子范围（加密个人 Skill Store）
+
+- 状态：`IN_PROGRESS`；依赖 `WFL-09 VERIFIED`、`PRV-07 DONE`。
+- 单一目标：`crayon-workflow/store/**`——`SkillStore<S: SecureStore>`（同 WFL-04 模式：加密与 OS user/Profile 隔离由注入实例承担，本层不做 IO/密码学）：`save_candidate`（WFL-08/09 确认后的 Recipe → `Candidate` SiteSkill，revision=1）、`load/list`（索引记录枚举）、`enable/disable`（闭合状态转换：Candidate→Enabled/Disabled，仅 Candidate 可启用）、`delete`（幂等）、`clear_all`（无痕清除）、配额 `MAX_SKILLS`（满载拒绝新增）、**migration**（索引 schema 版本不匹配→迁移未知版本记录为 corrupt 清除并计数，fail-closed）、**corrupt**（反序列化失败→删除+CorruptCleared）。
+- 隔离：键前缀 `wflsk-`，per-connector 无关（个人 skill 按名称唯一，Profile 隔离由注入实例保证）；不存任何参数值/正文（Recipe 本身无值，WFL-07/08 保证）。
+- 验收：`store_tests`（save/load roundtrip、list 枚举、enable/disable 闭合转换（Draft/Candidate/Enabled/Disabled 非法转换拒绝）、配额满载、corrupt 清除、索引版本迁移、无痕 clear_all、重复名称覆盖语义=拒绝）+ 既有回归；clippy/fmt/security/diff-check。
+- 明确不做：Enabled skill 的运行（WFL-12）、health/回滚（WFL-13）、云同步。
+
+### WFL-10 完成记录（2026-09-11）
+
+- 实现：`crayon-workflow/src/store/{mod.rs,store_tests.rs}`（约 400 行）——`SkillStore<S: SecureStore>`（WFL-04 模式：加密/OS user/Profile 隔离由注入实例承担）：
+  - `save_candidate`：确认后的 Recipe → `Candidate` SiteSkill（revision=1），**create-only**（同名拒绝）；配额 ≤64 fail-closed。
+  - 索引记录 `wflsk-index`（schema 版本化）支撑枚举；**migration**：未知版本索引→清除其命名记录+丢弃索引，返回 `IndexMigrated`（调用方重试即全新 store）；**corrupt**：解析失败记录删除+`CorruptCleared`（list 跳过并清理）。
+  - 闭合生命周期：仅 `Candidate→Enabled/Disabled`、`Enabled↔Disabled` 合法（Draft/Candidate 等非法转换拒绝）；`upgrade`：revision 严格 +1、名称必须一致、状态保留。
+  - `delete` 幂等同步索引；`clear_all` 无痕清除全部+索引。
+- 验证：`cargo test -p crayon-workflow` **63/63**（新增 8：roundtrip、create-only+配额 68 项压满、闭合转换矩阵、corrupt 清除+后续 NotFound、list 枚举+跳过 corrupt、索引迁移、无痕清除幂等、upgrade 升版+保留状态+名称一致性）；clippy `-D warnings` 零告警；fmt、`check.sh security`、`git diff --check` 通过。
+- Code Review：按 v0.9 复核——加密边界（SecureStore 注入）、配额/迁移/corrupt 全 fail-closed、生命周期闭合、Recipe 无值（WFL-07/08 保证）不引入存储面。P0/P1/P2=0。
+- 未覆盖与风险：Enabled 运行归 WFL-12；health/回滚归 WFL-13；真实 DPAPI/Keychain 实例归平台装配。`WFL-10` 转 `VERIFIED`（widget 装配口径同 WFL-09），解锁 `WFL-11`。

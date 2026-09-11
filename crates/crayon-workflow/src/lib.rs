@@ -11,6 +11,7 @@ pub mod preview;
 pub mod recipe;
 pub mod redaction;
 pub mod resume;
+pub mod store;
 pub mod trace;
 
 #[cfg(test)]
