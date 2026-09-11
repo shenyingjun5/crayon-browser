@@ -1,0 +1,21 @@
+{
+  "schema": "crayon-echarts-assets/v1",
+  "package": {
+    "name": "echarts",
+    "version": "6.1.0",
+    "license": "Apache-2.0",
+    "source": "https://registry.npmjs.org/echarts/-/echarts-6.1.0.tgz",
+    "npmIntegrity": "sha512-q0yaFPggC9FUdsWH4blavRWFmxdrIodbkoKNAjJudAI6CA9gNPxHtV2RcZNEepZVlk4yvBYkOkbk6HIVpIyHZA==",
+    "tarballSha256": "681aff88cc1038c3fa941a3a53d1b177a52250b05335efc607d6105ae13be481",
+    "upstreamTag": "v6.1.0"
+  },
+  "policy": {
+    "entry": "echarts.esm.min.js",
+    "externalImports": 0,
+    "networkImports": 0,
+    "closureFiles": 1,
+    "totalBytes": 1121654,
+    "totalByteBudget": 4194304,
+    "closureSha256": "28515f26aa57f87eb1e4ed4eb446927eaf329b5f5e02b4bfd4b0264fea40d1da"
+  }
+}
