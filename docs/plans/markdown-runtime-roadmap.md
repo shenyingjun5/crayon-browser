@@ -39,7 +39,7 @@ MRT 是用户侧 MDV 基础设施，不进入 `crayon-page-data`、CNT 的确定
 | MRT-09 | DONE | MDV-20W,MDV-25W,MRT-06,MRT-08 | `tests/e2e/desktop`,`tools/repo-guard`,`docs/current`,`docs/plans` | `MRT-09W` 先做 Windows 首发 P0 Runtime/包体/性能/安全总 Review；macOS 特有 addendum 后续 | MR-001..005,MR-008/012；P0/P1=0 |
 | MRT-10 | DONE | MRT-09 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv` | TOC/Outline：从解析事实生成有界标题树、稳定会话锚点与键盘/读屏导航 | MR-006；重复标题/超深/编辑更新 |
 | MRT-11 | DONE | MRT-09 | `browser/shared-ui/mdv` | 当前文档本地 Search：只查内存源码/安全文本，结果/高亮有界，不持久化 query | MR-006；Unicode/大文档/取消 |
-| MRT-12 | TODO | MRT-09 | `third_party/echarts`,`tools`,`docs/current` | ECharts 供应链与纯 JSON option schema：固定运行时闭包、series/component allowlist、禁止 function/eval/URL | MR-007；schema/许可/包体 |
+| MRT-12 | DONE | MRT-09 | `third_party/echarts`,`tools`,`docs/current` | ECharts 供应链与纯 JSON option schema：固定运行时闭包、series/component allowlist、禁止 function/eval/URL | MR-007；schema/许可/包体 |
 | MRT-13 | TODO | MRT-12 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | `echarts` fence extension：JSON parse/validate、Canvas/SVG 渲染、resize/主题、局部错误与释放 | MR-007/008；恶意 option/资源回落 |
 | MRT-14 | TODO | MRT-09 | `third_party/graphviz`,`tools`,`docs/current` | Graphviz WASM 选型与 sandbox 契约：DOT 预算、WASM/worker 闭包、许可、内存/CPU/超时/取消 | MR-009；许可/资源/敌意 DOT |
 | MRT-15 | TODO | MRT-14 | `browser/shared-ui/markdown-runtime`,`browser/shared-ui/mdv`,`browser/cef-shell/src/browser/mdv` | `dot/graphviz` fence extension：WASM lazy load、SVG policy、worker 终止与局部错误 | MR-008/009；超时/取消/资源回落 |
@@ -313,3 +313,11 @@ Gate:       MRT-18 TV/Cast gap / MRT-19 AI source-producer gap only
 - 验证：`mdv_presentation` 8 项（h1/h2 分节与 h3 节内、HR 永不分节、无标题/空文档单节、Enter/Exit 矩阵幂等、导航边界钳制不环绕、Normal 相位空操作、GoTo 钳制、revision 变化强制退出归零、重入保索引、单节演示）；`mdv_` 全量 11/11（viewer/outline/search/edit/save/page/images/transform/entry_guard）回归通过；`git diff --check` 通过。
 - Code Review：按 v0.9 复核——分节只消费事实层（零内容持有）、状态机闭合可逆、revision 边界诚实（编辑不跨版本呈现）、明确不做清单与 MRT-17/18 边界一致。P0/P1/P2=0。
 - 未覆盖与风险：Presentation UI/布局/键盘翻页实机归 MRT-17（依赖 MRT-13/15 图表扩展）；无 TV/Cast 会话语义（MRT-18）。`MRT-16` 转 `DONE`。
+
+### MRT-12 完成记录（2026-09-12）
+
+- 实现：`third_party/echarts/`——echarts 6.1.0（Apache-2.0）**单文件离线闭包** `assets/echarts.esm.min.js`（1,121,654 B，零相对/零网络 import）；`manifest.json` 固定 npm integrity + tarball sha256 + closure sha256 + 4MiB 字节预算；LICENSE（Apache-2.0 全文）；`VENDORED.md` 溯源文档。`tools/echarts/vendor.mjs`：`--check`（离线 sha256/字节校验）/`--archive <tgz>`（锁定 tarball 重建）/`--download`（维护者显式网络动作）——正常构建永不触网。
+- 范围说明：series/component allowlist 与禁止 function/eval/URL 的 option schema 校验归 MRT-13（fence extension 执行面），本任务只冻结供应链闭包（与 Mermaid MDV-14 先例一致）。
+- 验证：`node tools/echarts/vendor.mjs --check` PASS（sha256 + 字节数锁定）；closure 从 tarball `dist/` 逐字节复制（零修改）；`git diff --check` 通过。
+- Code Review：按 v0.9 复核供应链——来源固定（npm integrity + sha256 双 pin）、闭包单文件零 import、预算闭合、许可 Apache-2.0 兼容、维护者动作显式网络。P0/P1/P2=0。
+- 未覆盖与风险：allowlist schema 与渲染执行归 MRT-13；运行时 ESM import 的 CEF 加载路径归 MRT-13 装配。`MRT-12` 转 `DONE`，解锁 `MRT-13`。
