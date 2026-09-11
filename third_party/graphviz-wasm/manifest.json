@@ -1,0 +1,5 @@
+{
+  "schema": "crayon-graphviz-wasm-assets/v1",
+  "package": {"name": "@viz-js/viz", "version": "3.30.0", "license": "MIT", "source": "https://registry.npmjs.org/@viz-js/viz/-/viz-3.30.0.tgz", "npmIntegrity": "sha512-2zmcP55QY44uQfZ+GvgNHmGd8S6KUD+2eMur9AbYybS", "tarballSha256": "4f52d4bd062b38b9ca66de0a4888633c912b745f1f00b9b224c77a1c7d9f1c92", "upstreamTag": "v3.30.0"},
+  "policy": {"entry": "viz.js", "wasmEmbedded": true, "externalImports": 0, "networkImports": 0, "totalBytes": 1184246, "totalByteBudget": 4194304, "closureSha256": "fef725087058053ea3fe002159d456b49c92a1d38f16bc6bbae4874fc9f3c33f"}
+}
