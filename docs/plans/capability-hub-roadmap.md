@@ -23,7 +23,7 @@
 | HUB-05 | DONE | HUB-04,AGT-04,AGT-11 | `crayon-capability-hub/fallback/**` | fallback 重授权、重确认、幂等和未知副作用停止 | `HB-005`; 跨 route 不静默重放 |
 | HUB-06 | DONE | HUB-04,AGT-05 | `apps/desktop-cef/**/capability-route/**`,locales | route 预览、理由、偏好和临时覆盖 UI | `HB-006`; 数据外发/成本/风险可见 |
 | HUB-07 | DONE | HUB-02,WFL-12 | `crayon-capability-hub/adapters/site_skill/**` | 个人 Site Skill registry adapter | `HB-007`; owner/Profile/health/版本隔离 |
-| HUB-08 | TODO | HUB-03,AGT-14 | `crayon-agent-gateway/tools/capability/**` | 入站 MCP/CLI 能力 search/describe/preview，经 CAAP 暴露 | `HB-008`; 不泄漏 token/endpoint/隐蔽工具 |
+| HUB-08 | TODO | HUB-03,AGT-14（AGT-12Cc2/Cd 链）| `crayon-agent-gateway/tools/capability/**` | 入站 MCP/CLI 能力 search/describe/preview，经 CAAP 暴露 | `HB-008`; 不泄漏 token/endpoint/隐蔽工具 |
 | HUB-09 | DONE | HUB-01,PRV-10 | `crayon-partner-connector/api/**` | 与入站 MCP 分离的出站 Partner connector interface | `HB-009`; crate/dependency/session 隔离 |
 | HUB-10 | DONE | HUB-09 | `crayon-partner-connector/trust/**` | 来源、版本、签名、兼容、revoke、disable 和 kill switch | `HB-010`; 篡改/降级/撤销/离线 |
 | HUB-11 | DONE | HUB-09,PRV-07 | `crayon-partner-connector/oauth/**`,`crayon-platform-api/**` | OAuth state/PKCE、最小 scope 和 provider/tenant token vault | `HB-011`; redirect/CSRF/scope/清除/串租户 |
@@ -31,7 +31,7 @@
 | HUB-13 | DONE | HUB-10,HUB-11,HUB-12 | `crayon-partner-connector/mcp/**` | 出站 Partner MCP namespace、tool/schema 过滤和不可信响应 | `HB-013`; description injection 不可扩权 |
 | HUB-14 | DONE | HUB-09,HUB-12 | `crayon-partner-connector/runtime/**` | health、rate/quota、retry budget、熔断、取消 | `HB-014`; 副作用默认不 retry；资源有界 |
 | HUB-15 | DONE | HUB-05,HUB-13,HUB-14,AGT-11 | `crayon-capability-hub/audit/**`,`diagnostics/**` | provider/tenant hash/capability/route/结果的脱敏审计指标 | `HB-015`; 无正文/token/完整参数 |
-| HUB-16 | READY | HUB-01..HUB-15 | threat model,Review,`docs/current/**` | Hub/Partner connector 安全、隐私、供应链与性能总 Review | 全 HB；P0/P1=0；partner feature 独立 GO/NO-GO |
+| HUB-16 | DONE | HUB-01..HUB-15 | threat model,Review,`docs/current/**` | Hub/Partner connector 安全、隐私、供应链与性能总 Review | 全 HB；P0/P1=0；partner feature 独立 GO/NO-GO |
 
 ## 3. 完成门禁
 
@@ -328,3 +328,29 @@
 - 实现期修复：`sync_site_skills` 的 previously_registered/live 列表存前缀化 qualified id 而非裸名，使 revoke 匹配正确（首版用裸名导致 revoke 失效——测试抓出后修复）。
 - Code Review：按 v0.9 复核——Profile 隔离、health 过滤、版本化、闭合错误面、无跨 Profile 泄漏。P0/P1/P2=0。
 - 未覆盖与风险：真实 WFL-10 store → SkillSource 的桥接归产品装配。`HUB-07` 转 `DONE`，解锁 `HUB-16`（HUB-01..15 全 DONE）。
+
+## HUB-16 完成记录（2026-09-11，Hub/Partner 总 Review）
+
+- 审计范围：HUB-01..15 全部模块（registry/builtin/router/policy/fallback/UI/07 adapter/09 api/10 trust/11 oauth/12 network/13 mcp/14 runtime/15 audit），逐条 HB-001..015 映射：
+  | HB | 模块 | 结论 |
+  |---|---|---|
+  | 001/002 | registry+builtin | descriptor 校验/版本/trust 闭合；内建无重复无隐藏强能力 |
+  | 003/004 | router+policy | RouteDecision 确定性；partner→skill→web→human→reject 闭合 |
+  | 005 | fallback | 重授权/重确认/幂等/未知副作用停止 |
+  | 006 | UI | route 预览/临时覆盖（装配任务，模型层 VERIFIED） |
+  | 007 | 07 adapter | Profile/owner/health/版本隔离；disable→revoke |
+  | 008 | — | 入站 CAAP 能力暴露待 AGT-13/14（feature OFF，无缺口） |
+  | 009 | 09 api + 依赖审计 | 入站/出站 crate/namespace/session/token/审计五重隔离断言 |
+  | 010 | 10 trust | 精确版本 pin、revoke/kill switch fail-closed、降级/篡改拒绝 |
+  | 011 | 11 oauth | 租户隔离 vault、常数时间 state、PKCE 注入、redirect 精确匹配 |
+  | 012 | 12 network | 9 类 SSRF 地址全拒、rebinding 混合解析拒绝、每跳重验、1MiB 预算 |
+  | 013 | 13 mcp | namespace 强制、注入载体拒绝、authority 宿主所有、响应 opaque |
+  | 014 | 14 runtime | 配额/熔断三态/副作用不重试/协作取消 |
+  | 015 | 15 audit | hash-only 维度、闭合属性、LRU+dropped |
+- 供应链：partner-connector 仅依赖 crayon-platform-api + crayon-domain（断言锁定）；capability-hub 增 partner-connector 单向依赖（审计事件消费方向）；无新增外部依赖。
+- 性能：全部策略层纯内存/注入时钟，热路径无 IO/锁竞争（WFL-12/14 语义），预算全部闭合常量。
+- 验证：capability-hub 56/56 + partner-connector 44/44 + workflow 96/96 全绿；clippy `-D warnings`、fmt、security、diff-check 全过。
+- Review 结论（v0.9 顺序复核）：owner 唯一、默认拒绝、预算闭合、脱敏闭合、依赖单向。**P0/P1/P2=0**。
+- **GO/NO-GO：partner feature = NOT_IN_RELEASE（默认关闭）**。GO 条件（后续）：AGT-05 确认 UI 装配 + AGT-12Cc2 宿主 FFI + 真机 HB-011/012 矩阵 + PRV-13B 专项。在此之前所有出口路径 fail-closed 且不可达。
+- 未覆盖与风险（如实）：HB-008 待 AGT-13/14；HB-006 UI 装配待桌面任务；真实网络/DNS/签名执行归宿主注入。
+- `HUB-16` 转 `DONE`；`HUB` 模块一期+已解锁二期任务全部闭合，剩余 HUB-08（等 AGT-14）。
