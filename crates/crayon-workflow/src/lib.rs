@@ -13,6 +13,7 @@ pub mod redaction;
 pub mod resume;
 pub mod store;
 pub mod trace;
+pub mod validation;
 
 #[cfg(test)]
 mod challenge_tests;

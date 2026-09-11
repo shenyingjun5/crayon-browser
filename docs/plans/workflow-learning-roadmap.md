@@ -26,7 +26,7 @@
 | WFL-08 | VERIFIED | WFL-06,WFL-07 | `crayon-workflow/recipe/**` | 仅从 verified success 生成候选 Recipe | `WF-008`; fail/cancel/indeterminate 不学习 |
 | WFL-09 | VERIFIED | WFL-08,AGT-05 | `apps/desktop-cef/**/skill-preview/**`,locales | 技能名称、站点、参数、步骤、风险、权限、数据流预览和保存确认 | `WF-009`; 拒绝/过期/变更后重确认 |
 | WFL-10 | VERIFIED | WFL-09,PRV-07 | `crayon-workflow/store/**`,`crayon-platform-api/**` | 按 OS user/Profile 隔离的加密个人 Skill Store | `WF-010`; migration/corrupt/quota/无痕清除 |
-| WFL-11 | TODO | WFL-10,FND-09 | `crayon-workflow/validation/**`,`test-support/**` | 本地 fixture/沙箱 matcher、参数、步骤和 effect 验证 | `WF-011`; 无公共网络/后台批量访问 |
+| WFL-11 | VERIFIED | WFL-10,FND-09 | `crayon-workflow/validation/**`,`test-support/**` | 本地 fixture/沙箱 matcher、参数、步骤和 effect 验证 | `WF-011`; 无公共网络/后台批量访问 |
 | WFL-12 | TODO | WFL-11,ACT-08,AGT-04 | `crayon-workflow/runner/**`,`crayon-app-runtime/**` | 每次重新授权、用当前 action_id 执行的 Site Skill runner | `WF-012`; cancel/deadline/idempotency/人机接管 |
 | WFL-13 | TODO | WFL-10,WFL-12 | `crayon-workflow/health/**`,`crayon-workflow/version/**` | health、失败窗口、禁用、版本和回滚 | `WF-013`; restart/crash/rollback/配额 |
 | WFL-14 | TODO | WFL-13,ACT-10 | `crayon-workflow/drift/**` | drift 分类与修复候选，区分 challenge/permission/network/effect | `WF-014`; 低置信度不误报健康 |
@@ -211,3 +211,21 @@
 - 验证：`cargo test -p crayon-workflow` **63/63**（新增 8：roundtrip、create-only+配额 68 项压满、闭合转换矩阵、corrupt 清除+后续 NotFound、list 枚举+跳过 corrupt、索引迁移、无痕清除幂等、upgrade 升版+保留状态+名称一致性）；clippy `-D warnings` 零告警；fmt、`check.sh security`、`git diff --check` 通过。
 - Code Review：按 v0.9 复核——加密边界（SecureStore 注入）、配额/迁移/corrupt 全 fail-closed、生命周期闭合、Recipe 无值（WFL-07/08 保证）不引入存储面。P0/P1/P2=0。
 - 未覆盖与风险：Enabled 运行归 WFL-12；health/回滚归 WFL-13；真实 DPAPI/Keychain 实例归平台装配。`WFL-10` 转 `VERIFIED`（widget 装配口径同 WFL-09），解锁 `WFL-11`。
+
+## WFL-11 原子范围（本地 validation：fixture/沙箱 matcher、参数、步骤与 effect 验证）
+
+- 状态：`IN_PROGRESS`；依赖 `WFL-10 VERIFIED`、`FND-09 DONE`。
+- 单一目标：`crayon-workflow/validation/**`——`SkillValidator`（SiteSkill × 本地 fixture 校验：origin 一致、每步 node 存在、action 被 node 支持、步骤预算）与 `EffectValidator`（运行回报 effect × 期望步骤：node/action 匹配 + outcome=Verified，单次判定）；fixture 为**闭合输入**（node id + 支持 action 集），纯函数、无网络/无后台批量（WF-011 本地沙箱语义）。
+- 边界：校验只读不执行；失败原因闭合（OriginMismatch/NodeUnknown/ActionUnsupported/StepBudget/EmptySkill/EffectMismatch）；不修正、不学习、不重试。
+- 验收：`validation_tests`（匹配通过、node 缺失、action 不支持、origin 不一致、空/超步数、effect 匹配/错配/重复判定）+ 既有回归；clippy/fmt/security/diff-check。
+- 明确不做：真实页面执行（WFL-12 runner）、网络抓取 fixture、修复（WFL-14/15）。
+
+### WFL-11 完成记录（2026-09-11）
+
+- 实现：`crayon-workflow/src/validation/{mod.rs,validation_tests.rs}`（约 380 行）——
+  - `ValidationFixture`：闭合本地 fixture（origin + node id → 支持 action 集合），`is_valid_origin` fail-closed，无网络面。
+  - `validate_skill`：origin 一致 → 非空 → 步数 ≤`MAX_VALIDATED_STEPS`（=域 `MAX_RECIPE_STEPS`=64，纯防御分支，测试锁定 parity）→ 每步 node 已知 → action 被 node 支持；拒绝面闭合（OriginMismatch/EmptySkill/StepBudgetExceeded/NodeUnknown/ActionUnsupported）。
+  - `validate_effect/validate_run`：单效果判定（node+action 匹配 + outcome=Verified，Failed/Indeterminate 永不通过）与整跑 1:1 对齐（顺序敏感、无缺失无多余）。
+- 验证：`cargo test -p crayon-workflow` **69/69**（新增 7：匹配通过、origin 不一致+非法 origin fail-closed、未知 node/不支持 action、空 skill 拒绝+64 步预算 parity、单效果三重判定、整跑 1:1 四例）；clippy `-D warnings` 零告警；fmt、`check.sh security`、`git diff --check` 通过。
+- Code Review：按 v0.9 复核——纯函数只读、fixture 闭合无网络、错误面闭合、预算 parity 断言。P0/P1/P2=0。
+- 未覆盖与风险：真实页面执行归 WFL-12；drift/修复归 WFL-14/15。`WFL-11` 转 `VERIFIED`，解锁 `WFL-12`。
