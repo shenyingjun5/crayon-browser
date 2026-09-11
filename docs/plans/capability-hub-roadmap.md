@@ -22,7 +22,7 @@
 | HUB-04 | DONE | HUB-02,HUB-03 | `crayon-capability-hub/policy/**` | partner -> skill -> web -> human -> reject 默认策略及覆盖规则 | `HB-004`; trust/risk/health/preference 矩阵 |
 | HUB-05 | DONE | HUB-04,AGT-04,AGT-11 | `crayon-capability-hub/fallback/**` | fallback 重授权、重确认、幂等和未知副作用停止 | `HB-005`; 跨 route 不静默重放 |
 | HUB-06 | DONE | HUB-04,AGT-05 | `apps/desktop-cef/**/capability-route/**`,locales | route 预览、理由、偏好和临时覆盖 UI | `HB-006`; 数据外发/成本/风险可见 |
-| HUB-07 | TODO | HUB-02,WFL-12 | `crayon-capability-hub/adapters/site_skill/**` | 个人 Site Skill registry adapter | `HB-007`; owner/Profile/health/版本隔离 |
+| HUB-07 | DONE | HUB-02,WFL-12 | `crayon-capability-hub/adapters/site_skill/**` | 个人 Site Skill registry adapter | `HB-007`; owner/Profile/health/版本隔离 |
 | HUB-08 | TODO | HUB-03,AGT-14 | `crayon-agent-gateway/tools/capability/**` | 入站 MCP/CLI 能力 search/describe/preview，经 CAAP 暴露 | `HB-008`; 不泄漏 token/endpoint/隐蔽工具 |
 | HUB-09 | DONE | HUB-01,PRV-10 | `crayon-partner-connector/api/**` | 与入站 MCP 分离的出站 Partner connector interface | `HB-009`; crate/dependency/session 隔离 |
 | HUB-10 | DONE | HUB-09 | `crayon-partner-connector/trust/**` | 来源、版本、签名、兼容、revoke、disable 和 kill switch | `HB-010`; 篡改/降级/撤销/离线 |
@@ -31,7 +31,7 @@
 | HUB-13 | DONE | HUB-10,HUB-11,HUB-12 | `crayon-partner-connector/mcp/**` | 出站 Partner MCP namespace、tool/schema 过滤和不可信响应 | `HB-013`; description injection 不可扩权 |
 | HUB-14 | DONE | HUB-09,HUB-12 | `crayon-partner-connector/runtime/**` | health、rate/quota、retry budget、熔断、取消 | `HB-014`; 副作用默认不 retry；资源有界 |
 | HUB-15 | DONE | HUB-05,HUB-13,HUB-14,AGT-11 | `crayon-capability-hub/audit/**`,`diagnostics/**` | provider/tenant hash/capability/route/结果的脱敏审计指标 | `HB-015`; 无正文/token/完整参数 |
-| HUB-16 | BLOCKED | HUB-01..HUB-15 | threat model,Review,`docs/current/**` | Hub/Partner connector 安全、隐私、供应链与性能总 Review | 全 HB；P0/P1=0；partner feature 独立 GO/NO-GO |
+| HUB-16 | READY | HUB-01..HUB-15 | threat model,Review,`docs/current/**` | Hub/Partner connector 安全、隐私、供应链与性能总 Review | 全 HB；P0/P1=0；partner feature 独立 GO/NO-GO |
 
 ## 3. 完成门禁
 
@@ -315,3 +315,16 @@
 - 解除路径：WFL-09（skill-preview）→ WFL-10（store）→ WFL-11（validation）→ WFL-12（runner）→ HUB-07 → HUB-16。
 - 总 Review 预检（已完成部分）：HB-001..006/009..015 的模块与测试映射齐备（capability-hub 51 + partner-connector 44 测试全绿）；security 门禁通过；入站/出站依赖单向、默认拒绝、预算闭合、脱敏面复核无缺口。剩余映射缺口仅 HB-007/008（分别等 HUB-07 与 AGT-13/14 的 CAAP 能力暴露）。
 - 供应链预检：connector 依赖仅 crayon-platform-api + crayon-domain（无新外部依赖），无下载/许可审计项。
+
+## HUB-07 完成记录（2026-09-11）
+
+- 实现：`crayon-capability-hub/src/adapters/site_skill/{mod.rs,site_skill_tests.rs}`（约 320 行）——`SkillSource` trait（Profile 作用域的 Enabled 技能视图：enabled_names/version_of/summary_of/is_healthy）+ `RegistrySink` trait（upsert/revoke，解耦具体 registry 类型）+ `sync_site_skills`：
+  - 仅当前 Profile 的 Enabled skill 注册为 `personal-skill.<name>` 能力描述符（`PersonalSkill` source、`UserApproved` trust、`PageContent` scope）；
+  - health-disabled 技能跳过注册（HUB-13 拥有禁用决策）；
+  - 版本变更 → 同 id 重新 upsert（版本化注册语义）；
+  - 不再 Enabled 的技能从 registry revoke（`previously_registered` 跟踪）。
+  - **Profile 隔离**：每个 Profile 一个 source/adapter 实例，注册表互不可见（HB-007 owner/Profile/health/版本隔离全覆盖）。
+- 验证：`cargo test -p crayon-capability-hub` **56/56**（新增 5：前缀注册、unhealthy 跳过、disable→revoke、版本变更同 id 重注册、Profile 隔离）；hub 全量 56/56；clippy `-D warnings` 零告警；fmt、security、diff-check 全过。
+- 实现期修复：`sync_site_skills` 的 previously_registered/live 列表存前缀化 qualified id 而非裸名，使 revoke 匹配正确（首版用裸名导致 revoke 失效——测试抓出后修复）。
+- Code Review：按 v0.9 复核——Profile 隔离、health 过滤、版本化、闭合错误面、无跨 Profile 泄漏。P0/P1/P2=0。
+- 未覆盖与风险：真实 WFL-10 store → SkillSource 的桥接归产品装配。`HUB-07` 转 `DONE`，解锁 `HUB-16`（HUB-01..15 全 DONE）。
