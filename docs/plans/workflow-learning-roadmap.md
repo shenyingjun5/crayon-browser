@@ -31,7 +31,7 @@
 | WFL-13 | DONE | WFL-10,WFL-12 | `crayon-workflow/health/**`,`crayon-workflow/version/**` | health、失败窗口、禁用、版本和回滚 | `WF-013`; restart/crash/rollback/配额 |
 | WFL-14 | DONE | WFL-13,ACT-10 | `crayon-workflow/drift/**` | drift 分类与修复候选，区分 challenge/permission/network/effect | `WF-014`; 低置信度不误报健康 |
 | WFL-15 | DONE | WFL-14,ACT-06,ACT-08 | `crayon-workflow/heal/**` | 仅低风险、唯一匹配、效果可验证的受控修复 | `WF-015`; 高风险/跨源/语义变化必须人工确认 |
-| WFL-16 | TODO | WFL-01..WFL-15（01..15 全 DONE，READY）| threat model,Review,`docs/current/**` | Workflow/Challenge/Site Skill 隐私、安全、性能总 Review | 全 WF；P0/P1=0；feature 独立 GO/NO-GO |
+| WFL-16 | DONE | WFL-01..WFL-15 | threat model,Review,`docs/current/**` | Workflow/Challenge/Site Skill 隐私、安全、性能总 Review | 全 WF；P0/P1=0；feature 独立 GO/NO-GO |
 
 ## 3. 完成门禁
 
@@ -252,7 +252,7 @@
 
 ## WFL-13 原子范围（health、失败窗口、禁用、版本和回滚）
 
-- 状态：`IN_PROGRESS`；依赖 `WFL-10 VERIFIED`、`WFL-12 DONE`。
+- 状态：`DONE`；依赖 `WFL-10 VERIFIED`、`WFL-12 DONE`。
 - 单一目标：`crayon-workflow/health/**`+`version/**`——(1) `SkillHealth`：注入时钟的失败窗口追踪（窗口内连续/累计失败 ≥阈值 → `should_disable`，宿主执行 Disabled；成功重置连败；窗口滑动）；(2) `VersionHistory`：每 skill 有界（≤8）历史（recipe+revision），`rollback` 语义=恢复上一版内容但 revision 仍单调 +1（经 WFL-10 `upgrade`），无更早版本时拒绝。
 - 边界：health 只判定不建议执行动作（禁用由宿主对 store 调用）；历史只存 Recipe（无值）；容量淘汰最旧；注入时钟无墙钟。
 - 验收：`health_tests`/`version_tests`（窗口阈值/滑动/成功重置、历史入栈/回滚/耗尽拒绝、配额）+ 回归；clippy/fmt/security/diff-check。
@@ -299,3 +299,29 @@
 - 验证：`cargo test -p crayon-workflow` **96/96**（新增 8：低风险 Effect 修复成功、四非 Effect kind 拒绝、高风险需人工、二次修复唯一拒绝、challenge/取消停止、未验证 retry 转人工、未知 node 拒绝、MAX=1 锁定）；clippy `-D warnings` 零告警；fmt、security、diff-check 全过。
 - Code Review：按 v0.9 复核——五道门 fail-closed、单步单次修复、challenge/取消优先于修复、fixture 阻断跨源、无学习无持久化。P0/P1/P2=0。
 - 未覆盖与风险：retry 的真实执行归宿主 RunnerPort 装配；drift 分类质量归 WFL-14。`WFL-15` 转 `DONE`，WFL-01..15 全部完成，解锁 `HUB-07`。
+
+## WFL-16 完成记录（2026-09-11，Workflow/Challenge/Site Skill 总 Review）
+
+- 审计范围：WFL-01..15 全模块，逐条 WF-001..015 映射：
+  | WF | 模块 | 结论 |
+  |---|---|---|
+  | 001 | schema | 五 schema deny_unknown_fields + golden + 预算；Secrets never serialize |
+  | 002 | challenge | 确定性检测、无解题 surface |
+  | 003 | handoff | AwaitingHuman 单 owner、闭合终态、automation_allowed=false |
+  | 004 | checkpoint | SecureStore 注入加密、TTL、单次消费 |
+  | 005 | resume | fail-closed 恢复门、幂等裁决、挑战仍在即终止 |
+  | 006/007 | trace/redaction | verified-only trace、写盘前脱敏零泄漏 |
+  | 008 | recipe | 仅 verified success 学习、身份域校验唯一 Err |
+  | 009 | preview | 披露完整+数据流标志、confirm 单次、TTL/变更重确认 |
+  | 010 | store | 加密 per-Profile、配额/迁移/corrupt fail-closed、无痕清除 |
+  | 011 | validation | 闭合 fixture、预算 parity、1:1 对齐 |
+  | 012 | runner | 每步新授权、fail-closed 终止、无重试 |
+  | 013 | health/version | 滑动窗口 Disable、回滚版本单调 |
+  | 014/015 | drift/heal | 唯一信号分类、五道门 heal、副作用不重试 |
+- 隐私：全链路（trace/recipe/store/preview/resume/heal）无 DOM/字段值/secret/正文；Secrets never serialize 套件通过。
+- 安全：challenge 全链检测→暂停→人工→fail-closed 终止；无任何解题/自动点击 surface；恢复需全新授权（WFL-05 门 + WFL-12 每步新授权）。
+- 性能：全策略层纯内存/注入时钟；预算闭合常量（64 步/4096B payload/512 大纲）。
+- 验证：`cargo test -p crayon-workflow` **96/96**；clippy `-D warnings`、fmt、security、diff-check 全过。
+- Review 结论（v0.9）：**P0/P1/P2=0**。Workflow/Challenge/Site Skill feature = **NOT_IN_RELEASE（默认关闭）**，GO 条件：AGT-12Cc2 宿主装配 + 确认 UI + 真机 IME/Narrator 矩阵（WFL-03/09 先例）。
+- 未覆盖与风险（如实）：CEF widget 装配、drift 真实信号源、store 跨重启持久化集成归产品装配任务。
+- `WFL-16` 转 `DONE`；WFL-01..16 全部闭合。
