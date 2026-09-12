@@ -195,10 +195,7 @@ fn hostile_client_matrix_over_real_uds() {
 
     // Host survived all hostile traffic without wedging.
     assert_eq!(crayon_agent_host_stop(), CRAYON_AGENT_HOST_OK);
-    assert_eq!(
-        crayon_agent_host_stop(),
-        CRAYON_AGENT_HOST_NOT_RUNNING
-    );
+    assert_eq!(crayon_agent_host_stop(), CRAYON_AGENT_HOST_NOT_RUNNING);
 
     // Restart fresh: the good-path client connects, is granted, executes.
     start_host(&purpose);

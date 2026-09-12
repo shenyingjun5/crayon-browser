@@ -10,9 +10,7 @@ use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
 
 use crayon_domain::{AgentCapability, AgentTarget};
-use crayon_ipc_schema::{
-    CaapChunk, CaapHello, CaapRequest, CaapWelcome, SchemaVersion,
-};
+use crayon_ipc_schema::{CaapChunk, CaapHello, CaapRequest, CaapWelcome, SchemaVersion};
 
 const DEFAULT_PURPOSE: &str = "agent-caap";
 const CLIENT_NAME: &str = "agent-cli";
@@ -24,8 +22,7 @@ struct Client {
 impl Client {
     fn connect(purpose: &str) -> Result<Self, String> {
         let path = format!("/tmp/crayon-agent-{purpose}.sock");
-        let stream = UnixStream::connect(&path)
-            .map_err(|e| format!("connect {path}: {e}"))?;
+        let stream = UnixStream::connect(&path).map_err(|e| format!("connect {path}: {e}"))?;
         stream
             .set_read_timeout(Some(std::time::Duration::from_secs(10)))
             .map_err(|e| e.to_string())?;

@@ -425,6 +425,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "crayon-agent-mcp"
+version = "0.1.0"
+dependencies = [
+ "crayon-agent-gateway",
+ "crayon-domain",
+ "crayon-ipc-schema",
+ "crayon-platform-api",
+ "crayon-platform-macos",
+ "serde_json",
+]
+
+[[package]]
 name = "crayon-agent-perf-tests"
 version = "0.1.0"
 dependencies = [
