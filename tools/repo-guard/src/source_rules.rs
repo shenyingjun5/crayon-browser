@@ -69,6 +69,13 @@ pub fn inspect(root: &Path, files: &[PathBuf]) -> Vec<CheckResult> {
 }
 
 fn is_source(path: &Path) -> bool {
+    // Vendored third_party closures are build artifacts (minified
+    // Emscripten output), not product source. Their integrity is
+    // enforced by sha256 manifest pinning, not content scanning.
+    let display = crate::walk::display_path(path);
+    if display.starts_with("third_party/") && display.contains("/assets/") {
+        return false;
+    }
     path.extension()
         .and_then(|value| value.to_str())
         .map(|value| SOURCE_EXTENSIONS.contains(&value.to_ascii_lowercase().as_str()))

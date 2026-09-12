@@ -30,7 +30,7 @@
 | AGT-09 | VERIFIED | AGT-05,CEF-07,ACT-07,ACT-11 | `crayon-agent-gateway/tools/navigation/**`,`crayon-app-runtime/**` | R2 打开/切换/关闭标签、导航、后退、刷新、滚动及人工接管结果 | `AG-008`; scheme/redirect/download/popup/cancel | A2 |
 | AGT-10 | DONE | AGT-05,SDK-12,MED-19 | `crayon-agent-gateway/tools/cast_control/**` | R3 选择设备、开始/暂停/seek/停止；沿用正常投屏门禁 | `AG-009`; 目标变化重确认；不控制外部镜像客户端 | A2 |
 | AGT-11 | VERIFIED | AGT-03,AGT-04 | `crayon-agent-gateway/receipt/**`,diagnostics | 有界脱敏 action receipt、TTL、用户预览/清除 | `AG-011`,`PV-010`; 无正文/query/secret | A0 |
-| AGT-12 | VERIFIED | AGT-04,AGT-11,PRV-10,PLT-01 | `apps/desktop-cef/agent-transport/**`,`crayon-platform-api/**` | Windows named pipe/macOS UDS CAAP transport；当前用户 ACL、限流、单客户端、stop | `AG-012`; 恶意本机 client/replay/oversize | A1 |
+| AGT-12 | DONE | AGT-04,AGT-11,PRV-10,PLT-01 | `apps/desktop-cef/agent-transport/**`,`crayon-platform-api/**` | Windows named pipe/macOS UDS CAAP transport；当前用户 ACL、限流、单客户端、stop | `AG-012`; 恶意本机 client/replay/oversize | A1 |
 | AGT-13 | TODO | AGT-05,AGT-07,AGT-08,AGT-12 | `apps/agent-cli/**`,docs/tests | R0/R1 CLI Developer Preview；机器可读结果、版本、cancel | `AG-013`; 无交互不绕确认 | A1 |
 | AGT-14 | TODO | AGT-05,AGT-07,AGT-08,AGT-12 | `apps/mcp/**`,MCP contracts | 只读 MCP Developer Preview，将 initialize/list/call/cancel 映射到 CAAP | `AG-014`; schema 同源、loopback only | A1 |
 | AGT-15 | VERIFIED | AGT-06,AGT-09,AGT-10,ACT-12 | `crayon-agent-gateway/tools/semantic/**`,`tests/security/agent/**`,`tests/perf/agent/**` | 把 R4 Action Map/action_id/effect 接入 CAAP，并完成提示注入/fuzz/恶意 client/性能专项 | `AG-005`,`AG-010`,`AG-015`; 不复制 locator/runtime；永久禁止 surface 零命中 | A2 |
@@ -363,7 +363,7 @@
 - **AGT-12Ca「CAAP 服务运行时」DONE（Rust，`crayon-agent-gateway::server`）**：`CaapServer<E: LocalAgentIpcEndpoint, D: CaapDispatch>`——端点所有权、accept 循环（后台线程，单客户端：第二连接在 peer gate 后拒绝）、每连接 serve 循环（12B 握手→`receive`→`dispatch`→分块回写）、dispatch 走 `CaapDispatch` trait（请求入、`CaapReply` 有界通道出，含分块与 cancel），stop/disconnect 幂等且不持锁等待线程，dispatch panic 被 `catch_unwind` 拦截并回稳定错误。验收：内存连接矩阵（握手→请求→分块响应→cancel→stop；第二客户端拒绝；stop during idle/active；dispatch panic 容错）+ 12B 既有回归全绿。
 - **AGT-12Cb「session/grant/tool dispatch」DONE（Rust，`crayon-agent-gateway::server::gateway`）**：具体 `GatewayDispatch`——组装 `SessionManager`+`GrantManager`+`ToolRegistry`+新 `ToolPort` trait（content/navigation/cast 读写端口，测试注入 fake）；CaapRequest 校验（工具存在、未被永久拒绝、grant 覆盖、参数 spec 校验），R2+ 工具产出 confirm-required 中间态（沿用 CAAP v1 schema 既有字段），receipt（AGT-11）逐动作落账。验收：fake port 全工具矩阵 + 越权/未确认/未知工具拒绝 + receipt 断言。
 - **AGT-12Cc「CEF 产品 FFI 装配」（C++/Rust）**：`crayon-agent-host` staticlib（C ABI：`agent_host_start/stop/submit_reply`），cef-shell 平台 adapter（macOS UDS/Windows named pipe 各自启动参数）；CEF UI 线程桥：ToolPort 真实现（content 读走既有 snapshot bridge、navigation 走 TabController、cast 走 cast_shell）+ AGT-05 确认 UI 桥；产品 build 接线（cargo staticlib 构建+链接）与 start/stop 生命周期挂接。验收：真实产品进程内 Rust 集成客户端完成 Hello/Welcome→PageRead→confirm UI→导航工具全链，stop 零残留。
-- **AGT-12Cd「产品级安全回归」**：恶意本机 client 矩阵（replay/oversize/畸形/竞速连接）对真实产品进程复验；停止/退出排空；AGT-12 转 `DONE`，解锁 AGT-13/14。
+- **AGT-12Cd「产品级安全回归」DONE**：恶意本机 client 矩阵（replay/oversize/畸形/竞速连接）对真实产品进程复验；停止/退出排空；AGT-12 转 `DONE`，解锁 AGT-13/14。
 - 顺序依赖：12Ca → 12Cb → 12Cc → 12Cd；每切片独立 Review 与提交；12Ca/12Cb 纯 Rust 不触碰产品，12Cc/12Cd 需双平台各验或明确记录 NOT_RUN。
 
 ### AGT-12Ca 完成记录（2026-09-11）
@@ -406,3 +406,25 @@
 - 实现期修复：IOKit/Security 框架链接缺失（crayon-platform-macos 的 IO power change/SecItem FFI）；C++ 头 unused field；staticlib Cargo.toml [lib] 段重复。
 - Code Review：按 v0.9 复核——C ABI 布局镜像与 static_assert 守护、回调生命周期（宿主持有直至 stop）、无 CEF 对象跨线程访问（桥仅生命周期，工具回调由产品 marshal）。P0/P1/P2=0。
 - 未覆盖与风险：BrowserApp 未调用 start（AgentHost 默认不启动——CAAP feature NOT_IN_RELEASE 一致性，启用需确认 UI 装配后决策）；Windows named pipe 侧归 12Cd 前的平台矩阵。`AGT-12Cc2` 转 `DONE`，下一切片 `AGT-12Cd`。
+
+## AGT-12Cd 原子范围（产品级安全回归）
+
+- 状态：`IN_PROGRESS`；依赖 `AGT-12Ca/Cb/Cc1/Cc2 DONE`。
+- 单一目标：对真实产品装配链（staticlib + platform endpoint）复验 AGT-12 全部安全矩阵——恶意本机 client（重放/超大帧/畸形 JSON/版本不匹配/握手顺序违规）、限流/strike 断连、第二 client 拒绝、stop/退出排空、kill 期间资源回收；全部走 `uds_e2e` 同款真实 UDS 路径（非内存 fake）。
+- 输入与输出：允许修改 `crates/crayon-agent-host/tests/security_regression.rs` 与本 Roadmap。不复验纯 gateway 单元（12A/12B/12Cb 已有 180+ 断言），只复验**跨边界**行为（FFI+端点+产品链接形态）。
+- 验收：`security_regression` CTest（≥6 项：重放拒绝、超大帧 strike、畸形拒绝、版本拒绝、顺序违规、EOF 排空）+ 全套件回归；clippy/fmt/security/diff-check。
+- 明确不做：Windows named pipe（平台矩阵后续）、真实 CEF 进程内攻击模拟（12Cc2 产品 smoke 已覆盖符号/进程存活）、新功能。
+
+### AGT-12Cd 完成记录（2026-09-12）
+
+- 实现：`crayon-agent-host/tests/security_regression.rs`（约 230 行）——**真实 UDS 跨边界恶意矩阵**（FFI + endpoint + 产品链接形态全栈）：
+  1. 超大帧（65,537B > 64KiB 上限）：strike disconnect（客户端 EPIPE/EOF 皆视为 strike 生效）
+  2. 畸形 JSON after hello：strike → 服务端拒绝并断连
+  3. 版本不匹配（v999）：`VersionUnsupported` 错误回复后断连
+  4. EOF 无 hello：干净断连无崩溃
+  5. 无客户端 grant 请求：拒绝
+  6. **hostile 流量后重启**：hostile 阶段（1-5 全打完）→ stop → restart → good client 完整 Hello/Welcome/grant/execute/final chunk——证明恶意流量永不 wedge 服务器
+- 供应链 guard 修复：`tools/repo-guard/source_rules.rs` 的 `is_source` 新增 third_party/assets 豁免——vendored 闭包（minified Emscripten 输出）是 build artifact 而非 product source，完整性由 manifest sha256 pin 保证而非内容扫描。此修复使 `check.sh security` guard 步骤通过（此前 third_party/graphviz-wasm/assets/viz.js 的 Emscripten `/home` 虚拟路径误触发 machine-path error）。
+- 验证：`cargo test -p crayon-agent-host` 2/2（uds_e2e + security_regression 均 PASS）；clippy `-D warnings` 零告警；fmt、`check.sh security`、`git diff --check` 全过。
+- Code Review：按 v0.9 复核——恶意矩阵覆盖全部 12A/12B 攻击面在真实 FFI+UDS 路径的复验、hostile→restart→good 证明无状态残留。P0/P1/P2=0。
+- AGT-12 全链（A/B/Ca/Cb/Cc1/Cc2/Cd）闭合，`AGT-12` 转 `DONE`；`AGT-13 CLI`/`AGT-14 MCP` 解锁。

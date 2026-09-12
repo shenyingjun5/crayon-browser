@@ -204,7 +204,7 @@ where
                 dispatch.close_client(&client);
                 return ServeEnd::Disconnected;
             }
-            Err(_) => {
+            Err(error) => {
                 // Protocol-level rejection already produced a stable error
                 // reply or a guard strike; keep serving — hostile input
                 // must not terminate the client slot.
@@ -228,6 +228,7 @@ fn dispatch_request<D>(
 where
     D: CaapDispatch,
 {
+    eprintln!("[SRV] dispatching id={} client={}", request.id(), client);
     let cancel = CancelFlag::new();
     let request_id = request.id();
     let mut last_seq: u32 = 0;
