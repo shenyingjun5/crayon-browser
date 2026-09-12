@@ -5,8 +5,7 @@
 //! Tool descriptions come from the host registry (read-only R0/R1 set).
 
 use std::collections::BTreeMap;
-use std::io::{BufRead, Write};
-use std::io::{Read as _, Write as _};
+use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
 
 use crayon_domain::{AgentCapability, AgentTarget};
@@ -29,7 +28,6 @@ fn json_error(id: serde_json::Value, code: i64, message: &str) -> String {
     )
 }
 
-const ERR_PARSE: i64 = -32700;
 const ERR_METHOD_NOT_FOUND: i64 = -32601;
 const ERR_INTERNAL: i64 = -32603;
 
@@ -159,8 +157,8 @@ fn main() {
         }
     };
 
-    let welcome = match client.handshake() {
-        Ok(w) => w,
+    match client.handshake() {
+        Ok(_) => {}
         Err(e) => {
             eprintln!("agent-mcp: handshake failed: {e}");
             std::process::exit(1);
@@ -168,7 +166,6 @@ fn main() {
     };
 
     let tools = caap_tools();
-    let stdin = std::io::stdin();
     let mut input = String::new();
     loop {
         input.clear();

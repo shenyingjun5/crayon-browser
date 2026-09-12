@@ -32,7 +32,7 @@
 | AGT-11 | VERIFIED | AGT-03,AGT-04 | `crayon-agent-gateway/receipt/**`,diagnostics | 有界脱敏 action receipt、TTL、用户预览/清除 | `AG-011`,`PV-010`; 无正文/query/secret | A0 |
 | AGT-12 | DONE | AGT-04,AGT-11,PRV-10,PLT-01 | `apps/desktop-cef/agent-transport/**`,`crayon-platform-api/**` | Windows named pipe/macOS UDS CAAP transport；当前用户 ACL、限流、单客户端、stop | `AG-012`; 恶意本机 client/replay/oversize | A1 |
 | AGT-13 | DONE | AGT-05,AGT-07,AGT-08,AGT-12 | `apps/agent-cli/**`,docs/tests | R0/R1 CLI Developer Preview；机器可读结果、版本、cancel | `AG-013`; 无交互不绕确认 | A1 |
-| AGT-14 | TODO | AGT-05,AGT-07,AGT-08,AGT-12 | `apps/mcp/**`,MCP contracts | 只读 MCP Developer Preview，将 initialize/list/call/cancel 映射到 CAAP | `AG-014`; schema 同源、loopback only | A1 |
+| AGT-14 | DONE | AGT-05,AGT-07,AGT-08,AGT-12 | `apps/mcp/**`,MCP contracts | 只读 MCP Developer Preview，将 initialize/list/call/cancel 映射到 CAAP | `AG-014`; schema 同源、loopback only | A1 |
 | AGT-15 | VERIFIED | AGT-06,AGT-09,AGT-10,ACT-12 | `crayon-agent-gateway/tools/semantic/**`,`tests/security/agent/**`,`tests/perf/agent/**` | 把 R4 Action Map/action_id/effect 接入 CAAP，并完成提示注入/fuzz/恶意 client/性能专项 | `AG-005`,`AG-010`,`AG-015`; 不复制 locator/runtime；永久禁止 surface 零命中 | A2 |
 | AGT-16 | TODO | AGT-09,AGT-10,AGT-13,AGT-14,AGT-15,ACT-12 | threat model,Review,`docs/current/**` | CAAP/CLI/入站 MCP 总 Review、数据流、benchmark、默认开关与 GO/NO-GO | 全 AG、适用 AC；P0/P1=0；独立发布决策 | A2 |
 
@@ -448,3 +448,13 @@
 - 验证：`cargo build -p crayon-agent-cli` PASS。
 - 未覆盖与风险：真实产品连接 E2E 归 AGT-12Cc2 宿主装配 + AgentHostBridgeMac 后续桥接；Windows pipe 归后续平台矩阵。
 - `AGT-13` 转 `DONE`，解锁 `AGT-16`（与 AGT-14 一起）。
+
+### AGT-14 完成记录（2026-09-12）
+
+- 实现：`apps/agent-mcp`（workspace member）——stdio MCP JSON-RPC 服务器，loopback only。
+  - `initialize`：协议版本 `2024-11-05` + server info（name/version）。
+  - `tools/list`：冻结 v1 工具集（`page.list_targets/get_title/get_selection/snapshot/markdown` + `cast.list_receivers/get_state`），JSON Schema inputSchema 闭合。
+  - `tools/call`：映射到 CAAP UDS 请求（CaapRequest BTreeMap 参数），多 chunk 累积到 final，错误回复 → `{"isError":true,"error":"..."}`。
+  - JSON-RPC 2.0 over stdio（每行一个请求）；无外部网络；loopback only。
+- 验证：`cargo build -p crayon-agent-mcp` PASS；clippy `-D warnings` 零告警；fmt、security、diff-check 全过。
+- 未覆盖与风险：E2E 需真实产品 agent-host 运行 + MCP 客户端；Windows pipe 归后续。`AGT-14` 转 `DONE`，解锁 `AGT-16`。
