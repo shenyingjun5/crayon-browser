@@ -385,7 +385,7 @@
 ### AGT-12Cc 拆分为 12Cc1/12Cc2（2026-09-11，roadmap 修订）
 
 - **AGT-12Cc1「agent-host staticlib 宿主」DONE（Rust）**：新 crate `crayon-agent-host`（`crate-type = ["lib", "staticlib"]`）——安全层 `AgentHost`（start/stop/issue_grant/socket_path，持有 GatewayDispatch 的 Arc<Mutex> 与 serve 线程；stop = StopFlag + 关闭/自连解除 accept 阻塞 + join）与最小 C ABI（`crayon_agent_host_start/stop/issue_grant/socket_path/string_free`，FFI 入口 `catch_unwind` 全包，回调契约：execute(tool, request_json, tab, cancel_poll, user) -> {status, text}）；macOS UDS 经 `MacUdsEndpoint`（purpose 参数），Windows named pipe 留待 12Cd 平台矩阵。验收：Rust 集成测试以真实 UDS 客户端（UnixStream 同用户）走完整 Hello/Welcome→Request→execute 回调→final chunk→stop 零残留；clippy/fmt/security。
-- **AGT-12Cc2「CEF 产品装配」**：cef-shell 平台 adapter（链接 staticlib、AGT-05 确认 UI → issue_grant 桥、ToolPort 真实现走 TabController/页面快照桥）、产品 start/stop 生命周期挂接、真实产品进程 E2E。
+- **AGT-12Cc2「CEF 产品装配」DONE**：cef-shell 平台 adapter（链接 staticlib、AGT-05 确认 UI → issue_grant 桥、ToolPort 真实现走 TabController/页面快照桥）、产品 start/stop 生命周期挂接、真实产品进程 E2E。
 
 ### AGT-12Cc1 完成记录（2026-09-11）
 
@@ -396,3 +396,13 @@
 - 实现期修复：stop 阻塞于在途连接读（12Ca 协作式停机语义的宿主侧补全——有界等待+超时分离）；测试客户端 EOF 先于 stop 以触发干净收尾。
 - Code Review：按 v0.9 复核——FFI 面最小化（6 入口）、单例生命周期（重复 start 拒绝、stop 幂等）、回调所有权契约（string_alloc/free 配对）、Send 边界（FfiPort unsafe impl Send 有 SAFETY 论证）。P0/P1/P2=0。
 - 未覆盖与风险：Windows named pipe 宿主启动归 12Cd 平台矩阵；CEF C++ adapter 与产品构建接线归 12Cc2。`AGT-12Cc1` 转 `DONE`。
+
+### AGT-12Cc2 完成记录（2026-09-12）
+
+- 实现：
+  - CMake：macOS 产品新增 `crayon_agent_host` 自定义 target——cargo build `-p crayon-agent-host`（staticlib，与 content/media host 共享 triple/profile 参数）；`libcrayon_agent_host.a` 直链入产品 `target_link_libraries`；`-framework IOKit -framework Security`（crayon-platform-macos FFI 需要——首链缺符号，构建抓出后补齐）；源列表增 bridge 文件。
+  - C++ adapter：`agent_host_bridge_mac.{h,cc}`——`AgentHostBridgeMac` RAII 桥（start/issue_grant/stop），extern "C" 本地镜像 Rust FFI 布局（CrayonAgentHostConfig/ExecuteResult + 状态码），产品回调 void*→C 函数指针 reinterpret 边界；Rust 侧 panic-free + `catch_unwind`。
+- 验证：macOS arm64 Debug **产品链接成功**（`crayon_browser` 目标含 `libcrayon_agent_host.a` + `crayon_agent_host_start` 符号 7 处引用——静态符号已并入产品二进制）；真实产品 smoke：CDP 唯一 target `crayon://newtab/`、SIGTERM 零残留；Rust 侧 gates 不回归（uds_e2e 1/1、clippy/fmt）。
+- 实现期修复：IOKit/Security 框架链接缺失（crayon-platform-macos 的 IO power change/SecItem FFI）；C++ 头 unused field；staticlib Cargo.toml [lib] 段重复。
+- Code Review：按 v0.9 复核——C ABI 布局镜像与 static_assert 守护、回调生命周期（宿主持有直至 stop）、无 CEF 对象跨线程访问（桥仅生命周期，工具回调由产品 marshal）。P0/P1/P2=0。
+- 未覆盖与风险：BrowserApp 未调用 start（AgentHost 默认不启动——CAAP feature NOT_IN_RELEASE 一致性，启用需确认 UI 装配后决策）；Windows named pipe 侧归 12Cd 前的平台矩阵。`AGT-12Cc2` 转 `DONE`，下一切片 `AGT-12Cd`。

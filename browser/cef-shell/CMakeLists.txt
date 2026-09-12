@@ -1058,6 +1058,8 @@ if(OS_MAC)
       src/process/macos/ui_language_mac.cc
       src/process/macos/ui_language_mac.h
       src/process/macos/ui_language_mac.mm
+      src/macos/agent_host_bridge_mac.h
+      src/macos/agent_host_bridge_mac.cc
       src/macos/main_mac.mm)
   list(APPEND crayon_macos_sources
        src/macos/page_markdown_platform_mac.h
@@ -1139,6 +1141,30 @@ if(OS_MAC)
   add_custom_target(crayon_content_host DEPENDS "${crayon_content_host_binary}")
   add_custom_target(crayon_media_host DEPENDS "${crayon_media_host_binary}")
 
+  # AGT-12Cc2: the in-process CAAP agent host staticlib (Rust) linked
+  # into the macOS product binary. Single build invocation shared with
+  # the helper hosts so cargo never runs twice per configure.
+  set(crayon_agent_host_target_dir
+      "${CMAKE_CURRENT_BINARY_DIR}/agent-host-target")
+  set(crayon_agent_host_staticlib
+      "${crayon_agent_host_target_dir}/${crayon_content_host_triple}/${crayon_content_host_profile}/libcrayon_agent_host.a")
+  add_custom_command(
+    OUTPUT "${crayon_agent_host_staticlib}"
+    COMMAND
+      "${CMAKE_COMMAND}" -E env
+      "CARGO_TARGET_DIR=${crayon_agent_host_target_dir}"
+      "${CRAYON_CARGO_EXECUTABLE}" build -p crayon-agent-host
+      --target "${crayon_content_host_triple}"
+      ${crayon_content_host_profile_argument}
+    DEPENDS
+      "${PROJECT_SOURCE_DIR}/Cargo.toml"
+      "${PROJECT_SOURCE_DIR}/Cargo.lock"
+      ${crayon_content_host_rust_sources}
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+    COMMENT "Building the CAAP agent-host staticlib (Rust)"
+    VERBATIM)
+  add_custom_target(crayon_agent_host DEPENDS "${crayon_agent_host_staticlib}")
+
   add_executable(${CRAYON_BROWSER_TARGET} MACOSX_BUNDLE
                  ${crayon_macos_sources} ${crayon_macos_resources})
   SET_EXECUTABLE_TARGET_PROPERTIES(${CRAYON_BROWSER_TARGET})
@@ -1154,16 +1180,23 @@ if(OS_MAC)
                               src/macos/page_markdown_platform_mac.mm
                               src/macos/trusted_input_monitor_mac.mm
                               PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+  # AGT-12Cc2: bridging declarations for the Rust FFI surface.
+  set(crayon_agent_host_include_dir
+      "${PROJECT_SOURCE_DIR}/browser/cef-shell/src/macos")
   target_include_directories(${CRAYON_BROWSER_TARGET}
-                             PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+                             PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src"
+                                     "${crayon_agent_host_include_dir}")
   add_dependencies(${CRAYON_BROWSER_TARGET} libcef_dll_wrapper
-                   crayon_content_host crayon_media_host)
+                   crayon_content_host crayon_media_host crayon_agent_host)
   set_property(TARGET ${CRAYON_BROWSER_TARGET} APPEND PROPERTY LINK_DEPENDS
                "${crayon_content_host_binary}")
   set_property(TARGET ${CRAYON_BROWSER_TARGET} APPEND PROPERTY LINK_DEPENDS
                "${crayon_media_host_binary}")
   target_link_libraries(${CRAYON_BROWSER_TARGET}
-                        PRIVATE libcef_dll_wrapper ${CEF_STANDARD_LIBS}
+                        PRIVATE libcef_dll_wrapper
+                                "${crayon_agent_host_staticlib}"
+                                "-framework IOKit" "-framework Security"
+                                ${CEF_STANDARD_LIBS}
                                 crayon::browser-new-tab
                                 crayon::browser-product-strings
                                 crayon::browser-localization
