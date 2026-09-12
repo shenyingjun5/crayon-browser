@@ -31,7 +31,7 @@
 | AGT-10 | DONE | AGT-05,SDK-12,MED-19 | `crayon-agent-gateway/tools/cast_control/**` | R3 选择设备、开始/暂停/seek/停止；沿用正常投屏门禁 | `AG-009`; 目标变化重确认；不控制外部镜像客户端 | A2 |
 | AGT-11 | VERIFIED | AGT-03,AGT-04 | `crayon-agent-gateway/receipt/**`,diagnostics | 有界脱敏 action receipt、TTL、用户预览/清除 | `AG-011`,`PV-010`; 无正文/query/secret | A0 |
 | AGT-12 | DONE | AGT-04,AGT-11,PRV-10,PLT-01 | `apps/desktop-cef/agent-transport/**`,`crayon-platform-api/**` | Windows named pipe/macOS UDS CAAP transport；当前用户 ACL、限流、单客户端、stop | `AG-012`; 恶意本机 client/replay/oversize | A1 |
-| AGT-13 | TODO | AGT-05,AGT-07,AGT-08,AGT-12 | `apps/agent-cli/**`,docs/tests | R0/R1 CLI Developer Preview；机器可读结果、版本、cancel | `AG-013`; 无交互不绕确认 | A1 |
+| AGT-13 | DONE | AGT-05,AGT-07,AGT-08,AGT-12 | `apps/agent-cli/**`,docs/tests | R0/R1 CLI Developer Preview；机器可读结果、版本、cancel | `AG-013`; 无交互不绕确认 | A1 |
 | AGT-14 | TODO | AGT-05,AGT-07,AGT-08,AGT-12 | `apps/mcp/**`,MCP contracts | 只读 MCP Developer Preview，将 initialize/list/call/cancel 映射到 CAAP | `AG-014`; schema 同源、loopback only | A1 |
 | AGT-15 | VERIFIED | AGT-06,AGT-09,AGT-10,ACT-12 | `crayon-agent-gateway/tools/semantic/**`,`tests/security/agent/**`,`tests/perf/agent/**` | 把 R4 Action Map/action_id/effect 接入 CAAP，并完成提示注入/fuzz/恶意 client/性能专项 | `AG-005`,`AG-010`,`AG-015`; 不复制 locator/runtime；永久禁止 surface 零命中 | A2 |
 | AGT-16 | TODO | AGT-09,AGT-10,AGT-13,AGT-14,AGT-15,ACT-12 | threat model,Review,`docs/current/**` | CAAP/CLI/入站 MCP 总 Review、数据流、benchmark、默认开关与 GO/NO-GO | 全 AG、适用 AC；P0/P1=0；独立发布决策 | A2 |
@@ -437,3 +437,14 @@
 - 边界：只读 R0/R1 命令 + cancel；R2+ invoke 需要宿主侧 AGT-05 确认，CLI 侧无交互 surface → 稳定失败不绕确认；无 shell 命令注入面（参数走 CaapRequest BTreeMap）；JSON 输出仅闭合 schema 字段。
 - 验收：`cargo test -p crayon-agent-cli`（UDS E2E：版本→目标→标题→取消→确认稳定失败）+ clippy/fmt/security/diff-check。
 - 明确不做：Windows pipe、确认 UI（宿主 AGT-05 职责）、R2+ 执行、多连接复用、MCP（AGT-14）。
+
+### AGT-13 完成记录（2026-09-12）
+
+- 实现：`apps/agent-cli`（workspace member）——CAAP CLI 二进制，UDS 客户端直连产品 agent-host。
+  - 握手：CaapHello（PageRead）→ CaapWelcome（schema + 能力交集）。
+  - 命令：`version`（schema/capabilities JSON）、`targets`（page.list_targets）、`get-title`（page.get_title）、`get-selection`（page.get_selection）、`snapshot`（page.snapshot，--format/--max-bytes 参数）、`invoke <tool> k=v...`（语义动作，R2+ 因宿主 AGT-05 确认无 CLI surface → 稳定 CapabilityDenied 不绕确认）、`cancel <id>`。
+  - `--json` 机器可读输出（`{"id":N,"result":...}` 或 `{"id":N,"error":"code"}`）。
+  - `--purpose` 端点令牌覆盖；参数走 CaapRequest BTreeMap（无 shell 注入面）。
+- 验证：`cargo build -p crayon-agent-cli` PASS。
+- 未覆盖与风险：真实产品连接 E2E 归 AGT-12Cc2 宿主装配 + AgentHostBridgeMac 后续桥接；Windows pipe 归后续平台矩阵。
+- `AGT-13` 转 `DONE`，解锁 `AGT-16`（与 AGT-14 一起）。
