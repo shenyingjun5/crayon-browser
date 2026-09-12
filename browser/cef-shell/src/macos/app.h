@@ -21,6 +21,7 @@
 #include "macos/application_menu_mac.h"
 #include "macos/cast_chrome_mac.h"
 #include "browser/media_host/cast_shell_controller.h"
+#include "macos/agent_host_bridge_mac.h"
 #include "macos/content_host_adapter_mac.h"
 
 namespace crayon::browser::cef_shell {
@@ -89,6 +90,7 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   std::unique_ptr<macos::TrustedInputMonitor> trusted_input_monitor_;
   std::unique_ptr<macos::AlloyProductHostMac> product_host_;
   std::unique_ptr<macos::AlloyToolbarMac> toolbar_;
+  std::unique_ptr<macos::AgentHostBridgeMac> agent_host_;
   CefRefPtr<window::TabController> tab_controller_;
   std::unique_ptr<page_markdown::CefPageMarkdownPreviewController>
       page_markdown_preview_;

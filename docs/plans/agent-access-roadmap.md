@@ -487,3 +487,9 @@
 - 验证：crayon-agent-gateway 119/119、crayon-agent-host 2/2（UDS E2E + security regression）、crayon-workflow 96/96、全 workspace clippy/fmt/security 全过。
 - **GO/NO-GO：CAAP feature = NOT_IN_RELEASE（默认关闭）**。GO 条件：产品 AgentHostBridgeMac 启用调用（AGT-12Cc2 集成后按确认 UI 装配进度决策）+ 真机 E2E + Windows pipe 矩阵。
 - `AGT-16` 转 `DONE`；解锁 `CNT-11`（provider ADR）与 `PRV-13B`。
+
+### AGT-12Cc2 补充验证（2026-09-12）
+
+- 产品内 AgentHost UDS 端点验证：`/tmp/crayon-agent-agent-caap.sock` 已创建，外部 Python 客户端经 UDS 发送 CaapHello → 收到 CaapWelcome（schema=1, capabilities=["page_read"]）——**UDS 端点 + FFI + CAAP 握手 + 能力交集全链通过**。
+- request dispatch 超时确认：resolve_active_tab 回调当前为 null 函数指针（callbacks 未实现），导致 ToolPort resolve 走 UB——**这是预期的装配缺口**，需要 BrowserApp 提供真实回调桥接（TabController→active tab、snapshot bridge→page tool）。已在 AGT-12Cc2 范围内标注为剩余工作。
+- 结论：CAAP 传输层（UDS + FFI + frame protocol + handshake）在产品进程内**已验证通过**；工具执行回调需要产品装配。

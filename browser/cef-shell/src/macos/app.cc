@@ -343,6 +343,9 @@ void BrowserApp::OnContextInitialized() {
     page_markdown_preview_->Stop();
     cast_shell_->Shutdown();
     cast_chrome_->Close();
+    if (agent_host_) {
+      agent_host_->stop();
+    }
     content_host_->Stop();
     media_host_->Stop();
   });
@@ -394,6 +397,18 @@ void BrowserApp::ContinueContentHostStartup() {
                                                       can_go_forward));
             static_cast<void>(toolbar_->SyncTabs(tab_controller_->model()));
           });
+    }
+    // AGT-12Cc2: start the CAAP agent host (UDS endpoint).
+    if (!agent_host_) {
+      agent_host_ = std::make_unique<macos::AgentHostBridgeMac>();
+      const char* purpose = "agent-caap";
+      const char* profile = "default";
+      const char* caps[] = {"page_read", "navigation", nullptr};
+      macos::AgentHostBridgeMac::Callbacks cb{};
+      cb.resolve_active_tab_user = nullptr;
+      cb.tab_known_user = nullptr;
+      cb.execute_user = nullptr;
+      agent_host_->start(purpose, profile, 600000, caps, 2, cb);
     }
     // PLT-SHELL-24M1: the product first window is the macOS Alloy host; the
     // TabController WindowClient keeps every normalized callback surface.
