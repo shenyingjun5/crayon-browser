@@ -428,3 +428,12 @@
 - 验证：`cargo test -p crayon-agent-host` 2/2（uds_e2e + security_regression 均 PASS）；clippy `-D warnings` 零告警；fmt、`check.sh security`、`git diff --check` 全过。
 - Code Review：按 v0.9 复核——恶意矩阵覆盖全部 12A/12B 攻击面在真实 FFI+UDS 路径的复验、hostile→restart→good 证明无状态残留。P0/P1/P2=0。
 - AGT-12 全链（A/B/Ca/Cb/Cc1/Cc2/Cd）闭合，`AGT-12` 转 `DONE`；`AGT-13 CLI`/`AGT-14 MCP` 解锁。
+
+## AGT-13 原子范围（R0/R1 CLI Developer Preview）
+
+- 状态：`IN_PROGRESS`；依赖 `AGT-05 VERIFIED`、`AGT-07 VERIFIED`、`AGT-08 DONE`、`AGT-12 DONE`。
+- 单一目标：新 crate `apps/agent-cli`（workspace member）——CAAP CLI 二进制，通过 macOS UDS 连接产品 agent-host，支持：`version`（握(schema/能力交集)）、`targets`（page.list_targets）、`get-title`（page.get_title）、`get-selection`（page.get_selection）、`snapshot`（page.snapshot）、`invoke`（语义动作，R2+ 需确认则稳定报错不绕 UI）、`cancel <id>`；`--json` 机器可读输出；macOS 平台限定（Windows 后续）。
+- 输入与输出：允许修改 `apps/agent-cli/**`、workspace `Cargo.toml` members 与本 Roadmap。客户端直接用 `CaapConnection` + `crayon-platform-macos` 的 UDS 客户端构造器（同 12B 集成测试模式）。
+- 边界：只读 R0/R1 命令 + cancel；R2+ invoke 需要宿主侧 AGT-05 确认，CLI 侧无交互 surface → 稳定失败不绕确认；无 shell 命令注入面（参数走 CaapRequest BTreeMap）；JSON 输出仅闭合 schema 字段。
+- 验收：`cargo test -p crayon-agent-cli`（UDS E2E：版本→目标→标题→取消→确认稳定失败）+ clippy/fmt/security/diff-check。
+- 明确不做：Windows pipe、确认 UI（宿主 AGT-05 职责）、R2+ 执行、多连接复用、MCP（AGT-14）。

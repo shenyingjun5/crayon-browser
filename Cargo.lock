@@ -384,6 +384,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "crayon-agent-cli"
+version = "0.1.0"
+dependencies = [
+ "crayon-agent-gateway",
+ "crayon-domain",
+ "crayon-ipc-schema",
+ "crayon-platform-api",
+ "crayon-platform-macos",
+ "serde_json",
+]
+
+[[package]]
 name = "crayon-agent-gateway"
 version = "0.1.0"
 dependencies = [
