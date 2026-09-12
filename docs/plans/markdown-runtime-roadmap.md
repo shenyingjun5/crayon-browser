@@ -46,7 +46,7 @@ MRT 是用户侧 MDV 基础设施，不进入 `crayon-page-data`、CNT 的确定
 | MRT-16 | DONE | MRT-10,MRT-11 | `docs/current`,`browser/shared-ui/mdv` | 本地 Presentation v1 契约与状态机：分节规则、Normal/Presentation 切换、导航/焦点/退出；不含 TV/Cast | MR-010；契约/状态风暴 |
 | MRT-17 | TODO | MRT-16,MRT-13,MRT-15 | `browser/shared-ui/mdv`,`browser/shared-ui/locales`,`tests/e2e/desktop` | Presentation UI：16:9/自适应布局、键盘翻页、图表重排、speaker-note 明确不做、双平台实机 | MR-010；a11y/主题/resize/退出 |
 | MRT-18 | TODO | MRT-17,SDK-15 | `docs/current`,`docs/plans` | TV/Cast gap analysis：明确接收端/Cast-SDK facade、内容类型、会话、遥控器与失败语义；只产出外部独立 Roadmap 触发条件 | MR-011；无浏览器私有协议/媒体伪装 |
-| MRT-19 | TODO | MRT-09,CNT-11 | `docs/current`,`docs/plans` | AI Source Producer gap analysis：冻结候选 Markdown、发送预览、provenance、取消与用户保存边界；只产出 CNT 后续任务触发条件 | MR-013；无 registry/文件/保存/投屏权限 |
+| MRT-19 | DONE | MRT-09,CNT-11 | `docs/current`,`docs/plans` | AI Source Producer gap analysis：冻结候选 Markdown、发送预览、provenance、取消与用户保存边界；只产出 CNT 后续任务触发条件 | MR-013；无 registry/文件/保存/投屏权限 |
 
 ## 4. 分波次领取
 
@@ -329,3 +329,17 @@ Gate:       MRT-18 TV/Cast gap / MRT-19 AI source-producer gap only
 - 验证：`node tools/graphviz-wasm/vendor.mjs` PASS（sha256 + 字节数锁定）；`git diff --check` 通过。
 - Code Review：供应链来源双 pin、闭包零 import、预算闭合、MIT 许可兼容。P0/P1/P2=0。
 - 未覆盖与风险：DOT 沙箱与 SVG 渲染归 MRT-15。`MRT-14` 转 `DONE`，解锁 `MRT-15`。
+
+## MRT-19 原子范围（AI Source Producer gap analysis）
+
+- 状态：`IN_PROGRESS`；依赖 `MRT-09 DONE`、`CNT-11 DONE`。
+- 单一目标：`docs/current/presentation-contract.md` 同级新增 `docs/current/ai-source-gap-analysis.md`——明确 AI Source Producer 的候选 Markdown 冻结、发送预览、provenance、取消与用户保存边界，产出 CNT 后续任务触发条件。只做 gap analysis，不做实现。
+- 范围：候选 Markdown 从 WFL-10 已确认 SiteSkill 的 Recipe 步骤摘要生成（非 LLM 生成——LLM 生成归 CNT-13）；发送预览 UI 归 CNT-15；provenance 归 CNT-11 的 provider/tenant hash 模式；取消归 WFL-12 的 RunCancel；保存归 WFL-10 store。
+- 验收：gap analysis 文档（候选生成、发送预览、provenance、取消/保存边界四节），每节明确"已闭合/待 CNT-1x/待产品装配"；roadmap 记录。
+- 明确不做：任何代码实现、LLM 调用、UI、网络请求。
+
+### MRT-19 完成记录（2026-09-12）
+
+- 实现：`docs/current/ai-source-gap-analysis.md`（约 80 行）——四节 gap analysis：候选 Markdown 冻结（WFL-10 已闭合）、发送预览（数据模型闭合/缺口在 CNT-15 UI）、provenance（指纹体系闭合/请求级 hash 归 CNT-12/13）、取消与保存边界（语义闭合/HTTP 取消归 CNT-12）。每节标注"已闭合/待 CNT-1x/待产品装配"和后续任务触发条件。
+- 验证：文档结构完整、四节覆盖、交叉引用正确；roadmap 表已更新。
+- `MRT-19` 转 `DONE`。
