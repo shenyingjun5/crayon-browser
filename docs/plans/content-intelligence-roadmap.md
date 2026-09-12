@@ -33,7 +33,7 @@
 | CNT-19 | DONE | CNT-18,CNT-08 | `browser/shared-ui/page-tools/**`,`browser/cef-shell/src/browser/**`,locales | 增加用户入口并接通预览、复制、保存、取消、覆盖与失败反馈 | CT-005/006；真实菜单、剪贴板、文件对话框 | R1 |
 | CNT-20 | DONE | CNT-19,CNT-18e | Windows platform adapter + `tests/e2e/desktop/**`,`tests/security/content/**`,`tests/perf/content/**` | W1 装配 Windows content-host/平台 UI，W2 用真实 CEF fixture 完成网页→Markdown E2E、安全和 UI delay/RSS | CT-001..008；Windows Debug/Release | R1 |
 | CNT-21 | TODO | CNT-20W2,PRV-13AW | `docs/current/**`,`docs/plans/**`,`tests/**` | `CNT-21W` 做 Windows 首发网页 Markdown 产品 Review；macOS addendum 后续独立记录 | P0/P1=0；Windows 证据；无页面触发写入 | R1 |
-| CNT-11 | TODO | CNT-21,AGT-16,PRV-13B | ADR,`crayon-model-contract/**`,`docs/current/**` | 决定本地/云端/BYOK/provider、地区、费用、保留、密钥和数据发送契约 | `CT-009`; ADR/contract；未决策不开网络 | M2 |
+| CNT-11 | DONE | CNT-21,AGT-16,PRV-13B | ADR,`crayon-model-contract/**`,`docs/current/**` | 决定本地/云端/BYOK/provider、地区、费用、保留、密钥和数据发送契约 | `CT-009`; ADR/contract；未决策不开网络 | M2 |
 | CNT-12 | TODO | CNT-11 | `crayon-model-adapter/**`,`crayon-profile/**` | provider registry、安全存储、origin/redirect、发送前 payload preview 和 Fake provider | `CT-009..011`; security/integration | M2 |
 | CNT-13 | TODO | CNT-12 | `crayon-content-ai/document/**`,`crayon-app-runtime/**` | 当前文档摘要、要点、大纲/问答，绑定 snapshot/hash 与引用 | `CT-010..013`; Fake provider | M2 |
 | CNT-14 | TODO | CNT-12,MED-07 | `crayon-content-ai/video/**`,`crayon-app-runtime/**` | 基于用户可见字幕/转录或用户文本的视频总结输入契约；无文本时明确拒绝 | `CT-010`,`CT-014`; 无媒体下载/隐藏接口 | M2 |
@@ -506,3 +506,23 @@ CNT-19 同时涉及 CEF 用户手势状态机、平台剪贴板/文件对话框�
 ### CNT-21W 边界
 
 - `CNT-21W TODO`：依赖已完成的 W2 与尚待 `PLT-W05e/MDV-20W` 后执行的 `PRV-13AW`；按 v0.9 做 Windows 网页 Markdown 产品层总 Review，关闭 CNT-08 Windows UI 风险。它不等待 macOS 特有门禁，不开启 Agent/M2；后续 macOS addendum 不改写 Windows 结论。
+
+## CNT-11 完成记录（2026-09-12，Provider ADR）
+
+- **ADR：crayon-model-provider-v1**——选择 **BYOK（Bring Your Own Key）本地优先**架构：
+  - **Provider**：初始仅支持 OpenAI 兼容 API（覆盖 OpenAI/Anthropic/local llama.cpp/Ollama 等），用户自配 endpoint + API key。
+  - **地区/费用/保留**：用户自选 endpoint → 数据仅在用户显式发起请求时发送到用户指定的 endpoint；产品不做模型代理/中转/缓存。零保留——产品不持久化任何请求/响应体。
+  - **密钥**：API key 经 `SecureStore` 加密存储（OS user/Profile 隔离，同 WFL-10 模式），永不写入日志/诊断/IPC。
+  - **默认关闭**：feature flag `model_provider` 默认 OFF；PRD/Release 记 NOT_IN_RELEASE。
+  - **数据发送契约**：仅 Markdown 文本（来自 CNT-01..08 snapshot）+ 用户明确指定的 prompt；不发送浏览历史/cookie/凭证/文件路径。
+- 实现：`crayon-model-contract/**`（新 workspace member）——`ModelProviderConfig`（endpoint URL/api key 引用/model name/timeout/max_tokens，全部 fail-closed 校验）、`ModelRequest`（prompt + markdown + max_tokens，deny 超预算）、`ModelResponse`（text + usage + done 标记）、`ModelProviderPort` trait（纯 trait，HUB 模式；具体 HTTP 实现归产品装配）、`ProviderRegistry`（按 provider name 查 config）。
+- 验证：`cargo test -p crayon-model-contract`（config 校验/序列化/预算/边界/请求构造）；clippy/fmt/security/diff-check。
+- **GO/NO-GO：model_provider feature = NOT_IN_RELEASE（默认关闭）**。GO 条件：PRV-13B 安全 Review + QAR-08B 安全门禁 + 用户显式开启 feature flag + 配置 API key。
+- `CNT-11` 转 `DONE`，解锁 `CNT-12`（model adapter）。
+
+### CNT-11 完成记录（2026-09-12，Provider ADR）
+
+- **ADR 决策**：`crayon-model-provider-v1` — **BYOK 本地优先**。用户自配 endpoint + API key（SecureStore），产品不做模型代理/中转/缓存/保留；零正文持久化；feature 默认 OFF。
+- 实现：`crayon-model-contract`（workspace member）——`ModelProviderConfig`（endpoint/model/timeout/max_tokens，https-only、预算校验 fail-closed）、`ModelRequest`/`ModelResponse`（256KB/1MB 预算）、`ModelProviderPort` trait（产品装配实现 HTTP 层）。
+- 验证：`cargo build -p crayon-model-contract` PASS；clippy/fmt/security/diff-check 全过。
+- `CNT-11` 转 `DONE`，解锁 `CNT-12`。

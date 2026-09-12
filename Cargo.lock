@@ -663,6 +663,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "crayon-model-contract"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "crayon-page-data"
 version = "0.1.0"
 dependencies = [
