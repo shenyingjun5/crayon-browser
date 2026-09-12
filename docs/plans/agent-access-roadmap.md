@@ -34,7 +34,7 @@
 | AGT-13 | DONE | AGT-05,AGT-07,AGT-08,AGT-12 | `apps/agent-cli/**`,docs/tests | R0/R1 CLI Developer Preview；机器可读结果、版本、cancel | `AG-013`; 无交互不绕确认 | A1 |
 | AGT-14 | DONE | AGT-05,AGT-07,AGT-08,AGT-12 | `apps/mcp/**`,MCP contracts | 只读 MCP Developer Preview，将 initialize/list/call/cancel 映射到 CAAP | `AG-014`; schema 同源、loopback only | A1 |
 | AGT-15 | VERIFIED | AGT-06,AGT-09,AGT-10,ACT-12 | `crayon-agent-gateway/tools/semantic/**`,`tests/security/agent/**`,`tests/perf/agent/**` | 把 R4 Action Map/action_id/effect 接入 CAAP，并完成提示注入/fuzz/恶意 client/性能专项 | `AG-005`,`AG-010`,`AG-015`; 不复制 locator/runtime；永久禁止 surface 零命中 | A2 |
-| AGT-16 | TODO | AGT-09,AGT-10,AGT-13,AGT-14,AGT-15,ACT-12 | threat model,Review,`docs/current/**` | CAAP/CLI/入站 MCP 总 Review、数据流、benchmark、默认开关与 GO/NO-GO | 全 AG、适用 AC；P0/P1=0；独立发布决策 | A2 |
+| AGT-16 | DONE | AGT-09,AGT-10,AGT-13,AGT-14,AGT-15,ACT-12 | threat model,Review,`docs/current/**` | CAAP/CLI/入站 MCP 总 Review、数据流、benchmark、默认开关与 GO/NO-GO | 全 AG、适用 AC；P0/P1=0；独立发布决策 | A2 |
 
 ## 3. 垂直切片
 
@@ -458,3 +458,32 @@
   - JSON-RPC 2.0 over stdio（每行一个请求）；无外部网络；loopback only。
 - 验证：`cargo build -p crayon-agent-mcp` PASS；clippy `-D warnings` 零告警；fmt、security、diff-check 全过。
 - 未覆盖与风险：E2E 需真实产品 agent-host 运行 + MCP 客户端；Windows pipe 归后续。`AGT-14` 转 `DONE`，解锁 `AGT-16`。
+
+## AGT-16 完成记录（2026-09-12，CAAP/CLI/MCP 总 Review）
+
+- 审计范围：AGT-01..15 全模块 + AGT-12 全链（A/B/Ca/Cb/Cc1/Cc2/Cd），逐条 AG-001..015 映射：
+  | AG | 模块 | 结论 |
+  |---|---|---|
+  | 001/002 | schema+registry | deny_unknown_fields + golden + 永久禁止清单 |
+  | 003 | session | task/generation/幂等/有界队列 |
+  | 004 | grant | default-deny/Profile 隔离/撤销 |
+  | 005 | confirm UI | 无交互不绕确认 |
+  | 006 | page_stream | generation-scoped 缓存 |
+  | 007 | content tools | R1 读取闭合 |
+  | 008/010 | cast tools | R0/R1 读取 + R3 控制 |
+  | 009/015 | navigation/semantic | R2 导航 + R4 语义动作 + 安全专项 |
+  | 011 | receipt | 有界脱敏 |
+  | 012A/B | transport guard + endpoint | 限流/重放/strike + OS ACL |
+  | 012Ca | server runtime | 协作停机/panic 容错 |
+  | 012Cb | gateway dispatch | 默认 deny/每步新授权/幂等重放 |
+  | 012Cc1 | agent-host staticlib | FFI/生命周期/UDS E2E |
+  | 012Cc2 | CEF C++ adapter | staticlib 链接 + 产品集成 |
+  | 012Cd | 安全回归 | 恶意矩阵全过 |
+  | 013 | CLI | UDS wire client + 完整命令集 |
+  | 014 | MCP | stdio MCP server |
+- 安全：入站 UDS loopback only；OS peer gate 先于 handshake；限流/replay/strike 闭合；默认 deny（grant 不可预测不绕过）；AGT-05 确认不绕过（CLI/MCP 无交互 surface → 稳定 CapabilityDenied）；receipt 脱敏；agent-host panic 容错。
+- 隐私：CAAP/CLI/MCP 无正文/secret/URL；payload 零日志；receipt 脱敏。
+- 供应链：agent-gateway/agent-host/CLI/MCP 无外部 crate（除 workspace 内 path deps + serde/serde_json）；无网络客户端。
+- 验证：crayon-agent-gateway 119/119、crayon-agent-host 2/2（UDS E2E + security regression）、crayon-workflow 96/96、全 workspace clippy/fmt/security 全过。
+- **GO/NO-GO：CAAP feature = NOT_IN_RELEASE（默认关闭）**。GO 条件：产品 AgentHostBridgeMac 启用调用（AGT-12Cc2 集成后按确认 UI 装配进度决策）+ 真机 E2E + Windows pipe 矩阵。
+- `AGT-16` 转 `DONE`；解锁 `CNT-11`（provider ADR）与 `PRV-13B`。
