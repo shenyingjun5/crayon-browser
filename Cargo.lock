@@ -663,6 +663,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "crayon-model-adapter"
+version = "0.1.0"
+dependencies = [
+ "crayon-model-contract",
+]
+
+[[package]]
 name = "crayon-model-contract"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,8 @@
+[package]
+name = "crayon-model-adapter"
+version = "0.1.0"
+edition = "2021"
+license = "LicenseRef-Proprietary"
+
+[dependencies]
+crayon-model-contract = { path = "../crayon-model-contract" }

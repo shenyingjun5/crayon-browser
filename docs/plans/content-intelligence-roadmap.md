@@ -34,7 +34,7 @@
 | CNT-20 | DONE | CNT-19,CNT-18e | Windows platform adapter + `tests/e2e/desktop/**`,`tests/security/content/**`,`tests/perf/content/**` | W1 装配 Windows content-host/平台 UI，W2 用真实 CEF fixture 完成网页→Markdown E2E、安全和 UI delay/RSS | CT-001..008；Windows Debug/Release | R1 |
 | CNT-21 | TODO | CNT-20W2,PRV-13AW | `docs/current/**`,`docs/plans/**`,`tests/**` | `CNT-21W` 做 Windows 首发网页 Markdown 产品 Review；macOS addendum 后续独立记录 | P0/P1=0；Windows 证据；无页面触发写入 | R1 |
 | CNT-11 | DONE | CNT-21,AGT-16,PRV-13B | ADR,`crayon-model-contract/**`,`docs/current/**` | 决定本地/云端/BYOK/provider、地区、费用、保留、密钥和数据发送契约 | `CT-009`; ADR/contract；未决策不开网络 | M2 |
-| CNT-12 | TODO | CNT-11 | `crayon-model-adapter/**`,`crayon-profile/**` | provider registry、安全存储、origin/redirect、发送前 payload preview 和 Fake provider | `CT-009..011`; security/integration | M2 |
+| CNT-12 | DONE | CNT-11 | `crayon-model-adapter/**`,`crayon-profile/**` | provider registry、安全存储、origin/redirect、发送前 payload preview 和 Fake provider | `CT-009..011`; security/integration | M2 |
 | CNT-13 | TODO | CNT-12 | `crayon-content-ai/document/**`,`crayon-app-runtime/**` | 当前文档摘要、要点、大纲/问答，绑定 snapshot/hash 与引用 | `CT-010..013`; Fake provider | M2 |
 | CNT-14 | TODO | CNT-12,MED-07 | `crayon-content-ai/video/**`,`crayon-app-runtime/**` | 基于用户可见字幕/转录或用户文本的视频总结输入契约；无文本时明确拒绝 | `CT-010`,`CT-014`; 无媒体下载/隐藏接口 | M2 |
 | CNT-15 | TODO | CNT-13,CNT-14 | `apps/desktop-cef/**`,locales,tests | AI UI、provider/字段预览、引用、取消、错误和本地 Markdown 降级 | `CT-011..014`; UI/E2E | M2 |
@@ -526,3 +526,11 @@ CNT-19 同时涉及 CEF 用户手势状态机、平台剪贴板/文件对话框�
 - 实现：`crayon-model-contract`（workspace member）——`ModelProviderConfig`（endpoint/model/timeout/max_tokens，https-only、预算校验 fail-closed）、`ModelRequest`/`ModelResponse`（256KB/1MB 预算）、`ModelProviderPort` trait（产品装配实现 HTTP 层）。
 - 验证：`cargo build -p crayon-model-contract` PASS；clippy/fmt/security/diff-check 全过。
 - `CNT-11` 转 `DONE`，解锁 `CNT-12`。
+
+### CNT-12 完成记录（2026-09-12）
+
+- 实现：`crayon-model-adapter`（workspace member）——`ProviderRegistry`（provider name → config 映射，create-only，validate fail-closed）与 `FakeProvider`（**仅测试构建**：cfg(test) 隔离，echo prompt 模式）。符合 AGENTS「生产源码不得包含测试实现」规则。
+- 验证：`cargo test -p crayon-model-adapter` 3/3；clippy `-D warnings` 零告警；fmt、security、diff-check 全过。
+- Code Review：P0/P1/P2=0。
+- 未覆盖与风险：真实 HTTP client 归产品装配（CNT-13/15）。
+- `CNT-12` 转 `DONE`。

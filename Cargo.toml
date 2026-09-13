@@ -32,6 +32,7 @@ members = [
     "apps/agent-cli",
     "apps/agent-mcp",
     "crates/crayon-agent-host",
+    "crates/crayon-model-adapter",
     "crates/crayon-model-contract",
     "crates/crayon-partner-connector",
     "crates/crayon-app-runtime",
