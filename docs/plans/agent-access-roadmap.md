@@ -493,3 +493,14 @@
 - 产品内 AgentHost UDS 端点验证：`/tmp/crayon-agent-agent-caap.sock` 已创建，外部 Python 客户端经 UDS 发送 CaapHello → 收到 CaapWelcome（schema=1, capabilities=["page_read"]）——**UDS 端点 + FFI + CAAP 握手 + 能力交集全链通过**。
 - request dispatch 超时确认：resolve_active_tab 回调当前为 null 函数指针（callbacks 未实现），导致 ToolPort resolve 走 UB——**这是预期的装配缺口**，需要 BrowserApp 提供真实回调桥接（TabController→active tab、snapshot bridge→page tool）。已在 AGT-12Cc2 范围内标注为剩余工作。
 - 结论：CAAP 传输层（UDS + FFI + frame protocol + handshake）在产品进程内**已验证通过**；工具执行回调需要产品装配。
+
+## AGT-12Cc2 剩余装配指南（2026-09-12，为下一会话准备）
+
+- 当前状态：`agent_host_bridge_mac.{h,cc}` 已创建并链接进产品（staticlib 符号已确认）；UDS 端点已验证（handshake 通过）；BrowserApp 已声明 `agent_host_` 成员并有 start/stop 调用。
+- **剩余步骤（按序）**：
+  1. `app.cc` OnContextInitialized：在 content_host_/media_host_ 健康后调用 `agent_host_->start("agent-caap", "default", 600000, caps, 3, callbacks)`；callbacks 结构体三个函数指针指向 app.cc 内的 static/lambda 桥（resolve_active_tab→TabController::ActiveBrowser、tab_known→model().Find、execute→按 tool name 路由到对应 handler）。
+  2. execute 桥：page.list_targets/get_title/get_selection/snapshot/markdown → 从 `tab_controller_->ActiveBrowser()` + `CefFrame` 读取；navigation → `tab_controller_->GoBack/GoForward/Reload`；cast → `cast_shell_->...`。
+  3. issue_grant 桥：AGT-05 确认 UI（未来装配）确认后调用 `agent_host_->issue_grant(capability_str)`。
+  4. OnBrowserClosing / shutdown 路径：`agent_host_->stop()`。
+- 文件清单：`agent_host_bridge_mac.{h,cc}` 已在 CMake sources；Cargo.toml 已有 staticlib target；CMake 已有 crayon_agent_host build target + 链接。
+- 验证：产品启动 → UDS socket 存在 → CLI 连接 → version/targets/get-title → SIGTERM 零残留。
