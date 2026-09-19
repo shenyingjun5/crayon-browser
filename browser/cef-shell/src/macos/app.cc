@@ -935,6 +935,9 @@ void BrowserApp::ContentHostTick() {
   }
   media_host_was_healthy_ = media_healthy;
   media_host_cast_epoch_ = cast_epoch;
+  // PLT-SHELL-24M2UIP-a: the entry re-attaches (grey) whenever teardown
+  // paths cleared it, independent of media readiness.
+  TryAttachCastEntry();
   if (media_healthy) BindCastForActiveTab();
   if (cast_surface_) cast_surface_->Tick();
   ScheduleContentHostTick();
@@ -1036,6 +1039,34 @@ void BrowserApp::BindCastForActiveTab() {
   cast_binding_attempt_ = context;
   active_browser_id_ = browser->GetIdentifier();
   product_host_->ShowBrowser(active_browser_id_);
+  // PLT-SHELL-24M2UIP-a: the entry surface is attached at assembly time and
+  // persists here; only the context binds once media data is available.
+  TryAttachCastEntry();
+  if (!cast_surface_) return;
+  cast_surface_->BindContext(context);
+  cast_context_bound_ = cast_controller_->BindContext(context);
+  if (!cast_context_bound_) DetachCastSurface();
+}
+
+void BrowserApp::TryAttachCastEntry() {
+  CEF_REQUIRE_UI_THREAD();
+  if (cast_surface_ || !product_host_ || !toolbar_ || !media_host_ ||
+      !tab_controller_) {
+    return;
+  }
+  const auto browser = tab_controller_->ActiveBrowser();
+  if (!browser) {
+    return;
+  }
+  const auto window = product_host_->window();
+  const auto view = product_host_->browser_view(browser->GetIdentifier());
+  if (!window || !view) {
+    return;
+  }
+  // Permanent toolbar fixture: attaches with the first browser view — long
+  // before any media observation — and stays disabled (grey) via the
+  // presentation (no context => EntryEnabled() == false) until a real MHV2
+  // context binds in BindCastForActiveTab.
   cast_surface_ = std::make_unique<CastEntrySurface>(
       locale_snapshot_, MonotonicMilliseconds, [this](auto intent) {
         if (cast_controller_ && media_host_->healthy() &&
@@ -1044,11 +1075,7 @@ void BrowserApp::BindCastForActiveTab() {
       });
   if (!cast_surface_->Attach(window, view, toolbar_->toolbar_panel())) {
     DetachCastSurface();
-    return;
   }
-  cast_surface_->BindContext(context);
-  cast_context_bound_ = cast_controller_->BindContext(context);
-  if (!cast_context_bound_) DetachCastSurface();
 }
 
 bool BrowserApp::ExecuteAppCommand(macos::ApplicationCommand command) {

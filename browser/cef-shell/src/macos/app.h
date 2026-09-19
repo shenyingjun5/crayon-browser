@@ -87,6 +87,9 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   void ConsumeMediaObservations();
   void SyncToolbarToActiveTab();
   void BindCastForActiveTab();
+  // PLT-SHELL-24M2UIP-a: attaches the permanent cast entry as soon as the
+  // first browser view exists, independent of media readiness.
+  void TryAttachCastEntry();
   void DetachCastSurface();
   void ResetCastContext();
   // AGT-12Cc2r: agent-host callback plumbing. The state member is
