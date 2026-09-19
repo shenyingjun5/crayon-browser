@@ -60,11 +60,13 @@ class AlloyCastController final {
   std::optional<Context> context_;
   Snapshot snapshot_;
   std::vector<MediaChoice> all_media_;
+  std::vector<MediaChoice> staged_media_;
   std::vector<DeviceChoice> all_devices_;
   std::optional<::crayon::browser_cast_view::CastMediaRef> pending_open_media_;
   std::optional<ipc_v2::DraftStateReply> last_draft_;
   std::optional<std::string> code_request_id_;
   std::uint64_t player_revision_ = 0;
+  std::uint64_t next_player_refresh_ms_ = 0;
   std::uint64_t device_revision_ = 0;
   std::uint16_t requested_player_offset_ = 0;
   std::uint16_t requested_device_offset_ = 0;

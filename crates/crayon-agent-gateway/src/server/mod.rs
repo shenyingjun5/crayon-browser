@@ -204,7 +204,7 @@ where
                 dispatch.close_client(&client);
                 return ServeEnd::Disconnected;
             }
-            Err(error) => {
+            Err(_error) => {
                 // Protocol-level rejection already produced a stable error
                 // reply or a guard strike; keep serving — hostile input
                 // must not terminate the client slot.

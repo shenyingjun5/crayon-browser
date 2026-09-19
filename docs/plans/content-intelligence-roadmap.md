@@ -1,16 +1,16 @@
-# CNT 页面数据、Markdown 与第二阶段模型 Roadmap
+# CNT 页面数据、Markdown 与模型 Roadmap
 
-- 状态：C1 数据面已收口；一期 macOS 产品闭环 `CNT-17..19 DONE`，Windows 首发 `CNT-20W1/W2 DONE`，因此 `CNT-18e/CNT-20 DONE`；`CNT-21W` 等 `PRV-13AW` 后总 Review；M2 统一进入第二期并等待 `AGT-16/PRV-13B` 与 provider ADR
+- 状态：C1 数据面已收口；一期 macOS 产品闭环 `CNT-17..19 DONE`，Windows 首发 `CNT-20W1/W2 DONE`，因此 `CNT-18e/CNT-20 DONE`；`CNT-21W` 等 `PRV-13AW` 后总 Review；M2（`CNT-11..16`）自 2026-09-18 起归第三期（用户决策，原第二期），开始门禁不变
 - 任务数：21
 - C1 开始门禁：`CEF-15`、`BUX-18`、`SDK-14`、`MED-19`、`PRV-08`
 - 一期产品门禁：`REL-01`、`CNT-10`、`CEF-15`、`PRV-12`
-- M2 开始门禁：`CNT-21`、`AGT-16`、`PRV-13B`
+- M2 开始门禁：`CNT-21`、`AGT-16`、`PRV-13B`；M2 阶段=第三期（2026-09-18 起）
 
 ## 1. 范围
 
 - C1：确定性当前页快照、结构化内容、Markdown、预览/复制/保存，为用户和 Agent R1 共用。
 - `CNT` 只拥有 verified `PageSnapshot`、正文/Markdown 和基础 revision；Action/Form/Media/Risk Map、action_id、前置条件、effect 和面向动作的 ChangeSet 由 `ACT` Roadmap 拥有并复用该数据面。
-- M2：模型/provider 决策后，提供用户确认的文档总结与基于合法文本来源的视频总结。
+- M2：模型/provider 决策后，提供用户确认的文档总结与基于合法文本来源的视频总结。M2 属第三期；第三方 Agent 接入（AGT/ACT/WFL/HUB）不依赖真实模型。
 - 非目标：批量爬取、后台站点遍历、隐藏字幕接口、媒体下载、未授权 ASR、模型参与权限/DRM/投屏安全决策。
 
 ## 2. 原子任务

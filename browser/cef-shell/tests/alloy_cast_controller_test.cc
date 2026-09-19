@@ -306,6 +306,145 @@ bool FullFlow() {
   return true;
 }
 
+bool PaginatedRefreshPreservesSelection() {
+  auto transport = std::make_unique<FakeTransport>();
+  auto* fake = transport.get();
+  media_host::MediaHostAdapter adapter(std::move(transport));
+  CHECK_CAST(adapter.Start("media-host"));
+  std::uint64_t now = 1000;
+  media_host::AlloyCastController controller(&adapter, {}, "Video", "Device",
+                                             [&] { return now; });
+  CHECK_CAST(controller.BindContext(Context()));
+  const auto first_page = [&](std::uint64_t revision, bool more) {
+    mh2::PlayerPageReply reply{
+        fake->player_requests.back().context,
+        revision,
+        mh2::PlayerPageStatus::kOk,
+        0,
+        more ? std::optional<std::uint16_t>(16) : std::nullopt,
+        {}};
+    for (std::uint64_t id = 1; id <= 16; ++id)
+      reply.players.push_back({id, 2, mh2::PlayerSourceKind::kHttpUrl, true,
+                               true, true, false, "Video"});
+    fake->player_replies.push_back(std::move(reply));
+    controller.Tick();
+  };
+  const auto last_page = [&](std::uint64_t revision) {
+    fake->player_replies.push_back({fake->player_requests.back().context,
+                                    revision,
+                                    mh2::PlayerPageStatus::kOk,
+                                    16,
+                                    std::nullopt,
+                                    {{17, 2, mh2::PlayerSourceKind::kHttpUrl,
+                                      true, true, true, false, "Video"}}});
+    controller.Tick();
+  };
+  first_page(41, true);
+  last_page(41);
+  fake->inbound.push_back(
+      mh::DevicePageReply{LastDeviceRequestId(*fake),
+                          5,
+                          0,
+                          std::nullopt,
+                          {{"device", "Room", mh::DeviceState::kReady, true}}});
+  controller.Tick();
+  CHECK_CAST(controller.HandleIntent(
+      Intent(cast_view::CastIntentKind::kOpen, controller.snapshot())));
+  auto state =
+      State(fake->draft_requests.back(), 91, 1, mh2::DraftPhase::kChoosing);
+  state.media = mh2::DraftMediaRef{17, 2};
+  state.device_id = "device";
+  state.device_connected = true;
+  fake->draft_replies.push_back(state);
+  controller.Tick();
+  auto page =
+      Intent(cast_view::CastIntentKind::kMediaPage, controller.snapshot());
+  page.page_offset = 16;
+  CHECK_CAST(controller.HandleIntent(page));
+  const auto allows = [&](cast_view::CastIntentKind kind) {
+    cast_view::CastSelectionPresentation view;
+    view.BindContext(controller.snapshot().context);
+    return view.Apply(controller.snapshot()) &&
+           view.Allows(Intent(kind, controller.snapshot()), now);
+  };
+  const auto preserved = [&] {
+    const auto& snapshot = controller.snapshot();
+    return snapshot.media_total == 17 && snapshot.media_offset == 16 &&
+           snapshot.media.size() == 1 && snapshot.selected_media &&
+           snapshot.selected_media->ref.instance_id == 17;
+  };
+  now += 1000;
+  controller.Tick();
+  first_page(42, true);
+  CHECK_CAST(preserved());
+  CHECK_CAST(allows(cast_view::CastIntentKind::kPrepare));
+  last_page(42);
+  CHECK_CAST(preserved());
+  CHECK_CAST(controller.HandleIntent(
+      Intent(cast_view::CastIntentKind::kPrepare, controller.snapshot())));
+  state = State(fake->draft_requests.back(), 91, 2, mh2::DraftPhase::kPrepared);
+  state.media = mh2::DraftMediaRef{17, 2};
+  state.device_id = "device";
+  state.device_connected = true;
+  state.route = mh2::DraftRoute::kDirect;
+  state.prepared_until_ms = 10000;
+  fake->draft_replies.push_back(state);
+  controller.Tick();
+  now += 1000;
+  controller.Tick();
+  first_page(43, true);
+  CHECK_CAST(preserved());
+  CHECK_CAST(allows(cast_view::CastIntentKind::kCommit));
+  last_page(43);
+  CHECK_CAST(preserved());
+  CHECK_CAST(allows(cast_view::CastIntentKind::kCommit));
+  now += 1000;
+  controller.Tick();
+  first_page(44, false);  // Completed snapshot confirms player 17 was removed.
+  CHECK_CAST(controller.snapshot().media_total == 16);
+  CHECK_CAST(!controller.snapshot().selected_media);
+  CHECK_CAST(!allows(cast_view::CastIntentKind::kPrepare));
+  CHECK_CAST(!allows(cast_view::CastIntentKind::kCommit));
+  now += 1000;
+  controller.Tick();
+  first_page(45, true);
+  last_page(45);
+  CHECK_CAST(controller.snapshot().selected_media);
+  now += 1000;
+  controller.Tick();
+  fake->player_replies.push_back({fake->player_requests.back().context,
+                                  46,
+                                  mh2::PlayerPageStatus::kStale,
+                                  0,
+                                  std::nullopt,
+                                  {}});
+  controller.Tick();
+  CHECK_CAST(controller.snapshot().media_total == 0);
+  CHECK_CAST(!controller.snapshot().selected_media);
+  CHECK_CAST(!allows(cast_view::CastIntentKind::kCommit));
+  now += 1000;
+  controller.Tick();
+  first_page(47, true);
+  last_page(47);
+  CHECK_CAST(controller.snapshot().selected_media);
+  now += 1000;
+  controller.Tick();
+  first_page(48, true);
+  // A duplicate across pages invalidates the entire revision, not just staging.
+  fake->player_replies.push_back({fake->player_requests.back().context,
+                                  48,
+                                  mh2::PlayerPageStatus::kOk,
+                                  16,
+                                  std::nullopt,
+                                  {{1, 2, mh2::PlayerSourceKind::kHttpUrl, true,
+                                    true, true, false, "Video"}}});
+  controller.Tick();
+  CHECK_CAST(controller.snapshot().media_total == 0);
+  CHECK_CAST(!controller.snapshot().selected_media);
+  CHECK_CAST(!allows(cast_view::CastIntentKind::kCommit));
+  return true;
+}
+
 bool FailedContextBindCanRetry() {
   auto transport = std::make_unique<FakeTransport>();
   auto* fake = transport.get();
@@ -377,10 +516,65 @@ bool OverlayMediaIsRevalidated() {
   return true;
 }
 
+bool LatePlayersRefreshWithoutRebinding() {
+  auto transport = std::make_unique<FakeTransport>();
+  auto* fake = transport.get();
+  media_host::MediaHostAdapter adapter(std::move(transport));
+  CHECK_CAST(adapter.Start("media-host"));
+  std::uint64_t now = 1000;
+  media_host::AlloyCastController controller(&adapter, {}, "Video", "Device",
+                                             [&] { return now; });
+  CHECK_CAST(controller.BindContext(Context()));
+  fake->player_replies.push_back({fake->player_requests.back().context,
+                                  1,
+                                  mh2::PlayerPageStatus::kOk,
+                                  0,
+                                  std::nullopt,
+                                  {}});
+  controller.Tick();
+  CHECK_CAST(controller.snapshot().eligible_count == 0);
+  const auto sent_before = fake->sent.size();
+  for (int tick = 0; tick < 20; ++tick) controller.Tick();
+  CHECK_CAST(fake->player_requests.size() == 1);
+  now += 1000;
+  controller.Tick();
+  CHECK_CAST(fake->player_requests.size() == 2);
+  fake->player_replies.push_back({fake->player_requests.back().context,
+                                  2,
+                                  mh2::PlayerPageStatus::kOk,
+                                  0,
+                                  std::nullopt,
+                                  {{8, 1, mh2::PlayerSourceKind::kHttpUrl, true,
+                                    true, true, false, "Video"}}});
+  controller.Tick();
+  CHECK_CAST(controller.snapshot().eligible_count == 1);
+  CHECK_CAST(fake->sent.size() == sent_before);
+  now += 1000;
+  controller.Tick();
+  fake->player_replies.push_back({fake->player_requests.back().context,
+                                  3,
+                                  mh2::PlayerPageStatus::kOk,
+                                  0,
+                                  std::nullopt,
+                                  {}});
+  controller.Tick();
+  CHECK_CAST(controller.snapshot().eligible_count == 0);
+  controller.Shutdown();
+  now += 1000;
+  const auto requests = fake->player_requests.size();
+  controller.Tick();
+  CHECK_CAST(fake->player_requests.size() == requests);
+  return true;
+}
+
 }  // namespace
 
 int main() {
   const std::pair<const char*, bool (*)()> tests[] = {
+      {"late_players_refresh_without_rebinding",
+       &LatePlayersRefreshWithoutRebinding},
+      {"paginated_refresh_preserves_selection",
+       &PaginatedRefreshPreservesSelection},
       {"full_flow", &FullFlow},
       {"failed_context_bind_can_retry", &FailedContextBindCanRetry},
       {"compatibility_fails_closed", &CompatibilityFailsClosed},

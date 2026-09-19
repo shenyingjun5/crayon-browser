@@ -68,6 +68,7 @@ fn full_roundtrip_over_real_uds() {
         tab_known,
         execute,
         user_data: std::ptr::null_mut(),
+        client_connected_fn: None,
     };
     eprintln!("[T] started");
     assert_eq!(

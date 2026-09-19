@@ -2,11 +2,17 @@
 
 #include <CoreFoundation/CoreFoundation.h>
 
+#include <algorithm>
 #include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <memory>
+#include <mutex>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -15,16 +21,147 @@
 #include "browser/mdv/cef_mdv_handler.h"
 #include "browser/new_tab/cef_new_tab_handler.h"
 #include "browser/permission/permission_store.h"
+#include "crayon/browser_localization/locale_catalog.h"
+#include "include/base/cef_bind.h"
 #include "include/base/cef_callback.h"
 #include "include/cef_app.h"
 #include "include/cef_task.h"
 #include "include/wrapper/cef_closure_task.h"
 #include "include/wrapper/cef_helpers.h"
+#include "macos/agent_confirm_sheet_mac.h"
 #include "macos/media_host_process_mac.h"
 #include "macos/page_markdown_platform_mac.h"
 #include "macos/trusted_input_monitor_mac.h"
 
 namespace crayon::browser::cef_shell {
+
+// --- AGT-12Cc2r: agent-host callback plumbing ---------------------------
+
+constexpr char kAgentHostPurpose[] = "agent-caap";
+constexpr char kAgentHostProfile[] = "default";
+constexpr std::uint64_t kAgentHostGrantTtlMs = 600000;
+// Only capabilities whose tools are really wired into the execute bridge
+// are advertised; capability advertisement mirrors real assembly.
+constexpr char kAgentHostCapabilityPageRead[] = "page_read";
+// The serve thread blocks while the UI thread computes a callback result;
+// every wait is bounded so shutdown cannot depend on UI responsiveness.
+constexpr std::chrono::milliseconds kAgentUiWaitMs{2000};
+constexpr std::chrono::milliseconds kAgentCancelPollMs{100};
+constexpr std::size_t kMaxAgentFieldBytes = 2048;
+
+// CAAP error indices (ffi.rs caap_error_at ordering); the FFI execute
+// status is kAgentHostExecCaapError + index.
+constexpr int kAgentErrTargetInvalid = 3;
+constexpr int kAgentErrDeadlineExceeded = 6;
+constexpr int kAgentErrInvalidMessage = 9;
+
+// Shared serve-thread → UI-thread marshaling state. Defined at namespace
+// scope (declared in app.h) so BrowserApp can own it ahead of the bridge
+// member and the gate outlives the teardown that joins the serve thread.
+struct AgentUiState final {
+  enum class Work {
+    kResolveActiveTab,
+    kTabKnown,
+    kExecuteTool,
+  };
+  struct Pending final {
+    bool fulfilled = false;
+    bool ok = false;
+    std::string text;
+  };
+  enum class WaitOutcome {
+    kFulfilled,
+    kCancelled,
+    kFailed,
+  };
+
+  std::mutex mu;
+  std::condition_variable cv;
+  bool shutting_down = false;
+  std::uint64_t next_ticket = 1;
+  std::map<std::uint64_t, Pending> pending;
+  // UI-thread bindings installed once by StartAgentHost before the serve
+  // thread exists, then only read on TID_UI while shutting_down is false.
+  std::function<std::string()> resolve_active_tab;
+  std::function<bool(const std::string& tab)> tab_known;
+  std::function<std::optional<std::string>(const std::string& tool,
+                                           const std::string& tab)>
+      execute_tool;
+  // AGT-05C: fire-and-forget connect event (client, capabilities CSV).
+  std::function<void(const std::string&, const std::string&)> client_connected;
+
+  // Serve-thread side: reserves a result slot. 0 means shutting down.
+  std::uint64_t OpenTicket() {
+    std::lock_guard<std::mutex> lock(mu);
+    if (shutting_down) {
+      return 0;
+    }
+    const std::uint64_t ticket = next_ticket++;
+    pending.emplace(ticket, Pending{});
+    return ticket;
+  }
+
+  // Serve-thread side: bounded wait. is_cancelled is only called without
+  // holding mu.
+  WaitOutcome WaitFor(std::uint64_t ticket, bool (*is_cancelled)(void* user),
+                      void* cancel_user, Pending* out) {
+    const auto deadline = std::chrono::steady_clock::now() + kAgentUiWaitMs;
+    std::unique_lock<std::mutex> lock(mu);
+    for (;;) {
+      const auto now = std::chrono::steady_clock::now();
+      if (shutting_down || now >= deadline) {
+        break;
+      }
+      const auto it = pending.find(ticket);
+      if (it == pending.end()) {
+        break;
+      }
+      if (it->second.fulfilled) {
+        *out = it->second;
+        pending.erase(it);
+        return WaitOutcome::kFulfilled;
+      }
+      lock.unlock();
+      const bool cancelled = is_cancelled && is_cancelled(cancel_user);
+      lock.lock();
+      if (cancelled) {
+        pending.erase(ticket);
+        return WaitOutcome::kCancelled;
+      }
+      cv.wait_until(lock, std::min(now + kAgentCancelPollMs, deadline));
+    }
+    pending.erase(ticket);
+    return WaitOutcome::kFailed;
+  }
+
+  // UI-thread side. Fulfillments for abandoned tickets no-op.
+  void Fulfill(std::uint64_t ticket, bool ok, std::string text) {
+    {
+      std::lock_guard<std::mutex> lock(mu);
+      if (shutting_down) {
+        return;
+      }
+      const auto it = pending.find(ticket);
+      if (it == pending.end() || it->second.fulfilled) {
+        return;
+      }
+      it->second.ok = ok;
+      it->second.text = std::move(text);
+      it->second.fulfilled = true;
+    }
+    cv.notify_all();
+  }
+
+  // UI-thread side, called before the FFI stop joins the serve thread.
+  void Shutdown() {
+    {
+      std::lock_guard<std::mutex> lock(mu);
+      shutting_down = true;
+    }
+    cv.notify_all();
+  }
+};
+
 namespace {
 
 constexpr char kInitialUrl[] = "crayon://newtab";
@@ -32,8 +169,7 @@ constexpr std::size_t kContentHostStartupChecks = 500;
 constexpr std::int64_t kContentHostTickMilliseconds = 20;
 
 std::string Utf8(CFStringRef value) {
-  if (!value)
-    return {};
+  if (!value) return {};
   const CFIndex length = CFStringGetLength(value);
   const CFIndex capacity =
       CFStringGetMaximumSizeForEncoding(length, kCFStringEncodingUTF8) + 1;
@@ -46,16 +182,13 @@ std::string Utf8(CFStringRef value) {
 
 std::string HelperExecutablePath(const char* helper_name) {
   CFURLRef bundle_url = CFBundleCopyBundleURL(CFBundleGetMainBundle());
-  if (!bundle_url)
-    return {};
+  if (!bundle_url) return {};
   CFStringRef bundle_path =
       CFURLCopyFileSystemPath(bundle_url, kCFURLPOSIXPathStyle);
   CFRelease(bundle_url);
   const std::string path = Utf8(bundle_path);
-  if (bundle_path)
-    CFRelease(bundle_path);
-  if (path.empty())
-    return {};
+  if (bundle_path) CFRelease(bundle_path);
+  if (path.empty()) return {};
   return (std::filesystem::path(path) / "Contents" / "Helpers" / helper_name)
       .string();
 }
@@ -77,39 +210,224 @@ std::uint64_t MonotonicMilliseconds() {
 page_markdown::PageMarkdownStrings BuildPageMarkdownStrings(
     const ::crayon::browser::product_strings::PageMarkdownStrings& strings) {
   return page_markdown::PageMarkdownStrings{
-      strings.preview_command, strings.copy_command, strings.save_as_command,
-      strings.copied_status, strings.copy_failed_status,
-      strings.save_cancelled_status};
+      strings.preview_command,    strings.copy_command,
+      strings.save_as_command,    strings.copied_status,
+      strings.copy_failed_status, strings.save_cancelled_status};
 }
 
-macos::CastChromeStrings BuildCastStrings(
-    const ::crayon::browser::product_strings::CastStrings& strings) {
-  return macos::CastChromeStrings{strings.button_select,
-                                  strings.button_stop,
-                                  strings.picker_title,
-                                  strings.picker_empty,
-                                  strings.picker_select,
-                                  strings.picker_refresh,
-                                  strings.picker_cancel,
-                                  strings.cast_code_label,
-                                  strings.cast_code_connect,
-                                  strings.cast_code_failed,
-                                  strings.playback_pause,
-                                  strings.playback_resume,
-                                  strings.playback_seek,
-                                  strings.playback_seconds,
-                                  strings.playback_failed,
-                                  strings.rejected,
-                                  strings.rejected_no_route,
-                                  strings.rejected_drm,
-                                  strings.retry};
+// Serve-thread trampoline helpers and the UI-thread runner for the CAAP
+// agent host. The constants and AgentUiState live at the enclosing
+// namespace scope (see app.h); everything here is TU-local.
+
+void AgentUiRunWork(AgentUiState* state, std::uint64_t ticket,
+                    AgentUiState::Work work, std::string tool,
+                    std::string arg) {
+  CEF_REQUIRE_UI_THREAD();
+  {
+    std::lock_guard<std::mutex> lock(state->mu);
+    if (state->shutting_down) {
+      return;
+    }
+  }
+  bool ok = false;
+  std::string text;
+  switch (work) {
+    case AgentUiState::Work::kResolveActiveTab:
+      if (state->resolve_active_tab) {
+        text = state->resolve_active_tab();
+        ok = !text.empty();
+      }
+      break;
+    case AgentUiState::Work::kTabKnown:
+      if (state->tab_known) {
+        ok = state->tab_known(arg);
+        text = ok ? "1" : "0";
+      }
+      break;
+    case AgentUiState::Work::kExecuteTool:
+      if (state->execute_tool) {
+        if (auto result = state->execute_tool(tool, arg)) {
+          ok = true;
+          text = std::move(*result);
+        }
+      }
+      break;
+  }
+  state->Fulfill(ticket, ok, std::move(text));
 }
 
-macos::CastChromePresentation CastChromePresentation(
-    media_host::CastShellPresentation presentation) {
-  return {presentation.cast_code_pending, presentation.cast_code_failed,
-          presentation.control_pending, presentation.control_failed,
-          presentation.playback_paused};
+bool PostAgentUiWork(AgentUiState* state, std::uint64_t ticket,
+                     AgentUiState::Work work, std::string tool,
+                     std::string arg) {
+  return CefPostTask(
+      TID_UI, base::BindOnce(&AgentUiRunWork, base::Unretained(state), ticket,
+                             work, std::move(tool), std::move(arg)));
+}
+
+std::optional<std::uint64_t> ParseTabIdText(const std::string& text) {
+  if (text.empty() || text.size() > 19) {
+    return std::nullopt;
+  }
+  std::uint64_t value = 0;
+  for (const char c : text) {
+    const int digit = c - '0';
+    if (digit < 0 || digit > 9) {
+      return std::nullopt;
+    }
+    // Checked math: a wrapping id would only lookup-miss, but an overflow
+    // must not synthesize a different tab identity.
+    if (value > (UINT64_MAX - static_cast<std::uint64_t>(digit)) / 10) {
+      return std::nullopt;
+    }
+    value = value * 10 + static_cast<std::uint64_t>(digit);
+  }
+  return value;
+}
+
+std::string JsonEscape(const std::string& value) {
+  static constexpr char kHex[] = "0123456789abcdef";
+  const std::size_t limit = std::min(value.size(), kMaxAgentFieldBytes);
+  std::string out;
+  out.reserve(limit + 8);
+  for (std::size_t index = 0; index < limit; ++index) {
+    const char c = value[index];
+    switch (c) {
+      case '"':
+        out += "\\\"";
+        break;
+      case '\\':
+        out += "\\\\";
+        break;
+      case '\n':
+        out += "\\n";
+        break;
+      case '\r':
+        out += "\\r";
+        break;
+      case '\t':
+        out += "\\t";
+        break;
+      default:
+        if (static_cast<unsigned char>(c) < 0x20) {
+          out += "\\u00";
+          out += kHex[(static_cast<unsigned char>(c) >> 4) & 0xF];
+          out += kHex[static_cast<unsigned char>(c) & 0xF];
+        } else {
+          out += c;
+        }
+    }
+  }
+  return out;
+}
+
+// Serve-thread trampolines (C linkage to match the Rust extern "C" ABI).
+
+extern "C" const char* AgentResolveActiveTabTrampoline(void* user) {
+  auto* state = static_cast<AgentUiState*>(user);
+  const std::uint64_t ticket = state->OpenTicket();
+  if (ticket == 0) {
+    return nullptr;
+  }
+  if (!PostAgentUiWork(state, ticket, AgentUiState::Work::kResolveActiveTab,
+                       std::string(), std::string())) {
+    state->Fulfill(ticket, false, std::string());
+  }
+  AgentUiState::Pending out;
+  if (state->WaitFor(ticket, nullptr, nullptr, &out) !=
+          AgentUiState::WaitOutcome::kFulfilled ||
+      !out.ok) {
+    return nullptr;
+  }
+  return crayon_agent_host_string_alloc(out.text.c_str());
+}
+
+extern "C" int AgentTabKnownTrampoline(const char* tab, void* user) {
+  if (!tab) {
+    return 1;
+  }
+  auto* state = static_cast<AgentUiState*>(user);
+  const std::uint64_t ticket = state->OpenTicket();
+  if (ticket == 0) {
+    return 1;
+  }
+  if (!PostAgentUiWork(state, ticket, AgentUiState::Work::kTabKnown,
+                       std::string(), std::string(tab))) {
+    state->Fulfill(ticket, false, std::string());
+  }
+  AgentUiState::Pending out;
+  return state->WaitFor(ticket, nullptr, nullptr, &out) ==
+                     AgentUiState::WaitOutcome::kFulfilled &&
+                 out.ok
+             ? 0
+             : 1;
+}
+
+extern "C" CrayonAgentHostExecuteResult AgentExecuteTrampoline(
+    const char* tool, const char* request_json, const char* tab,
+    bool (*is_cancelled)(void* user), void* cancel_user, void* user) {
+  // request_json is intentionally unused: the assembled read tools take no
+  // parameters and parameter validation stays in the gateway.
+  (void)request_json;
+  static constexpr std::string_view kListTargets = "page.list_targets";
+  static constexpr std::string_view kGetTitle = "page.get_title";
+  const std::string_view tool_view =
+      tool ? std::string_view(tool) : std::string_view();
+  if (tool_view != kListTargets && tool_view != kGetTitle) {
+    // Known to the registry but not assembled in this adapter: fail with a
+    // stable CAAP error instead of pretending success.
+    return {kAgentHostExecCaapError + kAgentErrInvalidMessage, nullptr};
+  }
+  auto* state = static_cast<AgentUiState*>(user);
+  const std::uint64_t ticket = state->OpenTicket();
+  if (ticket == 0) {
+    return {kAgentHostExecCancelled, nullptr};
+  }
+  if (!PostAgentUiWork(state, ticket, AgentUiState::Work::kExecuteTool,
+                       std::string(tool_view),
+                       tab ? std::string(tab) : std::string())) {
+    state->Fulfill(ticket, false, std::string());
+  }
+  AgentUiState::Pending out;
+  switch (state->WaitFor(ticket, is_cancelled, cancel_user, &out)) {
+    case AgentUiState::WaitOutcome::kFulfilled:
+      if (out.ok) {
+        return {kAgentHostExecOk,
+                crayon_agent_host_string_alloc(out.text.c_str())};
+      }
+      return {kAgentHostExecCaapError + kAgentErrTargetInvalid, nullptr};
+    case AgentUiState::WaitOutcome::kCancelled:
+      return {kAgentHostExecCancelled, nullptr};
+    case AgentUiState::WaitOutcome::kFailed:
+      return {kAgentHostExecCaapError + kAgentErrDeadlineExceeded, nullptr};
+  }
+  return {kAgentHostExecCaapError + kAgentErrInvalidMessage, nullptr};
+}
+
+// AGT-05C: serve-thread → UI-thread connect event. Fire-and-forget; a
+// dropped post (loop gone) is fine because shutdown revokes everything.
+void AgentUiClientConnected(AgentUiState* state,
+                            std::string client,
+                            std::string capabilities) {
+  CEF_REQUIRE_UI_THREAD();
+  {
+    std::lock_guard<std::mutex> lock(state->mu);
+    if (state->shutting_down) {
+      return;
+    }
+  }
+  if (state->client_connected) {
+    state->client_connected(client, capabilities);
+  }
+}
+
+extern "C" void AgentClientConnectedTrampoline(const char* client,
+                                               const char* capabilities,
+                                               void* user) {
+  auto* state = static_cast<AgentUiState*>(user);
+  CefPostTask(TID_UI,
+              base::BindOnce(&AgentUiClientConnected, base::Unretained(state),
+                             std::string(client ? client : ""),
+                             std::string(capabilities ? capabilities : "")));
 }
 
 }  // namespace
@@ -122,7 +440,6 @@ BrowserApp::BrowserApp(
       product_strings_(BuildProductStringsOrEmpty(locale_snapshot)),
       page_markdown_strings_(
           BuildPageMarkdownStrings(product_strings_.page_markdown)),
-      cast_strings_(BuildCastStrings(product_strings_.cast)),
       mdv_runtime_(std::make_shared<mdv::MdvRuntimeState>()),
       mdv_entries_(std::make_shared<mdv::MdvEntryController>(
           mdv_runtime_, product_strings_.mdv)),
@@ -132,29 +449,6 @@ BrowserApp::BrowserApp(
       content_host_(std::make_unique<macos::ContentHostAdapter>()),
       media_host_(std::make_unique<media_host::MediaHostAdapter>(
           std::make_unique<macos::MediaHostProcess>())),
-      cast_shell_(std::make_unique<
-                  media_host::CastShellController>(media_host::CastCommandPort{
-          [this](media_host::media_host_ipc::DiscoveryAction action) {
-            return media_host_->RequestDiscovery(action);
-          },
-          [this](std::optional<std::uint64_t> revision, std::uint16_t offset) {
-            return media_host_->RequestDevicePage(revision, offset);
-          },
-          [this](std::uint64_t candidate, std::string device, bool handoff) {
-            return media_host_->RequestStartCast(candidate, std::move(device),
-                                                 handoff);
-          },
-          [this](std::uint64_t generation) {
-            return media_host_->RequestStopCast(generation);
-          },
-          [this](std::string code) {
-            return media_host_->RequestResolveCastCode(std::move(code));
-          },
-          [this](std::uint64_t generation,
-                 media_host::media_host_ipc::CastControlAction action,
-                 std::optional<std::uint64_t> seconds) {
-            return media_host_->RequestControlCast(generation, action, seconds);
-          }})),
       trusted_input_monitor_(std::make_unique<macos::TrustedInputMonitor>()),
       tab_controller_(new window::TabController(
           kInitialUrl,
@@ -162,15 +456,6 @@ BrowserApp::BrowserApp(
             const int browser_id = browser->GetIdentifier();
             const window::TabSnapshot* tab =
                 tab_controller_->model().FindByBrowser(browser_id);
-            if (cast_chrome_ && tab) {
-              active_browser_id_ = browser_id;
-              static_cast<void>(cast_chrome_->AttachWindow(
-                  browser_id, browser->GetHost()->GetWindowHandle()));
-              cast_chrome_->SetActiveWindow(browser_id);
-              cast_chrome_->Render(
-                  cast_shell_->coordinator(),
-                  CastChromePresentation(cast_shell_->presentation()));
-            }
             // TabModel::CreateTab auto-activated the new tab: surface it.
             if (tab && product_host_) {
               product_host_->ShowBrowser(browser_id);
@@ -179,14 +464,219 @@ BrowserApp::BrowserApp(
               static_cast<void>(toolbar_->AttachBrowser(tab->id, browser));
               static_cast<void>(toolbar_->SyncTabs(tab_controller_->model()));
             }
+            BindCastForActiveTab();
           },
           std::string(kInitialUrl), permission_store_.get())) {}
 
-BrowserApp::~BrowserApp() = default;
+BrowserApp::~BrowserApp() {
+  // Last-resort stop: the normal path (SetBrowsersClosedCallback) already
+  // shut the host down on the UI thread, but destruction can also run on
+  // a failed-init path where no CEF loop exists, so no thread assertion
+  // here. Gate + FFI stop are thread-safe.
+  if (agent_host_ && agent_host_->started()) {
+    if (agent_ui_state_) {
+      agent_ui_state_->Shutdown();
+    }
+    agent_host_->stop();
+  }
+}
+
+// --- AGT-12Cc2r: agent-host assembly ------------------------------------
+
+void BrowserApp::StartAgentHost() {
+  CEF_REQUIRE_UI_THREAD();
+  if (agent_host_ && agent_host_->started()) {
+    return;
+  }
+  if (!agent_ui_state_) {
+    agent_ui_state_ = std::make_unique<AgentUiState>();
+  }
+  agent_ui_state_->resolve_active_tab = [this]() {
+    return AgentActiveTabIdForUi();
+  };
+  agent_ui_state_->tab_known = [this](const std::string& tab) {
+    return AgentTabKnownForUi(tab);
+  };
+  agent_ui_state_->execute_tool =
+      [this](const std::string& tool,
+             const std::string& tab) -> std::optional<std::string> {
+    return AgentExecuteToolForUi(tool, tab);
+  };
+  agent_ui_state_->client_connected =
+      [this](const std::string& client, const std::string& capabilities) {
+        OnAgentClientConnectedForUi(client, capabilities);
+      };
+  if (!agent_host_) {
+    agent_host_ = std::make_unique<macos::AgentHostBridgeMac>();
+  }
+  const char* capabilities[] = {kAgentHostCapabilityPageRead};
+  const macos::AgentHostBridgeMac::Callbacks callbacks{
+      &AgentResolveActiveTabTrampoline, &AgentTabKnownTrampoline,
+      &AgentExecuteTrampoline,          &AgentClientConnectedTrampoline,
+      agent_ui_state_.get()};
+  // A failed start means the agent feature is silently unavailable (no
+  // endpoint, CLI connects fail); there is no success to announce and
+  // diagnostics deliberately stay out of the hot path.
+  static_cast<void>(agent_host_->start(kAgentHostPurpose, kAgentHostProfile,
+                                       kAgentHostGrantTtlMs, capabilities, 1,
+                                       callbacks));
+  // No grant is minted here: grants are the AGT-05 confirmation outcome.
+  // Without a confirmation surface every tool call fails with the stable
+  // CapabilityDenied documented by AGT-16; start only exposes the UDS
+  // endpoint and completes the handshake path.
+}
+
+void BrowserApp::ShutdownAgentHost() {
+  CEF_REQUIRE_UI_THREAD();
+  if (!agent_host_ || !agent_host_->started()) {
+    return;
+  }
+  if (agent_ui_state_) {
+    // Release bounded waiter waits before the FFI stop joins the thread.
+    agent_ui_state_->Shutdown();
+  }
+  agent_host_->stop();
+}
+
+void BrowserApp::StopBackgroundServices() {
+  CEF_REQUIRE_UI_THREAD();
+  if (background_services_stopped_) {
+    return;
+  }
+  background_services_stopped_ = true;
+  // An open connect-confirmation sheet would keep the window's terminate
+  // flow alive; end it (deny path) before tearing anything down.
+  agent_confirm::DismissConnectConfirmPanel();
+  content_host_tick_active_ = false;
+  trusted_input_monitor_->Stop();
+  // Created in OnContextInitialized, so an early quit (before any browser)
+  // can still reach the funnel without it.
+  if (page_markdown_preview_) {
+    page_markdown_preview_->Stop();
+  }
+  ResetCastContext();
+  if (toolbar_) toolbar_->Shutdown();
+  ShutdownAgentHost();
+  content_host_->Stop();
+  media_host_->Stop();
+}
+
+void BrowserApp::RequestProductQuit(bool force_close_browsers) {
+  CEF_REQUIRE_UI_THREAD();
+  // Quit may only reach the message loop from TabController's last
+  // OnBeforeClose (browsers-closed callback already ran above) — quitting
+  // earlier leaves live CEF objects and the agent-host serve thread behind,
+  // which CHECK-fails inside CefShutdown.
+  StopBackgroundServices();
+  tab_controller_->CloseAllBrowsers(force_close_browsers);
+}
+
+std::string BrowserApp::AgentActiveTabIdForUi() {
+  CEF_REQUIRE_UI_THREAD();
+  // The TabController owns tab activation; cast binding state
+  // (active_browser_id_) is intentionally not consulted here so agent
+  // reads stay independent of cast readiness.
+  const auto browser = tab_controller_->ActiveBrowser();
+  if (!browser) {
+    return {};
+  }
+  const window::TabSnapshot* tab =
+      tab_controller_->model().FindByBrowser(browser->GetIdentifier());
+  if (!tab) {
+    return {};
+  }
+  return std::to_string(tab->id);
+}
+
+bool BrowserApp::AgentTabKnownForUi(const std::string& tab) {
+  CEF_REQUIRE_UI_THREAD();
+  const std::optional<std::uint64_t> id = ParseTabIdText(tab);
+  if (!id) {
+    return false;
+  }
+  return tab_controller_->model().Find(static_cast<window::TabId>(*id)) !=
+         nullptr;
+}
+
+std::string BrowserApp::AgentExecuteToolForUi(const std::string& tool,
+                                              const std::string& tab) {
+  CEF_REQUIRE_UI_THREAD();
+  const window::TabModel& model = tab_controller_->model();
+  if (tool == "page.list_targets") {
+    std::string json = "{\"targets\":[";
+    bool first = true;
+    for (const window::TabId id : model.ordered_tabs()) {
+      const window::TabSnapshot* snapshot = model.Find(id);
+      if (!snapshot) {
+        continue;
+      }
+      if (!first) {
+        json.push_back(',');
+      }
+      first = false;
+      json += "{\"id\":\"" + std::to_string(snapshot->id) + "\",\"active\":";
+      json += model.active_tab() == std::optional<window::TabId>(snapshot->id)
+                  ? "true"
+                  : "false";
+      json += ",\"loading\":";
+      json += snapshot->loading ? "true" : "false";
+      json += ",\"url\":\"" + JsonEscape(snapshot->url) + "\"}";
+    }
+    json += "]}";
+    return json;
+  }
+  if (tool == "page.get_title") {
+    const std::optional<std::uint64_t> id = ParseTabIdText(tab);
+    const window::TabSnapshot* snapshot =
+        id ? model.Find(static_cast<window::TabId>(*id)) : nullptr;
+    if (!snapshot) {
+      return {};
+    }
+    // The product tab strip surfaces the tab URL as its label today; the
+    // preview serves the same value instead of inventing a page title.
+    return "{\"tab_id\":\"" + std::to_string(snapshot->id) + "\",\"title\":\"" +
+           JsonEscape(snapshot->url) + "\"}";
+  }
+  return {};
+}
+
+void BrowserApp::OnAgentClientConnectedForUi(const std::string& client,
+                                             const std::string& capabilities) {
+  CEF_REQUIRE_UI_THREAD();
+  // Only the assembled read capability is grantable here; anything else
+  // was already refused at advertisement time.
+  if (capabilities.find(kAgentHostCapabilityPageRead) == std::string::npos) {
+    return;
+  }
+  if (!agent_host_ || !agent_host_->started()) {
+    return;
+  }
+  const localization::LocaleCatalog catalog(locale_snapshot_.locale);
+  const std::string title =
+      std::string(catalog.Find("agent.confirm.title").value_or(""));
+  const std::string allow =
+      std::string(catalog.Find("agent.confirm.allow").value_or(""));
+  const std::string deny =
+      std::string(catalog.Find("agent.confirm.deny").value_or(""));
+  if (title.empty() || allow.empty() || deny.empty()) {
+    return;
+  }
+  const std::string detail =
+      std::string(catalog.Find("agent.confirm.client").value_or("Client")) +
+      ": " + client + "\n" +
+      std::string(catalog.Find("agent.confirm.disclosure").value_or(""));
+  // Allow mints the session grant bound to THIS confirmed client; the
+  // host refuses the mint once a different connection is active, so a
+  // stale panel can never authorize a client the user never confirmed.
+  agent_confirm::PresentConnectConfirmPanel(
+      title, detail, allow, deny, {[this, client] {
+        static_cast<void>(agent_host_->issue_grant_for_client(
+            client.c_str(), kAgentHostCapabilityPageRead));
+      }});
+}
 
 void BrowserApp::OnBeforeCommandLineProcessing(
-    const CefString& process_type,
-    CefRefPtr<CefCommandLine> command_line) {
+    const CefString& process_type, CefRefPtr<CefCommandLine> command_line) {
   static_cast<void>(process_type);
   command_line->AppendSwitch("use-mock-keychain");
 }
@@ -198,36 +688,19 @@ void BrowserApp::OnRegisterCustomSchemes(
 
 void BrowserApp::OnContextInitialized() {
   CEF_REQUIRE_UI_THREAD();
-  cast_chrome_ = std::make_unique<macos::CastChromeMac>(
-      cast_strings_,
-      macos::CastChromeCallbacks{
-          [this] { return cast_shell_->ActivateCastButton(); },
-          [this] { return cast_shell_->RefreshReceivers(); },
-          [this] { cast_shell_->CancelReceiverPicker(); },
-          [this](const std::string& device_id) {
-            return cast_shell_->SelectReceiver(device_id);
-          },
-          [this](std::string code) {
-            return cast_shell_->ConnectCastCode(std::move(code));
-          },
-          [this](bool paused) { return cast_shell_->SetPaused(paused); },
-          [this](std::uint64_t seconds) {
-            return cast_shell_->SeekSession(seconds);
-          }});
   new_tab::RegisterNewTabSchemeHandlerFactory(
       browser_new_tab::BuildNewTabPageModel(
           browser_new_tab::NewTabProfileMode::kRegular, {}),
       product_strings_.new_tab);
   if (!mdv::RegisterMdvSchemeHandlerFactory(product_strings_.mdv,
-                                             mdv_runtime_)) {
+                                            mdv_runtime_)) {
     CefQuitMessageLoop();
     return;
   }
   tab_controller_->SetLocalEntryCommandHandler(
       [entries = mdv_entries_, editing = mdv_editing_](
           CefRefPtr<CefBrowser> browser, int command_id) {
-        if (entries->HandleChromeCommand(browser, command_id))
-          return true;
+        if (entries->HandleChromeCommand(browser, command_id)) return true;
         return editing->HandleSaveCommand(browser, command_id);
       });
   mdv_entries_->SetDocumentLoadedCallback(
@@ -267,8 +740,7 @@ void BrowserApp::OnContextInitialized() {
   tab_controller_->SetContextMenuCommandHandler(
       [this, entries = mdv_entries_](CefRefPtr<CefBrowser> browser,
                                      int command_id) {
-        if (entries->HandleContextMenuCommand(browser, command_id))
-          return true;
+        if (entries->HandleContextMenuCommand(browser, command_id)) return true;
         return page_markdown_preview_->HandleContextMenuCommand(browser,
                                                                 command_id);
       });
@@ -291,8 +763,7 @@ void BrowserApp::OnContextInitialized() {
       }));
   page_markdown_preview_ =
       std::make_unique<page_markdown::CefPageMarkdownPreviewController>(
-          tab_controller_.get(), mdv_editing_,
-          page_markdown_strings_,
+          tab_controller_.get(), mdv_editing_, page_markdown_strings_,
           macos::CopyMarkdownToPasteboard);
   tab_controller_->SetPageSnapshotAdmission(
       [host = content_host_.get()] { return host->healthy(); });
@@ -300,55 +771,39 @@ void BrowserApp::OnContextInitialized() {
     content_host_->Consume(tab_controller_->DrainPageSnapshots(16));
   });
   tab_controller_->SetMediaObservationLifecycleCallback(
-      [this, host = media_host_.get()](std::uint32_t tab_id,
-                                 std::uint64_t navigation_id,
-                                 std::uint32_t generation, bool closed) {
-        const bool active = tab_controller_->model().active_tab() == tab_id;
+      [this](std::uint32_t tab_id, std::uint64_t navigation_id,
+             std::uint32_t generation, bool closed) {
         if (closed) {
-          static_cast<void>(host->CloseTab(tab_id, generation));
-          if (active)
-            cast_shell_->OnPageClosed();
+          media_generations_.erase(tab_id);
+          if (cast_binding_attempt_ &&
+              cast_binding_attempt_->tab_id == tab_id) {
+            ResetCastContext();
+          } else {
+            static_cast<void>(media_host_->CloseTab(tab_id, generation));
+          }
         } else {
-          static_cast<void>(
-              host->AdvanceNavigation(tab_id, navigation_id, generation));
-          if (active)
-            cast_shell_->OnNavigation();
+          media_generations_[tab_id] = generation;
+          if (tab_controller_->model().active_tab() == tab_id) {
+            BindCastForActiveTab();
+          } else {
+            static_cast<void>(media_host_->AdvanceNavigation(
+                tab_id, navigation_id, generation));
+          }
         }
       });
   tab_controller_->SetBrowserFocusedCallback(
-      [this](CefRefPtr<CefBrowser> browser) {
-        if (active_browser_id_ != 0 &&
-            active_browser_id_ != browser->GetIdentifier()) {
-          cast_shell_->OnNavigation();
-        }
-        active_browser_id_ = browser->GetIdentifier();
-        static_cast<void>(cast_chrome_->AttachWindow(
-            active_browser_id_, browser->GetHost()->GetWindowHandle()));
-        cast_chrome_->SetActiveWindow(active_browser_id_);
-        cast_chrome_->Render(
-            cast_shell_->coordinator(),
-            CastChromePresentation(cast_shell_->presentation()));
-      });
+      [this](CefRefPtr<CefBrowser>) { SyncToolbarToActiveTab(); });
   tab_controller_->SetBrowserClosingCallback(
       [this](CefRefPtr<CefBrowser> browser) {
-        cast_chrome_->DetachWindow(browser->GetIdentifier());
-        if (active_browser_id_ == browser->GetIdentifier())
+        if (active_browser_id_ == browser->GetIdentifier()) {
+          DetachCastSurface();
           active_browser_id_ = 0;
+        }
       });
   tab_controller_->SetMediaObservationEventsReadyCallback(
       [this] { ConsumeMediaObservations(); });
-  tab_controller_->SetBrowsersClosedCallback([this] {
-    content_host_tick_active_ = false;
-    trusted_input_monitor_->Stop();
-    page_markdown_preview_->Stop();
-    cast_shell_->Shutdown();
-    cast_chrome_->Close();
-    if (agent_host_) {
-      agent_host_->stop();
-    }
-    content_host_->Stop();
-    media_host_->Stop();
-  });
+  tab_controller_->SetBrowsersClosedCallback(
+      [this] { StopBackgroundServices(); });
   if (!content_host_->Start(HelperExecutablePath("crayon-content-host")) ||
       !media_host_->Start(HelperExecutablePath("crayon-media-host"))) {
     content_host_->Stop();
@@ -392,24 +847,14 @@ void BrowserApp::ContinueContentHostStartup() {
             if (!toolbar_) {
               return;
             }
-            static_cast<void>(toolbar_->OnTabUiUpdate(browser_id, url,
-                                                      is_loading, can_go_back,
-                                                      can_go_forward));
+            static_cast<void>(toolbar_->OnTabUiUpdate(
+                browser_id, url, is_loading, can_go_back, can_go_forward));
             static_cast<void>(toolbar_->SyncTabs(tab_controller_->model()));
           });
     }
-    // AGT-12Cc2: start the CAAP agent host (UDS endpoint).
-    if (!agent_host_) {
-      agent_host_ = std::make_unique<macos::AgentHostBridgeMac>();
-      const char* purpose = "agent-caap";
-      const char* profile = "default";
-      const char* caps[] = {"page_read", "navigation", nullptr};
-      macos::AgentHostBridgeMac::Callbacks cb{};
-      cb.resolve_active_tab_user = nullptr;
-      cb.tab_known_user = nullptr;
-      cb.execute_user = nullptr;
-      agent_host_->start(purpose, profile, 600000, caps, 2, cb);
-    }
+    // AGT-12Cc2r: start the CAAP agent host (UDS endpoint) once both
+    // helper hosts are healthy. Callbacks marshal onto this UI thread.
+    StartAgentHost();
     // PLT-SHELL-24M1: the product first window is the macOS Alloy host; the
     // TabController WindowClient keeps every normalized callback surface.
     if (!product_host_) {
@@ -419,12 +864,28 @@ void BrowserApp::ContinueContentHostStartup() {
               product_strings_.new_tab.document_title,
               toolbar_->tab_strip_view(), toolbar_->toolbar_view()},
           macos::AlloyProductHostMac::Callbacks{
-              [] { CefQuitMessageLoop(); }});
+              // window_destroyed: the window is gone, but any browser that
+              // has not delivered OnBeforeClose yet must still be closed
+              // through the quit funnel — a direct CefQuitMessageLoop here
+              // exits the loop with live CEF objects behind.
+              [this] { RequestProductQuit(true); },
+              [this] { BindCastForActiveTab(); },
+              [this] { DetachCastSurface(); },
+              [this] {
+                if (cast_surface_) cast_surface_->LayoutChanged();
+              },
+              [this](const CefKeyEvent& event) {
+                return cast_surface_ && cast_surface_->HandleKeyEvent(event);
+              },
+              [this](int command_id) {
+                return cast_surface_ &&
+                       cast_surface_->HandleAccelerator(command_id);
+              }});
     }
     if (!product_host_->Start()) {
-      content_host_->Stop();
-      media_host_->Stop();
-      CefQuitMessageLoop();
+      // The window never existed, so this is a pure service-teardown exit;
+      // the funnel stops the chain and quits with no browsers left.
+      RequestProductQuit(true);
       return;
     }
     content_host_tick_active_ = true;
@@ -454,33 +915,28 @@ void BrowserApp::ScheduleContentHostTick() {
 
 void BrowserApp::ContentHostTick() {
   CEF_REQUIRE_UI_THREAD();
-  if (!content_host_tick_active_)
-    return;
+  if (!content_host_tick_active_) return;
   content_host_->Consume(tab_controller_->DrainPageSnapshots(16));
   ConsumeMediaObservations();
   content_host_->Tick();
-  media_host_->Tick();
+  if (cast_controller_ && cast_context_bound_)
+    cast_controller_->Tick();
+  else
+    media_host_->Tick();
   page_markdown_preview_->Tick(content_host_->Drain(64),
                                content_host_->healthy());
   static_cast<void>(media_host_->Drain(64));
-  cast_shell_->ConsumePlanning(media_host_->DrainPlanning(64));
-  cast_shell_->ConsumeCast(media_host_->DrainCast(64));
+  static_cast<void>(media_host_->DrainPlanning(64));
   const bool media_healthy = media_host_->healthy();
   const std::uint64_t cast_epoch = media_host_->cast_state_epoch();
   if ((!media_healthy && media_host_was_healthy_) ||
-      (media_host_cast_epoch_ != 0 && cast_epoch != media_host_cast_epoch_)) {
-    cast_shell_->OnHostUnavailable();
+      (cast_controller_ && cast_epoch != media_host_cast_epoch_)) {
+    ResetCastContext();
   }
   media_host_was_healthy_ = media_healthy;
   media_host_cast_epoch_ = cast_epoch;
-  if (CefRefPtr<CefBrowser> active_browser = tab_controller_->ActiveBrowser()) {
-    active_browser_id_ = active_browser->GetIdentifier();
-    static_cast<void>(cast_chrome_->AttachWindow(
-        active_browser_id_, active_browser->GetHost()->GetWindowHandle()));
-    cast_chrome_->SetActiveWindow(active_browser_id_);
-  }
-  cast_chrome_->Render(cast_shell_->coordinator(),
-                       CastChromePresentation(cast_shell_->presentation()));
+  if (media_healthy) BindCastForActiveTab();
+  if (cast_surface_) cast_surface_->Tick();
   ScheduleContentHostTick();
 }
 
@@ -490,12 +946,7 @@ void BrowserApp::ConsumeMediaObservations() {
   for (auto& event : tab_controller_->DrainMediaObservations(16)) {
     auto page_url =
         tab_controller_->TrustedPageUrl(event.tab_id, event.navigation_id);
-    if (!page_url)
-      continue;
-    if (event.source == ::crayon::cef_shell::gateway::EventSource::kMedia &&
-        tab_controller_->model().active_tab() == event.tab_id) {
-      cast_shell_->OnBrowserVerifiedMedia();
-    }
+    if (!page_url) continue;
     facts.push_back(media_host::BrowserMediaFact{
         std::move(event), std::move(*page_url), MonotonicMilliseconds()});
   }
@@ -519,6 +970,85 @@ void BrowserApp::SyncToolbarToActiveTab() {
     }
   }
   static_cast<void>(toolbar_->SyncTabs(tab_controller_->model()));
+  BindCastForActiveTab();
+}
+
+void BrowserApp::DetachCastSurface() {
+  if (cast_surface_) cast_surface_->Detach();
+  cast_surface_.reset();
+}
+
+void BrowserApp::ResetCastContext() {
+  DetachCastSurface();
+  if (cast_controller_) cast_controller_->Shutdown();
+  cast_controller_.reset();
+  cast_binding_attempt_.reset();
+  cast_context_bound_ = false;
+  active_browser_id_ = 0;
+}
+
+void BrowserApp::BindCastForActiveTab() {
+  CEF_REQUIRE_UI_THREAD();
+  if (!product_host_ || !toolbar_ || !media_host_->healthy()) return;
+  const auto browser = tab_controller_->ActiveBrowser();
+  if (!browser) return;
+  const auto* tab =
+      tab_controller_->model().FindByBrowser(browser->GetIdentifier());
+  if (!tab || !tab->navigation_generation) return;
+  const auto generation =
+      media_generations_.find(static_cast<std::uint32_t>(tab->id));
+  const auto view = product_host_->browser_view(browser->GetIdentifier());
+  const auto window = product_host_->window();
+  if (generation == media_generations_.end() || !view || !window) return;
+  if (active_browser_id_ != browser->GetIdentifier()) {
+    // CloseTab retires the previous observation generation. Renew via the
+    // existing Browser observation owner on activation, never synthesize it.
+    active_browser_id_ = browser->GetIdentifier();
+    tab_controller_->client()->AdvanceMediaObservationNavigation(
+        browser, static_cast<std::uint32_t>(tab->id),
+        tab->navigation_generation);
+    return;  // The synchronous lifecycle callback performs the bind once.
+  }
+  if (!cast_controller_) {
+    cast_browser_session_ = MonotonicMilliseconds();
+    media_host_cast_epoch_ = media_host_->cast_state_epoch();
+    media_host_was_healthy_ = true;
+    const localization::LocaleCatalog catalog(locale_snapshot_.locale);
+    cast_controller_ = std::make_unique<media_host::AlloyCastController>(
+        media_host_.get(),
+        [this](auto snapshot) {
+          if (cast_surface_ && media_host_->healthy() &&
+              media_host_->cast_state_epoch() == media_host_cast_epoch_)
+            static_cast<void>(cast_surface_->Apply(std::move(snapshot)));
+        },
+        std::string(catalog.Find("cast.selection.video_fallback").value_or("")),
+        std::string(
+            catalog.Find("cast.selection.device_fallback").value_or("")),
+        MonotonicMilliseconds);
+  }
+  const browser_cast_view::CastViewContext context{
+      cast_browser_session_, "default", static_cast<std::uint32_t>(tab->id),
+      tab->navigation_generation, generation->second};
+  // One attempt per identity: readiness is checked above; a rejected bind must
+  // not repeatedly close/advance the runtime tab on each 20ms tick.
+  if (cast_binding_attempt_ && *cast_binding_attempt_ == context) return;
+  DetachCastSurface();
+  cast_binding_attempt_ = context;
+  active_browser_id_ = browser->GetIdentifier();
+  product_host_->ShowBrowser(active_browser_id_);
+  cast_surface_ = std::make_unique<CastEntrySurface>(
+      locale_snapshot_, MonotonicMilliseconds, [this](auto intent) {
+        if (cast_controller_ && media_host_->healthy() &&
+            media_host_->cast_state_epoch() == media_host_cast_epoch_)
+          static_cast<void>(cast_controller_->HandleIntent(intent));
+      });
+  if (!cast_surface_->Attach(window, view, toolbar_->toolbar_panel())) {
+    DetachCastSurface();
+    return;
+  }
+  cast_surface_->BindContext(context);
+  cast_context_bound_ = cast_controller_->BindContext(context);
+  if (!cast_context_bound_) DetachCastSurface();
 }
 
 bool BrowserApp::ExecuteAppCommand(macos::ApplicationCommand command) {

@@ -1042,10 +1042,12 @@ if(OS_MAC)
       src/macos/alloy_toolbar_mac.cc
       src/macos/app.cc
       src/macos/app.h
-      src/macos/cast_chrome_mac.h
-      src/macos/cast_chrome_mac.mm
-      src/browser/media_host/cast_shell_controller.cc
-      src/browser/media_host/cast_shell_controller.h
+      src/macos/agent_confirm_sheet_mac.h
+      src/macos/agent_confirm_sheet_mac.mm
+      src/browser/media_host/alloy_cast_controller.cc
+      src/browser/media_host/alloy_cast_controller.h
+      src/browser/media_host/cast_entry_surface.cc
+      src/browser/media_host/cast_entry_surface.h
       src/macos/content_host_adapter_mac.cc
       src/macos/content_host_adapter_mac.h
       src/macos/content_host_process_mac.cc
@@ -1179,6 +1181,7 @@ if(OS_MAC)
                               src/macos/cast_chrome_mac.mm
                               src/macos/page_markdown_platform_mac.mm
                               src/macos/trusted_input_monitor_mac.mm
+                              src/macos/agent_confirm_sheet_mac.mm
                               PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
   # AGT-12Cc2: bridging declarations for the Rust FFI surface.
   set(crayon_agent_host_include_dir
@@ -1506,6 +1509,16 @@ if(OS_MAC)
       crayon_media_host_adapter_mac_test
       PRIVATE crayon::cef-shell-core-client crayon::cef-shell-ipc)
     add_test(NAME media_host_adapter_mac COMMAND crayon_media_host_adapter_mac_test)
+    add_executable(crayon_alloy_cast_controller_mac_test
+      tests/alloy_cast_controller_test.cc
+      src/browser/media_host/alloy_cast_controller.cc
+      src/browser/media_host/media_host_adapter.cc)
+    target_compile_features(crayon_alloy_cast_controller_mac_test PRIVATE cxx_std_17)
+    target_include_directories(crayon_alloy_cast_controller_mac_test
+      PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(crayon_alloy_cast_controller_mac_test PRIVATE
+      crayon::browser-cast-view crayon::cef-shell-core-client crayon::cef-shell-ipc)
+    add_test(NAME alloy_cast_controller_mac COMMAND crayon_alloy_cast_controller_mac_test)
     add_executable(
       crayon_cast_shell_controller_mac_test
       tests/cast_shell_controller_test.cc
@@ -1582,6 +1595,10 @@ if(CRAYON_BUILD_TESTS)
       crayon_page_snapshot_cef_integration_test MACOSX_BUNDLE
       ${crayon_location_bar_sources}
       tests/page_snapshot_cef_integration_mac.mm
+      src/macos/alloy_product_host_mac.cc
+      src/macos/alloy_toolbar_mac.cc
+      tests/alloy_cast_toolbar_mac_probe.cc
+      tests/alloy_cast_toolbar_mac_probe.h
       tests/alloy_security_probe.cc
       tests/alloy_security_probe.h
       src/browser/window/alloy_site_controls.cc
@@ -1878,6 +1895,9 @@ if(CRAYON_BUILD_TESTS)
     add_test(NAME alloy_tab_strip_mac
              COMMAND crayon_page_snapshot_cef_integration_test --alloy-tab-strip-probe)
     set_tests_properties(alloy_tab_strip_mac PROPERTIES TIMEOUT 30 LABELS "cef;shell;macos")
+    add_test(NAME alloy_cast_toolbar_mac
+      COMMAND crayon_page_snapshot_cef_integration_test --alloy-cast-toolbar-mac-probe)
+    set_tests_properties(alloy_cast_toolbar_mac PROPERTIES TIMEOUT 30)
     add_test(NAME cast_entry_surface_probe
              COMMAND crayon_page_snapshot_cef_integration_test
              --cast-entry-surface-probe)

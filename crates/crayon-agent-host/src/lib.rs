@@ -32,6 +32,29 @@ pub fn wall_clock_ms() -> u64 {
         .unwrap_or(0)
 }
 
+/// Connected-client notification: client name plus negotiated
+/// capabilities (AGT-05C).
+pub type OnClientConnected = Arc<dyn Fn(&str, &[AgentCapability]) + Send + Sync>;
+
+/// Cross-thread host callbacks wired at construction (AGT-05C).
+pub struct AgentHostWiring {
+    /// Wakes a blocked endpoint accept (AGT-12Ce).
+    pub endpoint_wake: Box<dyn Fn() + Send + Sync>,
+    /// Invoked on the serve thread after a client completes its
+    /// handshake, with the client name and the negotiated capabilities.
+    /// Must not block: it runs between connection frames.
+    pub on_client_connected: OnClientConnected,
+}
+
+impl Default for AgentHostWiring {
+    fn default() -> Self {
+        Self {
+            endpoint_wake: Box::new(|| {}),
+            on_client_connected: Arc::new(|_, _| {}),
+        }
+    }
+}
+
 /// `GatewayDispatch` behind a mutex so confirmation-driven grant issuance
 /// can interleave with the serve loop. The lock is held for the duration
 /// of one dispatched request (or one grant issuance); a confirmation
@@ -39,6 +62,7 @@ pub fn wall_clock_ms() -> u64 {
 struct SharedDispatch<P: ToolPort> {
     inner: Arc<Mutex<GatewayDispatch<P>>>,
     active_client: Arc<Mutex<Option<String>>>,
+    on_client_connected: OnClientConnected,
 }
 
 impl<P: ToolPort> CaapDispatch for SharedDispatch<P> {
@@ -49,6 +73,8 @@ impl<P: ToolPort> CaapDispatch for SharedDispatch<P> {
         if let Ok(mut active) = self.active_client.lock() {
             *active = Some(client.to_owned());
         }
+        // External callback strictly outside both locks (AGT-05C).
+        (self.on_client_connected)(client, granted);
     }
 
     fn close_client(&mut self, client: &str) {
@@ -89,6 +115,10 @@ pub struct AgentHost<P: ToolPort> {
     stop: StopFlag,
     serve: Option<std::thread::JoinHandle<ServerExit>>,
     purpose: String,
+    // AGT-12Ce: wakes a blocked endpoint accept from outside the serve
+    // thread (the macOS UDS stop handle). Endpoints without a wake stop
+    // purely through the shared stop flag as before.
+    endpoint_wake: Option<Box<dyn Fn() + Send + Sync>>,
 }
 
 impl<P: ToolPort + Send + 'static> AgentHost<P> {
@@ -96,6 +126,37 @@ impl<P: ToolPort + Send + 'static> AgentHost<P> {
     /// be freshly constructed; the host starts it and owns it inside the
     /// serve thread.
     pub fn start_with_endpoint<E>(
+        endpoint: E,
+        port: P,
+        purpose: &str,
+        profile: ProfileScope,
+        grant_ttl_ms: u64,
+        supported_schema: SchemaVersion,
+        allowed_capabilities: Vec<AgentCapability>,
+    ) -> Result<Self, LocalAgentIpcError>
+    where
+        E: LocalAgentIpcEndpoint + Send + 'static,
+    {
+        Self::start_with_wiring(
+            AgentHostWiring::default(),
+            endpoint,
+            port,
+            purpose,
+            profile,
+            grant_ttl_ms,
+            supported_schema,
+            allowed_capabilities,
+        )
+    }
+
+    /// [`Self::start_with_endpoint`] plus the cross-thread host wiring:
+    /// `endpoint_wake` unblocks a parked accept on shutdown (AGT-12Ce);
+    /// `on_client_connected` surfaces each completed handshake (AGT-05C).
+    // Positional parity with the C-ABI-adjacent `start_with_endpoint`
+    // keeps one call shape across the hosting surface.
+    #[allow(clippy::too_many_arguments)]
+    pub fn start_with_wiring<E>(
+        wiring: AgentHostWiring,
         mut endpoint: E,
         port: P,
         purpose: &str,
@@ -118,16 +179,19 @@ impl<P: ToolPort + Send + 'static> AgentHost<P> {
                 Box::new(wall_clock_ms),
             ))),
             active_client: Arc::new(Mutex::new(None)),
+            on_client_connected: Arc::clone(&wiring.on_client_connected),
         });
         let stop = StopFlag::new();
         let thread_stop = stop.clone();
         let serve_shared = Arc::clone(&shared);
+        let on_client_connected = Arc::clone(&wiring.on_client_connected);
         let serve = std::thread::Builder::new()
             .name(format!("crayon-agent-host-{purpose}"))
             .spawn(move || {
                 let mut shared_dispatch = SharedDispatch {
                     inner: Arc::clone(&serve_shared.inner),
                     active_client: Arc::clone(&serve_shared.active_client),
+                    on_client_connected,
                 };
                 run(
                     &mut endpoint,
@@ -144,6 +208,7 @@ impl<P: ToolPort + Send + 'static> AgentHost<P> {
             stop,
             serve: Some(serve),
             purpose: purpose.to_owned(),
+            endpoint_wake: Some(wiring.endpoint_wake),
         })
     }
 
@@ -201,11 +266,44 @@ impl<P: ToolPort + Send + 'static> AgentHost<P> {
         guard.grant(&client, capability, None, wall_clock_ms())
     }
 
+    /// Issues a grant bound to a named client — the AGT-05C confirmation
+    /// outcome. The mint only proceeds while the confirmed client is
+    /// still the active connection, so a stale confirmation panel can
+    /// never authorize a different (never-confirmed) client.
+    pub fn issue_grant_for_client(
+        &self,
+        client: &str,
+        capability: AgentCapability,
+    ) -> Result<(), CaapError> {
+        let active = self
+            .shared
+            .active_client
+            .lock()
+            .ok()
+            .and_then(|active| active.clone())
+            .ok_or(CaapError::Unauthorized)?;
+        if active != client {
+            // The confirmed client is gone; another connection is active.
+            // Fail closed instead of minting for the unconfirmed client.
+            return Err(CaapError::Unauthorized);
+        }
+        let mut guard = self
+            .shared
+            .inner
+            .lock()
+            .map_err(|_| CaapError::Unauthorized)?;
+        guard.grant(client, capability, None, wall_clock_ms())
+    }
+
     /// Requests a clean exit and waits up to |timeout| for the serve
-    /// thread. A connection stuck in a blocking read keeps the loop alive
-    /// until its client disconnects; past the timeout the thread is
-    /// detached (it exits at the next loop boundary check).
+    /// thread. The endpoint wake (when present) unblocks a thread parked
+    /// in `accept` within its poll slice; a connection stuck in a
+    /// blocking read still keeps the loop alive until its client
+    /// disconnects, after which the timeout detaches the thread.
     pub fn stop_and_join(mut self, timeout: std::time::Duration) -> Option<ServerExit> {
+        if let Some(wake) = self.endpoint_wake.as_ref() {
+            wake();
+        }
         self.stop.stop();
         let handle = self.serve.take()?;
         let deadline = std::time::Instant::now() + timeout;
@@ -229,6 +327,7 @@ pub fn start_macos_uds<P: ToolPort + Send + 'static>(
     grant_ttl_ms: u64,
     supported_schema: SchemaVersion,
     allowed_capabilities: Vec<AgentCapability>,
+    on_client_connected: OnClientConnected,
 ) -> Result<(AgentHost<P>, String), LocalAgentIpcError> {
     let socket_path = {
         // The path derives purely from the purpose token; build a probe
@@ -237,7 +336,13 @@ pub fn start_macos_uds<P: ToolPort + Send + 'static>(
         MacUdsEndpoint::new(purpose)?.socket_path()
     };
     let endpoint = crayon_platform_macos::local_agent_ipc::MacUdsEndpoint::new(purpose)?;
-    let host = AgentHost::start_with_endpoint(
+    let stop_handle = endpoint.stop_handle();
+    let wiring = AgentHostWiring {
+        endpoint_wake: Box::new(move || stop_handle.request_stop()),
+        on_client_connected,
+    };
+    let host = AgentHost::start_with_wiring(
+        wiring,
         endpoint,
         port,
         purpose,

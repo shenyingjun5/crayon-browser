@@ -86,7 +86,7 @@ R04c2 codec 只序列化已经由 Browser proof/generation 链验证的事实；
 
 实现状态：R04c2 双端 codec 与共享 player golden 已 VERIFIED（Rust 7/7、Windows C++ Debug/Release 各 1/1）；R04d2 已在 Windows transport/host 接入有界 player registry。该状态只代表可信播放器事实进入 host 私有集合，不代表已有列表、选择或投送能力。
 
-R04d1 Windows transport/host 一次握手 owner 已 VERIFIED；R04d2 后 Windows Hello 只广告已装配的 `CAP_MEDIA_READ`，host 仅选择交集。每次 child generation 必须完成匹配 Welcome 后 transport 才 healthy，重启重新握手并创建新 registry；macOS 暂保留 legacy/零 MHV2 能力。Browser 只在当前 proof/generation 下发送 upsert/remove，队列失败饱和计数且不阻塞旧 MHV1 主链；registry 最多 16/page、256/global，公开投影不含原始 URL。R04d3 的 Browser DTO 仍不含 URL，重复、迟到、错上下文和背压 page 均拒绝并饱和计数；registry mutation 使旧 snapshot 返回 Stale 空页。
+R04d1 Windows transport/host 一次握手 owner 已 VERIFIED；R04d2 后 Windows Hello 只广告已装配的 `CAP_MEDIA_READ`，host 仅选择交集。每次 child generation 必须完成匹配 Welcome 后 transport 才 healthy，重启重新握手并创建新 registry；macOS 原先保留 legacy/零 MHV2 能力；2026-09-17 `PLT-SHELL-24M2CAST-T` 已接入同一握手及 player/page/draft transport，只有实际 Welcome 匹配后才发布协商能力，退役/Stop 清空能力与回复。同日 `PLT-SHELL-24M2CAST` 将 Mac 产品 cast 链切到 `AlloyCastController` + `CastEntrySurface`：Alloy 工具栏出现唯一 cast 入口（无媒体时 disabled），投影/意图全部来自真实 MHV2 协商数据，旧标题栏 accessory 消费链不再实例化。Mac Debug/Release transport Harness、产品构建与定向 CTest（含新工具栏 probe）已通过；真实接收端投屏与工具栏人工验收仍未做，不能据此宣称产品投屏闭环完成。Browser 只在当前 proof/generation 下发送 upsert/remove，队列失败饱和计数且不阻塞旧 MHV1 主链；registry 最多 16/page、256/global，公开投影不含原始 URL。R04d3 的 Browser DTO 仍不含 URL，重复、迟到、错上下文和背压 page 均拒绝并饱和计数；registry mutation 使旧 snapshot 返回 Stale 空页。
 
 R04e 修正媒体类型投影：renderer collector 只从实际 `HTMLVideoElement`/`HTMLMediaElement` 产生封闭 Video/Audio kind，内部 renderer→Browser CEF 消息显式升级为 v3 并拒绝旧 v2 同名布局；Browser 只把 Video 映射为 `has_video`、Audio 映射为 `has_audio`。kind 不参与播放证明或授权，`<video>` 是否含音轨不做页面侧猜测，最终能力仍由 prepare/receiver owner 决定。
 

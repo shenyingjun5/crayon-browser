@@ -5,7 +5,7 @@
 //! `crayon_agent_host_string_free`. Payload bytes never cross this layer
 //! for logging or diagnostics.
 
-use std::ffi::{c_char, CStr, CString};
+use std::ffi::{c_char, c_void, CStr, CString};
 use std::sync::Mutex;
 
 use crayon_agent_gateway::grant::ProfileScope;
@@ -24,6 +24,10 @@ pub const CRAYON_AGENT_HOST_UNSUPPORTED_PLATFORM: i32 = 4;
 pub const CRAYON_AGENT_HOST_NOT_RUNNING: i32 = 5;
 pub const CRAYON_AGENT_HOST_POISONED: i32 = 6;
 pub const CRAYON_AGENT_HOST_UNKNOWN_CAPABILITY: i32 = 7;
+/// Stop requested, but the serve thread stayed blocked on a client
+/// connection and was detached at the join timeout. The caller must treat
+/// the callbacks/user_data as still referenced until the process exits.
+pub const CRAYON_AGENT_HOST_STOP_TIMEOUT: i32 = 8;
 
 /// Execute-result status: the tool ran and produced `text`.
 pub const CRAYON_AGENT_HOST_EXEC_OK: i32 = 0;
@@ -57,6 +61,12 @@ pub type CrayonAgentHostExecuteFn = extern "C" fn(
     user: *mut std::os::raw::c_void,
 ) -> CrayonAgentHostExecuteResult;
 
+/// Notifies the product that a client completed its handshake (AGT-05C).
+/// `capabilities` is a comma-separated list of negotiated wire names; the
+/// product decides whether to present the confirmation surface.
+pub type CrayonAgentHostClientConnectedFn =
+    extern "C" fn(client: *const c_char, capabilities: *const c_char, user: *mut c_void);
+
 /// Host configuration. Strings are borrowed for the duration of `start`.
 #[repr(C)]
 pub struct CrayonAgentHostConfig {
@@ -69,7 +79,27 @@ pub struct CrayonAgentHostConfig {
     pub tab_known: CrayonAgentHostTabKnownFn,
     pub execute: CrayonAgentHostExecuteFn,
     pub user_data: *mut std::os::raw::c_void,
+    /// Optional; null when the product does not need connect events.
+    pub client_connected_fn: Option<CrayonAgentHostClientConnectedFn>,
 }
+
+/// Raw callback user pointer with the `FfiPort` lifetime guarantee, so
+/// the connect-event closure can cross into the serve thread (AGT-05C).
+struct CallbackUser(*mut c_void);
+
+impl CallbackUser {
+    /// Deliberately a method: a closure reading the field directly would
+    /// disjoint-capture the raw pointer and lose the Send/Sync wrapper.
+    fn get(&self) -> *mut c_void {
+        self.0
+    }
+}
+
+// SAFETY: the pointer targets product-owned state that outlives
+// `crayon_agent_host_stop` (same contract as `FfiPort`); the pointee is
+// only touched by product code on the CEF UI thread.
+unsafe impl Send for CallbackUser {}
+unsafe impl Sync for CallbackUser {}
 
 /// FFI tool port: wraps the config callbacks. The product guarantees the
 /// callbacks and user data outlive `stop`; sends across the serve-thread
@@ -235,6 +265,29 @@ pub unsafe extern "C" fn crayon_agent_host_start(config: *const CrayonAgentHostC
             execute: config.execute,
             user: config.user_data,
         };
+        let client_connected_fn = config.client_connected_fn;
+        // SAFETY: the raw user pointer follows the same product guarantee
+        // as `FfiPort` — callbacks and user data outlive
+        // `crayon_agent_host_stop`.
+        let callback_user = CallbackUser(config.user_data);
+        let on_client_connected =
+            std::sync::Arc::new(move |client: &str, capabilities: &[AgentCapability]| {
+                let Some(callback) = client_connected_fn else {
+                    return;
+                };
+                let Ok(client_c) = CString::new(client) else {
+                    return;
+                };
+                let names = capabilities
+                    .iter()
+                    .map(|capability| capability.wire_name())
+                    .collect::<Vec<_>>()
+                    .join(",");
+                let Ok(caps_c) = CString::new(names) else {
+                    return;
+                };
+                callback(client_c.as_ptr(), caps_c.as_ptr(), callback_user.get());
+            });
         let Ok(mut host) = HOST.lock() else {
             return CRAYON_AGENT_HOST_POISONED;
         };
@@ -248,6 +301,7 @@ pub unsafe extern "C" fn crayon_agent_host_start(config: *const CrayonAgentHostC
             config.grant_ttl_ms,
             SchemaVersion::CURRENT,
             capabilities,
+            on_client_connected,
         ) {
             Ok((agent, socket_path)) => {
                 *host = Some(GlobalHost { agent, socket_path });
@@ -261,16 +315,20 @@ pub unsafe extern "C" fn crayon_agent_host_start(config: *const CrayonAgentHostC
 }
 
 /// Stops the host and joins the serve thread. Idempotent; returns
-/// NOT_RUNNING when no host is live.
+/// NOT_RUNNING when no host is live and STOP_TIMEOUT when the serve
+/// thread stayed blocked on a client connection and was detached.
 #[no_mangle]
 pub extern "C" fn crayon_agent_host_stop() -> i32 {
     let taken = HOST.lock().ok().and_then(|mut host| host.take());
     match taken {
         Some(global) => {
-            global
+            match global
                 .agent
-                .stop_and_join(std::time::Duration::from_secs(5));
-            CRAYON_AGENT_HOST_OK
+                .stop_and_join(std::time::Duration::from_secs(5))
+            {
+                Some(_) => CRAYON_AGENT_HOST_OK,
+                None => CRAYON_AGENT_HOST_STOP_TIMEOUT,
+            }
         }
         None => CRAYON_AGENT_HOST_NOT_RUNNING,
     }
@@ -301,6 +359,47 @@ pub unsafe extern "C" fn crayon_agent_host_issue_grant(capability: *const c_char
         return CRAYON_AGENT_HOST_NOT_RUNNING;
     };
     match global.agent.issue_grant_to_active_client(capability) {
+        Ok(()) => CRAYON_AGENT_HOST_OK,
+        Err(_) => CRAYON_AGENT_HOST_NOT_RUNNING,
+    }
+}
+
+/// Issues a grant bound to the named client — the AGT-05C confirmation
+/// outcome. Fails with NOT_RUNNING when the confirmed client is no
+/// longer the active connection, so a stale panel can never authorize a
+/// different client.
+/// # Safety
+///
+/// `client` and `capability` must be valid NUL-terminated UTF-8 strings.
+#[no_mangle]
+pub unsafe extern "C" fn crayon_agent_host_issue_grant_for_client(
+    client: *const c_char,
+    capability: *const c_char,
+) -> i32 {
+    let name = if client.is_null() {
+        return CRAYON_AGENT_HOST_INVALID_CONFIG;
+    } else {
+        unsafe { CStr::from_ptr(client) }
+            .to_string_lossy()
+            .into_owned()
+    };
+    let capability_name = if capability.is_null() {
+        return CRAYON_AGENT_HOST_INVALID_CONFIG;
+    } else {
+        unsafe { CStr::from_ptr(capability) }
+            .to_string_lossy()
+            .into_owned()
+    };
+    let Some(capability) = capability_from_name(&capability_name) else {
+        return CRAYON_AGENT_HOST_UNKNOWN_CAPABILITY;
+    };
+    let Ok(mut host) = HOST.lock() else {
+        return CRAYON_AGENT_HOST_POISONED;
+    };
+    let Some(global) = host.as_mut() else {
+        return CRAYON_AGENT_HOST_NOT_RUNNING;
+    };
+    match global.agent.issue_grant_for_client(&name, capability) {
         Ok(()) => CRAYON_AGENT_HOST_OK,
         Err(_) => CRAYON_AGENT_HOST_NOT_RUNNING,
     }

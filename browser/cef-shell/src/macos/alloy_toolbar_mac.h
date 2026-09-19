@@ -36,6 +36,7 @@ class AlloyToolbarMac final {
 
   CefRefPtr<CefView> tab_strip_view() const;
   CefRefPtr<CefView> toolbar_view() const;
+  CefRefPtr<CefPanel> toolbar_panel() const { return toolbar_; }
 
   bool SyncTabs(const window::TabModel& model);
 

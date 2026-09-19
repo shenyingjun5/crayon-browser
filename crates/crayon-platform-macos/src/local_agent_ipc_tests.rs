@@ -101,3 +101,33 @@ fn real_bind_accept_and_uid_check() {
     assert!(LocalAgentIpcEndpoint::admit_peer(&server, PeerIdentity::new(true, true)).is_ok());
     server.stop().expect("stop");
 }
+
+#[test]
+fn stop_handle_unblocks_accept() {
+    let mut ep = MacUdsEndpoint::new("test-wake").expect("endpoint");
+    ep.start().expect("start");
+    let handle = ep.stop_handle();
+    let worker = std::thread::spawn(move || ep.accept_and_check());
+    // Give the worker time to park in the accept poll loop.
+    std::thread::sleep(std::time::Duration::from_millis(200));
+    handle.request_stop();
+    let started = std::time::Instant::now();
+    let result = worker.join().expect("accept thread");
+    assert!(started.elapsed() < std::time::Duration::from_secs(2));
+    assert_eq!(result, Err(LocalAgentIpcError::NotRunning));
+}
+
+#[test]
+fn drop_unlinks_socket_file() {
+    let purpose = "test-drop-unlink";
+    let path = {
+        let ep = MacUdsEndpoint::new(purpose).expect("endpoint");
+        let mut ep = ep;
+        ep.start().expect("start");
+        let path = ep.socket_path();
+        assert!(std::path::Path::new(&path).exists());
+        path
+        // Drop here: must unlink like an explicit stop.
+    };
+    assert!(!std::path::Path::new(&path).exists());
+}

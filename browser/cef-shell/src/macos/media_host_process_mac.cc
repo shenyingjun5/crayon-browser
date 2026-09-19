@@ -40,6 +40,12 @@ using ::crayon::cef_shell::ipc::FrameCodec;
 using ::crayon::cef_shell::ipc::IpcError;
 using media_host_ipc::CodecError;
 using media_host_ipc::Message;
+namespace v2 = ::crayon::cef_shell::ipc::media_host_v2;
+
+constexpr std::uint32_t kCapabilities = v2::kCapMediaRead | v2::kCapDraft |
+                                        v2::kCapConnect | v2::kCapReason |
+                                        v2::kCapSession;
+constexpr auto kHandshakeDeadline = std::chrono::seconds(5);
 
 constexpr std::size_t kMaxOutboundFrames = 64;
 constexpr std::size_t kMaxResponseMessages = 64;
@@ -337,7 +343,11 @@ public:
   }
 
   void Stop() {
-    stopping_.store(true, std::memory_order_release);
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      stopping_.store(true, std::memory_order_release);
+      ClearSessionLocked();
+    }
     wake_.notify_all();
     if (worker_.joinable())
       worker_.join();
@@ -345,23 +355,56 @@ public:
   }
 
   bool Enqueue(Message message) {
+    const auto expected_generation = generation();
     CodecError error = CodecError::kInvalidValue;
-    auto payload = media_host_ipc::Encode(message, &error);
-    if (!payload || !healthy_.load(std::memory_order_acquire))
-      return false;
-    auto frame = FrameCodec::Encode(*payload);
+    return QueuePayload(media_host_ipc::Encode(message, &error), 0,
+                        expected_generation, 0, 0);
+  }
+
+  bool EnqueuePlayer(v2::PlayerMessage message) {
+    const auto *fact = std::get_if<v2::PlayerFact>(&message);
+    const auto &context =
+        fact ? fact->context : std::get<v2::PlayerContext>(message);
+    return QueuePayload(v2::EncodePlayerMessage(message), context.session_id,
+                        context.host_generation, v2::kCapMediaRead, 0);
+  }
+
+  bool EnqueuePlayerList(v2::PlayerListRequest request) {
+    return QueuePayload(
+        v2::EncodePlayerPageMessage(request), request.context.session_id,
+        request.context.host_generation, v2::kCapMediaRead, request.max_items);
+  }
+
+  bool EnqueueDraft(v2::DraftCommand command) {
+    const auto capabilities =
+        v2::kCapDraft | v2::kCapReason | v2::kCapSession |
+        (command.action == v2::DraftAction::kConnect ? v2::kCapConnect : 0);
+    return QueuePayload(v2::EncodeDraftMessage(command),
+                        command.context.session_id,
+                        command.context.host_generation, capabilities, 0);
+  }
+
+  std::vector<v2::PlayerPageReply> DrainPlayerPages(std::size_t maximum) {
+    return DrainQueue(&player_responses_, maximum);
+  }
+
+  std::vector<v2::DraftStateReply> DrainDraftStates(std::size_t maximum) {
+    return DrainQueue(&draft_responses_, maximum);
+  }
+
+  bool supports_player_messages() const noexcept {
+    return Supports(v2::kCapMediaRead);
+  }
+  bool supports_drafts() const noexcept {
+    return Supports(v2::kCapDraft | v2::kCapReason | v2::kCapSession);
+  }
+  bool supports_connect() const noexcept {
+    return Supports(v2::kCapDraft | v2::kCapConnect | v2::kCapReason |
+                    v2::kCapSession);
+  }
+  std::uint64_t player_session_id() const noexcept {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (!healthy_.load(std::memory_order_acquire))
-      return false;
-    if (outbound_.size() >= kMaxOutboundFrames) {
-      healthy_.store(false, std::memory_order_release);
-      invalidated_.store(true, std::memory_order_release);
-      wake_.notify_one();
-      return false;
-    }
-    outbound_.push_back(std::move(frame));
-    wake_.notify_one();
-    return true;
+    return healthy() ? negotiated_.session_id : 0;
   }
 
   std::vector<Message> Drain(std::size_t maximum) {
@@ -385,6 +428,66 @@ public:
   }
 
 private:
+  bool Supports(std::uint32_t capabilities) const noexcept {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return healthy() &&
+           (negotiated_.capabilities & capabilities) == capabilities;
+  }
+
+  bool QueuePayload(std::optional<std::vector<std::uint8_t>> payload,
+                    std::uint64_t session, std::uint64_t generation,
+                    std::uint32_t capabilities, std::uint16_t page_items) {
+    if (!payload || !healthy())
+      return false;
+    auto frame = FrameCodec::Encode(*payload);
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!healthy() || stopping_.load(std::memory_order_acquire) ||
+        generation != negotiated_.generation ||
+        (capabilities && session != negotiated_.session_id) ||
+        (negotiated_.capabilities & capabilities) != capabilities ||
+        (capabilities && payload->size() > negotiated_.max_frame_bytes) ||
+        page_items > negotiated_.max_page_items)
+      return false;
+    if (outbound_.size() >= kMaxOutboundFrames) {
+      // MHV1 retains its fail-closed restart policy; MHV2 callers own
+      // backpressure.
+      if (!capabilities) {
+        ClearSessionLocked();
+        invalidated_.store(true, std::memory_order_release);
+        wake_.notify_one();
+      }
+      return false;
+    }
+    outbound_.push_back(std::move(frame));
+    wake_.notify_one();
+    return true;
+  }
+
+  template <typename T>
+  std::vector<T> DrainQueue(std::deque<T> *queue, std::size_t maximum) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::vector<T> result;
+    const auto count = std::min(maximum, queue->size());
+    result.reserve(count);
+    for (std::size_t index = 0; index < count; ++index) {
+      result.push_back(std::move(queue->front()));
+      queue->pop_front();
+    }
+    return result;
+  }
+
+  // Called under mutex_: retires admission and all publicly visible session
+  // data. Pipe/decoder/pending-write state remains worker-owned and is cleared
+  // after IO.
+  void ClearSessionLocked() {
+    healthy_.store(false, std::memory_order_release);
+    negotiated_ = {};
+    outbound_.clear();
+    responses_.clear();
+    player_responses_.clear();
+    draft_responses_.clear();
+  }
+
   void Run() {
     ::crayon::cef_shell::core_client::CoreClientSupervisor supervisor;
     static_cast<void>(
@@ -404,31 +507,106 @@ private:
     }
     static_cast<void>(
         supervisor.Apply(CoreClientCommand::kStop, MonotonicMilliseconds()));
-    healthy_.store(false, std::memory_order_release);
-    StopChild(&child_, pending_write_, pending_offset_, true);
     ClearQueues();
+    StopChild(&child_, pending_write_, pending_offset_, true);
+    pending_write_.reset();
+    pending_offset_ = 0;
+    decoder_.Reset();
   }
 
   bool SpawnAndAdmit(
       ::crayon::cef_shell::core_client::CoreClientSupervisor *supervisor) {
     child_ = Child{};
-    if (!SpawnChild(executable_path_, &child_) ||
-        !WaitForHealth(child_, stopping_)) {
+    decoder_.Reset();
+    const auto next_generation = generation() + 1;
+    const auto session = ++session_nonce_;
+    std::optional<v2::Handshake> welcome;
+    if (next_generation && session && SpawnChild(executable_path_, &child_) &&
+        WaitForHealth(child_, stopping_))
+      welcome = ExchangeHandshake(session, next_generation);
+    if (!welcome) {
       StopChild(&child_, std::nullopt, 0, false);
+      decoder_.Reset();
       supervisor->OnEvent(CoreClientEvent::kSpawnFailed,
                           MonotonicMilliseconds());
       return false;
     }
-    decoder_.Reset();
     pending_write_.reset();
     pending_offset_ = 0;
     invalidated_.store(false, std::memory_order_release);
     last_health_probe_ = std::chrono::steady_clock::now();
-    supervisor->OnEvent(CoreClientEvent::kSpawnAccepted,
-                        MonotonicMilliseconds());
-    generation_.fetch_add(1, std::memory_order_acq_rel);
-    healthy_.store(true, std::memory_order_release);
-    return true;
+    bool admitted = false;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      if (!stopping_.load(std::memory_order_acquire)) {
+        negotiated_ = *welcome;
+        generation_.store(next_generation, std::memory_order_release);
+        healthy_.store(true, std::memory_order_release);
+        admitted = true;
+      }
+    }
+    if (admitted)
+      supervisor->OnEvent(CoreClientEvent::kSpawnAccepted,
+                          MonotonicMilliseconds());
+    return admitted;
+  }
+
+  std::optional<v2::Handshake> ExchangeHandshake(std::uint64_t session,
+                                                 std::uint64_t generation) {
+    const v2::Handshake hello{v2::Kind::kHello,   session,
+                              generation,         kCapabilities,
+                              v2::kMaxFrameBytes, v2::kMaxPageItems};
+    auto payload = v2::Encode(hello);
+    if (!payload)
+      return std::nullopt;
+    const auto frame = FrameCodec::Encode(*payload);
+    std::size_t offset = 0;
+    const auto deadline = std::chrono::steady_clock::now() + kHandshakeDeadline;
+    while (!stopping_.load(std::memory_order_acquire) &&
+           std::chrono::steady_clock::now() < deadline) {
+      if (offset < frame.size()) {
+        const auto written =
+            write(child_.input, frame.data() + offset, frame.size() - offset);
+        if (written > 0)
+          offset += static_cast<std::size_t>(written);
+        else if (written == 0 ||
+                 (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR))
+          return std::nullopt;
+        if (offset < frame.size()) {
+          static_cast<void>(
+              PollFd(child_.input, POLLOUT, kWorkerInterval.count()));
+          continue;
+        }
+      }
+      std::uint8_t bytes[kReadBufferBytes];
+      const auto count = read(child_.output, bytes, sizeof(bytes));
+      if (count == 0)
+        return std::nullopt;
+      if (count < 0) {
+        if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR)
+          return std::nullopt;
+        static_cast<void>(
+            PollFd(child_.output, POLLIN, kWorkerInterval.count()));
+        continue;
+      }
+      IpcError error = IpcError::kFrameMalformed;
+      if (!decoder_.Feed(bytes, static_cast<std::size_t>(count), &error))
+        return std::nullopt;
+      std::vector<std::uint8_t> response;
+      std::uint32_t declared = 0;
+      const auto status = decoder_.Take(&response, &declared);
+      if (status == DecodeStatus::kIncomplete)
+        continue;
+      if (status == DecodeStatus::kOversize)
+        return std::nullopt;
+      auto welcome = v2::Decode(response);
+      if (!welcome || !v2::MatchesHello(hello, *welcome))
+        return std::nullopt;
+      // Keep residual complete/partial frames for the normal reply decoder.
+      // A repeated Welcome is not a reply and will invalidate the session.
+      return welcome;
+    }
+    return std::nullopt;
   }
 
   bool ServiceHealthyChild(
@@ -486,8 +664,12 @@ private:
   }
 
   bool ReadReplies() {
+    if (!DecodeReplies())
+      return false;
     std::uint8_t bytes[kReadBufferBytes];
-    for (;;) {
+    for (std::size_t batch = 0; batch < kMaxResponseMessages &&
+                                !stopping_.load(std::memory_order_acquire);
+         ++batch) {
       const ssize_t count = read(child_.output, bytes, sizeof(bytes));
       if (count > 0) {
         IpcError error = IpcError::kFrameMalformed;
@@ -500,6 +682,7 @@ private:
         return errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR;
       }
     }
+    return true;
   }
 
   bool DecodeReplies() {
@@ -511,20 +694,55 @@ private:
         return true;
       if (status == DecodeStatus::kOversize)
         return false;
+      auto page = v2::DecodePlayerPageMessage(payload);
+      auto draft = v2::DecodeDraftMessage(payload);
       CodecError error = CodecError::kInvalidValue;
-      auto message = media_host_ipc::Decode(payload, &error);
-      if (!message || !IsReply(*message))
-        return false;
+      auto message = page || draft ? std::optional<Message>{}
+                                   : media_host_ipc::Decode(payload, &error);
       std::lock_guard<std::mutex> lock(mutex_);
-      if (responses_.size() >= kMaxResponseMessages)
+      if (!healthy() || stopping_.load(std::memory_order_acquire))
         return false;
-      responses_.push_back(std::move(*message));
+      if (page) {
+        auto *reply = std::get_if<v2::PlayerPageReply>(&*page);
+        if (!reply ||
+            !MatchesSession(reply->context.session_id,
+                            reply->context.host_generation, v2::kCapMediaRead,
+                            payload.size()) ||
+            reply->players.size() > negotiated_.max_page_items ||
+            player_responses_.size() >= kMaxResponseMessages)
+          return false;
+        player_responses_.push_back(std::move(*reply));
+      } else if (draft) {
+        auto *reply = std::get_if<v2::DraftStateReply>(&*draft);
+        if (!reply ||
+            !MatchesSession(reply->context.session_id,
+                            reply->context.host_generation,
+                            v2::kCapDraft | v2::kCapReason | v2::kCapSession,
+                            payload.size()) ||
+            draft_responses_.size() >= kMaxResponseMessages)
+          return false;
+        draft_responses_.push_back(std::move(*reply));
+      } else {
+        if (!message || !IsReply(*message) ||
+            responses_.size() >= kMaxResponseMessages)
+          return false;
+        responses_.push_back(std::move(*message));
+      }
     }
+  }
+
+  // mutex_ held by the reply decoder.
+  bool MatchesSession(std::uint64_t session, std::uint64_t generation,
+                      std::uint32_t capabilities, std::size_t bytes) const {
+    return session == negotiated_.session_id &&
+           generation == negotiated_.generation &&
+           (negotiated_.capabilities & capabilities) == capabilities &&
+           bytes <= negotiated_.max_frame_bytes;
   }
 
   void HandleExited(
       ::crayon::cef_shell::core_client::CoreClientSupervisor *supervisor) {
-    healthy_.store(false, std::memory_order_release);
+    ClearQueues();
     StopChild(&child_, pending_write_, pending_offset_, false);
     pending_write_.reset();
     pending_offset_ = 0;
@@ -538,8 +756,7 @@ private:
 
   void ClearQueues() {
     std::lock_guard<std::mutex> lock(mutex_);
-    outbound_.clear();
-    responses_.clear();
+    ClearSessionLocked();
   }
 
   void WaitUntil(std::uint64_t target_ms) {
@@ -559,6 +776,10 @@ private:
   std::condition_variable wake_;
   std::deque<std::vector<std::uint8_t>> outbound_;
   std::deque<Message> responses_;
+  std::deque<v2::PlayerPageReply> player_responses_;
+  std::deque<v2::DraftStateReply> draft_responses_;
+  v2::Handshake negotiated_{};      // mutex_; zero capabilities until admitted.
+  std::uint64_t session_nonce_ = 0; // worker only, never reset across Start.
   Child child_;
   FrameCodec decoder_;
   std::optional<std::vector<std::uint8_t>> pending_write_;
@@ -574,6 +795,35 @@ bool MediaHostProcess::Start(std::string path) {
 void MediaHostProcess::Stop() { impl_->Stop(); }
 bool MediaHostProcess::Enqueue(Message message) {
   return impl_->Enqueue(std::move(message));
+}
+bool MediaHostProcess::EnqueuePlayer(v2::PlayerMessage message) {
+  return impl_->EnqueuePlayer(std::move(message));
+}
+bool MediaHostProcess::EnqueuePlayerList(v2::PlayerListRequest request) {
+  return impl_->EnqueuePlayerList(std::move(request));
+}
+std::vector<v2::PlayerPageReply>
+MediaHostProcess::DrainPlayerPages(std::size_t maximum) {
+  return impl_->DrainPlayerPages(maximum);
+}
+bool MediaHostProcess::EnqueueDraft(v2::DraftCommand command) {
+  return impl_->EnqueueDraft(std::move(command));
+}
+std::vector<v2::DraftStateReply>
+MediaHostProcess::DrainDraftStates(std::size_t maximum) {
+  return impl_->DrainDraftStates(maximum);
+}
+bool MediaHostProcess::supports_player_messages() const noexcept {
+  return impl_->supports_player_messages();
+}
+bool MediaHostProcess::supports_drafts() const noexcept {
+  return impl_->supports_drafts();
+}
+bool MediaHostProcess::supports_connect() const noexcept {
+  return impl_->supports_connect();
+}
+std::uint64_t MediaHostProcess::player_session_id() const noexcept {
+  return impl_->player_session_id();
 }
 std::vector<Message> MediaHostProcess::Drain(std::size_t maximum) {
   return impl_->Drain(maximum);

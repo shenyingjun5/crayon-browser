@@ -36,6 +36,11 @@ class AlloyProductHostMac final {
   struct Callbacks final {
     /// Invoked once the Alloy window is destroyed (app quit path).
     std::function<void()> window_destroyed;
+    std::function<void()> view_ready;
+    std::function<void()> before_close;
+    std::function<void()> layout_changed;
+    std::function<bool(const CefKeyEvent&)> key_event;
+    std::function<bool(int)> accelerator;
   };
 
   AlloyProductHostMac(Dependencies dependencies, Callbacks callbacks);
@@ -58,6 +63,8 @@ class AlloyProductHostMac final {
   /// Makes the view hosting |browser_id| the visible tab.
   void ShowBrowser(int browser_id);
 
+  CefRefPtr<CefWindow> window() const;
+  CefRefPtr<CefBrowserView> browser_view(int browser_id) const;
   bool started() const noexcept;
   /// The browser of the currently visible tab.
   CefRefPtr<CefBrowser> browser() const noexcept;

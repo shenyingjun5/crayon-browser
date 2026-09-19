@@ -504,3 +504,63 @@
   4. OnBrowserClosing / shutdown 路径：`agent_host_->stop()`。
 - 文件清单：`agent_host_bridge_mac.{h,cc}` 已在 CMake sources；Cargo.toml 已有 staticlib target；CMake 已有 crayon_agent_host build target + 链接。
 - 验证：产品启动 → UDS socket 存在 → CLI 连接 → version/targets/get-title → SIGTERM 零残留。
+
+### AGT-12Cc2r 原子范围（2026-09-19 领取，剩余装配）
+
+- 状态：`VERIFIED`（2026-09-19 完成记录见下）。单一目标：按上方「剩余装配指南」完成产品回调桥装配——修复 `AgentHostBridgeMac::Callbacks` 的函数指针类型缺陷（当前把 user 指针 reinterpret 成函数指针，即补充验证记录的 null-fn UB 根因），在 `app.cc` 装配 resolve/tab_known/execute 真实回调（Rust serve 线程经 `CefPostTask` 编排到 UI 线程、有界等待、shutdown gate），execute 仅实装浏览器进程现有同步数据可达的 `page.list_targets`/`page.get_title`（标题暂以产品 tab strip 同源的 URL 代理），其余工具返回稳定 `invalid_message`；能力公告收敛为真实装配的 `page_read`。
+- 允许改动：`agent_host_bridge_mac.{h,cc}`、`src/macos/app.{h,cc}`、删除无引用孤儿头 `agent_host_tool_port_mac.h`、必要时 CMake 产品源列表、本节。
+- 禁止：Rust gateway/host/schema 变更、AGT-05 确认 UI 或任何 grant 铸造路径（无确认 UI 时 R0/R1 也稳定 `capability_denied`，与 AGT-16 口径一致）、`nav.*`/`cast.*`/`page.snapshot`/`page.markdown`/`page.get_selection` 实装、Windows、Release 默认开启语义。
+- 验收命令：guarded `python3 scripts/build_macos_local.py` Debug+Release exit0；`cargo test -p crayon-agent-host`、`-p crayon-agent-gateway` 不回归；产品运行时：启动 → UDS socket 存在 → CLI 握手 Welcome（page_read）→ `get-title`/`targets` 稳定 `capability_denied`（证明 resolve 桥工作且 default-deny 保持，非超时/UB）→ SIGTERM 零残留；改动行 clang-format；`git diff --check`。
+- 明确不做：真实 grant 数据流与 nav 工具（等 AGT-05 确认 UI 装配切片）；snapshot/markdown/selection 的 renderer 异步回传（独立切片）。
+
+### AGT-12Cc2r 完成记录（2026-09-19）
+
+- 改动：`agent_host_bridge_mac.h` 重写 `Callbacks` 为类型化 C 链接函数指针（修复把 user 指针 reinterpret 成函数指针的结构缺陷，即 Cc2 补充验证记录的 null-fn UB 根因），补 exec 状态常量与 `crayon_agent_host_string_alloc` 声明；`agent_host_bridge_mac.cc` 按 ffi.rs `#[repr(C)]` 布局逐字段透传。`app.{h,cc}` 新增 `AgentUiState`（serve 线程→UI 线程 ticket 编排：有界等待 2s、100ms cancel 轮询且不持锁调用、shutdown gate 先于 FFI join）与 extern "C" trampoline；execute 实装 `page.list_targets`/`page.get_title`（标题取产品 tab strip 同源 URL 代理，未伪造页面标题），其余工具返回稳定 `invalid_message`；能力公告收敛为 `page_read`（真实装配口径）；purpose/profile/TTL/超时全部命名常量；`StartAgentHost`/`ShutdownAgentHost` 装配进 `ContinueContentHostStartup` 与 `SetBrowsersClosedCallback`，析构兜底停止不带线程断言；删除无引用孤儿头 `agent_host_tool_port_mac.h`。任何 grant 不在此铸造。
+- 验证（macOS arm64，Darwin 25.6.0，工作区未提交）：guarded Debug/Release 构建 exit0 且 codesign PASS；`cargo test -p crayon-agent-host` 2/2、`-p crayon-agent-gateway` 119/119 不回归；产品运行时：启动 → `/tmp/crayon-agent-agent-caap.sock` 创建 → CLI 握手后 `get-title`/`targets` 稳定 `capabilitydenied`（证明 resolve→UI 线程→TabController 链路真实工作且 default-deny 保持，非超时/UB）；`snapshot`/`get-selection` 同样稳定 deny（grant 门禁先于 execute）；Apple Event 优雅退出 → `ShutdownAgentHost` 执行（诊断日志实证）→ 进程与 helper 全部退出（transient helper 2s 内自净）；改动行 clang-format（Google）与 `git diff --check` exit0；格式化后重建 exit0。
+- 未覆盖与风险（如实）：① 退出后 socket **文件**残留——既有 host 层缺口：`AgentHost::stop_and_join` 只置 StopFlag，endpoint 所有权在 serve 线程内、Host 无法调 `endpoint.stop()`（`run()` 的 `Endpoint(NotRunning)` 清洁分支因此不可达），阻塞 accept 不被唤醒 → 文件不 unlink 且无客户端时 join 空等 5s（本次实测退出耗时 5s）；平台层 `MacUdsEndpoint::start` 启动前 `remove_file` 兜底，功能无损；修复登记 `AGT-12Ce`。② 未实装工具的 `invalid_message` 分支在 grant UI 落地前不可达（grant 门禁先行），属防御性代码。③ `active_browser_id_`（cast 绑定追踪）不作 agent 活动页来源，agent 读取以 `TabController::ActiveBrowser()` 为唯一 owner，与 cast 就绪解耦。
+- Code Review：独立 reviewer 按 v0.9 复审；初版 APPROVE（P0=0、P1=0，P2×2、P3×2、Nit×1）。P2-1（product_host Start 失败分支退出前未停 agent host，存在 serve 线程在 CEF teardown 后 post task 的低概率窗口）已切片内修复（退出前补 `ShutdownAgentHost()`）；P2-2（Rust host 停止路径缺口）按规程延期至 `AGT-12Ce`；P3×2（start 失败语义注释、ParseTabIdText 溢出检查）与 Nit（`CrayonAgentHostConfig` 布局 static_assert）均已修复。修复后复验：双配置 guarded 构建 exit0+codesign PASS、CLI `get-title`/`targets` 稳定 `capabilitydenied`、优雅退出进程/helper 零残留、改动行格式化与 `git diff --check` exit0。最终 APPROVE，P0=P1=P2=P3=0，最高可达 VERIFIED 与本记录一致。
+- `AGT-12Cc2r` 转 `VERIFIED`；下一切片 `AGT-12Ce`（TODO）与 AGT-05 确认 UI 装配切片（grant 数据流）待领取。
+
+### AGT-05C 原子范围（2026-09-19 领取，连接级确认与 grant 接线）
+
+- 状态：`VERIFIED`（2026-09-19 领取并完成，记录见下）。单一目标：把 AGT-05 确认链路的产品端装配完成——Rust 侧把 `open_client`（客户端名 + 协商能力）事件经 FFI 上抛，C++ 桥转发到 UI 线程，产品弹出原生确认面板（三语言 `agent.confirm.*` locale key 已有），允许 → `issue_grant("page_read")` 铸会话 grant；拒绝/忽略 → 无 grant，行为不变。会话语义（重连撤销）下持久客户端（MCP 形态）在允许后可真实读页；一次性 CLI 在用户确认前已退出，保持稳定 `capability_denied`（与 AGT-13/16 口径一致）。
+- 允许改动：`crates/crayon-agent-host/**`、`crayon-agent-gateway`（仅 `SharedDispatch::open_client` 回调 hook）、`src/macos/agent_host_bridge_mac.{h,cc}`、新增 `src/macos/agent_confirm_sheet_mac.{h,mm}`、`src/macos/app.{h,cc}`、CMake（新文件注册）、对应测试；顺带把 AGT-12Ce 引入的 wake 参数收敛为 `AgentHostWiring`（行为不变，记录于本节）。
+- 禁止：AGT-04 grant 语义/持久化 schema 变更（不引入跨连接 consent）、R2+ 能力公告与 `AgentConfirmModel` 接线（留 R2+ 确认切片）、Windows、任何绕过确认的 grant 铸造路径。
+- 验收：Rust 集成测试——连接触发 `client_connected` 回调（名称+能力）→ issue_grant → 同连接请求真实返回数据；既有套件不回归；guarded Debug/Release 构建.exit0；产品 E2E——CLI 仍稳定 deny、退出干净；sheet 点击的人工验收归 26M。
+- 明确不做：一次性 CLI 的 grant 送达（会话语义决定，如需跨连接 consent 须先修订 AGT-04 并独立 Roadmap）。
+
+### AGT-05C 完成记录（2026-09-19）
+
+- 改动：`crayon-agent-host/lib.rs`——`SharedDispatch::open_client` 在双锁外触发 `on_client_connected`（客户端名 + 协商能力），新增 `AgentHostWiring`（endpoint_wake + on_client_connected，AGT-12Ce 引入的裸 wake 参数收敛于此，行为不变），`start_macos_uds` 增加回调参数；`ffi.rs`——`CrayonAgentHostConfig` 追加 `client_connected_fn`（镜像 struct 同步 + 尾部 static_assert），`CallbackUser` 按 `FfiPort` 同契约包装裸指针跨线程。`agent_host_bridge_mac.{h,cc}`——`Callbacks.client_connected` 透传。`app.{h,cc}`——连接事件经 `AgentUiState` 门控 post 到 UI 线程，`OnAgentClientConnectedForUi` 用既有三语言 `agent.confirm.*` locale key 呈现确认面板，允许 → `issue_grant("page_read")`；`StopBackgroundServices` 先撤面板。新增 `agent_confirm_sheet_mac.{h,mm}`——独立非激活 NSWindow 面板 + target/action 按钮（初版 NSAlert sheet 方案与 `CefRunMessageLoop` 泵不兼容：sheet 挂载时 AppKit 以 -128 取消退出，故改面板）。`main_mac.mm` 一行——`applicationShouldTerminate` 先撤面板（冻结清单偏差，如实记录）。CMake 注册新文件 + `-fobjc-arc`。
+- 验证（macOS arm64，Darwin 25.6.0，工作区未提交）：新增 Rust 集成 `connect_event_grant_then_read_roundtrip`——连接事件（名称+能力）→ 默认拒绝 → issue_grant → **同一持久连接真实读到数据**（幂等键重用按设计返回 invalid_message，测试改用新键，顺带固化该语义）；既有套件不回归（gateway 119/119、platform-macos 36/36、agent-host 全套件 ×3 轮稳定）；`security_regression` 补 disconnect-before-stop（配合 STOP_TIMEOUT 诚实化语义，stop_join 已覆盖超时路径）；`clippy -D warnings` exit0；`cargo fmt --check`、`git diff --check` exit0；guarded Debug/Release 构建 exit0 + codesign PASS。产品 E2E：CLI `targets`/`get-title` 稳定 `capabilitydenied`（确认面板弹出、未点击）；面板存在时退出 1 秒干净、进程/helper 零残留、socket 文件 unlink。
+- 未覆盖与风险（如实）：① 面板「允许」点击后的产品内 grant 生效链路由 Rust 集成测试覆盖（同一机制），真实点击确认的数据流归 26M 人工验收；② 一次性 CLI 在确认前已退出，grant 不落地，保持稳定拒绝（设计语义）；③ AGENT-04 grant 为会话级（重连撤销），跨连接 consent 需独立 Roadmap；④ `security_regression`/`stop_join` 的 STOP_TIMEOUT 相关断言依赖 AGT-12Ce 引入的诚实化返回码。
+- Code Review：独立 reviewer 按 v0.9 复审并独立复跑 Rust 证据；初版 **REQUEST_CHANGES（P1×1、P3×4）**。P1（确认面板与活跃客户端 TOCTOU：A 断开后面板仍在，点击会把 grant 铸给后连且从未被确认的 B）已修复——allow 回调携带被确认的 client 名，host 层新增 `issue_grant_for_client`（client ≠ active 时拒绝铸造），FFI `crayon_agent_host_issue_grant_for_client` 贯通，新增回归 `stale_panel_confirmation_never_grants_other_client`（A 断开→B 连接→点 A 面板→B 稳定 denied；确认 B 本体→读数据成功）。P3×4 已修：头文件 sheet→panel 文档漂移与死参数 `native_window` 删除、死 API `ConnectConfirmSheetPresented` 删除、`main_mac.mm` 注释改为防御性路径说明、UI 线程 grant 铸造在 dispatch 持锁窗口可阻塞（当前拓扑不可达）登记为 Rust API 后续候选。修复后复验：双配置 guarded 构建 exit0+codesign PASS、grant_flow 2/2（含新 TOCTOU 回归）、三套件全过、clippy/fmt/diff-check exit0、产品 E2E（CLI 稳定 denied、面板弹出、退出干净、socket unlink）。platform-macos `object_safety_assertion` 一次偶发失败（真实 Keychain 环境争用，非本切片代码），单独复跑 36/36 ×2 稳定通过，已如实记录。复审最终 **APPROVE，P0=P1=P2=P3=0**：P1 修复经 check-then-mint 残余窗口推演确认所有交错不扩权（孤儿 grant 必被同名重连的 revoke 撤销），新回归覆盖精确攻击序列；遗留观察（无绑定的旧 `issue_grant*` API 仅测试使用）登记为后续收敛候选，不阻塞。最高可达 VERIFIED。
+- `AGT-05C` 转 `VERIFIED`；R2+ 能力（navigation 等）的 `AgentConfirmModel` 逐动作确认与能力公告扩展留待下一切片。
+
+### AGT-12Ce 原子范围（2026-09-19 登记）
+
+- 状态：`VERIFIED`（2026-09-19 领取并完成，记录见下）。
+- 单一目标：修复 crayon-agent-host 停止路径——endpoint 所有权调整（host 持有停止句柄或 endpoint 引入 Drop+run 退出停止），使 `stop_and_join` 能唤醒阻塞 accept（`run()` 的 `Endpoint(NotRunning)` 分支生效）、unlink socket 文件、消除无客户端退出时最长 5s 的 join 空等。
+- 允许改动：`crates/crayon-agent-host/**`、`crates/crayon-platform-macos/src/local_agent_ipc.rs`、对应测试；禁止 wire/schema 变更与 C++ 侧改动。
+- 验收：新增/更新 stop 路径回归（含无客户端退出时 socket 文件被 unlink、join 及时返回）；既有 2/2 与 119/119 不回归；产品优雅退出后 socket 文件不再残留。
+
+### AGT-12Ce 完成记录（2026-09-19）
+
+- 改动：`crayon-platform-macos/local_agent_ipc.rs`——`MacUdsEndpoint` 内建共享 `stop_requested` 旗标与 `stop_handle()`/`MacUdsStopHandle`；`accept` 由无限阻塞改为 `poll(100ms)` 分片循环（每片观察 fd 失效与停止旗标，`POLLNVAL`/停止均返回 `NotRunning`，EINTR 重试，连接 fd 语义不变）；新增 `Drop` 复用 trait `stop()`（关 fd + unlink），serve 线程退出即清理。`crayon-agent-host/lib.rs`——`AgentHost` 增加 `endpoint_wake`，新增 `start_with_endpoint_wake`（原 `start_with_endpoint` 保持签名并委托），`stop_and_join` 先唤醒 endpoint accept 再置停止旗标；`start_macos_uds` 注入 UDS stop handle。`crayon-agent-gateway/server/mod.rs` 一行 `Err(_error)` 重命名（既有 unused variable 触发 `-D warnings` clippy 门禁，工具链变化后暴露；无行为变化，特此标注为门禁性顺手修复）。
+- 验证（macOS arm64，Darwin 25.6.0，工作区未提交）：新增回归 `stop_without_client_returns_promptly_and_unlinks`（无客户端 stop 立即返回 + socket 文件 unlink）与 endpoint 侧 `stop_handle_unblocks_accept`/`drop_unlinks_socket_file`；`cargo test -p crayon-agent-host` 3 套件全过（含既有 roundtrip 与 hostile matrix）、`-p crayon-platform-macos` 36/36、`-p crayon-agent-gateway` 119/119；`clippy -D warnings`（host+platform-macos 含依赖链）exit0；`cargo fmt --check` 与 `git diff --check` exit0。产品 E2E：guarded Debug/Release 构建 exit0+codesign PASS；启动 → socket 创建 → CLI `get-title`/`targets` 稳定 `capabilitydenied`（无回归）；Apple Event 优雅退出耗时 **0 秒**（修复前 5s join 空等）、**socket 文件已 unlink**（修复前残留）、进程/helper 零残留。
+- `AGT-12Ce` 转 `VERIFIED`。Windows named pipe 的对应 stop 生命周期归 Windows 平台矩阵（AGT-12Cd 后续），不在本切片；本切片无 C++ 侧改动。
+- Code Review：独立 reviewer 按 v0.9 复审并独立复跑测试/静态证据（platform-macos local_agent_ipc 9/9、agent-host 3 套件、gateway 119/119、clippy -D warnings exit0）；**APPROVE，P0=P1=P2=0，P3×4、Nit×1**，最高可达 VERIFIED 与本记录一致。P3 处置：① SAFETY 注释补 fd 所属线程契约（已采纳修复）；② stop 按路径 unlink 不校验 inode（既有缺口，FFI 单实例守卫下不可触发，登记为多实例化前置条件）；③ 握手中途连接无时间上界（既有，恶意同用户客户端可占住 serve 线程至 5s detach，后续候选：handshake read 加 SO_RCVTIMEO，独立领取）；④ gateway `_error` 一行（已披露，可接受）。Reviewer 范围外观察：`server/mod.rs` 既有逐请求 `eprintln!("[SRV] ...")` 属更早切片遗留，建议另行登记清理。
+
+## 借鉴输入与扩展方向（2026-09-18）
+
+参考 [Agent 原生浏览器借鉴方案](../reference/蜡笔AI浏览器_ego-lite与BrowserSkill借鉴完整方案.md)（已入库 `docs/reference/`）：ego lite 的 Agent Space/TaskSpace 编程模型与 Tencent BrowserSkill 的 Rust CLI/daemon 会话工程是本模块的路线借鉴。只借鉴设计，不引入其代码依赖；不放松仓库红线——不暴露原始 CDP/WebDriver/任意 JavaScript，不抢用户 OS 鼠标/焦点。
+
+- 第二期装配借鉴（应用于既有原子任务，不新增任务）：
+  - `AGT-12C` transport/装配切片对照 bsk-cli/bsk-protocol 的 UDS/Named Pipe 生命周期、session registry、协议 frame/rpcId/cancel/错误码设计做复核；AGT-12Cc2 剩余装配（execute 桥、grant 桥）沿用该工程拆分思路。
+  - `AGT-03` 会话与队列状态机对照“同一会话串行、不同会话并行”原则复核；并发语义已在 A0 冻结，仅作对照不做 schema 变更。
+  - `AGT-13/14` CLI/MCP Developer Preview 对照其工具参数、--no-focus、机器可读输出与 doctor/status 运维命令设计补齐体验。
+- 第三期候选方向（未拆原子任务，立任务前需独立 Roadmap 与安全红线评审）：
+  - Agent Space 独立资源模型：每 Agent/任务独立窗口、页面集合、Ref Ledger 与命令队列，默认可见但不抢焦点；Profile 按 Shared/Dedicated/Ephemeral 三类隔离（对应 `CefRequestContext`）。
+  - 用户 Tab 显式 Borrow/Return：Agent 默认只能操作自己创建的页面；操作用户标签页须显式授权，记录原窗口/位置并归还。
+  - 批量 Script/多动作单次调用：在 CAAP 之上提供批量工具编排，降低模型调用次数与 token 消耗；不暴露任意 JavaScript。
+  - 受限 CDP 兼容层当前被红线禁止，只有先修订 `AGENTS.md` 红线并独立评审后才可立项。

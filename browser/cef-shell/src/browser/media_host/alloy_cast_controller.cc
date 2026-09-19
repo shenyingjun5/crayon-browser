@@ -11,6 +11,7 @@ namespace {
 
 namespace cast_view = ::crayon::browser_cast_view;
 namespace mh = ::crayon::cef_shell::ipc::media_host;
+constexpr std::uint64_t kPlayerRefreshIntervalMs = 1000;
 
 bool BoundedText(const std::string& value) {
   if (value.empty() || value.size() > cast_view::kCastSelectionTitleBytes)
@@ -182,6 +183,7 @@ bool AlloyCastController::RequestPlayers(std::uint64_t revision,
   if (!context_ || player_request_pending_ ||
       offset >= cast_view::kCastSelectionCapacity)
     return false;
+  next_player_refresh_ms_ = clock_() + kPlayerRefreshIntervalMs;
   const auto request = adapter_->RequestPlayerPage(
       context_->tab_id, context_->navigation_id, context_->generation,
       revision, offset,
@@ -325,48 +327,70 @@ bool AlloyCastController::OpenForMedia(cast_view::CastMediaRef media) {
 }
 
 void AlloyCastController::DrainPlayers(bool* changed) {
+  const auto reject = [&] {
+    staged_media_.clear();
+    all_media_.clear();
+    player_revision_ = 0;
+    next_player_refresh_ms_ = clock_() + kPlayerRefreshIntervalMs;
+    *changed = true;
+  };
   for (auto& page : adapter_->DrainPlayerPages(8)) {
     player_request_pending_ = false;
-    if (!context_ || page.offset != requested_player_offset_) continue;
-    if (page.status == ipc_v2::PlayerPageStatus::kStale ||
-        page.offset != all_media_.size()) {
-      all_media_.clear();
-      player_revision_ = 0;
-      static_cast<void>(RequestPlayers(0, 0));
-      *changed = true;
+    if (!context_) continue;
+    if (page.offset != requested_player_offset_ ||
+        page.status != ipc_v2::PlayerPageStatus::kOk) {
+      reject();
       continue;
     }
-    player_revision_ = page.snapshot_revision;
-    const bool duplicate_player = std::any_of(
+    if (page.offset == 0) {
+      staged_media_.clear();
+      player_revision_ = page.snapshot_revision;
+    }
+    const auto total = staged_media_.size() + page.players.size();
+    if (page.snapshot_revision != player_revision_ ||
+        page.offset != staged_media_.size() ||
+        total > cast_view::kCastSelectionCapacity ||
+        (page.next_offset &&
+         (page.players.empty() || *page.next_offset != total ||
+          total >= cast_view::kCastSelectionCapacity))) {
+      reject();
+      continue;
+    }
+    const bool invalid_player = std::any_of(
         page.players.begin(), page.players.end(), [&](const auto& player) {
-          return std::any_of(all_media_.begin(), all_media_.end(),
+          return player.instance_id == 0 || player.source_revision == 0 ||
+                 std::any_of(staged_media_.begin(), staged_media_.end(),
                              [&](const auto& existing) {
-            return existing.ref.instance_id == player.instance_id;
-          }) || std::count_if(page.players.begin(), page.players.end(),
-                              [&](const auto& other) {
-            return other.instance_id == player.instance_id;
-          }) != 1;
+                               return existing.ref.instance_id ==
+                                      player.instance_id;
+                             }) ||
+                 std::count_if(page.players.begin(), page.players.end(),
+                               [&](const auto& other) {
+                                 return other.instance_id == player.instance_id;
+                               }) != 1;
         });
-    if (duplicate_player) {
-      all_media_.clear();
-      player_revision_ = 0;
-      *changed = true;
+    if (invalid_player) {
+      reject();
       continue;
     }
     for (const auto& player : page.players) {
-      if (all_media_.size() >= cast_view::kCastSelectionCapacity) break;
       const bool selectable =
           player.source_kind == ipc_v2::PlayerSourceKind::kHttpUrl &&
           player.has_video && player.visible && !player.eme_encrypted;
-      all_media_.push_back(
-          {{player.instance_id, player.source_revision},
-           BoundedText(player.redacted_origin) ? player.redacted_origin
-                                               : media_fallback_,
-           selectable});
+      staged_media_.push_back({{player.instance_id, player.source_revision},
+                               BoundedText(player.redacted_origin)
+                                   ? player.redacted_origin
+                                   : media_fallback_,
+                               selectable});
     }
-    if (page.next_offset &&
-        *page.next_offset < cast_view::kCastSelectionCapacity)
-      static_cast<void>(RequestPlayers(player_revision_, *page.next_offset));
+    if (page.next_offset) {
+      if (!RequestPlayers(player_revision_, *page.next_offset)) reject();
+      continue;
+    }
+    // Keep the last complete projection during a valid refresh. Only a fully
+    // validated revision may replace it, including confirmed removals.
+    all_media_.swap(staged_media_);
+    staged_media_.clear();
     *changed = true;
   }
 }
@@ -583,11 +607,19 @@ void AlloyCastController::Tick() {
     }
     changed = true;
   }
+  // Refresh the existing registry, never rebind/CloseTab to discover media
+  // arriving after the initial empty page. One in-flight page and a fixed
+  // cadence bound idle traffic and admission-failure retries.
+  if (compatible && !player_request_pending_ &&
+      clock_() >= next_player_refresh_ms_) {
+    static_cast<void>(RequestPlayers(0, 0));
+  }
   if (changed) Emit();
 }
 
 void AlloyCastController::ResetProjection() {
   all_media_.clear();
+  staged_media_.clear();
   all_devices_.clear();
   pending_open_media_.reset();
   last_draft_.reset();

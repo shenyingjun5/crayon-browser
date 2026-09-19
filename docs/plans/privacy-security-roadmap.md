@@ -276,4 +276,4 @@
 ## PRV-13B 第二期边界
 
 - 状态：`TODO`；第一期发布时必须在 QAR-15 标为 `NOT_IN_RELEASE`，不能以关闭 feature 冒充本任务通过。
-- 本任务在第二期模块开工前冻结增量边界：Agent grant/receipt、Workflow/Challenge/Skill、Hub route/fallback、Partner OAuth/token/SSRF/tool injection 与模型发送预览/保留/费用数据流。它不等待 CNT-16/WFL-16/HUB-16，避免形成“实现等 Review、Review 又等实现”的循环；模块实现后的专项证据统一进入 QAR-08B。
+- 本任务在第二期模块开工前冻结增量边界：Agent grant/receipt、Workflow/Challenge/Skill、Hub route/fallback、Partner OAuth/token/SSRF/tool injection 与模型发送预览/保留/费用数据流。它不等待 CNT-16/WFL-16/HUB-16，避免形成“实现等 Review、Review 又等实现”的循环；模块实现后的专项证据统一进入 QAR-08B。其中模型（provider/payload）子项自 2026-09-18 起随 M2 归第三期评审；Agent/Workflow/Hub/Partner 子项保持第二期。

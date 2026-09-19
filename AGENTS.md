@@ -7,7 +7,7 @@
 ## 1. 产品边界
 
 - 产品：面向 AI Agent 定制的“蜡笔 AI Agent 投屏浏览器”。桌面范围为 Windows/macOS CEF；HarmonyOS 仅做鸿蒙电脑 PC 形态技术预览；Linux 当前不在范围。
-- 顺序：浏览器基础与 LAN Direct/Relay 投屏 → 确定性页面快照/Markdown → Agent 协议、CLI/MCP、语义操作 → Workflow/Challenge/个人 Site Skill → Capability Hub/Partner Connector → 第二阶段模型能力。
+- 顺序：浏览器基础与 LAN Direct/Relay 投屏 → 确定性页面快照/Markdown → Agent 协议、CLI/MCP、语义操作 → Workflow/Challenge/个人 Site Skill → Capability Hub/Partner Connector（以上为第二期第三方 Agent 能力）→ 内置模型 AI、跨平台/外部宿主接入与个人 Skill 市场（第三期，2026-09-18 用户决策）。
 - 浏览器只做 LAN Direct/Relay 媒体投送，不实现 WebRTC、标签页/窗口/系统音频采集、编码或镜像传输；无可投路由时只交接独立蜡笔投屏客户端。
 - 设备发现、投屏码、连接、能力评估、DLNA/CastExtension、播放控制和会话监督复用 Cast-SDK；浏览器不得复制协议栈。
 - MCP 是自有版本化 Agent 协议的 adapter，不是第二套业务实现。CLI/MCP 必须共享握手、工具、错误、取消、幂等、generation 与审计语义。
@@ -63,6 +63,7 @@
 - 源码、日志、fixture 和文档示例不得包含真实凭证、Cookie、Authorization、私有签名 URL、本机绝对路径或生产秘密。
 - 站点 adapter 必须注册化、版本化、可关闭、有独立测试；不得扩张中心化站点 `match`。
 - 生产源码不得包含测试实现、fixture、Mock/Fake、故障注入或 `xxxForTest` API；测试放独立 target/file，生产构建图不得依赖 test-support。
+- 测试代码必须与生产源码物理分离：测试实现只放 crate/模块的 `tests/` 目录，不得放进 `src/` 源码树；Rust 生产源文件内至多保留 `#[cfg(test)] #[path] mod` 外部声明行引用 `tests/` 下的测试文件，C++ 测试源只能进入 `CRAYON_BUILD_TESTS` 门控的独立测试 target。
 - Debug 诊断使用独立 target/module；Release 不得包含测试脚本、测试资源、内部远程控制或调试依赖。
 - 新增/升级依赖前核对来源、许可证、维护状态、包体和跨平台影响；vendor/generated/submodule/lockfile 与发布 artifact 按测试和 Review 契约审查。
 - 函数 100/200 行、生产文件 2000/3000 行是两级 Review 提醒，不是机械拆分门槛；测试文件达到 3000 行不得合并（生成数据除外，生成源必须可审查）。

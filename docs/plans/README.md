@@ -10,7 +10,8 @@
 - 无视频推送路由时只交接给独立蜡笔投屏客户端；浏览器不做 WebRTC、采集或编码。
 - 浏览器和投屏主链路完成后建设当前页数据面与确定性 Markdown；CAAP 协议/权限内核可在浏览器后半段先行。
 - HarmonyOS 只规划鸿蒙电脑 PC 形态技术预览。
-- 第一期只发布网页 Markdown、LAN Direct/Relay 投屏、本地 Markdown 编辑三大闭环，并要求同一桌面候选包支持 `en-US/zh-CN/zh-TW` 跟随系统；本地化是三闭环的横切发布质量，不是第四条业务闭环。CAAP、CLI/入站 MCP、高性能读页、语义动作、Workflow/Challenge、Capability Hub、Partner 与模型仍是产品方向，但统一进入第二期且默认关闭。Linux 没有当前活跃 Roadmap。
+- 第一期只发布网页 Markdown、LAN Direct/Relay 投屏、本地 Markdown 编辑三大闭环，并要求同一桌面候选包支持 `en-US/zh-CN/zh-TW` 跟随系统；本地化是三闭环的横切发布质量，不是第四条业务闭环。CAAP、CLI/入站 MCP、高性能读页、语义动作、Workflow/Challenge、Capability Hub、Partner 等第三方 Agent 能力仍是产品方向，统一进入第二期且默认关闭；内置模型 AI（`CNT-11..16`）、HarmonyOS 与跨平台/外部宿主接入、个人 Skill 市场进入第三期（2026-09-18 用户决策）。Linux 没有当前活跃 Roadmap。
+- 第三方 Agent 能力的路线借鉴输入：[Agent 原生浏览器借鉴方案](../reference/蜡笔AI浏览器_ego-lite与BrowserSkill借鉴完整方案.md)（ego lite 的 Agent Space 编程模型与站点学习沉淀、Tencent BrowserSkill 的会话隔离/CLI/daemon 工程），只借鉴设计不引入依赖，与仓库红线冲突处以根 `AGENTS.md` 为准。
 - 出站 Partner API/MCP 与入站 MCP 是不同安全边界；Partner/TV Cast Manifest 属于 Cast-SDK/接收端协议，不在浏览器内复制实现。
 
 ## 2. 权威入口
@@ -35,12 +36,12 @@
 | PLT | [desktop-platform-adapters-roadmap.md](desktop-platform-adapters-roadmap.md) | Windows/macOS 存储、网络、生命周期、更新和客户端交接 | `PLT-01/02/W04/M04 DONE`；`PLT-M05 IN_PROGRESS`（macOS 后续切片暂缓），`PLT-W05a/W05b/W05c0 DONE`、`W05c BLOCKED` |
 | PLT 内部切片 | [desktop-shell-roadmap.md](desktop-shell-roadmap.md) | 自定义外壳＋Alloy；一期全功能迁移、可替换内容视图与双平台门禁 | 共享 `00..02`、Windows `03W..22W`、Mac `03M..15M`及`11M2/11M3` VERIFIED；`16M IN_PROGRESS`；共享标题/焦点修复已实现，Windows辅助窗口UI缺口归24W2b3b5d，产品效果后验 |
 | PRV | [privacy-security-roadmap.md](privacy-security-roadmap.md) | Profile、隐私、安全、日志和删除语义 | `PRV-01..12` 已完成或 VERIFIED；一期核心 `PRV-13A`、第二期扩展 `PRV-13B` |
-| CNT | [content-intelligence-roadmap.md](content-intelligence-roadmap.md) | 页面数据/Markdown 与第二阶段模型总结 | C1 数据面 `CNT-01..10 DONE/VERIFIED`；一期产品装配 `CNT-17..20 DONE`，`CNT-21W` 等 `PRV-13AW` 后总 Review；`CNT-11..16` 第二期 |
+| CNT | [content-intelligence-roadmap.md](content-intelligence-roadmap.md) | 页面数据/Markdown 与第三期模型总结 | C1 数据面 `CNT-01..10 DONE/VERIFIED`；一期产品装配 `CNT-17..20 DONE`，`CNT-21W` 等 `PRV-13AW` 后总 Review；`CNT-11..16` 第三期 |
 | AGT | [agent-access-roadmap.md](agent-access-roadmap.md) | CAAP、tool registry、CLI/MCP、高性能读页和授权操作 | A0 完成；`AGT-07/15 VERIFIED`，`AGT-12C/13/14` 按装配依赖后续推进 |
 | ACT | [semantic-action-roadmap.md](semantic-action-roadmap.md) | Page/Action/Form/Media/Risk Map、action_id、前置条件和效果验证 | `ACT-01..12 全部完成`（2026-08-30，ACT-12 总 Review GO）；实机接线归后续装配切片 |
 | WFL | [workflow-learning-roadmap.md](workflow-learning-roadmap.md) | Challenge 接管、Workflow Learning、个人 Site Skill、健康与受控修复 | `WFL-01/02/03/04/06/07 VERIFIED` |
 | HUB | [capability-hub-roadmap.md](capability-hub-roadmap.md) | Capability Registry/Router、入站发现与出站 Partner connector | `HUB-01..06 DONE`；`HUB-07+ 待依赖` |
-| HM | [harmony-browser-roadmap.md](harmony-browser-roadmap.md) | 鸿蒙电脑 PC 形态 ArkUI/ArkWeb 技术预览 | `HM-01`，后续启动 |
+| HM | [harmony-browser-roadmap.md](harmony-browser-roadmap.md) | 鸿蒙电脑 PC 形态 ArkUI/ArkWeb 技术预览（第三期） | `HM-01`，后续启动 |
 | QAR | [quality-release-roadmap.md](quality-release-roadmap.md) | Windows/macOS 构建、真实设备、性能、长稳和发布门禁 | Windows 核心 `QAR-02AW/05AW/08AW`；第二期 feature `02B/05B/08B`；macOS 特有门禁后置 |
 | RNM | [naming-migration-roadmap.md](naming-migration-roadmap.md) | `get-video` → `crayon-browser` 仓库、包、README、GitHub 与本地路径迁移 | `RNM-01..08 DONE` |
 
@@ -101,10 +102,15 @@
 - `AGT-13/14` 等 AGT-12 产品装配；`AGT-16` 再等 CLI/MCP 与 `AGT-15 VERIFIED`。
 - `AGT-12C` 与 `AGT-13/14/16` 均为第二期；先拆 CEF accept loop、stop、session/grant/tool dispatch 原子切片，不能夹入一期 CNT/Cast 装配。
 - `HUB-07` 等 `WFL-12`，`HUB-08` 等 `AGT-14`；Partner connector `HUB-09+` 仍按独立信任/OAuth/网络门禁推进。
-- `CNT-11` 必须等 `CNT-21`、`AGT-16`、`PRV-13B` 与 provider ADR；第一期不得提前接真实模型。
 - `SDK-15/16` 等 `HUB-16` 及外部 Cast-SDK/receiver 正式 API，不在浏览器内临时拼协议。
 
-第一期任务完成前不直接领取 WFL/HUB/M2/MRT-10+；已具备依赖的第二期模型或状态机任务也保持排队，不与 CEF 产品装配争抢工作区和真机矩阵。
+### 第三期排队（2026-09-18 起）
+
+- 内置模型 AI：`CNT-13..16`（`CNT-11/12` DONE），开始门禁仍为 `CNT-21`、`AGT-16`、`PRV-13B`；第一期/第二期不得提前接真实模型。
+- 跨平台接入：`HM-01..12`（HarmonyOS 电脑预览）与 BrowserSkill 式外部浏览器桥接方向候选，立任务前需独立 Roadmap 与红线评审。
+- 个人 Skill 市场：技能导入/导出、分享与市场分发的方向候选，基于 WFL 个人 Site Skill 稳定后评估；沉淀学习循环见 WFL Roadmap 借鉴章节。
+
+第一期任务完成前不直接领取 WFL/HUB/M2/MRT-10+；已具备依赖的第二/三期任务也保持排队，不与 CEF 产品装配争抢工作区和真机矩阵。
 
 ## 5. 当前代码事实
 

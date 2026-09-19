@@ -21,6 +21,18 @@ public:
   bool Start(std::string executable_path) override;
   void Stop() override;
   bool Enqueue(media_host_ipc::Message message) override;
+  bool EnqueuePlayer(media_host::ipc_v2::PlayerMessage message) override;
+  bool
+  EnqueuePlayerList(media_host::ipc_v2::PlayerListRequest request) override;
+  std::vector<media_host::ipc_v2::PlayerPageReply>
+  DrainPlayerPages(std::size_t max_messages) override;
+  bool EnqueueDraft(media_host::ipc_v2::DraftCommand command) override;
+  std::vector<media_host::ipc_v2::DraftStateReply>
+  DrainDraftStates(std::size_t max_messages) override;
+  bool supports_player_messages() const noexcept override;
+  bool supports_drafts() const noexcept override;
+  bool supports_connect() const noexcept override;
+  std::uint64_t player_session_id() const noexcept override;
   std::vector<media_host_ipc::Message> Drain(std::size_t max_messages) override;
   bool healthy() const noexcept override;
   std::uint64_t generation() const noexcept override;

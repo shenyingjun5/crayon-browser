@@ -1,5 +1,6 @@
 #import <Cocoa/Cocoa.h>
 
+#include <functional>
 #include <string>
 #include <array>
 
@@ -7,6 +8,7 @@
 #include "include/cef_command_line.h"
 #include "include/cef_resource_bundle.h"
 #include "include/wrapper/cef_library_loader.h"
+#include "macos/agent_confirm_sheet_mac.h"
 #include "macos/app.h"
 #include "macos/application_menu_mac.h"
 #include "process/macos/ui_language_mac.h"
@@ -31,11 +33,13 @@ enum class ExitCode : int {
 @interface CrayonAppDelegate : NSObject <NSApplicationDelegate> {
  @private
   CefRefPtr<crayon::browser::cef_shell::window::TabController> tab_controller_;
+  std::function<void()> quit_handler_;
 }
 
 - (instancetype)initWithTabController:
     (CefRefPtr<crayon::browser::cef_shell::window::TabController>)
-        tabController;
+        tabController
+                       quitHandler:(std::function<void()>)quitHandler;
 - (void)tryToTerminateApplication;
 @end
 
@@ -64,23 +68,33 @@ enum class ExitCode : int {
 @implementation CrayonAppDelegate
 - (instancetype)initWithTabController:
     (CefRefPtr<crayon::browser::cef_shell::window::TabController>)
-        tabController {
+        tabController
+                       quitHandler:(std::function<void()>)quitHandler {
   self = [super init];
   if (self) {
     tab_controller_ = tabController;
+    quit_handler_ = std::move(quitHandler);
   }
   return self;
 }
 
 - (void)tryToTerminateApplication {
-  if (tab_controller_) {
-    tab_controller_->CloseAllBrowsers(false);
+  // Quit funnels through BrowserApp so the background service chain stops
+  // before the message loop exits; force=false keeps beforeunload dialogs
+  // on the user-facing menu path.
+  if (quit_handler_) {
+    quit_handler_();
   }
 }
 
 - (NSApplicationTerminateReply)applicationShouldTerminate:
     (NSApplication*)sender {
   static_cast<void>(sender);
+  // Defensive: end an open agent-confirmation panel on the deny path.
+  // The product's terminate: override bypasses this delegate callback in
+  // the normal quit flow (StopBackgroundServices is the main dismissal
+  // path); this only fires if AppKit consults shouldTerminate directly.
+  crayon::browser::cef_shell::agent_confirm::DismissConnectConfirmPanel();
   return NSTerminateNow;
 }
 
@@ -136,7 +150,8 @@ int main(int argc, char* argv[]) {
     }
 
     CrayonAppDelegate* delegate = [[CrayonAppDelegate alloc]
-      initWithTabController:app->tab_controller()];
+      initWithTabController:app->tab_controller()
+                quitHandler:[app] { app->RequestProductQuit(false); }];
     using crayon::browser::cef_shell::macos::ApplicationCommand;
     using crayon::browser::cef_shell::macos::ApplicationMenuMac;
     const crayon::browser::localization::LocaleCatalog catalog(locale_snapshot.locale);

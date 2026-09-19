@@ -1,6 +1,6 @@
 # HM HarmonyOS 电脑浏览器 Roadmap
 
-- 状态：后续技术预览
+- 状态：后续技术预览；2026-09-18 起归第三期跨平台接入（原第二期排期，开始条件不变）
 - 任务数：12
 - 目标设备：鸿蒙电脑，PC 形态
 - 非目标：手机、平板、AVScreenCapture、AVCodec、WebRTC sender

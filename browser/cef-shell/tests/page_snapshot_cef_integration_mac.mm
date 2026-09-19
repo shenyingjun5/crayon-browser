@@ -16,27 +16,27 @@
 #include <variant>
 #include <vector>
 
-#include "browser/media_host/cast_shell_controller.h"
-#include "browser/media_host/media_host_adapter.h"
-#include "browser/window/tab_controller.h"
-#include "alloy_navigation_probe.h"
-#include "alloy_page_tools_probe.h"
-#include "alloy_profile_context_probe.h"
-#include "alloy_security_probe.h"
-#include "alloy_window_coordinator_probe.h"
-#include "cast_toolbar_host_probe.h"
-#include "cast_entry_surface_probe.h"
-#include "alloy_tab_strip_probe.h"
-#include "alloy_content_view_host_probe.h"
-#include "alloy_tab_controller_probe.h"
 #include "alloy_builtin_content_probe.h"
 #include "alloy_cast_bridge_probe.h"
 #include "alloy_cast_overlay_mac_probe.h"
-#include "alloy_locale_matrix_mac_probe.h"
+#include "alloy_cast_toolbar_mac_probe.h"
+#include "alloy_content_view_host_probe.h"
 #include "alloy_interactions_mac_probe.h"
-#include "alloy_page_markdown_probe.h"
+#include "alloy_locale_matrix_mac_probe.h"
+#include "alloy_navigation_probe.h"
 #include "alloy_omnibox_probe.h"
-#include "media_observation_cef_message_checks.h"
+#include "alloy_page_markdown_probe.h"
+#include "alloy_page_tools_probe.h"
+#include "alloy_profile_context_probe.h"
+#include "alloy_security_probe.h"
+#include "alloy_tab_controller_probe.h"
+#include "alloy_tab_strip_probe.h"
+#include "alloy_window_coordinator_probe.h"
+#include "browser/media_host/cast_shell_controller.h"
+#include "browser/media_host/media_host_adapter.h"
+#include "browser/window/tab_controller.h"
+#include "cast_entry_surface_probe.h"
+#include "cast_toolbar_host_probe.h"
 #include "include/base/cef_callback.h"
 #include "include/cef_app.h"
 #include "include/cef_application_mac.h"
@@ -50,6 +50,7 @@
 #include "macos/content_host_adapter_mac.h"
 #include "macos/media_host_process_mac.h"
 #include "macos/trusted_input_monitor_mac.h"
+#include "media_observation_cef_message_checks.h"
 
 #ifndef CRAYON_SNAPSHOT_TEST_HELPER_PATH
 #error "CRAYON_SNAPSHOT_TEST_HELPER_PATH must be defined"
@@ -1048,6 +1049,7 @@ int main(int argc, char *argv[]) {
       argc == 2 && std::string(argv[1]) == "--alloy-content-view-host-probe";
   const bool tab_strip_probe =
       argc == 2 && std::string(argv[1]) == "--alloy-tab-strip-probe";
+  const bool cast_mac_probe = argc == 2 && std::string(argv[1]) == "--alloy-cast-toolbar-mac-probe";
   const bool entry_probe =
       argc == 2 && std::string(argv[1]) == "--cast-entry-surface-probe";
   const bool toolbar_close_probe =
@@ -1055,9 +1057,9 @@ int main(int argc, char *argv[]) {
   const bool toolbar_probe =
       toolbar_close_probe ||
       (argc == 2 && std::string(argv[1]) == "--cast-toolbar-host-probe");
-  if (argc != 3 && !toolbar_probe && !entry_probe && !tab_strip_probe &&
-      !content_view_probe && !omnibox_probe && !interactions_probe &&
-      !builtins_probe && !cast_overlay_probe && !loc_matrix_probe)
+  if (argc != 3 && !cast_mac_probe && !toolbar_probe && !entry_probe && !tab_strip_probe &&
+      !content_view_probe && !omnibox_probe && !interactions_probe && !builtins_probe &&
+      !cast_overlay_probe && !loc_matrix_probe)
     return 2;
   CefScopedLibraryLoader library_loader;
   if (!library_loader.LoadInMain())
@@ -1106,6 +1108,7 @@ int main(int argc, char *argv[]) {
       }
       CefSetDataDirectoryForTests(ceftests_files.string());
     }
+    auto cast_mac_result = std::make_shared<AlloyCastToolbarMacProbeResult>();
     auto toolbar_result = std::make_shared<CastToolbarHostProbeResult>();
     auto entry_result = std::make_shared<CastEntrySurfaceProbeResult>();
     auto tab_strip_result = std::make_shared<AlloyTabStripProbeResult>();
@@ -1132,7 +1135,9 @@ int main(int argc, char *argv[]) {
         std::make_shared<AlloyWindowCoordinatorProbeResult>();
     CefRefPtr<SnapshotFixtureApp> snapshot_app;
     CefRefPtr<CefApp> app;
-    if (omnibox_probe) {
+    if (cast_mac_probe) {
+      app = CreateAlloyCastToolbarMacProbe(cast_mac_result);
+    } else if (omnibox_probe) {
       app = CreateAlloyOmniboxProbe(omnibox_result);
     } else if (interactions_probe) {
       app = CreateAlloyInteractionsMacProbe(interactions_result);
@@ -1178,112 +1183,88 @@ int main(int argc, char *argv[]) {
     [NSApp finishLaunching];
     [NSApp activateIgnoringOtherApps:YES];
     CefRunMessageLoop();
+    if (cast_mac_probe) {
+      const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+      while (!cast_mac_result->closed && std::chrono::steady_clock::now() < deadline)
+        CefDoMessageLoopWork();
+    }
     const bool passed =
-        omnibox_probe
-            ? omnibox_result->behavior_passed && omnibox_result->window_closed
-            : interactions_probe
-            ? interactions_result->attach_passed &&
-                  interactions_result->native_menu_passed &&
-                  interactions_result->context_passed &&
-                  interactions_result->drag_passed &&
-                  interactions_result->commands_passed &&
-                  interactions_result->fencing_passed &&
-                  interactions_result->shutdown_passed &&
-                  interactions_result->browser_closed &&
+        cast_mac_probe  ? cast_mac_result->passed && cast_mac_result->closed
+        : omnibox_probe ? omnibox_result->behavior_passed && omnibox_result->window_closed
+        : interactions_probe
+            ? interactions_result->attach_passed && interactions_result->native_menu_passed &&
+                  interactions_result->context_passed && interactions_result->drag_passed &&
+                  interactions_result->commands_passed && interactions_result->fencing_passed &&
+                  interactions_result->shutdown_passed && interactions_result->browser_closed &&
                   interactions_result->window_closed
-            : builtins_probe
-            ? builtins_result->new_tab_passed &&
-                  builtins_result->mdv_runtime_passed &&
-                  builtins_result->edit_save_passed &&
-                  builtins_result->conflict_passed &&
-                  builtins_result->browser_closed &&
-                  builtins_result->window_closed
-            : page_markdown_probe
+        : builtins_probe
+            ? builtins_result->new_tab_passed && builtins_result->mdv_runtime_passed &&
+                  builtins_result->edit_save_passed && builtins_result->conflict_passed &&
+                  builtins_result->browser_closed && builtins_result->window_closed
+        : page_markdown_probe
             ? page_markdown_result->context_menu_passed &&
                   page_markdown_result->cancellation_passed &&
-                  page_markdown_result->preview_passed &&
-                  page_markdown_result->export_passed &&
-                  page_markdown_result->lifecycle_passed &&
-                  page_markdown_result->window_closed
-            : cast_bridge_probe
-            ? cast_bridge_result->selection_passed &&
-                  cast_bridge_result->connection_passed &&
-                  cast_bridge_result->reason_passed &&
-                  cast_bridge_result->session_passed &&
-                  cast_bridge_result->accessibility_passed &&
-                  cast_bridge_result->browser_closed &&
+                  page_markdown_result->preview_passed && page_markdown_result->export_passed &&
+                  page_markdown_result->lifecycle_passed && page_markdown_result->window_closed
+        : cast_bridge_probe
+            ? cast_bridge_result->selection_passed && cast_bridge_result->connection_passed &&
+                  cast_bridge_result->reason_passed && cast_bridge_result->session_passed &&
+                  cast_bridge_result->accessibility_passed && cast_bridge_result->browser_closed &&
                   cast_bridge_result->window_closed
-            : cast_overlay_probe
-            ? cast_overlay_result->placement_passed &&
-                  cast_overlay_result->click_passed &&
-                  cast_overlay_result->expiry_passed &&
-                  cast_overlay_result->unsupported_passed &&
-                  cast_overlay_result->duplicate_passed &&
-                  cast_overlay_result->picker_passed &&
-                  cast_overlay_result->detach_passed &&
-                  cast_overlay_result->browser_closed &&
+        : cast_overlay_probe
+            ? cast_overlay_result->placement_passed && cast_overlay_result->click_passed &&
+                  cast_overlay_result->expiry_passed && cast_overlay_result->unsupported_passed &&
+                  cast_overlay_result->duplicate_passed && cast_overlay_result->picker_passed &&
+                  cast_overlay_result->detach_passed && cast_overlay_result->browser_closed &&
                   cast_overlay_result->window_closed
-            : loc_matrix_probe
-            ? locale_matrix_result->new_tab_passed &&
-                  locale_matrix_result->browser_closed &&
+        : loc_matrix_probe
+            ? locale_matrix_result->new_tab_passed && locale_matrix_result->browser_closed &&
                   locale_matrix_result->window_closed
-            : navigation_probe
-            ? navigation_result->behavior_passed &&
-                  navigation_result->real_navigation_passed &&
-                  navigation_result->identity_passed &&
-                  navigation_result->fencing_passed &&
-                  navigation_result->bookmark_passed &&
-                  navigation_result->history_passed &&
-                  navigation_result->download_passed &&
-                  navigation_result->window_closed
-            : profile_context_probe
+        : navigation_probe
+            ? navigation_result->behavior_passed && navigation_result->real_navigation_passed &&
+                  navigation_result->identity_passed && navigation_result->fencing_passed &&
+                  navigation_result->bookmark_passed && navigation_result->history_passed &&
+                  navigation_result->download_passed && navigation_result->window_closed
+        : profile_context_probe
             ? profile_context_result->context_isolation_passed &&
                   profile_context_result->cookie_isolation_passed &&
-                  profile_context_result->browsers_closed &&
-                  profile_context_result->window_closed
-            : security_probe
-            ? security_result->certificate_deny_passed &&
-                  security_result->certificate_once_passed &&
-                  security_result->permission_prompt_passed &&
-                  security_result->external_protocol_blocked &&
-                  security_result->external_protocol_denied &&
-                  security_result->browser_closed && security_result->window_closed
-            : page_tools_probe
+                  profile_context_result->browsers_closed && profile_context_result->window_closed
+        : security_probe ? security_result->certificate_deny_passed &&
+                               security_result->certificate_once_passed &&
+                               security_result->permission_prompt_passed &&
+                               security_result->external_protocol_blocked &&
+                               security_result->external_protocol_denied &&
+                               security_result->browser_closed && security_result->window_closed
+        : page_tools_probe
             ? page_tools_result->find_passed && page_tools_result->zoom_passed &&
                   page_tools_result->fullscreen_passed && page_tools_result->pdf_passed &&
-                  page_tools_result->pdf_fencing_passed &&
-                  page_tools_result->capability_passed &&
+                  page_tools_result->pdf_fencing_passed && page_tools_result->capability_passed &&
                   page_tools_result->browser_closed && page_tools_result->window_closed
-            : window_coordinator_probe
-            ? window_coordinator_result->behavior_passed &&
-                  window_coordinator_result->real_popup_passed &&
-                  window_coordinator_result->policy_passed &&
-                  window_coordinator_result->isolation_passed &&
-                  window_coordinator_result->windows_closed
-            : tab_controller_probe
+        : window_coordinator_probe ? window_coordinator_result->behavior_passed &&
+                                         window_coordinator_result->real_popup_passed &&
+                                         window_coordinator_result->policy_passed &&
+                                         window_coordinator_result->isolation_passed &&
+                                         window_coordinator_result->windows_closed
+        : tab_controller_probe
             ? tab_controller_result->behavior_passed && tab_controller_result->close_cancelled &&
-                  tab_controller_result->late_create_closed && tab_controller_result->renderer_crash_closed &&
+                  tab_controller_result->late_create_closed &&
+                  tab_controller_result->renderer_crash_closed &&
                   tab_controller_result->window_closed
-            : content_view_probe
+        : content_view_probe
             ? content_view_result->behavior_passed && content_view_result->browsers_closed &&
                   content_view_result->window_closed
-            : tab_strip_probe
-            ? tab_strip_result->behavior_passed && tab_strip_result->window_closed
-            : entry_probe
-            ? entry_result->behavior_passed && entry_result->browser_closed &&
-                  entry_result->window_closed
-            : toolbar_probe
-                  ? toolbar_result->layout_passed &&
-                        toolbar_result->browser_closed &&
-                        toolbar_result->window_closed &&
-                        (!toolbar_close_probe ||
-                         toolbar_result->cancellation_verified)
-                  : snapshot_app->passed();
-    if (profile_context_probe || security_probe || page_tools_probe ||
-        interactions_probe || builtins_probe || page_markdown_probe ||
-        cast_overlay_probe || loc_matrix_probe)
+        : tab_strip_probe ? tab_strip_result->behavior_passed && tab_strip_result->window_closed
+        : entry_probe     ? entry_result->behavior_passed && entry_result->browser_closed &&
+                            entry_result->window_closed
+        : toolbar_probe ? toolbar_result->layout_passed && toolbar_result->browser_closed &&
+                              toolbar_result->window_closed &&
+                              (!toolbar_close_probe || toolbar_result->cancellation_verified)
+                        : snapshot_app->passed();
+    if (cast_mac_probe || profile_context_probe || security_probe || page_tools_probe ||
+        interactions_probe || builtins_probe || page_markdown_probe || cast_overlay_probe ||
+        loc_matrix_probe)
       app = nullptr;
-    if (interactions_probe || builtins_probe || page_markdown_probe ||
+    if (cast_mac_probe || interactions_probe || builtins_probe || page_markdown_probe ||
         cast_overlay_probe || loc_matrix_probe) {
       // CEF-150 macOS teardown race: CefShutdown blocks indefinitely on an
       // already-exited helper child (unreaped zombie, waitpid ECHILD); the

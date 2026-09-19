@@ -1,21 +1,22 @@
 # 蜡笔 AI Agent 投屏浏览器总 Roadmap
 
-- 版本：v0.11（一期自定义外壳＋Alloy 迁移）
-- 日期：2026-09-04
+- 版本：v0.12（二期收窄为第三方 Agent 能力，新增第三期：内置模型 AI、跨平台接入与 Skill 市场）
+- 日期：2026-09-18
 - 状态：活跃
 - 当前任务总数：297
 - 当前测试用例总数：212
 
 ## 1. 当前结论
 
+- **2026-09-18 用户决策（二期/三期重排）**：第二期收窄为“第三方 Agent 接入与周边能力”——S1/A1/A2、W1/W2、H0/H1、X1、`MRT-10..19` 与 `PRV-13B` 的非 model 子项保持第二期；原第二期的内置模型 AI（`CNT-11..16`，M2）与 HarmonyOS（VH）移入新设第三期，第三期同时纳入跨平台/外部宿主接入探索与个人 Skill 市场。路线借鉴输入为 [Agent 原生浏览器借鉴方案](reference/蜡笔AI浏览器_ego-lite与BrowserSkill借鉴完整方案.md)（已入库 `docs/reference/`）：ego lite 的 Agent Space/TaskSpace 编程模型与站点学习沉淀、Tencent BrowserSkill 的会话隔离/CLI/daemon 工程实现；两个项目仅作设计借鉴，不引入代码依赖，不改变仓库红线与依赖方向。
 - **2026-09-04 最新决策**：长期采用自定义 Shell＋CEF Alloy，一期即开始迁移。完整一期执行总图见 [REL §5](plans/release-v1-roadmap.md#5-一期完整执行总图2026-09-04-重排)，具体宿主切片见 [PLT-SHELL](plans/desktop-shell-roadmap.md)。当前 Mac 先推进共享/本地验证，Windows 首发政策不变。后文 Chrome-style/BUX 既有完成证据是历史基线，不代表新自定义外壳通过。
 - 已收口：`BRD-01..04`、Foundation、`MED-01..19`、`BUX-01..18`、`SDK-01..14`、`RNM-01..08`；CEF 为 `CEF-01..05/15 DONE`、`CEF-06..14 VERIFIED`，`ACT-01..12` 已完成契约/模型层总 Review，`MRT-01..08 DONE`。
 - 页面数据 C1 算法与数据面 `CNT-01..10` 已收口；一期产品链 `CNT-17..20 DONE`，其中 Windows `CNT-20W1/W2` 已用真实 CEF 对称闭合。`CNT-21W` 等三大闭环平台切片完成后的 `PRV-13AW` 再做总 Review。
-- 第一期范围由 `REL-01 DONE` 冻结为网页 Markdown、LAN Direct/Relay 投屏、本地 Markdown 编辑三大闭环；远程后续已在 macOS arm64 闭合共享协议与大部分产品链。`REL-05 DONE` 按 2026-08-31 用户决策改为 Windows 10/11 x64 先形成发布候选，macOS 特有验证后置且不阻塞 Windows。Agent/CLI/MCP、Workflow、Hub、Partner、模型与 HarmonyOS 默认关闭并进入第二期。
+- 第一期范围由 `REL-01 DONE` 冻结为网页 Markdown、LAN Direct/Relay 投屏、本地 Markdown 编辑三大闭环；远程后续已在 macOS arm64 闭合共享协议与大部分产品链。`REL-05 DONE` 按 2026-08-31 用户决策改为 Windows 10/11 x64 先形成发布候选，macOS 特有验证后置且不阻塞 Windows。Agent/CLI/MCP、Workflow、Hub、Partner 默认关闭并进入第二期；模型（M2）与 HarmonyOS 默认关闭并进入第三期（2026-09-18 重排）。
 - 第一期三个闭环在同一候选包支持 `en-US/zh-CN/zh-TW` 并跟随用户首选系统 UI 语言；`LOC-01..10` 独立承接统一资源、locale resolver、CEF/平台装配和真实发布矩阵，当前 `LOC-01/03/04/05W/06W DONE`、`LOC-02 VERIFIED`、`LOC-07W BLOCKED`、`LOC-08M IMPLEMENTED`。本地化是横切质量，不扩张第四条业务闭环。
 - 平台剩余重点：网页 Markdown 的 `CNT-20W1/W2` 与本地 Markdown 生产隔离 `MDV-25W` 已闭合；`PLT-W05a/W05b/W05c0 DONE`，`PLT-W05c` 的产品投屏码/播控装配与双配置自动化已闭合，但当前远程桌面点击被标记为 `LLMHF_INJECTED`，须在可信物理输入控制台补 ADB 正式接收端 Direct 真机证据后才能继续 W05d..f；独立主线继续 `MDV-20W -> MRT-09W`、`PRV-13AW -> CNT-21W` 与 QAR Windows 核心矩阵。macOS `PLT-M05b4..b6/M05c`、QAR-10 和其他 macOS 特有门禁保留后续，不得改写已有证据或冒充 Windows 结果。
-- 产品依赖顺序不变，但发布拆为两期：第一期先完成浏览器/LAN 投屏/网页 Markdown/本地 MDV；第二期再开放 Agent 协议与语义动作、Workflow/Challenge、Capability Hub/合作方和模型。
-- CAAP、CLI/入站 MCP、高性能读页和授权操作仍是产品核心方向，但不进入第一期发布包启用范围；具体模型/provider 与视频/文档总结同属第二期。
+- 产品依赖顺序不变，但发布拆为三期：第一期先完成浏览器/LAN 投屏/网页 Markdown/本地 MDV；第二期再开放 Agent 协议与语义动作、Workflow/Challenge、Capability Hub/合作方等第三方 Agent 能力；第三期开放内置模型 AI、跨平台/外部宿主接入与个人 Skill 市场。
+- CAAP、CLI/入站 MCP、高性能读页和授权操作仍是产品核心方向，但不进入第一期发布包启用范围；具体模型/provider 与视频/文档总结（M2）自 2026-09-18 起属第三期。
 - Windows/macOS 为当前桌面；HarmonyOS 只做鸿蒙电脑 PC 形态技术预览；Linux 无活跃任务。
 - `BUX` 独立承接完整桌面浏览器体验；`MDV` 承接本地 Markdown 查看/编辑/保存、图标工具栏、图片与 Mermaid Full，`MRT` 独立承接闭合 Extension Framework、Highlight/KaTeX 与后续扩展门禁（PRD v0.8）；`ACT`、`WFL`、`HUB` 分别承接语义动作、持久化工作流和 connector 安全边界，避免把大模块塞进 CEF、AGT 或 CNT。
 
@@ -49,12 +50,12 @@
 | PLT | 7 | Windows/macOS 系统与本机 IPC/客户端交接适配 |
 | REL | 5 | 第一期三大闭环范围、装配审计、Windows 首发顺序与发布聚合 |
 | PRV | 14 | Profile、隐私、安全、日志与分期数据流 Review |
-| CNT | 21 | 页面数据/Markdown 产品闭环；第二阶段模型总结 |
+| CNT | 21 | 页面数据/Markdown 产品闭环；第三期模型总结（M2） |
 | ACT | 12 | 语义地图、action_id、前置条件与效果验证 |
 | AGT | 16 | CAAP、入站 registry、CLI/MCP 与授权访问 |
 | WFL | 16 | Workflow、Challenge、个人 Site Skill 与受控修复 |
 | HUB | 16 | Capability Registry、Router 与 Partner connector |
-| HM | 12 | HarmonyOS 电脑 PC 形态技术预览 |
+| HM | 12 | HarmonyOS 电脑 PC 形态技术预览（第三期跨平台接入） |
 | QAR | 18 | 核心/第二期 feature 分离的质量、性能、安全、发布和回滚 |
 | RNM | 8 | `get-video` → `crayon-browser` 命名迁移 |
 | **合计** | **297** | |
@@ -167,7 +168,7 @@ flowchart LR
 - 验收：Windows x64 候选包真实完成网页→Markdown→复制/保存、网页视频→设备→Direct/Relay→控制/停止、本地 `.md`→编辑→预览→安全保存，并在 `en-US/zh-CN/zh-TW` 系统 UI 语言下保持 CEF/产品/原生 UI 一致；P0/P1=0。Agent/Workflow/Partner/model 等第二期 feature 默认为 off/NOT_IN_RELEASE。
 - 平台：Windows 10/11 x64 为当前首发候选。已有 macOS arm64 共享实现和证据保留；macOS 签名/公证、Keychain、原生生命周期、安装/升级/回滚与最终 Go/NoGo 后续独立验证，不能阻塞或冒充 Windows 候选。
 
-以下 S1 对外装配、A1/A2/W/H/X/M2/Harmony 阶段统一属于第二期，不阻塞 R1：
+以下 S1 对外装配、A1/A2/W/H/X 阶段属于第二期（第三方 Agent 接入与周边能力）；M2 与 VH 自 2026-09-18 起属于第三期，另设 X3/S3 第三期方向段。二三期均不阻塞 R1：
 
 ### S1：语义地图与可验证动作内核
 
@@ -209,18 +210,28 @@ flowchart LR
 - `SDK-15` 做浏览器侧缺口分析与外部 API 提案；外部 Cast-SDK/接收端获批发布后才执行 `SDK-16`。
 - 验收：浏览器无 raw manifest/协议拼接，只消费固定版本正式 facade。
 
-### M2：模型型 AI 第二阶段
+### M2：内置模型 AI（第三期）
 
-- `CNT-11..16`；前置 `CNT-21`、`AGT-16`、`PRV-13B`。
-- 验收：provider ADR、发送预览、文档总结、合法文本来源的视频总结、引用和降级。可与 W/H 后期按资源并行，但不能替代其确定性门禁。
+- `CNT-11..16`；前置 `CNT-21`、`AGT-16`、`PRV-13B`。原第二期任务，2026-09-18 用户决策移入第三期：第三期先完成内置 AI 的 provider 接入与总结能力，第三方 Agent 能力（第二期）不依赖真实模型。
+- 验收：provider ADR、发送预览、文档总结、合法文本来源的视频总结、引用和降级。`CNT-11/12`（provider ADR 与 model adapter/Fake provider）已 DONE；`CNT-13..16` 保持排队。可与 X3/S3 按资源并行，但不能替代其确定性门禁。
 
 ### V5：Windows/macOS 稳定发布
 
-- 第一期 Windows 候选执行 `QAR-02AW/05AW/08AW` 与其余 W 核心任务；第二期 feature 执行 `QAR-02B/05B/08B`。Agent、Workflow、Partner、模型分别做 feature GO/NO-GO；任一后续 feature NO-GO 不阻塞三大核心闭环发布。
+- 第一期 Windows 候选执行 `QAR-02AW/05AW/08AW` 与其余 W 核心任务；第二期 feature 执行 `QAR-02B/05B/08B`，其中 model 相关复核随 M2 归第三期。Agent、Workflow、Partner、模型分别做 feature GO/NO-GO；任一后续 feature NO-GO 不阻塞三大核心闭环发布。
 
-### VH：HarmonyOS 电脑技术预览
+### X3：跨平台与外部宿主接入（第三期）
 
-- `HM-01..12`；共享 CAAP 和适用语义契约，平台 transport/ArkWeb 能力单独验证。
+- 方向候选（未拆原子任务，立任务前需独立 Roadmap 与安全红线评审）：HarmonyOS 电脑预览（VH）之外，评估 BrowserSkill 式“控制用户现有 Chrome/Edge”可选桥接作为独立边界产品；它不进入蜡笔自身浏览器核心依赖，不复制其 MV3 插件栈，CEF 内置模式不需要扩展 API。
+- 边界：不暴露原始 CDP/WebDriver、不移动用户 OS 鼠标/抢占焦点、不代理任意网络；借鉴方案中的“受限 CDP 兼容层”与当前 `AGENTS.md` 红线冲突，只有先修订红线并独立评审后才可立项。
+
+### S3：个人 Skill 市场（第三期）
+
+- 方向候选（未拆原子任务，立任务前需独立 Roadmap 与安全评审）：在 WFL 个人 Site Skill（本地、加密、Profile 隔离）产品化稳定后，评估技能导入/导出、跨设备同步、分享与市场分发信任审核。
+- Skill 沉淀机制按借鉴方案的学习循环持续演进：探索→记录→verified success→生成候选→用户确认→Skill Store→后续优先复用→失败受控修复。该循环的确定性骨架已由 `WFL-06..15` 落地；二期产品装配与演进对照借鉴文档补强 Site Skill Manifest 结构（domains/capabilities/inputs/success_assertion）与站点学习目录组织，不改变 verified-only 与用户确认红线。
+
+### VH：HarmonyOS 电脑技术预览（第三期）
+
+- `HM-01..12`；共享 CAAP 和适用语义契约，平台 transport/ArkWeb 能力单独验证。原第二期排期，2026-09-18 用户决策移入第三期跨平台接入。
 
 ## 6. 资源与工期建议
 
@@ -257,7 +268,7 @@ flowchart LR
 3. `MDV-25W DONE -> MDV-20W -> MRT-09W`：Windows 本地 Markdown 生产隔离已闭合，继续 P0 Runtime、包体与真机回归。
 4. `PRV-13AW -> CNT-21W -> PLT-19W -> QAR Windows slices -> REL-03/04 -> QAR-16W`：三闭环数据流与网页 Markdown 总 Review 后，聚合 `LOC-07W` 并执行安全、性能、长稳、安装/升级/回滚、SBOM 与候选 Go/NoGo。
 
-第二期保持排队：`AGT-12C/13/14/16`、`WFL`、`HUB`、`CNT-11..16`、`MRT-10..19`、`SDK-15/16`、`HM`。其中 `CNT-11` 等 `CNT-21 + AGT-16 + PRV-13B + provider ADR`；不得在 R1 完成前抢占 CEF 装配和真机矩阵。
+第二期保持排队：`AGT-12C/13/14/16`、`WFL`、`HUB`、`MRT-10..19`、`SDK-15/16`。第三期（2026-09-18 起）保持排队：`CNT-13..16`（M2，`CNT-11/12` 已 DONE，仍等 `CNT-21 + AGT-16 + PRV-13B`）、`HM`、X3/S3 方向候选；不得在 R1 完成前抢占 CEF 装配和真机矩阵。
 
 ## 8. 发布门禁
 

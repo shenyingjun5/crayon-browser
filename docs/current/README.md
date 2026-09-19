@@ -22,7 +22,7 @@
 | [Code Highlight 供应链契约](code-highlight.md) | `code-highlight-assets-v1` 选型、固定离线 grammar/别名/dependency、hash/许可/包体与安全输出边界 |
 | [KaTeX 数学语法与供应链契约](math-katex.md) | `math-katex-assets-v1` 的 `$`/`$$` 定界、固定 option/宏禁令、ESM/CSS/WOFF2 离线闭包与 MRT-08 输出门禁 |
 | [本地 Presentation v1 契约](presentation-contract.md) | `presentation-v1` 分节规则、Normal/Presenting 状态机、节导航与焦点意图（MRT-16） |
-| [总 Roadmap](../crayon-private-cast-browser-roadmap.md) | 297 项活跃任务、Windows 首发候选、第一期/第二期阶段和当前领取顺序 |
+| [总 Roadmap](../crayon-private-cast-browser-roadmap.md) | 297 项活跃任务、Windows 首发候选、第一期/第二期/第三期阶段和当前领取顺序 |
 | [第一期发布 Roadmap](../plans/release-v1-roadmap.md) | 网页 Markdown、LAN 投屏、本地 Markdown 编辑三大闭环、平台顺序与关闭 feature |
 | [自定义外壳迁移 Roadmap](../plans/desktop-shell-roadmap.md) | 一期自绘标签/导航/面板＋Alloy，内容视图边界、原子迁移、旧宿主退出与双平台验证 |
 | [三语言本地化 Roadmap](../plans/localization-roadmap.md) | `en-US/zh-CN/zh-TW` 跟随系统、共享资源/解析器、CEF/平台装配和真机发布门禁 |
@@ -66,7 +66,7 @@ Cast-SDK source lock 的当前事实位于 `config/cast-sdk-source.toml`、`.git
 - Cast-SDK source revision 已由 `SDK-01` 固定并通过 `RG-008`；`SDK-01..14 DONE`，包括真实接收端 Harness 与总 Review。`SDK-15/16` 只承接后续 Partner/TV Cast gap 与正式外部 facade。
 - `MED-19` 已完成：投屏决策集合为 `Direct/Relay/ExternalClientHandoff/Reject`，旧 `mirror` wire 值保留兼容读取窗口且不再发出；`tab_video`/`system_audio` 仅作为 `crayon-domain` 遗留字段存在，策略与 runtime 代码不再引用，不得继续扩张。
 - 三语言本地化 `LOC-01/03/04/05W/06W DONE` 已冻结 current 契约、纯 C++17 resolver、统一共享产品 catalog，完成 Windows 用户首选 UI 语言到 CEF locale/Accept-Language/自有 UI 的单 snapshot 装配，并把 Release 闭合为三套支持语言及必要 gender pak；`LOC-02 VERIFIED` 已建立三套 155-key 事实源和确定性生成物（繁体语言审校待 LOC-07W）。`LOC-07W BLOCKED` 等待 Windows 人工/系统语言矩阵；`LOC-08M IMPLEMENTED` 已接入 macOS 单 snapshot 与 `en/zh-Hans/zh-Hant` 生成资源，但平台构建/真机证据后置。不得把资源闭包解释为三语言已发布。
-- 当前开发前沿：2026-08-31 用户决策改为 Windows 10/11 x64 先形成第一期候选，已有 macOS arm64 共享实现/证据保留，macOS 特有签名/公证/Keychain/生命周期/打包后续验证。`CNT-17..19 DONE` 与 `CNT-20 VERIFIED` 已在 macOS 闭合网页 Markdown；Windows 尚无 content-host/process/platform UI adapter，先执行 `CNT-20W1/W2 -> CNT-21W`。`PLT-M05b1..b3 DONE` 已冻结共享观察、策略、MHV1、Cast runtime/UI 语义；Windows 尚无 media-host/Cast 平台装配，执行 `PLT-W05a..f`，Direct/Relay 使用当前 ADB 在线 `com.zknowai.labi.cast.receiver` 正式接收端取证。`MDV-20/24/25 VERIFIED` 只补 Windows 对称发布回归。Agent/CLI/MCP、Workflow、Hub、Partner、模型与 HarmonyOS 统一为第二期且默认关闭。
+- 当前开发前沿：2026-08-31 用户决策改为 Windows 10/11 x64 先形成第一期候选，已有 macOS arm64 共享实现/证据保留，macOS 特有签名/公证/Keychain/生命周期/打包后续验证。`CNT-17..19 DONE` 与 `CNT-20 VERIFIED` 已在 macOS 闭合网页 Markdown；Windows 尚无 content-host/process/platform UI adapter，先执行 `CNT-20W1/W2 -> CNT-21W`。`PLT-M05b1..b3 DONE` 已冻结共享观察、策略、MHV1、Cast runtime/UI 语义；Windows 尚无 media-host/Cast 平台装配，执行 `PLT-W05a..f`，Direct/Relay 使用当前 ADB 在线 `com.zknowai.labi.cast.receiver` 正式接收端取证。`MDV-20/24/25 VERIFIED` 只补 Windows 对称发布回归。Agent/CLI/MCP、Workflow、Hub、Partner 统一为第二期且默认关闭；模型（`CNT-11..16`）与 HarmonyOS 自 2026-09-18 用户决策起归第三期，个人 Skill 市场与跨平台/外部宿主接入亦为第三期方向候选。第三方 Agent 路线借鉴输入见 `docs/reference/蜡笔AI浏览器_ego-lite与BrowserSkill借鉴完整方案.md`。
 
 ## 5. 权威与历史
 

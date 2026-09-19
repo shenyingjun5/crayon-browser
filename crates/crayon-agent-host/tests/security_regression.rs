@@ -57,6 +57,7 @@ fn start_host(purpose: &str) {
         tab_known,
         execute,
         user_data: std::ptr::null_mut(),
+        client_connected_fn: None,
     };
     assert_eq!(
         unsafe { crayon_agent_host_start(&config) },
@@ -217,7 +218,17 @@ fn hostile_client_matrix_over_real_uds() {
     stream.read_exact(&mut payload).expect("chunk body");
     let chunk: crayon_ipc_schema::CaapChunk = serde_json::from_slice(&payload).expect("chunk");
     assert!(chunk.is_final());
-    assert_eq!(chunk.data(), "ok");
+    assert_eq!(
+        chunk.data(),
+        "ok",
+        "unexpected payload {:?} (final={})",
+        chunk.data(),
+        chunk.is_final()
+    );
     assert!(EXEC_COUNT.load(Ordering::SeqCst) >= 1);
+    // Disconnect before stopping: with the connection open the serve
+    // thread parks on its next frame read and the join reports
+    // CRAYON_AGENT_HOST_STOP_TIMEOUT (covered by stop_join tests).
+    drop(stream);
     assert_eq!(crayon_agent_host_stop(), CRAYON_AGENT_HOST_OK);
 }

@@ -131,6 +131,12 @@ bool AlloyToolbarMac::FocusOmnibox() {
 }
 
 void AlloyToolbarMac::Shutdown() {
+  // Release every CEF object reference before CEF teardown: wrappers still
+  // alive at CefShutdown trip the Debug shutdown checker and leak the
+  // underlying browser context in CEF's ImplManager. The window owns the
+  // mounted views, so dropping our handles here cannot destroy live UI.
+  bound_browser_ = nullptr;
+  toolbar_ = nullptr;
   if (omnibox_) {
     static_cast<void>(omnibox_->Shutdown());
   }

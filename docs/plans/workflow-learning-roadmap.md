@@ -325,3 +325,12 @@
 - Review 结论（v0.9）：**P0/P1/P2=0**。Workflow/Challenge/Site Skill feature = **NOT_IN_RELEASE（默认关闭）**，GO 条件：AGT-12Cc2 宿主装配 + 确认 UI + 真机 IME/Narrator 矩阵（WFL-03/09 先例）。
 - 未覆盖与风险（如实）：CEF widget 装配、drift 真实信号源、store 跨重启持久化集成归产品装配任务。
 - `WFL-16` 转 `DONE`；WFL-01..16 全部闭合。
+
+## 借鉴输入与扩展方向（2026-09-18）
+
+参考 [Agent 原生浏览器借鉴方案](../reference/蜡笔AI浏览器_ego-lite与BrowserSkill借鉴完整方案.md)（已入库 `docs/reference/`）第 9/13 节：技能沉淀采用“Agent 首次探索→记录 Snapshot/Action/等待条件/结果→任务成功→生成 Workflow Candidate→用户确认保存→进入 Site Skill Store→后续优先复用→失败时 Selector Healer 修复”的学习循环，让浏览器随使用不断沉淀站点技能。
+
+- 现状对照：该循环的确定性骨架已由 `WFL-06..15` 完成并 VERIFIED/DONE——trace（仅授权步骤+verified effect）、recipe（verified-only 候选）、skill-preview（用户确认）、store（加密 per-Profile 隔离）、runner（每步重新授权）、health/version（禁用与回滚）、drift/heal（低风险受控修复）。ego lite 的 Site Learnings 目录与 Tencent BrowserSkill 的 Skill 指令组织作为设计参照，不引入其代码。
+- 二期产品装配与演进对照借鉴文档补强（在既有任务边界内或拆新原子任务）：Site Skill Manifest 的 `domains/capabilities/inputs/success_assertion` 结构、按站点组织的学习目录（`skills/<site>/`）经验、Selector 失效修复的用户可见性与审阅流程（对应 `WFL-14/15`）。
+- 边界不变：技能仍是当前用户/Profile 的本地加密资产；manifest/trace 不含密码、验证码、Cookie、Authorization、原始文件路径；verified-only 与用户显式确认红线不放宽；Challenge 不绕过。
+- 第三期候选方向（未拆原子任务，立任务前需独立 Roadmap 与安全评审，见总 Roadmap §5 S3）：技能导入/导出与格式校验、跨设备同步、个人 Skill 市场/分享与信任审核。跨用户分发是新的信任与隐私边界，不得作为 WFL 既有任务的顺手扩展。

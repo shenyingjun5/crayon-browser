@@ -27,9 +27,13 @@ class ProductWindowDelegate final : public CefWindowDelegate,
     std::function<void(CefRefPtr<CefWindow> window)> window_created;
     std::function<bool()> can_close;
     std::function<void()> window_destroyed_view;
+    std::function<void()> layout_changed;
+    std::function<bool(const CefKeyEvent&)> key_event;
+    std::function<bool(int)> accelerator;
   };
 
   explicit ProductWindowDelegate(Host host) : host_(std::move(host)) {}
+  void DetachHost() { host_ = {}; }
 
   void OnBrowserCreated(CefRefPtr<CefBrowserView>,
                         CefRefPtr<CefBrowser> browser) override {
@@ -56,6 +60,16 @@ class ProductWindowDelegate final : public CefWindowDelegate,
     if (host_.window_destroyed_view) host_.window_destroyed_view();
   }
 
+  bool OnKeyEvent(CefRefPtr<CefWindow>, const CefKeyEvent& event) override {
+    return host_.key_event && host_.key_event(event);
+  }
+  bool OnAccelerator(CefRefPtr<CefWindow>, int command_id) override {
+    return host_.accelerator && host_.accelerator(command_id);
+  }
+  void OnLayoutChanged(CefRefPtr<CefView>, const CefRect&) override {
+    if (host_.layout_changed) host_.layout_changed();
+  }
+
  private:
   Host host_;
 
@@ -71,7 +85,7 @@ struct AlloyProductHostMac::Impl {
   CefRefPtr<CefClient> client;
   CefRefPtr<CefView> tab_strip_view;
   CefRefPtr<CefView> toolbar_view;
-  std::function<void()> window_destroyed;
+  Callbacks callbacks;
   CefRefPtr<CefPanel> container;
   std::map<int, CefRefPtr<CefBrowserView>> views;
   CefRefPtr<CefBrowserView> first_view;
@@ -92,6 +106,7 @@ struct AlloyProductHostMac::Impl {
     // window becomes the visible tab. Before the window exists (first
     // browser) the view is visible by default once mounted.
     ShowBrowser(browser_id);
+    if (callbacks.view_ready) callbacks.view_ready();
   }
 
   void ShowBrowser(int browser_id) {
@@ -161,10 +176,12 @@ struct AlloyProductHostMac::Impl {
     window->Layout();
     window->Show();
     window->Activate();
+    if (callbacks.view_ready) callbacks.view_ready();
   }
 
   bool CanCloseWindow() const {
     if (views.empty()) {
+      if (callbacks.before_close) callbacks.before_close();
       return true;
     }
     // Drain one close request per attempt; the result MUST be propagated:
@@ -177,19 +194,39 @@ struct AlloyProductHostMac::Impl {
     }
     if (found != views.end() && found->second &&
         found->second->GetBrowser() && found->second->GetBrowser()->GetHost()) {
-      return found->second->GetBrowser()->GetHost()->TryCloseBrowser();
+      const bool allowed =
+          found->second->GetBrowser()->GetHost()->TryCloseBrowser();
+      if (allowed && callbacks.before_close) callbacks.before_close();
+      return allowed;
     }
     return false;
   }
 
   void WindowDestroyedView() {
+    if (callbacks.before_close) callbacks.before_close();
     window = nullptr;
     container = nullptr;
     views.clear();
     first_view = nullptr;
-    if (window_destroyed) {
-      window_destroyed();
+    // The toolbar panels were only borrowed from the app assembly; without
+    // this release their CefView wrappers would outlive CefShutdown (Impl
+    // is destroyed after main's CefShutdown call).
+    tab_strip_view = nullptr;
+    toolbar_view = nullptr;
+    if (callbacks.window_destroyed) {
+      callbacks.window_destroyed();
     }
+  }
+
+  ~Impl() {
+    // Failed-start and abnormal teardown: window destruction never ran, so
+    // drop every CEF view reference here before CefShutdown audits wrappers.
+    window = nullptr;
+    container = nullptr;
+    views.clear();
+    first_view = nullptr;
+    tab_strip_view = nullptr;
+    toolbar_view = nullptr;
   }
 };
 
@@ -201,7 +238,7 @@ AlloyProductHostMac::AlloyProductHostMac(Dependencies dependencies,
   impl->client = dependencies.client;
   impl->tab_strip_view = dependencies.tab_strip_view;
   impl->toolbar_view = dependencies.toolbar_view;
-  impl->window_destroyed = callbacks.window_destroyed;
+  impl->callbacks = std::move(callbacks);
 
   ProductWindowDelegate::Host host;
   host.browser_created = [impl = impl.get()](CefRefPtr<CefBrowser> browser) {
@@ -218,6 +255,10 @@ AlloyProductHostMac::AlloyProductHostMac(Dependencies dependencies,
     impl->WindowDestroyedView();
   };
 
+  host.layout_changed = impl->callbacks.layout_changed;
+  host.key_event = impl->callbacks.key_event;
+  host.accelerator = impl->callbacks.accelerator;
+
   view_delegate_ =
       CefRefPtr<CefBrowserViewDelegate>(new ProductWindowDelegate(host));
   window_delegate_ =
@@ -225,7 +266,10 @@ AlloyProductHostMac::AlloyProductHostMac(Dependencies dependencies,
   impl_ = std::move(impl);
 }
 
-AlloyProductHostMac::~AlloyProductHostMac() = default;
+AlloyProductHostMac::~AlloyProductHostMac() {
+  static_cast<ProductWindowDelegate*>(view_delegate_.get())->DetachHost();
+  static_cast<ProductWindowDelegate*>(window_delegate_.get())->DetachHost();
+}
 
 bool AlloyProductHostMac::Start() {
   CEF_REQUIRE_UI_THREAD();
@@ -244,6 +288,7 @@ bool AlloyProductHostMac::Start() {
 
 void AlloyProductHostMac::Close() {
   CEF_REQUIRE_UI_THREAD();
+  if (impl_->callbacks.before_close) impl_->callbacks.before_close();
   bool requested = false;
   for (auto& entry : impl_->views) {
     if (entry.second && entry.second->GetBrowser() &&
@@ -290,6 +335,16 @@ CefRefPtr<CefBrowser> AlloyProductHostMac::browser() const noexcept {
     return nullptr;
   }
   return found->second ? found->second->GetBrowser() : nullptr;
+}
+
+CefRefPtr<CefWindow> AlloyProductHostMac::window() const {
+  return impl_->window;
+}
+
+CefRefPtr<CefBrowserView> AlloyProductHostMac::browser_view(
+    int browser_id) const {
+  const auto found = impl_->views.find(browser_id);
+  return found == impl_->views.end() ? nullptr : found->second;
 }
 
 bool AlloyProductHostMac::started() const noexcept {
