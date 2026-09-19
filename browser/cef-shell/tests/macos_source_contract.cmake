@@ -108,17 +108,27 @@ if(NOT initial_url_count EQUAL 1)
   message(FATAL_ERROR "macOS shell must contain exactly one crayon://newtab URL")
 endif()
 
+# PLT-SHELL-24M2CAST: the product cast chain is AlloyCastController +
+# CastEntrySurface (toolbar-only entry, real MHV2 projections). The app
+# assembly binds/resets per-tab cast contexts; the surface localizes its own
+# strings via LocaleCatalog, so no resolved cast strings cross the assembly.
+# The cast drains have a single consumer (the controller): app must never
+# call DrainCast directly.
 foreach(required_cast_token
-        "strings.cast_code_label" "strings.playback_pause"
-        "strings.playback_resume" "strings.playback_seek"
-        "RequestResolveCastCode" "RequestControlCast"
-        "ConnectCastCode" "SetPaused" "SeekSession"
-        "CastChromePresentation(cast_shell_->presentation())")
+        "AlloyCastController" "CastEntrySurface"
+        "BindCastForActiveTab" "ResetCastContext"
+        "DetachCastSurface" "cast_binding_attempt_"
+        "SetMediaObservationLifecycleCallback")
   string(FIND "${app_source}" "${required_cast_token}" token_index)
   if(token_index EQUAL -1)
     message(FATAL_ERROR "macOS app is missing Cast wiring ${required_cast_token}")
   endif()
 endforeach()
+string(FIND "${app_source}" "DrainCast" app_drain_cast_index)
+if(NOT app_drain_cast_index EQUAL -1)
+  message(FATAL_ERROR
+          "macOS app must not consume cast drains directly (unique consumer is AlloyCastController)")
+endif()
 
 foreach(required_host_token
         "AlloyProductHostMac"
