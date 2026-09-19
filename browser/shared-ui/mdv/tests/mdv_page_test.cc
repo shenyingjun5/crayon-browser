@@ -94,6 +94,10 @@ crayon::browser_mdv::MdvPageStrings SampleStrings() {
       "查看源码",
       "关闭",
       "图表无法渲染，已保留源码",
+      "大纲",
+      "搜索文档",
+      "上一个匹配",
+      "下一个匹配",
       crayon::browser_mdv::MdvShortcutPlatform::kWindows,
   };
 }
