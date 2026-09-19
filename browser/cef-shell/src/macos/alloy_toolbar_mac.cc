@@ -21,11 +21,13 @@ std::string Localized(::crayon::browser::localization::AppLocale locale,
 
 AlloyToolbarMac::AlloyToolbarMac(localization::LocaleSnapshot locale,
                                  Callbacks callbacks) {
+  // PLT-SHELL-24M2UIP-c: reserve the merged-titlebar leading area for the
+  // traffic lights (strip is 40pt; controls sit in its left 76pt).
+  constexpr int kTrafficLightLeadingInset = 76;
   tab_strip_ = std::make_unique<window::AlloyTabStrip>(
-      window::AlloyTabStrip::Strings{
-          Localized(locale.locale, "tabs.new"),
-          Localized(locale.locale, "tabs.close"),
-          Localized(locale.locale, "tabs.fallback")},
+      window::AlloyTabStrip::Strings{Localized(locale.locale, "tabs.new"),
+                                     Localized(locale.locale, "tabs.close"),
+                                     Localized(locale.locale, "tabs.fallback")},
       window::AlloyTabStrip::Callbacks{
           [new_tab = std::move(callbacks.new_tab)] {
             if (new_tab) new_tab();
@@ -38,7 +40,8 @@ AlloyToolbarMac::AlloyToolbarMac(localization::LocaleSnapshot locale,
           },
           [title = std::move(callbacks.tab_title)](window::TabId id) {
             return title ? title(id) : std::string{};
-          }});
+          }},
+      kTrafficLightLeadingInset);
   omnibox_ = std::make_unique<window::AlloyOmnibox>(
       window::AlloyOmnibox::Strings{
           Localized(locale.locale, "address.placeholder"),
@@ -70,6 +73,9 @@ AlloyToolbarMac::AlloyToolbarMac(localization::LocaleSnapshot locale,
         }
       }});
   toolbar_ = CefPanel::CreatePanel(nullptr);
+  // PLT-SHELL-24M2UIP-d: unified chrome band — the toolbar row shares the
+  // tab strip's light periwinkle family so the top region reads as one bar.
+  toolbar_->SetBackgroundColor(0xFFE9EDF6);
   CefBoxLayoutSettings toolbar_settings;
   toolbar_settings.horizontal = true;
   auto toolbar_layout = toolbar_->SetToBoxLayout(toolbar_settings);

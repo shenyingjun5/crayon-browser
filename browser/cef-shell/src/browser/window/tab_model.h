@@ -23,6 +23,9 @@ struct TabSnapshot final {
   int browser_id;
   TabLifecycle lifecycle;
   std::string url;
+  // Page title from the display handler; empty until the first title
+  // change (the strip then falls back to the URL).
+  std::string title;
   bool loading;
   bool can_go_back;
   bool can_go_forward;
@@ -44,6 +47,7 @@ public:
   bool MarkCrashed(int browser_id);
 
   bool UpdateAddress(int browser_id, std::string url);
+  bool UpdateTitle(int browser_id, std::string title);
   bool UpdateLoading(int browser_id, bool loading, bool can_go_back,
                      bool can_go_forward);
   bool BeginNavigation(int browser_id);

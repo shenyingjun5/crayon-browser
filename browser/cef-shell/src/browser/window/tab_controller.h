@@ -74,6 +74,8 @@ class WindowClient final : public CefClient,
 
   void OnAddressChange(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
                        const CefString& url) override;
+  void OnTitleChange(CefRefPtr<CefBrowser> browser,
+                     const CefString& title) override;
   void OnLoadingStateChange(CefRefPtr<CefBrowser> browser, bool isLoading,
                             bool canGoBack, bool canGoForward) override;
   void OnRenderProcessTerminated(CefRefPtr<CefBrowser> browser,
@@ -348,6 +350,9 @@ class TabController final : public CefBaseRefCounted {
   void OnBrowserClosing(CefRefPtr<CefBrowser> browser);
   void OnBrowserFocused(CefRefPtr<CefBrowser> browser);
   void OnAddressUpdated(CefRefPtr<CefBrowser> browser, const std::string& url);
+  // AGT/page-title path (PLT-SHELL-24M2UIP-b): display-handler title for
+  // the tab strip; empty until the first title change.
+  void OnTitleUpdated(CefRefPtr<CefBrowser> browser, const std::string& title);
   // Emits the registered TabUiUpdateCallback from the freshest model state;
   // browser_id 0 falls back to the active tab (or a bare reshuffle signal).
   void NotifyTabUiUpdate(int browser_id);

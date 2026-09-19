@@ -35,7 +35,9 @@ public:
   static constexpr int kActivateCommandBase = 0x7a20;
   static constexpr int kCloseCommandBase = 0x7a60;
 
-  AlloyTabStrip(Strings strings, Callbacks callbacks);
+  /// |leading_inset| reserves room for merged-titlebar window controls
+  /// (macOS traffic lights); 0 keeps the full-width strip (Windows).
+  AlloyTabStrip(Strings strings, Callbacks callbacks, int leading_inset = 0);
   ~AlloyTabStrip();
 
   AlloyTabStrip(const AlloyTabStrip &) = delete;

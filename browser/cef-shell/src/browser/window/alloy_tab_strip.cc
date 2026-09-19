@@ -16,6 +16,10 @@ namespace crayon::browser::cef_shell::window {
 namespace {
 
 constexpr int kStripHeight = 40;
+// Chrome-style band colors (PLT-SHELL-24M2UIP-b, reference: the retired
+// Chrome-runtime shell): periwinkle strip with a white active tab.
+constexpr cef_color_t kStripBackground = 0xFFDEE4F4;
+constexpr cef_color_t kActiveTabBackground = 0xFFFFFFFF;
 constexpr int kTabMinimumWidth = 62;
 constexpr int kTabMaximumWidth = 208;
 constexpr int kCloseMinimumWidth = 32;
@@ -36,9 +40,8 @@ public:
   }
 
   void OnThemeChanged(CefRefPtr<CefView> view) override {
-    view->SetBackgroundColor(view->GetThemeColor(
-        active_ ? CEF_ColorTabBackgroundActiveFrameActive
-                : CEF_ColorTabBackgroundInactiveFrameActive));
+    view->SetBackgroundColor(active_ ? kActiveTabBackground
+                                     : kStripBackground);
   }
 
 private:
@@ -73,15 +76,18 @@ struct AlloyTabStrip::State final : std::enable_shared_from_this<State> {
     IMPLEMENT_REFCOUNTING(ButtonDelegate);
   };
 
-  State(Strings strings_value, Callbacks callbacks_value)
+  State(Strings strings_value, Callbacks callbacks_value, int leading_inset)
       : strings(std::move(strings_value)),
-        callbacks(std::move(callbacks_value)) {}
+        callbacks(std::move(callbacks_value)),
+        leading_inset(leading_inset) {}
 
   void Initialize() {
     panel = CefPanel::CreatePanel(new SurfaceDelegate(kTabMinimumWidth));
+    panel->SetBackgroundColor(kStripBackground);
     CefBoxLayoutSettings layout;
     layout.horizontal = true;
     layout.between_child_spacing = kChildSpacing;
+    layout.inside_border_insets.left = leading_inset;
     panel->SetToBoxLayout(layout);
   }
 
@@ -252,11 +258,13 @@ struct AlloyTabStrip::State final : std::enable_shared_from_this<State> {
   std::optional<TabId> active_tab;
   bool active = true;
   bool dispatching = false;
+  int leading_inset = 0;
 };
 
-AlloyTabStrip::AlloyTabStrip(Strings strings, Callbacks callbacks)
-    : state_(
-          std::make_shared<State>(std::move(strings), std::move(callbacks))) {
+AlloyTabStrip::AlloyTabStrip(Strings strings, Callbacks callbacks,
+                             int leading_inset)
+    : state_(std::make_shared<State>(std::move(strings),
+                                     std::move(callbacks), leading_inset)) {
   CEF_REQUIRE_UI_THREAD();
   state_->Initialize();
 }

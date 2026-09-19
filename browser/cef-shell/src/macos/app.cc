@@ -839,7 +839,12 @@ void BrowserApp::ContinueContentHostStartup() {
               [this](window::TabId tab_id) {
                 const window::TabSnapshot* tab =
                     tab_controller_->model().Find(tab_id);
-                return tab ? tab->url : std::string{};
+                if (!tab) {
+                  return std::string{};
+                }
+                // PLT-SHELL-24M2UIP-b: prefer the page title; the URL stays
+                // as the fallback until the first title change arrives.
+                return !tab->title.empty() ? tab->title : tab->url;
               }});
       tab_controller_->SetTabUiUpdateCallback(
           [this](int browser_id, const std::string& url, bool is_loading,

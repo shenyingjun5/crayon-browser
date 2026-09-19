@@ -2,6 +2,8 @@
 // product layout (tab strip, toolbar, content container) and owns the
 // per-tab browser views. All handler surfaces route through the
 // TabController WindowClient; the host holds no business logic.
+#include "macos/alloy_product_host_mac.h"
+
 #include <map>
 #include <utility>
 
@@ -12,8 +14,7 @@
 #include "include/views/cef_window.h"
 #include "include/views/cef_window_delegate.h"
 #include "include/wrapper/cef_helpers.h"
-
-#include "macos/alloy_product_host_mac.h"
+#include "macos/alloy_titlebar_mac.h"
 
 namespace crayon::browser::cef_shell::macos {
 namespace {
@@ -171,11 +172,20 @@ struct AlloyProductHostMac::Impl {
     if (first_view) {
       container->AddChildView(first_view);
     }
-    window->SetTitle(title);
+    // PLT-SHELL-24M2UIP-c: the tab strip row doubles as the titlebar; the
+    // native title text is hidden and the traffic lights move into the
+    // strip's leading inset. Applied before Show so the first layout is
+    // already full-size.
+    titlebar::ApplyMergedTitlebar(window->GetWindowHandle(),
+                                  /*strip_height=*/40.0);
     window->SetSize(CefSize(1100, 760));
     window->Layout();
     window->Show();
     window->Activate();
+    // Re-apply once on screen: the traffic-light frames only exist after
+    // the window is visible.
+    titlebar::ApplyMergedTitlebar(window->GetWindowHandle(),
+                                  /*strip_height=*/40.0);
     if (callbacks.view_ready) callbacks.view_ready();
   }
 

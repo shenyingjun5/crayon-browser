@@ -141,6 +141,12 @@ void WindowClient::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
   controller_->OnBrowserClosing(browser);
 }
 
+void WindowClient::OnTitleChange(CefRefPtr<CefBrowser> browser,
+                                 const CefString& title) {
+  CEF_REQUIRE_UI_THREAD();
+  controller_->OnTitleUpdated(browser, title.ToString());
+}
+
 void WindowClient::OnAddressChange(CefRefPtr<CefBrowser> browser,
                                    CefRefPtr<CefFrame> frame,
                                    const CefString& url) {
@@ -941,6 +947,13 @@ void TabController::OnAddressUpdated(CefRefPtr<CefBrowser> browser,
                                      const std::string& url) {
   CEF_REQUIRE_UI_THREAD();
   model_.UpdateAddress(browser->GetIdentifier(), url);
+  NotifyTabUiUpdate(browser->GetIdentifier());
+}
+
+void TabController::OnTitleUpdated(CefRefPtr<CefBrowser> browser,
+                                   const std::string& title) {
+  CEF_REQUIRE_UI_THREAD();
+  model_.UpdateTitle(browser->GetIdentifier(), title);
   NotifyTabUiUpdate(browser->GetIdentifier());
 }
 

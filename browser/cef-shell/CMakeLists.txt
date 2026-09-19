@@ -1044,6 +1044,8 @@ if(OS_MAC)
       src/macos/app.h
       src/macos/agent_confirm_sheet_mac.h
       src/macos/agent_confirm_sheet_mac.mm
+      src/macos/alloy_titlebar_mac.h
+      src/macos/alloy_titlebar_mac.mm
       src/browser/media_host/alloy_cast_controller.cc
       src/browser/media_host/alloy_cast_controller.h
       src/browser/media_host/cast_entry_surface.cc
@@ -1182,6 +1184,7 @@ if(OS_MAC)
                               src/macos/page_markdown_platform_mac.mm
                               src/macos/trusted_input_monitor_mac.mm
                               src/macos/agent_confirm_sheet_mac.mm
+                              src/macos/alloy_titlebar_mac.mm
                               PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
   # AGT-12Cc2: bridging declarations for the Rust FFI surface.
   set(crayon_agent_host_include_dir
@@ -1596,6 +1599,8 @@ if(CRAYON_BUILD_TESTS)
       ${crayon_location_bar_sources}
       tests/page_snapshot_cef_integration_mac.mm
       src/macos/alloy_product_host_mac.cc
+      src/macos/alloy_titlebar_mac.mm
+      src/macos/alloy_titlebar_mac.h
       src/macos/alloy_toolbar_mac.cc
       tests/alloy_cast_toolbar_mac_probe.cc
       tests/alloy_cast_toolbar_mac_probe.h
@@ -1706,6 +1711,7 @@ if(CRAYON_BUILD_TESTS)
                  MACOSX_BUNDLE_BUNDLE_VERSION "1")
     set_source_files_properties(
       tests/page_snapshot_cef_integration_mac.mm
+      src/macos/alloy_titlebar_mac.mm
       src/macos/cast_chrome_mac.mm
       src/macos/trusted_input_monitor_mac.mm
       src/macos/application_menu_mac.mm

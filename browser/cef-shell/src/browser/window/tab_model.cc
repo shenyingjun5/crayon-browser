@@ -6,6 +6,10 @@
 
 namespace crayon::browser::cef_shell::window {
 
+namespace {
+constexpr std::size_t kMaximumTitleBytes = 512;
+}  // namespace
+
 std::optional<TabId> TabModel::CreateTab() {
   if (tabs_.size() >= kMaximumTabsPerWindow || next_tab_id_ == 0) {
     return std::nullopt;
@@ -14,6 +18,7 @@ std::optional<TabId> TabModel::CreateTab() {
   tabs_.push_back({id,
                    0,
                    TabLifecycle::kCreating,
+                   {},
                    {},
                    false,
                    false,
@@ -150,6 +155,18 @@ bool TabModel::MarkCrashed(int browser_id) {
   }
   tab->lifecycle = TabLifecycle::kCrashed;
   tab->loading = false;
+  return true;
+}
+
+bool TabModel::UpdateTitle(int browser_id, std::string title) {
+  TabSnapshot *tab = FindByBrowserMutable(browser_id);
+  if (!tab || tab->lifecycle == TabLifecycle::kClosing) {
+    return false;
+  }
+  if (title.size() > kMaximumTitleBytes) {
+    title.resize(kMaximumTitleBytes);
+  }
+  tab->title = std::move(title);
   return true;
 }
 
