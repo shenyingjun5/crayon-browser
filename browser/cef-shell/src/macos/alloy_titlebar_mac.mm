@@ -22,6 +22,14 @@ bool ApplyMergedTitlebar(void* native_window, double strip_height) {
   window.styleMask |= NSWindowStyleMaskFullSizeContentView;
   window.titlebarAppearsTransparent = YES;
   window.titleVisibility = NSWindowTitleHidden;
+  // FullSizeContentView only resizes the NSWindow's contentView; CEF's
+  // bridged root view keeps its below-titlebar frame unless stretched
+  // explicitly. Without this the strip row sits under an empty titlebar
+  // band and the merged-titlebar look breaks.
+  if (NSView* content = window.contentView) {
+    content.frame = NSMakeRect(0, 0, window.frame.size.width,
+                               window.frame.size.height);
+  }
 
   // Center the traffic lights vertically in the strip row. The buttons'
   // superview is the titlebar container pinned to the window top; with the
