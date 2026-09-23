@@ -857,7 +857,10 @@ void BrowserApp::ContinueContentHostStartup() {
                 // PLT-SHELL-24M2UIP-b: prefer the page title; the URL stays
                 // as the fallback until the first title change arrives.
                 return !tab->title.empty() ? tab->title : tab->url;
-              }});
+              },
+              // PLT-SHELL-24M2FIX-C6: the address bar's bookmark control only
+              // reports the press; the store and the resulting state live here.
+              [this] { ToggleActiveBookmark(); }});
       tab_controller_->SetTabUiUpdateCallback(
           [this](int browser_id, const std::string& url, bool is_loading,
                  bool can_go_back, bool can_go_forward) {
@@ -1023,6 +1026,9 @@ void BrowserApp::SyncToolbarToActiveTab() {
     }
   }
   static_cast<void>(toolbar_->SyncTabs(tab_controller_->model()));
+  // PLT-SHELL-24M2FIX-C6: the star follows the tab, not the click, so a tab
+  // switch shows the new page's state without waiting for a toggle.
+  static_cast<void>(RefreshBookmarkState());
   if (product_host_) product_host_->RefreshTabChrome();
   BindCastForActiveTab();
   // PLT-SHELL-24M2FIX-D: the product, not a look-alike probe, reports the
@@ -1030,6 +1036,107 @@ void BrowserApp::SyncToolbarToActiveTab() {
   if (product_host_) {
     product_host_->DumpDiagnostics("sync-toolbar");
   }
+}
+
+// PLT-SHELL-24M2FIX-C6: the bookmark store is created on first use and loaded
+// from the profile's own data directory. A missing file is the first run, not a
+// failure, so the load result is deliberately ignored; a failed create does
+// leave the control inert rather than pretending the page was saved.
+bool BrowserApp::EnsureBookmarks() {
+  CEF_REQUIRE_UI_THREAD();
+  if (bookmarks_) {
+    return true;
+  }
+  const auto profile = browser_engine::ProfileId::TryCreate("crayon-default");
+  if (!profile) {
+    return false;
+  }
+  bookmarks_ = std::make_unique<window::AlloyBookmarks>(
+      *profile,
+      window::AlloyBookmarks::Callbacks{
+          [this](const std::string& url) {
+            return toolbar_ && toolbar_->NavigateToAddress(url);
+          },
+          [this](const std::string& url) {
+            return product_host_ && product_host_->CreateTab(url);
+          }});
+  const auto context = CefRequestContext::GetGlobalContext();
+  const std::string cache =
+      context ? context->GetCachePath().ToString() : std::string{};
+  if (!cache.empty()) {
+    static_cast<void>(
+        bookmarks_->LoadFromFile(cache + "/crayon-bookmarks.json"));
+  }
+  return true;
+}
+
+bool BrowserApp::SaveBookmarks() {
+  CEF_REQUIRE_UI_THREAD();
+  if (!bookmarks_) {
+    return false;
+  }
+  const auto context = CefRequestContext::GetGlobalContext();
+  const std::string cache =
+      context ? context->GetCachePath().ToString() : std::string{};
+  if (cache.empty()) {
+    return false;
+  }
+  return bookmarks_->SaveToFile(cache + "/crayon-bookmarks.json");
+}
+
+// Reflects the active page's bookmark state on the address bar control.
+bool BrowserApp::RefreshBookmarkState() {
+  CEF_REQUIRE_UI_THREAD();
+  if (!toolbar_ || !tab_controller_ || !EnsureBookmarks()) {
+    return false;
+  }
+  const CefRefPtr<CefBrowser> browser = tab_controller_->ActiveBrowser();
+  if (!browser) {
+    return false;
+  }
+  const window::TabSnapshot* tab =
+      tab_controller_->model().FindByBrowser(browser->GetIdentifier());
+  // An empty or non-http(s) page cannot be bookmarked, so the control reports
+  // "not saved" instead of keeping a stale filled state.
+  if (!tab || tab->url.empty() ||
+      !browser_bookmarks::BookmarkStore::IsValidUrl(tab->url)) {
+    return toolbar_->SetBookmarked(false);
+  }
+  if (!bookmarks_->RefreshForUrl(tab->url)) {
+    return false;
+  }
+  return toolbar_->SetBookmarked(bookmarks_->bar().current_page_starred());
+}
+
+void BrowserApp::ToggleActiveBookmark() {
+  CEF_REQUIRE_UI_THREAD();
+  if (!toolbar_ || !tab_controller_ || !EnsureBookmarks()) {
+    return;
+  }
+  const CefRefPtr<CefBrowser> browser = tab_controller_->ActiveBrowser();
+  if (!browser) {
+    return;
+  }
+  const window::TabSnapshot* tab =
+      tab_controller_->model().FindByBrowser(browser->GetIdentifier());
+  if (!tab || tab->url.empty() ||
+      !browser_bookmarks::BookmarkStore::IsValidUrl(tab->url)) {
+    return;
+  }
+  const std::string url = tab->url;
+  const std::string title = tab->title.empty() ? tab->url : tab->title;
+  if (!bookmarks_->RefreshForUrl(url)) {
+    return;
+  }
+  if (const auto existing = bookmarks_->bar().current_page_bookmark()) {
+    static_cast<void>(bookmarks_->Remove(*existing));
+  } else {
+    static_cast<void>(bookmarks_->AddCurrentPage(title, url));
+  }
+  // Re-read the store rather than assuming the write: Remove() can refuse, and
+  // the control must then keep showing the state the store actually holds.
+  static_cast<void>(RefreshBookmarkState());
+  static_cast<void>(SaveBookmarks());
 }
 
 void BrowserApp::DetachCastSurface() {

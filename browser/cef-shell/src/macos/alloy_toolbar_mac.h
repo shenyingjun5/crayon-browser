@@ -12,6 +12,7 @@
 #include "browser/window/alloy_chrome_decoration.h"
 #include "browser/window/alloy_navigation.h"
 #include "browser/window/alloy_omnibox.h"
+#include "browser/window/alloy_search_engines.h"
 #include "browser/window/alloy_tab_strip.h"
 #include "browser/window/tab_model.h"
 #include "crayon/browser_localization/locale_snapshot.h"
@@ -27,6 +28,9 @@ class AlloyToolbarMac final {
     std::function<void(window::TabId)> activate_tab;
     std::function<void(window::TabId)> close_tab;
     std::function<std::string(window::TabId)> tab_title;
+    /// PLT-SHELL-24M2FIX-C6: the address bar's bookmark control was pressed.
+    /// The app owns the store, so it answers with SetBookmarked().
+    std::function<void()> toggle_bookmark;
   };
 
   AlloyToolbarMac(localization::LocaleSnapshot locale, Callbacks callbacks);
@@ -42,6 +46,12 @@ class AlloyToolbarMac final {
   /// wrapped in a holder panel, so the toolbar's child index no longer
   /// identifies it.
   CefRefPtr<CefView> omnibox_view() const;
+  /// PLT-SHELL-24M2FIX-C6: the address field and its bookmark control, exposed
+  /// by name so callers never depend on the omnibox's internal child order.
+  CefRefPtr<CefTextfield> omnibox_textfield() const;
+  CefRefPtr<CefLabelButton> bookmark_button() const;
+  /// Reflects the current page's bookmark state on that control.
+  bool SetBookmarked(bool bookmarked);
 
   bool SyncTabs(const window::TabModel& model);
 
@@ -63,6 +73,18 @@ class AlloyToolbarMac final {
 
   bool SetAddress(std::string address);
   bool FocusOmnibox();
+  /// PLT-SHELL-24M2FIX-C6: navigates the bound tab through the navigation
+  /// layer's own validation, for owner surfaces that hold a URL (the bookmark
+  /// store's open-current-page callback, for example) rather than a submission.
+  bool NavigateToAddress(std::string url);
+
+  /// PLT-SHELL-24M2FIX-C8: switches the engine a non-URL submission is sent to.
+  /// Refused when the omnibox is missing, the provider is invalid, or a
+  /// submission is mid-dispatch; the active engine is then left unchanged.
+  bool SetSearchEngine(window::SearchEngine engine);
+  window::SearchEngine search_engine() const noexcept {
+    return search_engine_;
+  }
 
   /// PLT-SHELL-24M2FIX-C4: everything the native chrome decoration has to draw
   /// that CEF Views cannot express — tab corners and loading indicator geometry
@@ -83,6 +105,8 @@ class AlloyToolbarMac final {
   /// tall as the navigation bar and the pill would lose its shape.
   CefRefPtr<CefPanel> omnibox_holder_;
   CefRefPtr<CefBrowser> bound_browser_;
+  /// The engine non-URL submissions go to; see SetSearchEngine().
+  window::SearchEngine search_engine_ = window::kDefaultSearchEngine;
 };
 
 }  // namespace crayon::browser::cef_shell::macos

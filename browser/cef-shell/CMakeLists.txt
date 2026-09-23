@@ -109,6 +109,7 @@ if(OS_WINDOWS)
       src/browser/window/alloy_tab_controller.cc
       src/browser/window/alloy_tab_controller.h
       src/browser/window/alloy_chrome_decoration.h
+      src/browser/window/alloy_search_engines.h
       src/browser/window/alloy_chrome_palette.h
       src/browser/window/alloy_tab_strip.cc
       src/browser/window/alloy_tab_strip.h
@@ -598,6 +599,7 @@ if(OS_WINDOWS)
       src/browser/window/alloy_tab_controller.cc
       src/browser/window/alloy_tab_controller.h
       src/browser/window/alloy_chrome_decoration.h
+      src/browser/window/alloy_search_engines.h
       src/browser/window/alloy_chrome_palette.h
       src/browser/window/alloy_tab_strip.cc
       src/browser/window/alloy_tab_strip.h
@@ -1030,9 +1032,12 @@ if(OS_MAC)
       src/renderer/page_snapshot_collector/cef_page_snapshot_renderer.h
       src/browser/window/tab_controller.cc
       src/browser/window/tab_model.cc
+      src/browser/window/alloy_bookmarks.cc
+      src/browser/window/alloy_bookmarks.h
       src/browser/window/alloy_icon.cc
       src/browser/window/alloy_icon.h
       src/browser/window/alloy_chrome_decoration.h
+      src/browser/window/alloy_search_engines.h
       src/browser/window/alloy_tab_strip.cc
       src/browser/window/alloy_tab_strip.h
       src/browser/window/alloy_omnibox.cc
@@ -1209,6 +1214,8 @@ if(OS_MAC)
                                 "-framework IOKit" "-framework Security"
                                 ${CEF_STANDARD_LIBS}
                                 crayon::browser-new-tab
+                                crayon::browser-bookmarks
+                                crayon::browser-bookmarks-view
                                 crayon::browser-product-strings
                                 crayon::browser-localization
                                 crayon::browser-omnibox-core

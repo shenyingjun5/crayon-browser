@@ -12,6 +12,7 @@
 #include "crayon/browser_omnibox/omnibox_state.h"
 #include "crayon/browser_omnibox_provider/search_provider.h"
 #include "crayon/browser_privacy/privacy_defaults.h"
+#include "include/views/cef_label_button.h"
 #include "include/views/cef_panel.h"
 #include "include/views/cef_textfield.h"
 
@@ -46,12 +47,20 @@ public:
     /// failed URL and the page area stays blank with no explanation.
     /// Platforms that leave it empty keep the previous silent behaviour.
     std::string load_failed_notice;
+    /// PLT-SHELL-24M2FIX-C6: accessible name of the trailing bookmark control,
+    /// in its un-bookmarked and bookmarked states.
+    std::string bookmark_add;
+    std::string bookmark_remove;
   };
 
   struct Callbacks final {
     std::function<void(std::uint64_t, const std::string &)> request_suggestions;
     std::function<void(const OmniboxSubmission &)> submit;
     std::function<void()> cancel;
+    /// PLT-SHELL-24M2FIX-C6: the user pressed the bookmark control. The owner
+    /// decides whether this adds or removes the current page's bookmark and
+    /// reports the result back through SetBookmarked().
+    std::function<void()> toggle_bookmark;
   };
 
   AlloyOmnibox(
@@ -65,6 +74,22 @@ public:
 
   CefRefPtr<CefPanel> panel() const;
   CefRefPtr<CefTextfield> textfield() const;
+  /// PLT-SHELL-24M2FIX-C6: the bookmark control, exposed so callers (and
+  /// probes) address it by name instead of by child index.
+  CefRefPtr<CefLabelButton> bookmark_button() const;
+  bool bookmarked() const noexcept;
+
+  /// PLT-SHELL-24M2FIX-C8: replaces the provider set used for search-query
+  /// submissions, so the engine selector can switch it at runtime. Refuses
+  /// while a submission is being dispatched (the set is read on that path).
+  bool SetSearchProviders(
+      browser_omnibox_provider::SearchProviderSet providers);
+
+  /// PLT-SHELL-24M2FIX-C6: reflects the current page's bookmark state on the
+  /// trailing control (filled or outline glyph plus its accessible name). The
+  /// owner calls this after every navigation and after each toggle, so the
+  /// control never shows a state the store does not agree with.
+  bool SetBookmarked(bool bookmarked);
 
   bool Focus();
   bool Edit(std::string text);

@@ -17,6 +17,7 @@
 
 #include "browser/window/alloy_chrome_decoration.h"
 #include "browser/window/alloy_chrome_palette.h"
+#include "browser/window/alloy_icon.h"
 
 namespace crayon::browser::cef_shell::window {
 namespace {
@@ -35,6 +36,13 @@ using browser_omnibox::ParseOmniboxInput;
 // semicircles at the same fraction of the navigation bar (36 of 48 DIP).
 constexpr int kOmniboxHeight = 2 * kOmniboxPillRadiusDip;
 constexpr int kSuggestionHeight = 36;
+// PLT-SHELL-24M2FIX-C6: the bookmark control lives inside the pill's trailing
+// end; metrics.minimumHitTargetDip keeps it a real target, and the pill's
+// rounded end is cut by the native decoration, not by this view.
+constexpr int kBookmarkButtonWidth = 32;
+// Command id for the bookmark control, in the same closed range as the other
+// chrome commands (tab strip uses 0x7a.., this one is deliberately outside it).
+constexpr int kBookmarkCommandId = 0x7b20;
 constexpr std::size_t kMaxSuggestionTitleBytes = 512;
 constexpr int kEnterKey = 13;
 constexpr int kEscapeKey = 27;
@@ -157,6 +165,32 @@ struct AlloyOmnibox::State final : std::enable_shared_from_this<State> {
     IMPLEMENT_REFCOUNTING(SuggestionDelegate);
   };
 
+  // PLT-SHELL-24M2FIX-C6: the bookmark control. It reports the press to the
+  // owner (which owns the store and answers with SetBookmarked) and repaints
+  // its own background with the pill colour, because a label button would
+  // otherwise show the window theme's background as a lighter rectangle
+  // inside the pill.
+  class BookmarkDelegate final : public CefButtonDelegate {
+  public:
+    explicit BookmarkDelegate(std::weak_ptr<State> state)
+        : state_(std::move(state)) {}
+
+    void OnButtonPressed(CefRefPtr<CefButton> button) override {
+      ReleaseAlloyIconFocus(button);
+      if (auto state = state_.lock()) {
+        state->OnBookmarkPressed();
+      }
+    }
+
+    void OnThemeChanged(CefRefPtr<CefView> view) override {
+      view->SetBackgroundColor(chrome_palette::kOmniboxBackground);
+    }
+
+  private:
+    std::weak_ptr<State> state_;
+    IMPLEMENT_REFCOUNTING(BookmarkDelegate);
+  };
+
   struct SuggestionBinding final {
     std::size_t index;
     CefRefPtr<CefLabelButton> button;
@@ -178,12 +212,52 @@ struct AlloyOmnibox::State final : std::enable_shared_from_this<State> {
     textfield->SetFocusable(true);
     textfield->SetPlaceholderText(strings.placeholder);
     textfield->SetAccessibleName(strings.accessible_name);
-    panel->AddChildView(textfield);
+    // PLT-SHELL-24M2FIX-C6: the pill is [field][bookmark control] on one row,
+    // with the suggestion strip below it. The row paints the pill colour itself
+    // because a bare panel falls back to the window theme's primary background,
+    // which would show as a lighter rectangle inside the pill.
+    field_row = CefPanel::CreatePanel(new PanelDelegate(/*pill=*/true));
+    CefBoxLayoutSettings field_layout;
+    field_layout.horizontal = true;
+    auto field_box = field_row->SetToBoxLayout(field_layout);
+    field_row->AddChildView(textfield);
+    field_box->SetFlexForView(textfield, 1);
+    bookmark_button = CefLabelButton::CreateLabelButton(
+        new BookmarkDelegate(weak_from_this()), CefString());
+    bookmark_button->SetID(kBookmarkCommandId);
+    bookmark_button->SetFocusable(true);
+    bookmark_button->SetMinimumSize(CefSize(kBookmarkButtonWidth, kOmniboxHeight));
+    field_row->AddChildView(bookmark_button);
+    if (!SetBookmarked(false)) {
+      bookmark_button = nullptr;
+    }
+    panel->AddChildView(field_row);
     suggestions_panel = CefPanel::CreatePanel(new PanelDelegate(/*pill=*/false));
     CefBoxLayoutSettings suggestions_layout;
     suggestions_panel->SetToBoxLayout(suggestions_layout);
     suggestions_panel->SetVisible(false);
     panel->AddChildView(suggestions_panel);
+  }
+
+  // PLT-SHELL-24M2FIX-C6: one control, two states. Chrome's star fills when the
+  // page is bookmarked and offers the opposite action in its tooltip, so both
+  // the glyph and the accessible name follow the state rather than a caption.
+  bool SetBookmarked(bool value) {
+    CEF_REQUIRE_UI_THREAD();
+    if (!active || !bookmark_button) {
+      return false;
+    }
+    const std::string label = value ? strings.bookmark_remove
+                                    : strings.bookmark_add;
+    if (!ApplyAlloyIcon(bookmark_button,
+                        value ? AlloyIcon::kBookmarkFilled
+                              : AlloyIcon::kBookmarkOutline,
+                        label)) {
+      return false;
+    }
+    bookmark_button->SetEnabled(true);
+    bookmarked = value;
+    return true;
   }
 
   bool Focus() {
@@ -192,6 +266,18 @@ struct AlloyOmnibox::State final : std::enable_shared_from_this<State> {
       return false;
     model.OnFocus();
     textfield->RequestFocus();
+    return true;
+  }
+
+  // PLT-SHELL-24M2FIX-C8: the provider set is read by Submit(), so replacing it
+  // mid-dispatch is refused rather than racing with that read.
+  bool SetSearchProviders(
+      browser_omnibox_provider::SearchProviderSet value) {
+    CEF_REQUIRE_UI_THREAD();
+    if (!active || dispatching) {
+      return false;
+    }
+    providers = std::move(value);
     return true;
   }
 
@@ -345,6 +431,18 @@ struct AlloyOmnibox::State final : std::enable_shared_from_this<State> {
       return false;
     RenderSelection();
     return true;
+  }
+
+  // PLT-SHELL-24M2FIX-C6: the control does not decide anything itself. The
+  // owner holds the store, so the intent leaves through the callback and the
+  // state comes back through SetBookmarked(); a refused toggle therefore leaves
+  // the glyph untouched instead of lying about the store.
+  void OnBookmarkPressed() {
+    CEF_REQUIRE_UI_THREAD();
+    if (!active || dispatching || !callbacks.toggle_bookmark) {
+      return;
+    }
+    Dispatch([&] { callbacks.toggle_bookmark(); });
   }
 
   void OnSuggestionPressed(CefRefPtr<CefButton> sender) {
@@ -519,6 +617,8 @@ struct AlloyOmnibox::State final : std::enable_shared_from_this<State> {
     model.Shutdown();
     callbacks = {};
     suggestion_bindings.clear();
+    bookmark_button = nullptr;
+    field_row = nullptr;
     textfield = nullptr;
     suggestions_panel = nullptr;
     if (panel) {
@@ -534,10 +634,13 @@ struct AlloyOmnibox::State final : std::enable_shared_from_this<State> {
   browser_omnibox_provider::SearchProviderSet providers;
   browser_omnibox::OmniboxStateMachine model;
   CefRefPtr<CefPanel> panel;
+  CefRefPtr<CefPanel> field_row;
   CefRefPtr<CefTextfield> textfield;
+  CefRefPtr<CefLabelButton> bookmark_button;
   CefRefPtr<CefPanel> suggestions_panel;
   std::vector<SuggestionBinding> suggestion_bindings;
   std::string accepted_text;
+  bool bookmarked = false;
   // PLT-SHELL-24M2FIX-B: text of the submission notice currently on screen.
   std::string notice;
   std::string committed_display;
@@ -569,7 +672,20 @@ CefRefPtr<CefPanel> AlloyOmnibox::panel() const {
 CefRefPtr<CefTextfield> AlloyOmnibox::textfield() const {
   return state_ ? state_->textfield : nullptr;
 }
+CefRefPtr<CefLabelButton> AlloyOmnibox::bookmark_button() const {
+  return state_ ? state_->bookmark_button : nullptr;
+}
+bool AlloyOmnibox::bookmarked() const noexcept {
+  return state_ && state_->bookmarked;
+}
+bool AlloyOmnibox::SetBookmarked(bool bookmarked) {
+  return state_ && state_->SetBookmarked(bookmarked);
+}
 bool AlloyOmnibox::Focus() { return state_ && state_->Focus(); }
+bool AlloyOmnibox::SetSearchProviders(
+    browser_omnibox_provider::SearchProviderSet providers) {
+  return state_ && state_->SetSearchProviders(std::move(providers));
+}
 bool AlloyOmnibox::Edit(std::string text) {
   return state_ && state_->Edit(std::move(text), true);
 }

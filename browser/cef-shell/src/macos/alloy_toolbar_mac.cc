@@ -4,6 +4,7 @@
 #include <utility>
 
 #include "browser/window/alloy_chrome_palette.h"
+#include "browser/window/alloy_search_engines.h"
 #include "crayon/browser_localization/locale_catalog.h"
 #include "crayon/browser_privacy/privacy_defaults.h"
 #include "include/views/cef_box_layout.h"
@@ -49,7 +50,11 @@ AlloyToolbarMac::AlloyToolbarMac(localization::LocaleSnapshot locale,
           Localized(locale.locale, "omnibox.edit"),
           Localized(locale.locale, "omnibox.notice.no_search_provider"),
           Localized(locale.locale, "omnibox.notice.blocked"),
-          Localized(locale.locale, "omnibox.notice.load_failed")},
+          Localized(locale.locale, "omnibox.notice.load_failed"),
+          // PLT-SHELL-24M2FIX-C6: the bookmark control's two accessible names
+          // already exist for the Windows shell's bookmark UI.
+          Localized(locale.locale, "bookmarks.add_page"),
+          Localized(locale.locale, "bookmarks.remove_page")},
       window::AlloyOmnibox::Callbacks{
           {},
           [this](const window::OmniboxSubmission& submission) {
@@ -57,8 +62,15 @@ AlloyToolbarMac::AlloyToolbarMac(localization::LocaleSnapshot locale,
               static_cast<void>(navigation_->Navigate(submission));
             }
           },
-          {}},
-      browser_privacy::DefaultPrivacyDefaults());
+          {},
+          [toggle = std::move(callbacks.toggle_bookmark)] {
+            if (toggle) toggle();
+          }},
+      browser_privacy::DefaultPrivacyDefaults(),
+      // PLT-SHELL-24M2FIX-C8: input that is not a URL must produce the default
+      // engine's result page. Product decision recorded in
+      // window/alloy_search_engines.h (Baidu default, Google alternative).
+      window::DefaultSearchProviders());
   navigation_ = std::make_unique<window::AlloyNavigation>(
       window::AlloyNavigation::Strings{
           Localized(locale.locale, "nav.back"),
@@ -115,6 +127,18 @@ CefRefPtr<CefView> AlloyToolbarMac::toolbar_view() const { return toolbar_; }
 
 CefRefPtr<CefView> AlloyToolbarMac::omnibox_view() const {
   return omnibox_ ? omnibox_->panel() : nullptr;
+}
+
+CefRefPtr<CefTextfield> AlloyToolbarMac::omnibox_textfield() const {
+  return omnibox_ ? omnibox_->textfield() : nullptr;
+}
+
+CefRefPtr<CefLabelButton> AlloyToolbarMac::bookmark_button() const {
+  return omnibox_ ? omnibox_->bookmark_button() : nullptr;
+}
+
+bool AlloyToolbarMac::SetBookmarked(bool bookmarked) {
+  return omnibox_ && omnibox_->SetBookmarked(bookmarked);
 }
 
 bool AlloyToolbarMac::SyncTabs(const window::TabModel& model) {
@@ -191,6 +215,32 @@ bool AlloyToolbarMac::OnTabLoadError(int browser_id, const std::string& url,
 bool AlloyToolbarMac::FocusOmnibox() {
   CEF_REQUIRE_UI_THREAD();
   return omnibox_ && omnibox_->Focus();
+}
+
+bool AlloyToolbarMac::NavigateToAddress(std::string url) {
+  CEF_REQUIRE_UI_THREAD();
+  if (!navigation_) {
+    return false;
+  }
+  window::OmniboxSubmission submission;
+  submission.kind = window::OmniboxSubmissionKind::kNavigateUrl;
+  submission.value = std::move(url);
+  return navigation_->Navigate(submission);
+}
+
+bool AlloyToolbarMac::SetSearchEngine(window::SearchEngine engine) {  CEF_REQUIRE_UI_THREAD();
+  if (!omnibox_) {
+    return false;
+  }
+  browser_omnibox_provider::SearchProviderSet providers;
+  if (!providers.Add(window::SearchProviderFor(engine))) {
+    return false;
+  }
+  if (!omnibox_->SetSearchProviders(std::move(providers))) {
+    return false;
+  }
+  search_engine_ = engine;
+  return true;
 }
 
 window::ChromeDecoration AlloyToolbarMac::decoration() const {

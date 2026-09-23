@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "browser/window/alloy_omnibox.h"
+#include "browser/window/alloy_search_engines.h"
 #include "crayon/browser_privacy/privacy_defaults.h"
 #include "include/base/cef_callback.h"
 #include "include/cef_command_line.h"
@@ -26,12 +27,18 @@
 namespace {
 
 using crayon::browser::cef_shell::window::AlloyOmnibox;
+using crayon::browser::cef_shell::window::DefaultSearchProviders;
+using crayon::browser::cef_shell::window::kDefaultSearchEngine;
+using crayon::browser::cef_shell::window::kSearchEngineOrder;
 using crayon::browser::cef_shell::window::OmniboxSubmission;
 using crayon::browser::cef_shell::window::OmniboxSubmissionKind;
+using crayon::browser::cef_shell::window::SearchEngine;
+using crayon::browser::cef_shell::window::SearchProviderFor;
 using crayon::browser_omnibox::OmniboxSuggestion;
 using crayon::browser_omnibox::SuggestionSource;
 using crayon::browser_omnibox_provider::SearchProvider;
 using crayon::browser_omnibox_provider::SearchProviderSet;
+using crayon::browser_omnibox_provider::ValidateProvider;
 using crayon::browser_privacy::DefaultPrivacyDefaults;
 
 constexpr int kPollMilliseconds = 25;
@@ -244,6 +251,34 @@ private:
     return result;
   }
 
+  // PLT-SHELL-24M2FIX-C8: the product catalogue decides, with no network, where
+  // input that is not a URL is sent. Asserted here because the rest of this
+  // probe tests the omnibox with a provider it configures itself, which would
+  // leave the product's own default untested.
+  bool SearchEngineCatalogOk() {
+    const auto providers = DefaultSearchProviders();
+    const auto *primary = providers.Primary();
+    if (!primary || primary->name != "Baidu" ||
+        primary->url_template.find("https://www.baidu.com/s?wd=") != 0) {
+      return false;
+    }
+    const auto url = providers.BuildSearchUrl("chromium");
+    if (!url || url->find("https://www.baidu.com/s?wd=chromium") != 0) {
+      return false;
+    }
+    if (kSearchEngineOrder.size() != 2 ||
+        kSearchEngineOrder[0] != kDefaultSearchEngine) {
+      return false;
+    }
+    for (const SearchEngine engine : kSearchEngineOrder) {
+      if (ValidateProvider(SearchProviderFor(engine))) {
+        return false;
+      }
+    }
+    return SearchProviderFor(SearchEngine::kBaidu).url_template !=
+           SearchProviderFor(SearchEngine::kGoogle).url_template;
+  }
+
   void ScheduleCheck() {
     CefPostDelayedTask(TID_UI,
                        base::BindOnce(&AlloyOmniboxProbe::Check,
@@ -271,7 +306,7 @@ private:
     // behind them would let that environment limit mask this coverage.
     if (!local_scenario_checked_) {
       local_scenario_checked_ = true;
-      const bool local_ok = RunLocalScenario();
+      const bool local_ok = RunLocalScenario() && SearchEngineCatalogOk();
       std::cout << "alloy_omnibox_windows local_notices=" << (local_ok ? 1 : 0)
                 << std::endl;
       if (!local_ok) {

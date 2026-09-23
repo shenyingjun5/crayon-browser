@@ -708,18 +708,14 @@ private:
   }
 
   std::string DisplayedOmniboxText() const {
-    const auto omnibox_view = OmniboxPanel();
-    const auto textfield = omnibox_view && omnibox_view->GetChildViewCount() > 0
-                               ? omnibox_view->GetChildViewAt(0)->AsTextfield()
-                               : nullptr;
+    // PLT-SHELL-24M2FIX-C6: the field is addressed by name. It now sits inside
+    // the pill's field row, so a child index would return that row instead.
+    const auto textfield = toolbar_ ? toolbar_->omnibox_textfield() : nullptr;
     return textfield ? textfield->GetText().ToString() : std::string{};
   }
 
   bool BeginUnsubmittedOmniboxEdit(const std::string &text) {
-    const auto omnibox_view = OmniboxPanel();
-    const auto textfield = omnibox_view && omnibox_view->GetChildViewCount() > 0
-                               ? omnibox_view->GetChildViewAt(0)->AsTextfield()
-                               : nullptr;
+    const auto textfield = toolbar_ ? toolbar_->omnibox_textfield() : nullptr;
     if (!textfield)
       return false;
     textfield->RequestFocus();
