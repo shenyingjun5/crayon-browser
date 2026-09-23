@@ -209,7 +209,9 @@ struct AlloyOmnibox::State final : std::enable_shared_from_this<State> {
     }
 
     void OnThemeChanged(CefRefPtr<CefView> view) override {
-      view->SetBackgroundColor(chrome_palette::kOmniboxBackground);
+      if (auto state = state_.lock()) {
+        view->SetBackgroundColor(state->FieldSurfaceColor());
+      }
     }
 
   private:
@@ -317,6 +319,11 @@ struct AlloyOmnibox::State final : std::enable_shared_from_this<State> {
       return;
     }
     focused = value;
+    if (bookmark_button) {
+      // Same surface as the field: otherwise the control keeps the resting
+      // colour as a block on a lifted (focused) pill.
+      bookmark_button->SetBackgroundColor(FieldSurfaceColor());
+    }
     if (textfield) {
       textfield->SetBackgroundColor(FieldSurfaceColor());
       if (value) {

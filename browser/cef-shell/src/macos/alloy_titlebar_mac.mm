@@ -295,11 +295,19 @@ bool HasArea(const ChromeRect &rect) {
   if (NSIsEmptyRect(field)) {
     return;
   }
+  // A rectangular ANNULUS, not a stroked rounded rect: CEF's own outline is
+  // rounded and curves up to ~0.3r INSIDE the field's rect at the corners, so a
+  // stroked band whose inner boundary is also rounded left the corner arcs
+  // visible (measured as small grey notches). Filling the 4 DIP ring on both
+  // sides of the boundary covers every variant; the field's own text padding is
+  // wider than the inward half.
+  constexpr CGFloat kBand = 4;
   [ColorFromArgb(crayon::browser::cef_shell::window::chrome_palette::
-                       kOmniboxFocusedBackground) setStroke];
-  NSBezierPath *edge = [NSBezierPath bezierPathWithRect:NSInsetRect(field, 0.5, 0.5)];
-  edge.lineWidth = 2;
-  [edge stroke];
+                       kOmniboxFocusedBackground) setFill];
+  NSBezierPath *ring = [NSBezierPath bezierPathWithRect:NSInsetRect(field, -kBand, -kBand)];
+  [ring appendBezierPathWithRect:NSInsetRect(field, kBand, kBand)];
+  ring.windingRule = NSWindingRuleEvenOdd;
+  [ring fill];
 }
 
 - (void)drawRect:(NSRect)dirtyRect {

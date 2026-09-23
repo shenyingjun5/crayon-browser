@@ -61,6 +61,10 @@ class AlloyToolbarMac final {
   CefRefPtr<CefLabelButton> bookmark_button() const;
   /// Reflects the current page's bookmark state on that control.
   bool SetBookmarked(bool bookmarked);
+  /// PLT-SHELL-24M2FIX-C10: whether the address field holds focus. The owner
+  /// needs it because CEF paints the field's own outline from a WINDOW theme
+  /// colour, which therefore has to follow the focus state.
+  bool omnibox_focused() const;
 
   /// PLT-SHELL-24M2FIX-C7: creates the trailing menu button if it does not
   /// exist yet and moves it to the end of the row, so it always follows the
