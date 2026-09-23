@@ -183,8 +183,32 @@ bool RestartReadbackIsIdentical() {
 
 } // namespace
 
+// PLT-SHELL-24M2FIX-C9: the new-tab URL key. Its default is the product's
+// vendor site, so a fresh install opens a real page, and the value is bounded
+// and control-character checked like every other string preference.
+bool NewTabUrlKeyDefaultsToVendorSiteAndValidates() {
+  PreferenceStore store;
+  const auto& value = store.Get(PreferenceStore::kNewTabUrl);
+  const auto* text = std::get_if<std::string>(&value);
+  CHECK(text != nullptr && *text == "www.zknowai.com");
+  CHECK(!store.IsModified(PreferenceStore::kNewTabUrl));
+  CHECK(store.Set(PreferenceStore::kNewTabUrl,
+                  PreferenceValue{std::string("example.test")}));
+  const auto* updated = std::get_if<std::string>(
+      &store.Get(PreferenceStore::kNewTabUrl));
+  CHECK(updated != nullptr && *updated == "example.test");
+  PreferenceError error = PreferenceError::kInvalidValue;
+  CHECK(!store.Set(PreferenceStore::kNewTabUrl,
+                   PreferenceValue{std::string("bad\nvalue")}, &error));
+  CHECK(error == PreferenceError::kInvalidValue);
+  CHECK(!store.Set(PreferenceStore::kNewTabUrl,
+                   PreferenceValue{std::string(1025, 'x')}, &error));
+  return true;
+}
+
 int main() {
-  if (!DefaultsAndSetGet() || !TypeAndKeyRejection() || !ValueValidation() ||
+  if (!NewTabUrlKeyDefaultsToVendorSiteAndValidates() ||
+      !DefaultsAndSetGet() || !TypeAndKeyRejection() || !ValueValidation() ||
       !ResetSemantics() || !RoundTripOnlyOverrides() ||
       !MigrationFromV0DropsUnknownAndInvalid() ||
       !StrictV1RejectsUnknownKeys() || !CorruptionMatrixFailsClosed() ||

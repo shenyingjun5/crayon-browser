@@ -37,6 +37,10 @@ class PreferenceStore final {
   static constexpr char kShowBookmarkBar[] = "show_bookmark_bar";  // bool
   static constexpr char kDownloadDirectory[] = "download_directory";  // string
   static constexpr char kSearchProvider[] = "search_provider";     // string
+  // PLT-SHELL-24M2FIX-C9: the URL the new-tab ("+") action opens. Empty
+  // means the built-in new-tab page; the product default is the vendor site,
+  // so a fresh install opens a real page and the value is user-editable.
+  static constexpr char kNewTabUrl[] = "new_tab_url";              // string
 
   // startup_policy values.
   static constexpr std::int64_t kStartupNewTab = 0;

@@ -22,6 +22,8 @@
 #include "browser/new_tab/cef_new_tab_handler.h"
 #include "browser/permission/permission_store.h"
 #include "crayon/browser_localization/locale_catalog.h"
+#include "crayon/browser_preferences/preference_codec.h"
+#include <fstream>
 #include "include/base/cef_bind.h"
 #include "include/base/cef_callback.h"
 #include "include/cef_app.h"
@@ -837,7 +839,9 @@ void BrowserApp::ContinueContentHostStartup() {
           macos::AlloyToolbarMac::Callbacks{
               [this] {
                 if (product_host_) {
-                  static_cast<void>(product_host_->CreateTab(kInitialUrl));
+                  // PLT-SHELL-24M2FIX-C9: "+" opens the user's new-tab URL
+                  // (product default www.zknowai.com), not the built-in page.
+                  static_cast<void>(product_host_->CreateTab(NewTabUrl()));
                 }
               },
               [this](window::TabId tab_id) {
@@ -1150,6 +1154,123 @@ void BrowserApp::ToggleActiveBookmark() {
   static_cast<void>(SaveBookmarks());
 }
 
+// PLT-SHELL-24M2FIX-C9: preferences are created on first use and loaded from
+// the profile's own data directory through the shared codec, so the on-disk
+// shape is the same one the Windows shell writes.
+bool BrowserApp::EnsurePreferences() {
+  CEF_REQUIRE_UI_THREAD();
+  if (preferences_) {
+    return true;
+  }
+  preferences_ = std::make_unique<browser_preferences::PreferenceStore>();
+  const auto context = CefRequestContext::GetGlobalContext();
+  const std::string cache =
+      context ? context->GetCachePath().ToString() : std::string{};
+  if (cache.empty()) {
+    return true;
+  }
+  std::ifstream input(cache + "/crayon-preferences.json", std::ios::binary);
+  if (!input) {
+    return true;  // First run: all keys at their defaults.
+  }
+  const std::string document((std::istreambuf_iterator<char>(input)),
+                             std::istreambuf_iterator<char>());
+  if (auto restored = browser_preferences::DeserializePreferences(document)) {
+    preferences_ = std::make_unique<browser_preferences::PreferenceStore>(
+        std::move(*restored));
+  }
+  return true;
+}
+
+bool BrowserApp::SavePreferences() {
+  CEF_REQUIRE_UI_THREAD();
+  if (!preferences_) {
+    return false;
+  }
+  const auto context = CefRequestContext::GetGlobalContext();
+  const std::string cache =
+      context ? context->GetCachePath().ToString() : std::string{};
+  if (cache.empty()) {
+    return false;
+  }
+  std::ofstream output(cache + "/crayon-preferences.json",
+                       std::ios::trunc | std::ios::binary);
+  if (!output) {
+    return false;
+  }
+  output << browser_preferences::SerializePreferences(*preferences_);
+  return output.good();
+}
+
+// The URL the new-tab ("+") action opens. An empty stored value falls back to
+// the built-in page; anything else is resolved like omnibox input, so a value
+// typed as "www.zknowai.com" becomes https://... under the privacy defaults.
+std::string BrowserApp::NewTabUrl() {
+  CEF_REQUIRE_UI_THREAD();
+  if (!EnsurePreferences()) {
+    return kInitialUrl;
+  }
+  const auto &value =
+      preferences_->Get(browser_preferences::PreferenceStore::kNewTabUrl);
+  const auto *text = std::get_if<std::string>(&value);
+  if (!text || text->empty()) {
+    return kInitialUrl;
+  }
+  if (text->find("://") != std::string::npos) {
+    return *text;
+  }
+  return browser_omnibox_provider::ResolveSchemelessUrl(
+      *text, browser_privacy::DefaultPrivacyDefaults());
+}
+
+// Writes the new-tab URL after the store's own validation. A rejected value
+// (over-long, control characters) leaves the previous one in place instead of
+// persisting something the store would refuse to load.
+bool BrowserApp::SetNewTabUrl(std::string value) {
+  CEF_REQUIRE_UI_THREAD();
+  if (!EnsurePreferences()) {
+    return false;
+  }
+  const auto not_space = [](unsigned char c) { return !std::isspace(c); };
+  value.erase(value.begin(), std::find_if(value.begin(), value.end(), not_space));
+  value.erase(std::find_if(value.rbegin(), value.rend(), not_space).base(),
+              value.end());
+  const browser_preferences::PreferenceValue candidate{value};
+  if (!browser_preferences::PreferenceStore::IsValidValueForKey(
+          browser_preferences::PreferenceStore::kNewTabUrl, candidate)) {
+    return false;
+  }
+  if (!preferences_->Set(browser_preferences::PreferenceStore::kNewTabUrl,
+                         candidate)) {
+    return false;
+  }
+  return SavePreferences();
+}
+
+void BrowserApp::ShowSettings() {
+  CEF_REQUIRE_UI_THREAD();
+  if (!EnsurePreferences()) {
+    return;
+  }
+  const auto &value =
+      preferences_->Get(browser_preferences::PreferenceStore::kNewTabUrl);
+  const auto *text = std::get_if<std::string>(&value);
+  const std::string current = text ? *text : std::string{};
+  const auto localized = [this](const char *key) {
+    const auto found =
+        ::crayon::browser::localization::LocaleCatalog(locale_snapshot_.locale)
+            .Find(key);
+    return found ? std::string(*found) : std::string{};
+  };
+  static_cast<void>(settings_panel::PresentSettingsPanel(
+      localized("settings.title"), localized("settings.new_tab_url"), current,
+      localized("settings.save"), localized("omnibox.cancel"),
+      settings_panel::PanelCallbacks{[this](std::string entered) {
+        // The panel is already gone; the value is validated and persisted here.
+        static_cast<void>(SetNewTabUrl(std::move(entered)));
+      }}));
+}
+
 void BrowserApp::DetachCastSurface() {
   if (cast_surface_) cast_surface_->Detach();
   cast_surface_.reset();
@@ -1260,7 +1381,7 @@ bool BrowserApp::ExecuteAppCommand(macos::ApplicationCommand command) {
   CEF_REQUIRE_UI_THREAD();
   switch (command) {
     case macos::ApplicationCommand::kNewTab:
-      return product_host_ && product_host_->CreateTab(kInitialUrl);
+      return product_host_ && product_host_->CreateTab(NewTabUrl());
     case macos::ApplicationCommand::kCloseTab:
       if (!tab_controller_->ActiveBrowser()) {
         return false;
@@ -1269,6 +1390,11 @@ bool BrowserApp::ExecuteAppCommand(macos::ApplicationCommand command) {
       return true;
     case macos::ApplicationCommand::kFocusLocation:
       return toolbar_ && toolbar_->FocusOmnibox();
+    case macos::ApplicationCommand::kSettings:
+      // PLT-SHELL-24M2FIX-C9: the toolbar menu's settings entry (and the
+      // application menu's, which routes through this same handler).
+      ShowSettings();
+      return true;
     case macos::ApplicationCommand::kReload:
       tab_controller_->Reload();
       return true;

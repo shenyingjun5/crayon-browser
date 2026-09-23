@@ -256,5 +256,8 @@
   "mdv.outline": "大纲",
   "mdv.search_placeholder": "搜索文档",
   "mdv.search_prev": "上一个匹配",
-  "mdv.search_next": "下一个匹配"
+  "mdv.search_next": "下一个匹配",
+  "settings.title": "设置",
+  "settings.new_tab_url": "新标签页网址",
+  "settings.save": "保存"
 }

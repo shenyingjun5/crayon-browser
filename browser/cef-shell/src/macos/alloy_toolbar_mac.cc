@@ -52,10 +52,14 @@ constexpr int kToolbarMenuCommandIds[] = {
     static_cast<int>(ApplicationCommand::kCloseTab),
     static_cast<int>(ApplicationCommand::kReload),
     static_cast<int>(ApplicationCommand::kBack),
-    static_cast<int>(ApplicationCommand::kForward)};
+    static_cast<int>(ApplicationCommand::kForward),
+    // PLT-SHELL-24M2FIX-C9: settings is a real destination now (the native
+    // settings panel), so the entry is listed rather than left out.
+    static_cast<int>(ApplicationCommand::kSettings)};
 
 constexpr const char* kToolbarMenuLabelKeys[] = {
-    "tabs.new", "tabs.close", "nav.reload", "nav.back", "nav.forward"};
+    "tabs.new",   "tabs.close", "nav.reload",
+    "nav.back",   "nav.forward", "settings.title"};
 
 constexpr int kToolbarMenuButtonWidth = 36;
 // Command id of the trailing menu button itself (not of a menu item).

@@ -256,3 +256,6 @@
 "mdv.search_placeholder" = "搜尋文件";
 "mdv.search_prev" = "上一個符合";
 "mdv.search_next" = "下一個符合";
+"settings.title" = "設定";
+"settings.new_tab_url" = "新分頁網址";
+"settings.save" = "儲存";

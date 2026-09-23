@@ -24,6 +24,8 @@
 #include "macos/alloy_product_host_mac.h"
 #include "macos/alloy_toolbar_mac.h"
 #include "browser/window/alloy_bookmarks.h"
+#include "crayon/browser_preferences/preference_store.h"
+#include "macos/settings_panel_mac.h"
 #include "macos/application_menu_mac.h"
 #include "macos/content_host_adapter_mac.h"
 
@@ -92,6 +94,15 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   // EnsureBookmarks creates and loads it on first use; RefreshBookmarkState
   // reflects the active tab on the control; ToggleActiveBookmark adds or
   // removes the active page and persists the store.
+  // PLT-SHELL-24M2FIX-C9: preferences behind the settings panel. The store is
+  // created and loaded on first use; NewTabUrl() is what the new-tab ("+")
+  // action opens, and the settings panel is the only writer besides tests.
+  bool EnsurePreferences();
+  bool SavePreferences();
+  std::string NewTabUrl();
+  bool SetNewTabUrl(std::string value);
+  void ShowSettings();
+
   bool EnsureBookmarks();
   bool RefreshBookmarkState();
   void ToggleActiveBookmark();
@@ -140,6 +151,7 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   /// PLT-SHELL-24M2FIX-C6: bookmark store behind the address bar's control.
   /// Created on first use, so a shell that never bookmarks never touches disk.
   std::unique_ptr<window::AlloyBookmarks> bookmarks_;
+  std::unique_ptr<browser_preferences::PreferenceStore> preferences_;
   // AGT-12Cc2r: serve-thread → UI-thread marshaling state for the agent
   // host. Declared before agent_host_ so the gate outlives bridge stop().
   std::unique_ptr<AgentUiState> agent_ui_state_;

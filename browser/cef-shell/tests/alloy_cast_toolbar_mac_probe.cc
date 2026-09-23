@@ -573,7 +573,7 @@ private:
         Fail("menu precedes cast entry");
         return false;
       }
-      if (ids.size() != 5) {
+      if (ids.size() != 6) {
         Fail("trailing menu item count");
         return false;
       }
