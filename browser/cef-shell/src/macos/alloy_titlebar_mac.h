@@ -42,6 +42,8 @@ struct TabDecoration {
 struct ChromeDecoration {
   std::vector<TabDecoration> tabs;
   ChromeRect omnibox;
+  bool omnibox_focused;
+  ChromeRect omnibox_field;
 };
 
 // PLT-SHELL-24M2FIX-C4: draws the chrome shapes CefView cannot express. CEF

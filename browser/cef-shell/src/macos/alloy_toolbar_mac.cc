@@ -159,6 +159,9 @@ AlloyToolbarMac::AlloyToolbarMac(localization::LocaleSnapshot locale,
           {},
           [toggle = std::move(callbacks.toggle_bookmark)] {
             if (toggle) toggle();
+          },
+          [focus = std::move(callbacks.omnibox_focus_changed)] {
+            if (focus) focus();
           }},
       browser_privacy::DefaultPrivacyDefaults(),
       // PLT-SHELL-24M2FIX-C8: input that is not a URL must produce the default
@@ -404,6 +407,17 @@ window::ChromeDecoration AlloyToolbarMac::decoration() const {
     if (omnibox_->panel()->ConvertPointToWindow(origin)) {
       const CefSize size = omnibox_->panel()->GetSize();
       result.omnibox = CefRect(origin.x, origin.y, size.width, size.height);
+      // PLT-SHELL-24M2FIX-C10: the native layer draws the focus ring on the
+      // pill's outline, so it needs the focus state, not just the rect.
+      result.omnibox_focused = omnibox_->focused();
+      if (const CefRefPtr<CefTextfield> field = omnibox_->textfield()) {
+        CefPoint field_origin;
+        if (field->ConvertPointToWindow(field_origin)) {
+          const CefSize field_size = field->GetSize();
+          result.omnibox_field = CefRect(field_origin.x, field_origin.y,
+                                         field_size.width, field_size.height);
+        }
+      }
     }
   }
   return result;

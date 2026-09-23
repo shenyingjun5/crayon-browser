@@ -61,6 +61,10 @@ public:
     /// decides whether this adds or removes the current page's bookmark and
     /// reports the result back through SetBookmarked().
     std::function<void()> toggle_bookmark;
+    /// PLT-SHELL-24M2FIX-C10: the field gained or lost focus. The owner
+    /// republishes the chrome decoration, because the focus ring is drawn on the
+    /// pill's outline by the native layer rather than by CEF.
+    std::function<void()> focus_changed;
   };
 
   AlloyOmnibox(
@@ -78,6 +82,8 @@ public:
   /// probes) address it by name instead of by child index.
   CefRefPtr<CefLabelButton> bookmark_button() const;
   bool bookmarked() const noexcept;
+  /// PLT-SHELL-24M2FIX-C10: whether the address field currently holds focus.
+  bool focused() const noexcept;
 
   /// PLT-SHELL-24M2FIX-C8: replaces the provider set used for search-query
   /// submissions, so the engine selector can switch it at runtime. Refuses

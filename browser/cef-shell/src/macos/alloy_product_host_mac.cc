@@ -187,6 +187,8 @@ titlebar::ChromeDecoration ToTitlebarDecoration(
     result.tabs.push_back(item);
   }
   result.omnibox = ToChromeRect(source.omnibox);
+  result.omnibox_focused = source.omnibox_focused;
+  result.omnibox_field = ToChromeRect(source.omnibox_field);
   return result;
 }
 
@@ -402,6 +404,23 @@ struct AlloyProductHostMac::Impl {
     window->SetThemeColor(CEF_ColorTextfieldOutline,
                           window::chrome_palette::kOmniboxBackground);
     window->SetThemeColor(CEF_ColorTextfieldHover,
+                          window::chrome_palette::kOmniboxBackground);
+    // PLT-SHELL-24M2FIX-C10: CEF paints a RECTANGULAR focus ring for the
+    // textfield (measured on the product: a 2 DIP blue box inset inside the
+    // pill, rows 103-110/145-152 at logical x 1015). Setting the theme's ring
+    // colour to the focused field surface removes that box; the rounded ring on
+    // the pill's outline is drawn by the native decoration instead. Known cost,
+    // registered in the roadmap: toolbar buttons lose their keyboard focus ring
+    // on this surface (tab buttons keep theirs, the band is a different colour).
+    window->SetThemeColor(CEF_ColorSysStateFocusRing,
+                          window::chrome_palette::kOmniboxFocusedBackground);
+    // The textfield sits inside a FocusableBorder in Views, and THAT is what
+    // paints the rectangular outline seen on the product (measured: a 4 DIP
+    // blue line inset ~5 DIP inside the pill). Both of its states are set to
+    // the field's own surface so the rectangle blends away.
+    window->SetThemeColor(CEF_ColorFocusableBorderFocused,
+                          window::chrome_palette::kOmniboxFocusedBackground);
+    window->SetThemeColor(CEF_ColorFocusableBorderUnfocused,
                           window::chrome_palette::kOmniboxBackground);
     window->ThemeChanged();
     window->Layout();

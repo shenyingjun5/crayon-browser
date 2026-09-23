@@ -6,6 +6,7 @@
 #include <string_view>
 #include <utility>
 
+#include "include/base/cef_callback.h"
 #include "include/cef_color_ids.h"
 #include "include/cef_task.h"
 #include "include/views/cef_box_layout.h"
@@ -13,6 +14,7 @@
 #include "include/views/cef_label_button.h"
 #include "include/views/cef_panel_delegate.h"
 #include "include/views/cef_textfield_delegate.h"
+#include "include/wrapper/cef_closure_task.h"
 #include "include/wrapper/cef_helpers.h"
 
 #include "browser/window/alloy_chrome_decoration.h"
@@ -142,6 +144,30 @@ struct AlloyOmnibox::State final : std::enable_shared_from_this<State> {
         if (state->setting_text)
           return;
         state->Edit(textfield->GetText().ToString(), false);
+      }
+    }
+
+    // PLT-SHELL-24M2FIX-C10: Chrome selects the whole address when the field
+    // gains focus, so the next keystroke replaces it. Done here rather than in
+    // Focus() because a click lands on the field directly and never goes
+    // through the accessor.
+    void OnFocus(CefRefPtr<CefView>) override {
+      if (auto state = state_.lock()) {
+        state->OnFieldFocusChanged(true);
+      }
+    }
+
+    void OnBlur(CefRefPtr<CefView>) override {
+      if (auto state = state_.lock()) {
+        state->OnFieldFocusChanged(false);
+      }
+    }
+
+    // The field's surface depends on focus, so a theme change has to re-apply
+    // the color that matches the CURRENT state rather than the default one.
+    void OnThemeChanged(CefRefPtr<CefView> view) override {
+      if (auto state = state_.lock()) {
+        view->SetBackgroundColor(state->FieldSurfaceColor());
       }
     }
 
@@ -279,6 +305,46 @@ struct AlloyOmnibox::State final : std::enable_shared_from_this<State> {
     }
     providers = std::move(value);
     return true;
+  }
+
+  // PLT-SHELL-24M2FIX-C10: focus is a chrome state, not just a textfield state.
+  // Chrome selects the whole address on gain and lifts the field's surface, and
+  // the native layer draws the ring on the pill because CEF would paint a
+  // rectangle. All three follow from this one transition.
+  void OnFieldFocusChanged(bool value) {
+    CEF_REQUIRE_UI_THREAD();
+    if (!active || focused == value) {
+      return;
+    }
+    focused = value;
+    if (textfield) {
+      textfield->SetBackgroundColor(FieldSurfaceColor());
+      if (value) {
+        // Select-all after the click has been dispatched: doing it inline loses
+        // to CEF's own caret placement for the same event.
+        CefPostTask(TID_UI,
+                    CefCreateClosureTask(base::BindOnce(
+                        [](std::weak_ptr<State> weak) {
+                          const auto state = weak.lock();
+                          if (!state || !state->active || !state->focused ||
+                              !state->textfield) {
+                            return;
+                          }
+                          state->textfield->SelectAll(false);
+                        },
+                        weak_from_this())));
+      } else {
+        textfield->ClearSelection();
+      }
+    }
+    if (callbacks.focus_changed) {
+      Dispatch([&] { callbacks.focus_changed(); });
+    }
+  }
+
+  std::uint32_t FieldSurfaceColor() const {
+    return focused ? chrome_palette::kOmniboxFocusedBackground
+                   : chrome_palette::kOmniboxBackground;
   }
 
   void SetFieldText(const std::string &text) {
@@ -641,6 +707,7 @@ struct AlloyOmnibox::State final : std::enable_shared_from_this<State> {
   std::vector<SuggestionBinding> suggestion_bindings;
   std::string accepted_text;
   bool bookmarked = false;
+  bool focused = false;
   // PLT-SHELL-24M2FIX-B: text of the submission notice currently on screen.
   std::string notice;
   std::string committed_display;
@@ -677,6 +744,9 @@ CefRefPtr<CefLabelButton> AlloyOmnibox::bookmark_button() const {
 }
 bool AlloyOmnibox::bookmarked() const noexcept {
   return state_ && state_->bookmarked;
+}
+bool AlloyOmnibox::focused() const noexcept {
+  return state_ && state_->focused;
 }
 bool AlloyOmnibox::SetBookmarked(bool bookmarked) {
   return state_ && state_->SetBookmarked(bookmarked);

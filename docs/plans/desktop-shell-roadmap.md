@@ -1400,3 +1400,13 @@ Code Review：按 v0.9 独立检查唯一 owner、同步 callback reentrancy、t
   - 证据：`alloy_cast_toolbar_mac` PASS，输出 `trailing_menu index=3 cast=2 items=6`（菜单含设置项）。
 - **C9-c 导航按钮形状（BLOCKED，非本会话可解）**：与参考实现逐像素对照（`/tmp/nav_compare.png` 口径：上=本产品、下=本机 Chrome 153 同区域）确认差异是**字形本身**：Chrome 的前进/后退是**带杆箭头（←/→）**，本仓是**纯尖角括号（< >）**；加载图标本仓更粗更黑。修法是改 `browser/shared-ui/design/icons/nav-back.svg`、`nav-forward.svg`、`nav-reload.svg` 后运行 `tools/design-icons/generate-cef-masks.mjs` 重生成掩码 —— 而该生成器**必须用 Chrome headless 渲染**，本沙箱内 Chrome 起不来（`--no-sandbox` 直接挂起、不带该开关报 `sandbox initialization failed: Operation not permitted`）。**只改 SVG 会让生成物与源不一致**，故未改动任何图标（未留半成品）。剩余动作（C9-c）：改这 3 个 SVG（描边 2、currentColor、24x24，与既有字形同规格）→ 跑生成器 → 产品截图复验。与 C8b（搜索引擎放大镜掩码）同一阻塞点，建议与 C8b 合并为「图标字形更新」一个切片一次做完。
 - 未覆盖与风险（如实）：① C9-c 未做（阻塞见上）；② 设置面板目前只有"新标签页网址"一项，尚无分区/搜索框等设置页信息架构；③ 面板与菜单的键盘走查（Tab 顺序、Esc 取消、Return 保存）与 AX 未做；④ 偏好文件的写入未做原子替换（直接 trunc 写，进程中断可能留半文件 —— codec 的 schema 失败是 fail-closed 且会回落默认值，故最坏是丢设置而非崩溃）；⑤ 点击链路无机器证据（见 C9-a）。
+
+## 108. PLT-SHELL-24M2FIX-C10 完成记录（2026-09-23，地址栏聚焦态：圆角环 + 聚焦全选）
+
+- 领取依据：用户实机反馈「鼠标点进去之后里面的形状是方形的、蓝色的，特别难看，要改成跟谷歌一样」，并要求「网址栏有内容时点进去自动全选，再输就整段替换，和谷歌一样」。
+- 真因（产品实机量测，非推测；本会话不能合成键鼠，故用**单一临时开关**在启动后 2.5 s 聚焦地址栏取证，取证后已移除并复验零残留）：
+  - **两处叠加**：① 蓝色来自我们自己的**全选高亮**（CEF 的选中底色）**和** CEF 给 textfield 画的**矩形描边**；② 那条矩形描边是灰色 1 DIP、紧贴 textfield 自身矩形（因此右端止于收藏星之前），在圆角胶囊里读起来就是「一个方框」。三档 ID 逐个试过：`CEF_ColorTextfieldOutline`（早已设为胶囊色）、`CEF_ColorSysStateFocusRing`、`CEF_ColorFocusableBorder{Focused,Unfocused}` 都**不影响**该描边，故改用**覆盖法**（不依赖 CEF 内部用哪个 ID）：装饰层按 textfield 矩形画一条 2 DIP 的"字段表面色"带把它盖掉。
+- 实现：`ChromeDecoration` 增 `omnibox_focused` 与 `omnibox_field`（textfield 自身矩形）→ 原生层聚焦时先覆盖灰框、再沿**胶囊轮廓**画 2 DIP 圆角环（色取 `tokens.focusRing`）→ 聚焦同时把字段表面提到 `#F9F9FF`（参考实现实测值，复用既有 raise-surface 令牌，未新造灰）；`AlloyOmnibox::OnFieldFocusChanged()` 是这三个变化的单一入口，`TextDelegate::OnFocus/OnBlur` 触发，聚焦时 post 一个 task 再 `SelectAll(false)`（同步调用会被同一事件的插入符定位覆盖）。焦点变化经 `focus_changed` 回调让宿主 `RefreshTabChrome()` 重发装饰（与 C4/C5 同理由：几何/状态变了就要重发）。
+- 参考实现实测（本机 Chrome，用户截图同机同管线）：聚焦字段填充 `#F9F9FF`、环 **2 DIP**、外框高 72 px = **36 DIP**（与本仓胶囊同高、半径同为半高）。
+- 产品像素复验（临时开关下）：聚焦时胶囊填充 `(249,249,255)` ✓、圆角环出现在胶囊轮廓（x=1600 处 y=92..95 / 160..163）且**右端为半圆弧**（x=1015 处 y=53..55 / 73..75，正是半径 17 的弧）✓、文字全选高亮可见 ✓；去掉开关后未聚焦态**无环**且填充回到 `(232,233,242)` ✓。灰框覆盖前后对照：同一位置的灰色边界由 2 行降为 1 行（`before_focus_grey_box.png` / `after_focus_rounded_ring.png`）。
+- 未覆盖与风险（如实）：① 覆盖掉的灰框在胶囊**外沿**仍可能留 ≤0.5 DIP 的灰线（实测 1 行像素），未再深挖 CEF 内部 ID；② 为换取聚焦环形状，窗口主题的 `CEF_ColorSysStateFocusRing`/`CEF_ColorFocusableBorder*` 被设为表面色，**工具栏按钮**的键盘焦点环在该表面不再可见（标签按钮所在带色不同、仍可见）——登记的 a11y 折衷，后续若需要可为按钮也在装饰层画环；③ 点击链路（真实鼠标点入、选中、替换）本机无机器证据，归人工复看；④ `docs` 未含 Esc/Return 等键盘走查与 AX 名称核对。

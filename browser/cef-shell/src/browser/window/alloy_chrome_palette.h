@@ -35,6 +35,15 @@ inline constexpr std::uint32_t kToolbarBackground = 0xFFF9F9FF;
 // darker than the reference against the lighter toolbar.
 inline constexpr std::uint32_t kOmniboxBackground = 0xFFE7E9F3;
 
+// PLT-SHELL-24M2FIX-C10: the address field's focused surface. Reference build
+// measured #F9F9FF there, which is the same raised-surface value as the toolbar
+// and the active tab, so the token is reused rather than a new grey invented.
+inline constexpr std::uint32_t kOmniboxFocusedBackground = kActiveTabBackground;
+
+// PLT-SHELL-24M2FIX-C10: the focus ring drawn on the pill's own rounded
+// outline. tokens.json -> themes.light.colors.focusRing.
+inline constexpr std::uint32_t kFocusRing = 0xFF2F6FED;
+
 // tokens.json -> themes.light.colors.separator. Hairline under the chrome band,
 // which is what keeps the band visually separate from the white page. The
 // reference build draws a slightly lighter line (measured #E0E1EA); the system

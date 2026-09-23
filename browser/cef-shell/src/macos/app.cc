@@ -865,6 +865,11 @@ void BrowserApp::ContinueContentHostStartup() {
               // PLT-SHELL-24M2FIX-C6: the address bar's bookmark control only
               // reports the press; the store and the resulting state live here.
               [this] { ToggleActiveBookmark(); },
+              // PLT-SHELL-24M2FIX-C10: the focus ring is drawn by the native
+              // layer, so a focus change republishes the chrome decoration.
+              [this] {
+                if (product_host_) product_host_->RefreshTabChrome();
+              },
               // PLT-SHELL-24M2FIX-C7: the toolbar menu sends the same command
               // ids the application menu does, so both entry points share one
               // handler instead of growing a second command implementation.

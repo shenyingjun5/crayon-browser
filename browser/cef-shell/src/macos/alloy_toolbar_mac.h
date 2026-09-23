@@ -34,6 +34,8 @@ class AlloyToolbarMac final {
     /// PLT-SHELL-24M2FIX-C6: the address bar's bookmark control was pressed.
     /// The app owns the store, so it answers with SetBookmarked().
     std::function<void()> toggle_bookmark;
+    /// PLT-SHELL-24M2FIX-C10: the address field gained or lost focus.
+    std::function<void()> omnibox_focus_changed;
     /// PLT-SHELL-24M2FIX-C7: a command was chosen in the toolbar's menu. The id
     /// is the ApplicationCommand value, so the app routes it through the same
     /// handler its application menu already uses.

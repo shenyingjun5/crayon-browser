@@ -24,6 +24,9 @@ constexpr NSTimeInterval kIndicatorPeriod = 1.0;
 constexpr NSTimeInterval kIndicatorFrame = 1.0 / 30.0;
 // Height of the hairline that separates the chrome band from the page.
 constexpr CGFloat kChromeSeparatorHeight = 1;
+// PLT-SHELL-24M2FIX-C10: focus ring on the pill outline (reference build
+// measures 2 DIP, following the pill's full radius).
+constexpr CGFloat kFocusRingWidth = 2;
 
 NSWindow *ResolveWindow(void *handle) {
   id object = (__bridge id)handle;
@@ -56,6 +59,11 @@ NSColor *IndicatorColor() {
       crayon::browser::cef_shell::window::chrome_palette::kTabLoadingIndicator);
 }
 
+NSColor *FocusRingColor() {
+  return ColorFromArgb(
+      crayon::browser::cef_shell::window::chrome_palette::kFocusRing);
+}
+
 NSColor *SeparatorColor() {
   return ColorFromArgb(
       crayon::browser::cef_shell::window::chrome_palette::kChromeSeparator);
@@ -80,6 +88,8 @@ bool HasArea(const ChromeRect &rect) {
 @public
   std::vector<TabDecoration> tabs_;
   ChromeRect omnibox_;
+  ChromeRect omnibox_field_;
+  BOOL omnibox_focused_;
   CGFloat phase_;
 }
 @end
@@ -126,6 +136,8 @@ bool HasArea(const ChromeRect &rect) {
 - (void)applyDecoration:(const ChromeDecoration &)decoration {
   tabs_ = decoration.tabs;
   omnibox_ = decoration.omnibox;
+  omnibox_focused_ = decoration.omnibox_focused ? YES : NO;
+  omnibox_field_ = decoration.omnibox_field;
   if ([self hasLoadingTab]) {
     [self startIndicator];
   } else {
@@ -275,6 +287,21 @@ bool HasArea(const ChromeRect &rect) {
            radius:radius];
 }
 
+// PLT-SHELL-24M2FIX-C10: CEF outlines the textfield's own rect (measured grey,
+// 1 DIP, ending where the bookmark control begins). Painting the field's surface
+// along that edge hides the box without depending on which theme colour ID CEF
+// used for it, and leaves the rounded ring as the only outline.
+- (void)coverFieldOutline:(NSRect)field {
+  if (NSIsEmptyRect(field)) {
+    return;
+  }
+  [ColorFromArgb(crayon::browser::cef_shell::window::chrome_palette::
+                       kOmniboxFocusedBackground) setStroke];
+  NSBezierPath *edge = [NSBezierPath bezierPathWithRect:NSInsetRect(field, 0.5, 0.5)];
+  edge.lineWidth = 2;
+  [edge stroke];
+}
+
 - (void)drawRect:(NSRect)dirtyRect {
   for (const TabDecoration &tab : tabs_) {
     const NSRect rect = ToRect(tab.bounds);
@@ -293,7 +320,30 @@ bool HasArea(const ChromeRect &rect) {
                        kToolbarBackground) setFill];
     [self drawOmniboxPill:ToRect(omnibox_)];
   }
+  if (HasArea(omnibox_) && omnibox_focused_) {
+    [self coverFieldOutline:ToRect(omnibox_field_)];
+    [self drawOmniboxFocusRing:ToRect(omnibox_)];
+  }
   [self drawBandSeparator];
+}
+
+// PLT-SHELL-24M2FIX-C10: CEF paints a RECTANGULAR focus ring for a textfield,
+// which reads as a blue box around a pill. The ring is drawn here instead, on
+// the pill's own rounded outline, and the window theme's focus-ring colour is
+// set to the field's focused surface so CEF's rectangle blends away.
+- (void)drawOmniboxFocusRing:(NSRect)rect {
+  const CGFloat radius = std::min(NSHeight(rect) / 2, NSWidth(rect) / 2);
+  if (radius <= kFocusRingWidth) {
+    return;
+  }
+  const NSRect ring = NSInsetRect(rect, kFocusRingWidth / 2, kFocusRingWidth / 2);
+  const CGFloat ring_radius = radius - kFocusRingWidth / 2;
+  NSBezierPath *path = [NSBezierPath bezierPathWithRoundedRect:ring
+                                                      xRadius:ring_radius
+                                                      yRadius:ring_radius];
+  path.lineWidth = kFocusRingWidth;
+  [FocusRingColor() setStroke];
+  [path stroke];
 }
 
 // PLT-SHELL-24M2FIX-C5: the chrome band became a surface (strip #DEE2F0,

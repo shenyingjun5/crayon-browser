@@ -71,6 +71,16 @@ struct ChromeDecoration final {
   // The omnibox pill. Empty when the toolbar is not mounted in a window, in
   // which case no pill corners may be cut.
   CefRect omnibox;
+  // PLT-SHELL-24M2FIX-C10: the address field holds focus. CEF paints a
+  // RECTANGULAR focus ring for a textfield, which reads as a blue box around a
+  // pill; the decoration suppresses that and draws the ring on the pill's own
+  // outline instead.
+  bool omnibox_focused = false;
+  // The textfield's own rect inside that pill. CEF draws its own 1 DIP outline
+  // around this rect (measured grey, ending where the bookmark control begins),
+  // which reads as a box inside the rounded field; the decoration paints over
+  // it with the field's surface so only the rounded ring remains.
+  CefRect omnibox_field;
 };
 
 } // namespace crayon::browser::cef_shell::window
