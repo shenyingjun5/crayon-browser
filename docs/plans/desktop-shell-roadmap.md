@@ -1410,3 +1410,87 @@ Code Review：按 v0.9 独立检查唯一 owner、同步 callback reentrancy、t
 - 参考实现实测（本机 Chrome，用户截图同机同管线）：聚焦字段填充 `#F9F9FF`、环 **2 DIP**、外框高 72 px = **36 DIP**（与本仓胶囊同高、半径同为半高）。
 - 产品像素复验（临时开关下）：聚焦时胶囊填充 `(249,249,255)` ✓、圆角环出现在胶囊轮廓（x=1600 处 y=92..95 / 160..163）且**右端为半圆弧**（x=1015 处 y=53..55 / 73..75，正是半径 17 的弧）✓、文字全选高亮可见 ✓；去掉开关后未聚焦态**无环**且填充回到 `(232,233,242)` ✓。灰框覆盖前后对照：同一位置的灰色边界由 2 行降为 1 行（`before_focus_grey_box.png` / `after_focus_rounded_ring.png`）。
 - 未覆盖与风险（如实）：① 覆盖掉的灰框在胶囊**外沿**仍可能留 ≤0.5 DIP 的灰线（实测 1 行像素），未再深挖 CEF 内部 ID；② 为换取聚焦环形状，窗口主题的 `CEF_ColorSysStateFocusRing`/`CEF_ColorFocusableBorder*` 被设为表面色，**工具栏按钮**的键盘焦点环在该表面不再可见（标签按钮所在带色不同、仍可见）——登记的 a11y 折衷，后续若需要可为按钮也在装饰层画环；③ 点击链路（真实鼠标点入、选中、替换）本机无机器证据，归人工复看；④ `docs` 未含 Esc/Return 等键盘走查与 AX 名称核对。
+
+## 109. PLT-SHELL-24M2FIX-C11 完成记录（2026-09-23，设置改用原版页面 + 新标签页空白 + 下线 new_tab_url 设置）
+
+- 领取依据：用户实机要求三条：① ⋮ 菜单与「偏好设置」的「设置」要直接用它原有那一套完整设置，不要自造；② 新标签页/新打开的页面用空白页；③ 把产品自己的「新标签页网址」设置去掉，改用原版设置（尤其「起始页面」这一节）。
+- **前置取证（本会话，隔离探针，非产品）**：用 CEF 发行包自带 `tests/cefclient`（`-DUSE_SANDBOX=OFF`，可直接 exec，构建 56 s / 347 MB，位于 `/private/tmp/cefclient-probe`）以 `--use-views --use-alloy-style --lang=zh-CN --remote-debugging-port=<p>` 起隔离实例，经 CDP `PUT /json/new` + `Page.navigate` + `Page.captureScreenshot` 取证：
+  - **CEF 150 macOS 在 Chrome bootstrap + Alloy style（= 本产品现状）下 `chrome://settings` 完整渲染**，共 16 个分区（您与 Google／自动填充和密码／隐私与安全／性能／AI 创新功能／外观／搜索引擎／默认浏览器／起始页面／语言／下载内容／无障碍／系统／重置设置／扩展程序／关于 Chromium）；`/appearance`、`/search`、`/onStartup`、`/content` 子页正常，`/passwords` 重定向回设置根、**不崩**；`--lang=zh-CN` 下标题为「设置」、子页「设置 - 外观」。
+  - **原版设置里没有「新标签页网址」这一项**：`?search=新标签页` 无结果；「起始页面」的四个选项实测是 `controlled-radio-button name="5/1/4/6"`（5=打开新标签页[缺省]、1=继续浏览上次打开的网页、4=打开特定网页或一组网页、6=两者），对应 Chromium 的 `session.restore_on_startup`；`session.startup_urls`、`homepage`、`NewTabPageLocation`（策略，非设置项）均在 libcef 中确认存在。
+  - 证伪的旧假设：`tests/ceftests/webui_unittest.cc` 的 `WEBUI_TEST` 清单只是 content 层自测覆盖集，**不是**「CEF 支持哪些 chrome://」的白名单；`resources.pak` 里 grep 不到字符串也不代表不存在（pak 内容是压缩的）。证据图归档 `.cache/qa/plt-shell-settings-original/`。
+- 实现：
+  - `src/macos/app.cc`：新增常量 `kNewTabPageUrl = "about:blank"` 与 `kOriginalSettingsUrl = "chrome://settings"`；删除 `EnsurePreferences/SavePreferences/NewTabUrl/SetNewTabUrl/ShowSettings` 共 5 个函数（及对应 include），新增 `OpenOriginalSettings()` —— 在活动标签的 main frame `LoadURL(kOriginalSettingsUrl)`，无活动标签时退回 `product_host_->CreateTab(...)`；`ApplicationCommand::kSettings` 改走它，`kNewTab` 与工具栏 "+" 改用 `kNewTabPageUrl`。**从命令进入而不是在 omnibox 放行 `chrome` scheme**，故 `IsAllowedNavigationUrl()`（仅 http/https/crayon/about/file）保持不变。
+  - 删除 `src/macos/settings_panel_mac.{h,mm}`（`git rm`）与 CMake macos 源列表两项；macOS 产品目标不再链接 `crayon::browser-preferences`（该模块在 macOS 侧已无消费者）。`app.h` 同步移除 include、方法声明与 `preferences_` 成员。工具栏菜单那条「设置页还不存在，故不列 Preferences」的过期注释一并改正。
+  - `browser/preferences`：移除闭集键 `kNewTabUrl`（常量 + `Registry()` + `RegisteredKeys()` 三处同步）。**关键兼容处理**：`kPreferenceSchemaVersion` 1 → 2 —— 旧 profile 的 v1 文件仍带 `new_tab_url`，若保持 v1 严格模式会整份被判 `kContentRejected` 从而丢光所有设置；升版后 v1 走容忍迁移（未知键丢弃、其余保留）。契约测试同步：删除已下线键的用例，新增 `MigrationFromV1DropsRemovedNewTabUrlKey`（v1 含该键可加载且其它键保留；当前 schema 含该键仍严格拒绝），`StrictV1RejectsUnknownKeys` → `StrictCurrentSchemaRejectsUnknownKeys`（改用 v2 文档），`CorruptionMatrixFailsClosed` 的「更新版本」样本由 v2 改为 v3。
+  - 本地化：删除 `settings.new_tab_url` / `settings.save` 两个词条（三语言），261 → 259 键；成对守卫同步为 259（`tools/locales/generate.test.mjs` 的 `keyCount` + `browser/shared-ui/localization/tests/locale_snapshot_test.cc` 的 `LocaleCatalog::Size()`），并重跑 `tools/locales/generate.mjs` 刷新 6 份生成物。
+- 验证（实际命令与结果）：
+  - `cmake --build .cache/build/macos-arm64-cef-debug-ninja --target crayon_browser crayon_browser_preferences_test --parallel 8` → **exit 0**（57 步；产品链接成功并完成 ad-hoc 签名）。
+  - `ctest -R "^(localization_generated_check|localization_generator_contract|preferences_contract|browser_localization_contract|browser_localization_public_header|browser_localization_source_boundary|macos_cef_shell_source_contract)$"` → **7/7 PASS**（2.08 s）。其中 `macos_cef_shell_source_contract` 即 `crayon://newtab` 在 app.cc 恰好一次的守卫（首窗仍走内置页，契约未改）。
+  - `ctest -R "^alloy_cast_toolbar_mac$"` → **PASS**（16.18 s，⋮ 菜单仍为 6 项且含设置）。
+  - `node tools/locales/generate.mjs --check` → `{"passed":true,"keys":259,"files":9}`；`node --test tools/locales/generate.test.mjs` → 6/6 pass。
+  - `cargo run -q -p repo-guard -- scan --root .` → RG-003/RG-004 **warning（既有，非本轮引入）**，其余 checks passed、findings 0。
+  - `git diff --check` → clean。
+- Code Review（自审，按 v0.9）：需求/边界（只用原版设置 + 新页空白 + 下线自有设置；不动 omnibox 允许列表、不动 Windows 侧 `new_tab_url_` 重定向语义）；正确性（schema 升版是旧文件不丢设置的**必要条件**，已由迁移用例守住）；架构（macOS 产品不再持有第二套设置 owner，偏好模块在该平台无消费者后连同链接一并下线）；安全（不新增网络/权限/日志；`chrome://settings` 仅由内部命令载入）；数据（旧文件容忍迁移；新文件写 v2）；测试与可维护性（键/词条/计数/schema 四处成对守卫全部同步）。P0/P1/P2 = 0/0/0，APPROVE。
+- 未覆盖与风险（如实）：
+  1. **「起始页面」目前可设置但不生效**：本轮只把设置表面换成原版（含起始页面这一节），产品尚未读取 `session.restore_on_startup` / `session.startup_urls` 来决定首窗开什么。若要「跟 Chrome 一样」，需另立切片读这两个偏好并映射到首窗/额外标签。
+  2. **首窗仍开内置 `crayon://newtab`**（`macos_source_contract` 要求该 URL 在 app.cc 恰好一次）。若要求「启动即空白」需一并改源码契约；本轮未擅自改契约，等用户拍板。
+  3. **产品点击链路无机器证据**：产品是单实例（`open -n --args` 起不来第二份），且本机 `AXIsProcessTrusted()/CGPreflightPostEventAccess()` 均为 false（不能合成键鼠），故「⋮ → 设置 → 落到 chrome://settings」只到「代码路径 + 契约 + 探针同源」层级，**归人工复看**。
+  4. 原版设置里对本产品无意义的项（扩展程序、Sync/Google 服务、默认浏览器、重置设置、关于 Chromium）仍在，WebUI 分区不可定制，本轮未做屏蔽。
+  5. 内置新标签页（`crayon://newtab`）现在只剩首窗一个入口；若后续连首窗也改空白，该页需要在 Roadmap 里明确去留。
+  6. 工作区另有**不属于本轮**的未提交改动（`alloy_omnibox.cc`、`alloy_titlebar_mac.mm`、`alloy_toolbar_mac.h`，C10 遗留），本轮未触碰、未回滚。
+- 后续：`24M2FIX-C11` 转 `VERIFIED`（构建 + 契约 + 探针 + 守卫有证据；产品点击链路待人工复看）。建议紧接一个切片处理上面第 1、2 条（起始页面生效 + 首窗缺省页），它们与本轮同属「设置改用原版」这一个变化原因。
+
+## 110. PLT-SHELL-24M2FIX-C12 完成记录（2026-09-23，首窗与新标签一律空白；「起始页面生效」实测不可行）
+
+- 领取依据：用户对 §109 两个待定项的回答：「1 做」（让原版设置的「起始页面」真正生效）+「2 新加的 tab 页一律是空白页」。
+- **决定性实测（本轮核心结论，推翻了我原本的实现假设）**：在既有 macOS 真实 CEF 探针 `alloy_builtin_content_probe.cc`（CTest `alloy_builtin_content_mac`）的 `OnContextInitialized` 内加一条能力断言 —— `CefPreferenceManager::GetGlobalPreferenceManager()` 非空 且 `HasPreference("session.restore_on_startup")`、`HasPreference("session.startup_urls")` 为真。**实测失败**，探针输出 `alloy_builtin_content_mac detail=startup-preference passed=0`。
+  - 结论（精确口径）：**经 `CefPreferenceManager::GetGlobalPreferenceManager()` 读不到 Chromium 的 profile 偏好**。chrome://settings 的「起始页面」确实把值写进 Chromium 自己的 pref（§109 已实测该节 4 个选项 = `session.restore_on_startup` 的 5/1/4/6），但**产品这一侧读不出来**。本产品只使用 global request context，因此这就是我们唯一可用的公开 API。旁证：CEF 自带 cefclient 的偏好用法同样是「自己在 `OnRegisterCustomPreferences` 里注册前缀 pref 再读写」（`tests/shared/browser/client_app_browser.cc:106`、`tests/cefclient/browser/client_prefs.cc`），即该 API 面向自定义/CEF 作用域偏好，而非 Chromium 的 profile 偏好集合。
+  - 因此「起始页面生效」**不能**通过 CEF 公开 API 实现；若强行实现只能由本仓解析 profile 的 `Preferences` JSON（违反「状态唯一 owner」、且该文件由 Chromium 异步写盘、时序不可控）——不做。
+- **过程失误（如实记录）**：该断言放在 `OnContextInitialized` 里调用 `Finish(false, …)`（窗口尚未存在）会让探针**不退出**，ctest 以 240 s 超时收场。断言已回退，避免在仓库里留下必然挂起的测试。**基线已补测**：回退后 `alloy_builtin_content_mac` → `detail=complete passed=1`、**2.72 s 通过**，故那次 240 s 超时确由该断言引入，探针本身健康。
+- 实现（本轮实际交付的行为）：**首窗与任何新加标签一律 `about:blank`** —— 新增常量 `kNewTabPageUrl`，首窗 `Dependencies.initial_url` 由 `kInitialUrl` 改为 `kNewTabPageUrl`，工具栏 "+" 与 ⌘T 同（§109 已改）。`kInitialUrl` 仅保留给 `TabController` 构造参数（macOS 上走的是已废弃的 Chrome-style `CreateMainWindow` 路径，`tab_controller.cc:1121`），因此 `macos_source_contract` 的「`crayon://newtab` 在 app.cc 恰好一次」守卫**保持不变**。
+- C12 的读偏好代码（`ResolveStartupUrls` / `OpenPendingStartupTabs` / `IsNavigableStartupUrl` / 4 个偏好常量 / 3 个 include）在取证后**已全部回退**，不留死代码；`view_ready` 回调恢复原样。
+- 验证：`cmake --build … --target crayon_browser crayon_page_snapshot_cef_integration_test` exit 0（含 ad-hoc 签名）；`ctest -R "^(localization_generated_check|localization_generator_contract|preferences_contract|browser_localization_contract|browser_localization_public_header|browser_localization_source_boundary|macos_cef_shell_source_contract)$"` **7/7 PASS**；回退后全仓检索 `ResolveStartupUrls` / `OpenPendingStartupTabs` / `IsNavigableStartupUrl` / `cef_preference` / `cef_parser` 零残留；`app.cc` 中 `crayon://newtab` 仍恰好一次、`kNewTabPageUrl` 引用 4 处。
+- Code Review（自审）：需求边界（只做「一律空白」这半；「起始页面生效」经实测不可行，不伪造完成）；正确性（回退彻底，无半成品、无死代码）；安全（不解析/不写入 Chromium 的 Preferences 文件）；架构（不新增第二套状态 owner）；测试（能力断言试过并如实回退，未留挂起用例）。P0/P1/P2 = 0/0/0，APPROVE。
+- 未覆盖与风险（如实）：
+  1. **原版设置的「起始页面」对本产品是显示项，不生效**（根因见上）。若用户仍要它生效，只有三条路：① 本仓解析 profile `Preferences` JSON（不推荐，理由见上）；② 推动/等待 CEF 暴露该偏好（需外部依赖）；③ 产品自建启动页设置（回到 §109 前的方案）。**需用户选**。
+  2. `alloy_builtin_content_mac` 在本沙箱的超时基线未测（见上）。
+  3. 产品点击/启动链路仍无机器证据（单实例 + 本机不能合成键鼠），归人工复看：新标签应为纯白空白页。
+  4. 工作区仍有**不属于本轮**的未提交改动：`alloy_omnibox.cc`、`alloy_titlebar_mac.mm`、`alloy_toolbar_mac.h`，以及 **`app.cc` 里 C10 遗留的临时实验开关**（`// PLT-SHELL-24M2FIX-C10 EXPERIMENT (temporary, remove before delivery)`，启动后 2.5 s 自动聚焦地址栏；经核对**不在 HEAD**，属未提交残留，注释自称「交付前移除」）。本轮未触碰、未回滚，**建议单独清理**。
+- 后续：`24M2FIX-C12` 转 `VERIFIED`（「一律空白」有构建 + 契约证据；「起始页面生效」判为 **BLOCKED（CEF 不暴露该偏好）**，等用户选择路线后再开新切片）。
+
+## 111. PLT-SHELL-24M2FIX-C13 取证记录（2026-09-23 深夜，**推翻 §109 的"原版设置可用"结论**）
+
+- 触发：用户实机反馈「点了三个点，设置没生效/是空的」。这是他第二次报同一现象（第一次真因是跑旧程序，已解决），因此本轮按"代码真有缺陷"重新取证。
+- **决定性实测（同一份 cefclient 二进制，唯一差别是运行时样式）**：
+
+| 启动方式 | 样式 | `chrome://settings` 结果 |
+|---|---|---|
+| `--use-views --use-alloy-style --url=chrome://settings` | **Alloy style** | `href=about:blank`、`title=""`、`hasSettingsUi=false`、`elements=3` → **导航不提交** |
+| `--use-views --url=chrome://settings` | Chrome style | `href=chrome://settings/`、`title=Settings`、`hasSettingsUi=true`、`elements=619` → 正常 |
+
+  ⇒ **chrome://settings 只在 Chrome style 的浏览器里能渲染；Alloy style 下不提交。** 本产品为自定义 UI 必须使用 Alloy style（`CEF_RUNTIME_STYLE_ALLOY`），故「⋮ → 原版设置页」**技术上不可行**，与菜单接线无关。
+
+- 产品侧同源证据（临时诊断，已撤除）：⋮ 菜单命令**确实到达**该路径——诊断标记 `settings-command` ×1、`settings-inline` ×1（= `LoadURL(kOriginalSettingsUrl)` 被调用）；但地址栏与画面均不变。同一入口加载 `chrome://version`（content 层 WebUI，CEF 自测保证）**能渲染**（内容区非白像素 190,305 / 2,640,000）→ 排除「命令未到达」「chrome:// 整体不可用」「资源包处理器/请求拦截器有问题」，只剩「设置页在 Alloy 下不可用」这一条。同时排除了：`IsAllowedNavigationUrl`（只管 omnibox）、`RedirectBuiltInNewTab`（只认 chrome://newtab）、`MdvEntryController/InterceptWhileDirty`（非 file:// 且非 user_gesture 一律放行）、`AboutBrowserResources`（只认两个 id）、观测桥的资源处理器（未覆写 OnBeforeResourceLoad）。
+- **方法错误（P0 级教训，必须记住）**：§109 的「CEF 150 macOS + Alloy style 下 chrome://settings 完整可渲染」结论**是假阳**。当时用 CDP `PUT /json/new` 新建 target 采样，而 **CDP 新建的浏览器是 `CEF_RUNTIME_STYLE_DEFAULT`（macOS 上解析为 Chrome style）**，不是产品使用的 Alloy 窗口；据此产出的截图与结论全部不成立。⇒ **凡"CEF 能力"结论，必须在与产品同一样式的窗口里验证（用窗口自身的初始 URL），不能用 CDP 新建 target 采样。**
+- 过程失误（如实）：① 一度按"诊断日志 `url=` 字段"判定导航未发生，该字段实测不跟随导航更新（同一会话里用户后来的 `baidu` 搜索也没反映），不可作为唯一判据；② 第一次自测用 `launchctl setenv` 传环境变量被沙箱拒绝，且 `&&` 链把 `open` 一起跳过，导致短暂无实例运行。
+- 当前代码状态：`ApplicationCommand::kSettings` → `BrowserApp::OpenOriginalSettings()`（`LoadURL("chrome://settings")`）保留，但**点击无反应**——按本仓「点了没反应的入口比不列更差」的既有判据，这是一个**已知死入口**，等用户选定方向后立即处理（自建 `crayon://settings` 内置页 / 暂时撤掉该菜单项）。临时诊断与哨兵**已全部撤除**（全仓检索 `TEMP(C13`、`getenv`、`settings-command` 等零残留；`crayon_shell_diag.enable` 已删）。
+- 验证：撤除后 `crayon_browser` 重建 exit 0（含签名）；产品重启为干净实例（二进制 20:35:55）；`app.cc` 中 `crayon://newtab` ×1、`kNewTabPageUrl` ×4、`OpenOriginalSettings` ×2、`kOriginalSettingsUrl` ×3。
+- 未覆盖与风险（如实）：**设置入口目前是死的**；产品是否自建设置页、覆盖哪些设置项（至少应含 `PreferenceStore` 的 5 个键与"起始页面"语义）需用户决定后另立切片。
+
+## 112. PLT-SHELL-24M2FIX-C14 完成记录（2026-09-23 深夜，修复「页内点击不出新页面」——基础功能级缺陷）
+
+- 触发：用户实机反馈「网站里边的点击也不会产生新的页面，都是基本功能都不通」。
+- 真因（两层，均有代码/文档证据）：
+  1. `TabController::HandlePopupRequest` 接受 `target=_blank` / `window.open` 的 URL 后，把它放进 `pending_popup_urls_`，然后**依赖 `CefBrowserHost::ExecuteChromeCommand(IDC_NEW_TAB)` 去开标签**。而 CEF 150 的 `include/cef_browser.h` 明确记载 `CanExecuteChromeCommand` / `ExecuteChromeCommand` **只用于 Chrome style**；本产品是 Alloy style ⇒ 该命令**没有任何效果**。
+  2. macOS 侧**从未设置** `SetChromeCommandCallback`（全仓只有 `src/windows/app.cc:316` 设了），所以「命令回调 → 开标签」这条链在 macOS 上根本不存在。
+  ⇒ 结果：**每个 `target=_blank` 点击（百度搜索结果就是这种链接）都被静默丢弃**——popup 被取消、URL 烂在队列里，既不报错也不开标签。
+- 修复：新增平台中立回调 `TabController::SetPopupRequestedCallback(std::function<void(const std::string&)>)`；`HandlePopupRequest` 入库后**优先**调用它（未设置时保留原 Chrome-命令回退，Chrome style 构建行为不变）；macOS `app.cc` 接上回调并 `product_host_->CreateTab(kNewTabPageUrl)` —— 队列中的目标 URL 仍由既有 `TabController::OnBrowserCreated` 消费并加载（URL 只有这一个消费点，不新增第二处所有权）。
+- 证据（产品自身诊断通道，**无需人工点击**）：同一段临时自测让程序自己调用 `HandlePopupRequest(browser, "https://example.com/popup-probe", true)`（与真实 `target=_blank` 点击同一条路径）：
+  - 修复前：`browser-created` ×1，`browsers=1`（点击无任何结果，复现用户现象）
+  - 修复后：`browser-created` ×2，计数演进 `browsers=1 mounted=1` → `browsers=1 mounted=2` → **`active=2 browsers=2 mounted=2`** ⇒ 新标签被创建并激活
+- 防回归：`macos_source_contract.cmake` 新增 token 守卫 `SetPopupRequestedCallback`（此前 macOS 缺这条接线没有任何守卫能发现）。
+- 验证：`crayon_browser` 构建 exit 0（含签名）；定向契约 `macos_cef_shell_source_contract` / `preferences_contract` / `alloy_cast_toolbar_mac` **3/3 PASS**；临时自测块与诊断哨兵**全部撤除**（全仓检索 `TEMP(C14-VERIFY)` / `popup-probe` 零残留，`crayon_shell_diag.enable` 已删）；产品重启为干净实例（二进制 20:41:14）。
+- 未覆盖与风险（如实）：
+  1. **Windows 侧未动**：`src/windows/app.cc` 仍走旧的 Chrome-命令路径 + `ObserveChromeCommand`。若 Windows 产品同样运行于 Alloy style，则存在同一缺陷（弹窗点击无反应），需另立任务在 Windows 上核实并统一（建议共用本次的 `SetPopupRequestedCallback`）。
+  2. 本轮仍未验证真机鼠标点击链路（本机不能合成键鼠）；上述证据来自**同一条代码路径的程序化驱动**。
+  3. 弹窗策略仍按既有 `PopupPolicy` 收敛（无手势/队列满/标签满即拒绝），本次未改策略，只补上了"被接受之后必须有人开标签"。
