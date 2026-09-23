@@ -25,6 +25,7 @@
     "toolbarBackground": "#20242C",
     "tabStripBackground": "#171A20",
     "activeTabBackground": "#20242C",
+    "omniboxBackground": "#303744",
     "inactiveTabForeground": "#98A2B3",
     "foreground": "#F2F4F7",
     "mutedForeground": "#AAB2C0",

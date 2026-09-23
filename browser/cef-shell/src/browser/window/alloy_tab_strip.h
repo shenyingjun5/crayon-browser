@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "browser/window/alloy_chrome_decoration.h"
 #include "browser/window/tab_model.h"
 #include "include/views/cef_panel.h"
 
@@ -48,6 +49,11 @@ public:
   bool Sync(const TabModel &model, const std::vector<TabId> &ordered_tabs);
   bool RefreshTitles();
   bool Shutdown();
+
+  /// Geometry and state for the native chrome decoration. Returns an empty
+  /// list when a tab's window coordinates cannot be resolved: a stale
+  /// decoration would keep drawing corners for a tab that moved or vanished.
+  std::vector<TabDecoration> decoration() const;
 
   bool active() const noexcept;
   std::size_t rendered_tab_count() const noexcept;

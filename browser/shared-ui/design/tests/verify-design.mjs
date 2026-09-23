@@ -206,6 +206,7 @@ const requiredColorKeys = [
   "toolbarBackground",
   "tabStripBackground",
   "activeTabBackground",
+  "omniboxBackground",
   "inactiveTabForeground",
   "foreground",
   "mutedForeground",

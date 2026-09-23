@@ -42,7 +42,7 @@ foreach(required_token
         "CEF_REQUIRE_UI_THREAD"
         "CreateBrowser"
         "CEF_RUNTIME_STYLE_CHROME"
-        "TryCloseBrowser"
+        "OnBrowserCloseRequested"
         "OnAfterCreated"
         "OnBeforeClose"
         "OnRenderProcessTerminated"

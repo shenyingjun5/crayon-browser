@@ -21,6 +21,7 @@
 #include "include/views/cef_window.h"
 #include "include/views/cef_window_delegate.h"
 #include "include/wrapper/cef_closure_task.h"
+#include "include/wrapper/cef_helpers.h"
 
 namespace {
 
@@ -72,7 +73,8 @@ public:
       return;
     }
     omnibox_ = std::make_unique<AlloyOmnibox>(
-        AlloyOmnibox::Strings{"Search or enter address", "Address"},
+        AlloyOmnibox::Strings{"Search or enter address", "Address",
+                              "No search provider", "Blocked", "Load failed"},
         AlloyOmnibox::Callbacks{
             [this](std::uint64_t generation, const std::string &text) {
               requests_.push_back({generation, text});
@@ -262,6 +264,21 @@ private:
       logged_stage_ = stage_;
       std::cout << "alloy_omnibox_windows stage=" << stage_ << std::endl;
     }
+    // PLT-SHELL-24M2FIX-B: the notice paths below reach no network and need no
+    // synthetic key delivery, so they are asserted before the input stages. The
+    // input stages require an Accessibility/Foreground-trusted session and are
+    // known to degrade in a non-foreground GUI session; gating the notices
+    // behind them would let that environment limit mask this coverage.
+    if (!local_scenario_checked_) {
+      local_scenario_checked_ = true;
+      const bool local_ok = RunLocalScenario();
+      std::cout << "alloy_omnibox_windows local_notices=" << (local_ok ? 1 : 0)
+                << std::endl;
+      if (!local_ok) {
+        Finish(false, "local-notices");
+        return;
+      }
+    }
     if (stage_ == 0) {
       const auto punycode = AlloyOmnibox::SafeDisplayText(
           "https://user:pass@xn--fsqu00a.test/path");
@@ -277,9 +294,15 @@ private:
           window_->GetRuntimeStyle() != CEF_RUNTIME_STYLE_ALLOY ||
           !omnibox_->SetAddress("https://user:pass@xn--fsqu00a.test/path") ||
           omnibox_->displayed_text() != "https://xn--fsqu00a.test/path" ||
-          !omnibox_->Edit("") || !omnibox_->Focus() ||
-          !SendUnicodeText(L"example.test")) {
+          !omnibox_->Edit("") || !omnibox_->Focus()) {
         Finish(false, "display-or-input");
+        return;
+      }
+      if (!SendUnicodeText(L"example.test")) {
+        // Reported apart from the checks above: synthetic key delivery needs an
+        // Accessibility-trusted session whose window can actually be activated,
+        // so this failure means "environment", not "display or input".
+        Finish(false, "foreground-input");
         return;
       }
       ++stage_;
@@ -364,31 +387,9 @@ private:
         return;
       }
 
-      std::vector<OmniboxSubmission> isolated;
-      empty_provider_ = std::make_unique<AlloyOmnibox>(
-          AlloyOmnibox::Strings{"Input", "Address"},
-          AlloyOmnibox::Callbacks{
-              {},
-              [&isolated](const OmniboxSubmission &submission) {
-                isolated.push_back(submission);
-              },
-              {}},
-          DefaultPrivacyDefaults());
-      if (!empty_provider_->Edit("plain query") || !empty_provider_->Submit() ||
-          isolated.size() != 1 ||
-          isolated[0].kind != OmniboxSubmissionKind::kNoSearchProvider ||
-          !empty_provider_->Edit("JaVaScRiPt:alert(1)") ||
-          !empty_provider_->Submit() || isolated.size() != 2 ||
-          isolated[1].kind != OmniboxSubmissionKind::kBlocked ||
-          !empty_provider_->Edit("https://user:pass@example.test/") ||
-          !empty_provider_->Submit() || isolated.size() != 3 ||
-          isolated[2].kind != OmniboxSubmissionKind::kBlocked ||
-          !empty_provider_->Shutdown()) {
-        Finish(false, "fail-closed-submissions");
-        return;
-      }
-      empty_provider_.reset();
-
+      // The fail-closed submission notices and the failed-load notice need no
+      // synthetic key delivery, so they are asserted in RunLocalScenario()
+      // before the input stages; see the local_scenario_ gate in Check().
       if (!omnibox_->OnNavigationFinished(true,
                                           "https://user:pass@例子.test/path") ||
           !omnibox_->Edit("draft remains") ||
@@ -416,6 +417,76 @@ private:
         cancel_events_ == 1 && narrow.width > 0 && wide.width > narrow.width &&
         omnibox_->displayed_text() == "https://new.test/";
     Finish(result_->real_input_passed, "complete");
+  }
+
+  // PLT-SHELL-24M2FIX-B: every submission that can reach no remote service, and
+  // every failed main-frame navigation, must surface a notice instead of
+  // leaving the address bar (and a blank page area) looking idle. None of these
+  // paths touch the network or need synthetic input.
+  bool RunLocalScenario() {
+    CEF_REQUIRE_UI_THREAD();
+    std::vector<OmniboxSubmission> isolated;
+    empty_provider_ = std::make_unique<AlloyOmnibox>(
+        AlloyOmnibox::Strings{"Input", "Address", "No search provider",
+                              "Blocked", "Load failed"},
+        AlloyOmnibox::Callbacks{
+            {},
+            [&isolated](const OmniboxSubmission &submission) {
+              isolated.push_back(submission);
+            },
+            {}},
+        DefaultPrivacyDefaults());
+    const bool notices_ok =
+        empty_provider_->notice_text().empty() &&
+        empty_provider_->Edit("plain query") && empty_provider_->Submit() &&
+        isolated.size() == 1 &&
+        isolated[0].kind == OmniboxSubmissionKind::kNoSearchProvider &&
+        empty_provider_->notice_text() == "No search provider" &&
+        empty_provider_->Edit("JaVaScRiPt:alert(1)") &&
+        empty_provider_->Submit() && isolated.size() == 2 &&
+        isolated[1].kind == OmniboxSubmissionKind::kBlocked &&
+        empty_provider_->notice_text() == "Blocked" &&
+        empty_provider_->Edit("https://user:pass@example.test/") &&
+        empty_provider_->Submit() && isolated.size() == 3 &&
+        isolated[2].kind == OmniboxSubmissionKind::kBlocked &&
+        empty_provider_->notice_text() == "Blocked" &&
+        empty_provider_->Shutdown();
+    empty_provider_.reset();
+    if (!notices_ok) {
+      return false;
+    }
+
+    std::vector<OmniboxSubmission> failed;
+    auto failing = std::make_unique<AlloyOmnibox>(
+        AlloyOmnibox::Strings{"Input", "Address", "No search provider",
+                              "Blocked", "Load failed"},
+        AlloyOmnibox::Callbacks{
+            {},
+            [&failed](const OmniboxSubmission &submission) {
+              failed.push_back(submission);
+            },
+            {}},
+        DefaultPrivacyDefaults());
+    const bool load_failure_ok =
+        failing->notice_text().empty() && failing->Edit("https://fail.test/") &&
+        failing->notice_text().empty() && failing->Submit() &&
+        failed.size() == 1 &&
+        failed[0].kind == OmniboxSubmissionKind::kNavigateUrl &&
+        // Still loading: no notice yet, only a completed failure explains.
+        failing->notice_text().empty() &&
+        failing->OnNavigationFinished(false, "https://fail.test/") &&
+        failing->notice_text() == "Load failed" &&
+        // A fresh edit supersedes the stale failure notice.
+        failing->Edit("second attempt") && failing->notice_text().empty() &&
+        // A page-driven failure (link, redirect, reload) never enters the
+        // loading state, so OnNavigationFinished reports false and the caller
+        // must drive the notice explicitly.
+        !failing->OnNavigationFinished(false, "https://elsewhere.test/") &&
+        failing->notice_text().empty() && failing->ShowLoadFailureNotice() &&
+        failing->notice_text() == "Load failed" &&
+        failing->Edit("third attempt") && failing->notice_text().empty() &&
+        failing->Shutdown();
+    return load_failure_ok;
   }
 
   void Finish(bool passed, const char *detail) {
@@ -451,6 +522,7 @@ private:
   int stage_ = 0;
   int logged_stage_ = -1;
   int cancel_events_ = 0;
+  bool local_scenario_checked_ = false;
   bool finished_ = false;
   bool passed_ = false;
 

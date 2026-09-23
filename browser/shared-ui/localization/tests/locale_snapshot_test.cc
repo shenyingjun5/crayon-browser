@@ -113,7 +113,7 @@ bool ProjectionIsClosedAndExact() {
 }
 
 bool CatalogIsClosedAndDoesNotFallback() {
-  CHECK(LocaleCatalog::Size() == 255);
+  CHECK(LocaleCatalog::Size() == 258);
   CHECK(LocaleCatalog::Version() == "desktop-localization-v1");
   const LocaleCatalog english(AppLocale::kEnUs);
   const LocaleCatalog simplified(AppLocale::kZhCn);

@@ -1,7 +1,9 @@
 #include "macos/alloy_toolbar_mac.h"
+#include "macos/alloy_titlebar_mac.h"
 
 #include <utility>
 
+#include "browser/window/alloy_chrome_palette.h"
 #include "crayon/browser_localization/locale_catalog.h"
 #include "crayon/browser_privacy/privacy_defaults.h"
 #include "include/views/cef_box_layout.h"
@@ -21,9 +23,6 @@ std::string Localized(::crayon::browser::localization::AppLocale locale,
 
 AlloyToolbarMac::AlloyToolbarMac(localization::LocaleSnapshot locale,
                                  Callbacks callbacks) {
-  // PLT-SHELL-24M2UIP-c: reserve the merged-titlebar leading area for the
-  // traffic lights (strip is 40pt; controls sit in its left 76pt).
-  constexpr int kTrafficLightLeadingInset = 76;
   tab_strip_ = std::make_unique<window::AlloyTabStrip>(
       window::AlloyTabStrip::Strings{Localized(locale.locale, "tabs.new"),
                                      Localized(locale.locale, "tabs.close"),
@@ -41,11 +40,16 @@ AlloyToolbarMac::AlloyToolbarMac(localization::LocaleSnapshot locale,
           [title = std::move(callbacks.tab_title)](window::TabId id) {
             return title ? title(id) : std::string{};
           }},
-      kTrafficLightLeadingInset);
+      // PLT-SHELL-24M2FIX-C5: the strip starts where the reference build's
+      // first tab does, not where the window controls end.
+      titlebar::kTabStripLeadingInset);
   omnibox_ = std::make_unique<window::AlloyOmnibox>(
       window::AlloyOmnibox::Strings{
           Localized(locale.locale, "address.placeholder"),
-          Localized(locale.locale, "omnibox.edit")},
+          Localized(locale.locale, "omnibox.edit"),
+          Localized(locale.locale, "omnibox.notice.no_search_provider"),
+          Localized(locale.locale, "omnibox.notice.blocked"),
+          Localized(locale.locale, "omnibox.notice.load_failed")},
       window::AlloyOmnibox::Callbacks{
           {},
           [this](const window::OmniboxSubmission& submission) {
@@ -73,15 +77,32 @@ AlloyToolbarMac::AlloyToolbarMac(localization::LocaleSnapshot locale,
         }
       }});
   toolbar_ = CefPanel::CreatePanel(nullptr);
-  // PLT-SHELL-24M2UIP-d: unified chrome band — the toolbar row shares the
-  // tab strip's light periwinkle family so the top region reads as one bar.
-  toolbar_->SetBackgroundColor(0xFFE9EDF6);
+  // PLT-SHELL-24M2FIX-C: band colors come from the shared palette (design
+  // tokens), not per-file literals that drift from the tokens.
+  toolbar_->SetBackgroundColor(window::chrome_palette::kToolbarBackground);
   CefBoxLayoutSettings toolbar_settings;
   toolbar_settings.horizontal = true;
+  // PLT-SHELL-24M2FIX-C4-a: the reference build leaves the address field short
+  // of the window edge instead of running it into the frame.
+  toolbar_settings.inside_border_insets.right =
+      window::kChromeTrailingInsetDip;
   auto toolbar_layout = toolbar_->SetToBoxLayout(toolbar_settings);
+  // PLT-SHELL-24M2FIX-C4-a: the pill is centred in the navigation bar by a
+  // holder with symmetric vertical insets. Setting the toolbar's cross-axis
+  // alignment instead would also re-size the navigation panel, whose preferred
+  // height is empty and which relies on its minimum height.
+  omnibox_holder_ = CefPanel::CreatePanel(nullptr);
+  omnibox_holder_->SetBackgroundColor(window::chrome_palette::kToolbarBackground);
+  CefBoxLayoutSettings holder_settings;
+  holder_settings.horizontal = true;
+  holder_settings.inside_border_insets.top = window::kOmniboxPillMarginDip;
+  holder_settings.inside_border_insets.bottom = window::kOmniboxPillMarginDip;
+  auto holder_layout = omnibox_holder_->SetToBoxLayout(holder_settings);
+  omnibox_holder_->AddChildView(omnibox_->panel());
+  holder_layout->SetFlexForView(omnibox_->panel(), 1);
   toolbar_->AddChildView(navigation_->panel());
-  toolbar_->AddChildView(omnibox_->panel());
-  toolbar_layout->SetFlexForView(omnibox_->panel(), 1);
+  toolbar_->AddChildView(omnibox_holder_);
+  toolbar_layout->SetFlexForView(omnibox_holder_, 1);
 }
 
 AlloyToolbarMac::~AlloyToolbarMac() = default;
@@ -91,6 +112,10 @@ CefRefPtr<CefView> AlloyToolbarMac::tab_strip_view() const {
 }
 
 CefRefPtr<CefView> AlloyToolbarMac::toolbar_view() const { return toolbar_; }
+
+CefRefPtr<CefView> AlloyToolbarMac::omnibox_view() const {
+  return omnibox_ ? omnibox_->panel() : nullptr;
+}
 
 bool AlloyToolbarMac::SyncTabs(const window::TabModel& model) {
   if (!tab_strip_) {
@@ -105,6 +130,12 @@ bool AlloyToolbarMac::AttachBrowser(window::TabId tab_id,
   CEF_REQUIRE_UI_THREAD();
   if (!navigation_ || !browser) {
     return false;
+  }
+  if (omnibox_ && bound_browser_ &&
+      bound_browser_->GetIdentifier() != browser->GetIdentifier()) {
+    // An unfinished edit belongs to the previous tab, not the newly selected
+    // page. Cancel it before Bind publishes that page's committed address.
+    static_cast<void>(omnibox_->Cancel());
   }
   bound_browser_ = std::move(browser);
   // Bind primes the address display from the main frame URL itself.
@@ -131,9 +162,53 @@ bool AlloyToolbarMac::SetAddress(std::string address) {
   return omnibox_ && omnibox_->SetAddress(std::move(address));
 }
 
+bool AlloyToolbarMac::OnTabLoadError(int browser_id, const std::string& url,
+                                     bool certificate_error) {
+  CEF_REQUIRE_UI_THREAD();
+  if (browser_id == 0 || !bound_browser_ ||
+      bound_browser_->GetIdentifier() != browser_id) {
+    return false;
+  }
+  // Order mirrors the Windows shell: the navigation projection first, then
+  // the omnibox, so the address bar lands on the final failure state.
+  if (navigation_) {
+    static_cast<void>(
+        navigation_->OnLoadError(bound_browser_, url, certificate_error));
+  }
+  if (omnibox_) {
+    // OnNavigationFinished reports true only when the omnibox model was itself
+    // waiting on this navigation, i.e. the user submitted it from the field.
+    // Loads driven by the page — link, redirect, reload — never enter that
+    // state, so they take the explicit notice path instead; without it a failed
+    // load leaves a blank page area with no explanation.
+    if (!omnibox_->OnNavigationFinished(false, url)) {
+      static_cast<void>(omnibox_->ShowLoadFailureNotice());
+    }
+  }
+  return true;
+}
+
 bool AlloyToolbarMac::FocusOmnibox() {
   CEF_REQUIRE_UI_THREAD();
   return omnibox_ && omnibox_->Focus();
+}
+
+window::ChromeDecoration AlloyToolbarMac::decoration() const {
+  CEF_REQUIRE_UI_THREAD();
+  window::ChromeDecoration result;
+  if (tab_strip_) {
+    result.tabs = tab_strip_->decoration();
+  }
+  // An unresolvable omnibox keeps the pill rect empty: the decoration then cuts
+  // no corners at all, rather than cutting them at stale coordinates.
+  if (omnibox_ && omnibox_->panel()) {
+    CefPoint origin;
+    if (omnibox_->panel()->ConvertPointToWindow(origin)) {
+      const CefSize size = omnibox_->panel()->GetSize();
+      result.omnibox = CefRect(origin.x, origin.y, size.width, size.height);
+    }
+  }
+  return result;
 }
 
 void AlloyToolbarMac::Shutdown() {
@@ -142,6 +217,7 @@ void AlloyToolbarMac::Shutdown() {
   // underlying browser context in CEF's ImplManager. The window owns the
   // mounted views, so dropping our handles here cannot destroy live UI.
   bound_browser_ = nullptr;
+  omnibox_holder_ = nullptr;
   toolbar_ = nullptr;
   if (omnibox_) {
     static_cast<void>(omnibox_->Shutdown());

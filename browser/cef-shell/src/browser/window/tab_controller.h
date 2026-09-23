@@ -7,6 +7,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -78,6 +79,15 @@ class WindowClient final : public CefClient,
                      const CefString& title) override;
   void OnLoadingStateChange(CefRefPtr<CefBrowser> browser, bool isLoading,
                             bool canGoBack, bool canGoForward) override;
+  // PLT-SHELL-24M2FIX-B: main-frame navigation failure. Without this the
+  // product shell never learns that a navigation died, so the address bar
+  // stays in its loading presentation and the user sees an unexplained blank
+  // page. The handler is platform-neutral; a shell that already observes
+  // load errors through its own built-in-content observer simply does not
+  // register the callback.
+  void OnLoadError(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
+                   ErrorCode error_code, const CefString& error_text,
+                   const CefString& failed_url) override;
   void OnRenderProcessTerminated(CefRefPtr<CefBrowser> browser,
                                  TerminationStatus status, int error_code,
                                  const CefString& error_string) override;
@@ -188,6 +198,8 @@ class TabController final : public CefBaseRefCounted {
       std::function<void(CefRefPtr<CefBrowser> browser)>;
   using BrowserClosingCallback =
       std::function<void(CefRefPtr<CefBrowser> browser)>;
+  using BrowserCloseRequestedCallback =
+      std::function<bool(CefRefPtr<CefBrowser> browser)>;
   using ChromeCommandCallback = std::function<void(int command_id)>;
   using BrowsersClosedCallback = std::function<void()>;
   using PageLoadCompletedCallback =
@@ -232,6 +244,10 @@ class TabController final : public CefBaseRefCounted {
   void SetChromeCommandCallback(ChromeCommandCallback callback);
   void SetBrowserFocusedCallback(BrowserFocusedCallback callback);
   void SetBrowserClosingCallback(BrowserClosingCallback callback);
+  // Returning true consumes CEF DoClose: the host releases the owned view,
+  // observes OnBeforeClose, and quits after its final window is destroyed.
+  void SetBrowserCloseRequestedCallback(BrowserCloseRequestedCallback callback);
+  bool OnBrowserCloseRequested(CefRefPtr<CefBrowser> browser);
 
   // PLT-SHELL-24M2: Alloy UI projection hook. Fired after the model absorbs
   // an address or loading-state change, and after a tab detaches. browser_id
@@ -240,6 +256,14 @@ class TabController final : public CefBaseRefCounted {
       int browser_id, const std::string& url, bool is_loading,
       bool can_go_back, bool can_go_forward)>;
   void SetTabUiUpdateCallback(TabUiUpdateCallback callback);
+
+  // PLT-SHELL-24M2FIX-B: fires once per failed main-frame navigation with the
+  // browser that failed, the URL CEF reported as failed, and whether the code
+  // is a certificate/SSL failure. Fired on the CEF UI thread; browser_id is
+  // never 0.
+  using TabLoadErrorCallback = std::function<void(
+      int browser_id, std::string url, bool certificate_error)>;
+  void SetTabLoadErrorCallback(TabLoadErrorCallback callback);
 
   // Alloy host tab commands: model activation plus the media observation
   // focus swap; view switching stays with the window host.
@@ -358,6 +382,11 @@ class TabController final : public CefBaseRefCounted {
   void NotifyTabUiUpdate(int browser_id);
   void OnLoadingUpdated(CefRefPtr<CefBrowser> browser, bool is_loading,
                         bool can_go_back, bool can_go_forward);
+  // PLT-SHELL-24M2FIX-B: normalizes a load-handler failure down to the
+  // registered TabLoadErrorCallback (main frame only).
+  void OnLoadErrorUpdated(CefRefPtr<CefBrowser> browser,
+                          CefRefPtr<CefFrame> frame, cef_errorcode_t error_code,
+                          const CefString& failed_url);
   void OnRenderProcessGone(CefRefPtr<CefBrowser> browser);
   void OnChromeCommand(int command_id);
   bool RedirectBuiltInNewTab(CefRefPtr<CefFrame> frame,
@@ -392,6 +421,8 @@ class TabController final : public CefBaseRefCounted {
   ChromeCommandCallback chrome_command_callback_;
   BrowserFocusedCallback browser_focused_callback_;
   BrowserClosingCallback browser_closing_callback_;
+  BrowserCloseRequestedCallback browser_close_requested_callback_;
+  std::set<int> host_close_requests_;
   LocalEntryCommandHandler local_entry_command_handler_;
   NavigationInterceptor navigation_interceptor_;
   FileDialogHandler file_dialog_handler_;
@@ -402,6 +433,7 @@ class TabController final : public CefBaseRefCounted {
   SaveCommandHandler save_command_handler_;
   BrowsersClosedCallback browsers_closed_callback_;
   TabUiUpdateCallback tab_ui_update_callback_;
+  TabLoadErrorCallback tab_load_error_callback_;
   PageLoadCompletedCallback page_load_completed_callback_;
   PageSnapshotEventsReadyCallback page_snapshot_events_ready_callback_;
   MediaObservationEventsReadyCallback media_observation_events_ready_callback_;

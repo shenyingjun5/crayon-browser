@@ -101,6 +101,9 @@
 "omnibox.submit" = "提交";
 "omnibox.cancel" = "取消";
 "omnibox.navigate" = "导航";
+"omnibox.notice.no_search_provider" = "未配置搜索引擎，无法搜索";
+"omnibox.notice.blocked" = "出于安全考虑，已阻止该地址";
+"omnibox.notice.load_failed" = "无法载入此网页";
 "new_tab.title" = "蜡笔浏览器";
 "new_tab.regular_heading" = "从一张干净的画布开始";
 "new_tab.incognito_heading" = "无痕浏览";

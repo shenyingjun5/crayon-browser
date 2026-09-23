@@ -4,6 +4,8 @@
 
 **2026-09-08 当前执行顺序：Mac 优先构建和调通，Windows UI 同步改为 Chrome 风格，Windows 效果后续验证。** macOS arm64 产品基线已构建并验证原生菜单/本地 Markdown 保存；共享新标签页 `24W2b3b5a VERIFIED`。Mac Alloy `03M..16M`、`11M2/11M3 VERIFIED`（06M自动验证为键盘输入/建议激活，鼠标真机矩阵归23M；10M为存储adapter，默认产品接线归24M；16M为真实CEF页面工具/PDF，物理打印另验）。主会话负责方案、原子拆分和Review，Terra开发、Luna固定验证。用户最新要求：完成16M后提交推送并暂停，17M及后续未领取。下文 Windows 首发队列保留为历史决策与待恢复验证，不覆盖本次 Mac 优先指令。正式发布动作仍需单独授权。
 
+**2026-09-23 当前增量：用户实机反馈的顶部圆角 Tab、点击切页与后台关闭修复已按 [PLT-SHELL §103](desktop-shell-roadmap.md#103-plt-shell-24m2fix-tab-顶部标签与页面切换2026-09-23) 达 `24M2FIX-TAB VERIFIED`，GPT-6 Luna 子 Agent 完成双配置定向与 Mac 产品 GUI 复测。beforeunload、拖窗/拥挤标签、Windows 与其它基础入口仍按 §103 保留门禁；旧 BUX/组件通过记录不代表当前默认产品完整闭环。**
+
 ## 1. 当前产品范围
 
 - 产品是面向 AI Agent 定制的浏览器；Windows/macOS CEF 浏览器与局域网 Direct/Relay 投屏优先。

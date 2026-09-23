@@ -22,9 +22,10 @@
     "focusRingPx": 2
   },
   "colors": {
-    "toolbarBackground": "#FFFFFF",
-    "tabStripBackground": "#E8EEF8",
-    "activeTabBackground": "#FFFFFF",
+    "toolbarBackground": "#F9F9FF",
+    "tabStripBackground": "#DEE2F0",
+    "activeTabBackground": "#F9F9FF",
+    "omniboxBackground": "#E7E9F3",
     "inactiveTabForeground": "#475467",
     "foreground": "#1D2939",
     "mutedForeground": "#667085",

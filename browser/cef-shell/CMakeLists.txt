@@ -108,6 +108,8 @@ if(OS_WINDOWS)
       src/browser/window/alloy_interactions.h
       src/browser/window/alloy_tab_controller.cc
       src/browser/window/alloy_tab_controller.h
+      src/browser/window/alloy_chrome_decoration.h
+      src/browser/window/alloy_chrome_palette.h
       src/browser/window/alloy_tab_strip.cc
       src/browser/window/alloy_tab_strip.h
       src/browser/window/alloy_omnibox.cc
@@ -595,6 +597,8 @@ if(OS_WINDOWS)
       src/browser/window/alloy_interactions.h
       src/browser/window/alloy_tab_controller.cc
       src/browser/window/alloy_tab_controller.h
+      src/browser/window/alloy_chrome_decoration.h
+      src/browser/window/alloy_chrome_palette.h
       src/browser/window/alloy_tab_strip.cc
       src/browser/window/alloy_tab_strip.h
       src/browser/window/alloy_omnibox.cc
@@ -1028,6 +1032,7 @@ if(OS_MAC)
       src/browser/window/tab_model.cc
       src/browser/window/alloy_icon.cc
       src/browser/window/alloy_icon.h
+      src/browser/window/alloy_chrome_decoration.h
       src/browser/window/alloy_tab_strip.cc
       src/browser/window/alloy_tab_strip.h
       src/browser/window/alloy_omnibox.cc

@@ -463,6 +463,7 @@ BrowserApp::BrowserApp(
             if (tab && toolbar_) {
               static_cast<void>(toolbar_->AttachBrowser(tab->id, browser));
               static_cast<void>(toolbar_->SyncTabs(tab_controller_->model()));
+              if (product_host_) product_host_->RefreshTabChrome();
             }
             BindCastForActiveTab();
           },
@@ -791,10 +792,21 @@ void BrowserApp::OnContextInitialized() {
           }
         }
       });
+  tab_controller_->SetBrowserCloseRequestedCallback(
+      [this](CefRefPtr<CefBrowser> browser) {
+        if (!product_host_ || !browser ||
+            !product_host_->browser_view(browser->GetIdentifier()))
+          return false;
+        if (active_browser_id_ == browser->GetIdentifier())
+          DetachCastSurface();
+        return product_host_->HandleBrowserClose(browser);
+      });
   tab_controller_->SetBrowserFocusedCallback(
       [this](CefRefPtr<CefBrowser>) { SyncToolbarToActiveTab(); });
   tab_controller_->SetBrowserClosingCallback(
       [this](CefRefPtr<CefBrowser> browser) {
+        if (product_host_)
+          product_host_->NotifyBrowserClosed(browser->GetIdentifier());
         if (active_browser_id_ == browser->GetIdentifier()) {
           DetachCastSurface();
           active_browser_id_ = 0;
@@ -854,7 +866,30 @@ void BrowserApp::ContinueContentHostStartup() {
             }
             static_cast<void>(toolbar_->OnTabUiUpdate(
                 browser_id, url, is_loading, can_go_back, can_go_forward));
-            static_cast<void>(toolbar_->SyncTabs(tab_controller_->model()));
+            if (browser_id == 0) {
+              SyncToolbarToActiveTab();
+            } else {
+              static_cast<void>(toolbar_->SyncTabs(tab_controller_->model()));
+              if (product_host_) product_host_->RefreshTabChrome();
+            }
+            // PLT-SHELL-24M2FIX-D: capture the view tree at every navigation
+            // state change, which is when "which tab is actually on screen"
+            // stops matching "which tab just loaded".
+            if (product_host_) {
+              product_host_->DumpDiagnostics("tab-ui-update");
+            }
+          });
+      // PLT-SHELL-24M2FIX-B: the macOS shell has no built-in-content observer
+      // for load errors, so register the platform-neutral TabController
+      // projection; otherwise a failed navigation leaves the toolbar in its
+      // loading presentation with a blank page and no explanation.
+      tab_controller_->SetTabLoadErrorCallback(
+          [this](int browser_id, std::string url, bool certificate_error) {
+            if (!toolbar_) {
+              return;
+            }
+            static_cast<void>(toolbar_->OnTabLoadError(
+                browser_id, url, certificate_error));
           });
     }
     // AGT-12Cc2r: start the CAAP agent host (UDS endpoint) once both
@@ -867,14 +902,22 @@ void BrowserApp::ContinueContentHostStartup() {
           macos::AlloyProductHostMac::Dependencies{
               tab_controller_->client(), kInitialUrl,
               product_strings_.new_tab.document_title,
-              toolbar_->tab_strip_view(), toolbar_->toolbar_view()},
+              toolbar_->tab_strip_view(), toolbar_->toolbar_view(),
+              // PLT-SHELL-24M2FIX-C4: the assembly owns the chrome views, so
+              // it is the only place that can answer where the tab corners,
+              // tab loading indicator and omnibox pill are. The host decides
+              // when to ask (window creation, every layout pass).
+              [this] {
+                return toolbar_ ? toolbar_->decoration()
+                                : window::ChromeDecoration{};
+              }},
           macos::AlloyProductHostMac::Callbacks{
               // window_destroyed: the window is gone, but any browser that
               // has not delivered OnBeforeClose yet must still be closed
               // through the quit funnel — a direct CefQuitMessageLoop here
               // exits the loop with live CEF objects behind.
               [this] { RequestProductQuit(true); },
-              [this] { BindCastForActiveTab(); },
+              [this] { SyncToolbarToActiveTab(); },
               [this] { DetachCastSurface(); },
               [this] {
                 if (cast_surface_) cast_surface_->LayoutChanged();
@@ -974,11 +1017,19 @@ void BrowserApp::SyncToolbarToActiveTab() {
     const window::TabSnapshot* tab =
         tab_controller_->model().FindByBrowser(browser->GetIdentifier());
     if (tab) {
+      // Browsing remains usable even while the media host is unavailable.
+      if (product_host_) product_host_->ShowBrowser(browser->GetIdentifier());
       static_cast<void>(toolbar_->AttachBrowser(tab->id, browser));
     }
   }
   static_cast<void>(toolbar_->SyncTabs(tab_controller_->model()));
+  if (product_host_) product_host_->RefreshTabChrome();
   BindCastForActiveTab();
+  // PLT-SHELL-24M2FIX-D: the product, not a look-alike probe, reports the
+  // view tree at the moment the toolbar is bound to the active tab.
+  if (product_host_) {
+    product_host_->DumpDiagnostics("sync-toolbar");
+  }
 }
 
 void BrowserApp::DetachCastSurface() {
@@ -1043,7 +1094,6 @@ void BrowserApp::BindCastForActiveTab() {
   DetachCastSurface();
   cast_binding_attempt_ = context;
   active_browser_id_ = browser->GetIdentifier();
-  product_host_->ShowBrowser(active_browser_id_);
   // PLT-SHELL-24M2UIP-a: the entry surface is attached at assembly time and
   // persists here; only the context binds once media data is available.
   TryAttachCastEntry();

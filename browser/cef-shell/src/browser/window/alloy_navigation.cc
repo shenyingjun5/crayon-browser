@@ -4,6 +4,7 @@
 #include <map>
 #include <utility>
 
+#include "browser/window/alloy_chrome_decoration.h"
 #include "browser/window/alloy_icon.h"
 #include "crayon/browser_navigation/navigation_controller.h"
 #include "include/cef_parser.h"
@@ -15,7 +16,7 @@
 namespace crayon::browser::cef_shell::window {
 namespace {
 
-constexpr int kBarHeight = 48;
+constexpr int kBarHeight = kNavigationBarHeightDip;
 constexpr int kButtonWidth = 36;
 constexpr int kIdentityWidth = 36;
 constexpr int kChildSpacing = 2;

@@ -8,6 +8,8 @@
 
 ## 1. 当前结论
 
+- **2026-09-23 产品基础修复**：按用户实机反馈，顶部圆角标签同行、点击切页与后台关闭优先于新增能力；`PLT-SHELL-24M2FIX-TAB` 当前 VERIFIED，详见 [外壳 Roadmap §103](plans/desktop-shell-roadmap.md#103-plt-shell-24m2fix-tab-顶部标签与页面切换2026-09-23)。已有 BUX 完成记录仅代表当时层级；默认 Alloy 产品尚缺的 Chrome 基础体验与未覆盖操作仍按该节登记，不视作全部完成。
+
 - **2026-09-18 用户决策（二期/三期重排）**：第二期收窄为“第三方 Agent 接入与周边能力”——S1/A1/A2、W1/W2、H0/H1、X1、`MRT-10..19` 与 `PRV-13B` 的非 model 子项保持第二期；原第二期的内置模型 AI（`CNT-11..16`，M2）与 HarmonyOS（VH）移入新设第三期，第三期同时纳入跨平台/外部宿主接入探索与个人 Skill 市场。路线借鉴输入为 [Agent 原生浏览器借鉴方案](reference/蜡笔AI浏览器_ego-lite与BrowserSkill借鉴完整方案.md)（已入库 `docs/reference/`）：ego lite 的 Agent Space/TaskSpace 编程模型与站点学习沉淀、Tencent BrowserSkill 的会话隔离/CLI/daemon 工程实现；两个项目仅作设计借鉴，不引入代码依赖，不改变仓库红线与依赖方向。
 - **2026-09-04 最新决策**：长期采用自定义 Shell＋CEF Alloy，一期即开始迁移。完整一期执行总图见 [REL §5](plans/release-v1-roadmap.md#5-一期完整执行总图2026-09-04-重排)，具体宿主切片见 [PLT-SHELL](plans/desktop-shell-roadmap.md)。当前 Mac 先推进共享/本地验证，Windows 首发政策不变。后文 Chrome-style/BUX 既有完成证据是历史基线，不代表新自定义外壳通过。
 - 已收口：`BRD-01..04`、Foundation、`MED-01..19`、`BUX-01..18`、`SDK-01..14`、`RNM-01..08`；CEF 为 `CEF-01..05/15 DONE`、`CEF-06..14 VERIFIED`，`ACT-01..12` 已完成契约/模型层总 Review，`MRT-01..08 DONE`。

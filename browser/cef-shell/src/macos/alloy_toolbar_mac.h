@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 
+#include "browser/window/alloy_chrome_decoration.h"
 #include "browser/window/alloy_navigation.h"
 #include "browser/window/alloy_omnibox.h"
 #include "browser/window/alloy_tab_strip.h"
@@ -37,6 +38,10 @@ class AlloyToolbarMac final {
   CefRefPtr<CefView> tab_strip_view() const;
   CefRefPtr<CefView> toolbar_view() const;
   CefRefPtr<CefPanel> toolbar_panel() const { return toolbar_; }
+  /// The omnibox field itself. Consumers must ask for it by name: the pill is
+  /// wrapped in a holder panel, so the toolbar's child index no longer
+  /// identifies it.
+  CefRefPtr<CefView> omnibox_view() const;
 
   bool SyncTabs(const window::TabModel& model);
 
@@ -48,8 +53,24 @@ class AlloyToolbarMac final {
   bool OnTabUiUpdate(int browser_id, const std::string& url, bool is_loading,
                      bool can_go_back, bool can_go_forward);
 
+  /// PLT-SHELL-24M2FIX-B: projects a failed main-frame navigation for
+  /// |browser_id|. The address bar leaves its loading presentation and shows
+  /// the failed URL, and the site identity reports the failure, so a dead
+  /// navigation is no longer indistinguishable from an idle blank page.
+  /// / |certificate_error| selects the security-specific identity.
+  bool OnTabLoadError(int browser_id, const std::string& url,
+                      bool certificate_error);
+
   bool SetAddress(std::string address);
   bool FocusOmnibox();
+
+  /// PLT-SHELL-24M2FIX-C4: everything the native chrome decoration has to draw
+  /// that CEF Views cannot express — tab corners and loading indicator geometry
+  /// from the strip, plus the omnibox pill rect. The omnibox contributes here
+  /// because this class is the assembly that owns both rows; the tab strip
+  /// alone cannot see the navigation bar.
+  window::ChromeDecoration decoration() const;
+
   void Shutdown();
 
  private:
@@ -57,6 +78,10 @@ class AlloyToolbarMac final {
   std::unique_ptr<window::AlloyOmnibox> omnibox_;
   std::unique_ptr<window::AlloyNavigation> navigation_;
   CefRefPtr<CefPanel> toolbar_;
+  /// Pill container. The toolbar is one row tall and its children are stretched
+  /// to fill it, so without this padded holder the omnibox panel would be as
+  /// tall as the navigation bar and the pill would lose its shape.
+  CefRefPtr<CefPanel> omnibox_holder_;
   CefRefPtr<CefBrowser> bound_browser_;
 };
 

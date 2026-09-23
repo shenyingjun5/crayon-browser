@@ -15,6 +15,9 @@
 #include "include/views/cef_textfield_delegate.h"
 #include "include/wrapper/cef_helpers.h"
 
+#include "browser/window/alloy_chrome_decoration.h"
+#include "browser/window/alloy_chrome_palette.h"
+
 namespace crayon::browser::cef_shell::window {
 namespace {
 
@@ -25,7 +28,12 @@ using browser_omnibox::OmniboxState;
 using browser_omnibox::OmniboxSuggestion;
 using browser_omnibox::ParseOmniboxInput;
 
-constexpr int kOmniboxHeight = 40;
+// PLT-SHELL-24M2FIX-C4-a: the address field is a pill, so its height is
+// exactly twice the pill radius (tokens.json -> metrics.pillRadiusDip). The
+// reference Chrome build measures 34 DIP tall with a 17 DIP radius; the token
+// value is the single source here, and 2x18 keeps the end caps true
+// semicircles at the same fraction of the navigation bar (36 of 48 DIP).
+constexpr int kOmniboxHeight = 2 * kOmniboxPillRadiusDip;
 constexpr int kSuggestionHeight = 36;
 constexpr std::size_t kMaxSuggestionTitleBytes = 512;
 constexpr int kEnterKey = 13;
@@ -80,6 +88,10 @@ bool SafeSuggestion(const OmniboxSuggestion &suggestion) {
 
 class PanelDelegate final : public CefPanelDelegate {
 public:
+  // |pill| selects the address field fill: the field is a pill on the toolbar
+  // surface, while the suggestion strip is a separate surface above it.
+  explicit PanelDelegate(bool pill) : pill_(pill) {}
+
   CefSize GetPreferredSize(CefRefPtr<CefView>) override {
     return CefSize(320, kOmniboxHeight);
   }
@@ -87,10 +99,14 @@ public:
     return CefSize(160, kOmniboxHeight);
   }
   void OnThemeChanged(CefRefPtr<CefView> view) override {
-    view->SetBackgroundColor(view->GetThemeColor(CEF_ColorPrimaryBackground));
+    view->SetBackgroundColor(pill_
+                                 ? chrome_palette::kOmniboxBackground
+                                 : view->GetThemeColor(
+                                       CEF_ColorPrimaryBackground));
   }
 
 private:
+  const bool pill_;
   IMPLEMENT_REFCOUNTING(PanelDelegate);
 };
 
@@ -154,7 +170,7 @@ struct AlloyOmnibox::State final : std::enable_shared_from_this<State> {
         providers(std::move(provider_value)) {}
 
   void Initialize() {
-    panel = CefPanel::CreatePanel(new PanelDelegate);
+    panel = CefPanel::CreatePanel(new PanelDelegate(/*pill=*/true));
     CefBoxLayoutSettings column;
     panel->SetToBoxLayout(column);
     textfield =
@@ -163,7 +179,7 @@ struct AlloyOmnibox::State final : std::enable_shared_from_this<State> {
     textfield->SetPlaceholderText(strings.placeholder);
     textfield->SetAccessibleName(strings.accessible_name);
     panel->AddChildView(textfield);
-    suggestions_panel = CefPanel::CreatePanel(new PanelDelegate);
+    suggestions_panel = CefPanel::CreatePanel(new PanelDelegate(/*pill=*/false));
     CefBoxLayoutSettings suggestions_layout;
     suggestions_panel->SetToBoxLayout(suggestions_layout);
     suggestions_panel->SetVisible(false);
@@ -213,6 +229,8 @@ struct AlloyOmnibox::State final : std::enable_shared_from_this<State> {
     }
     accepted_text = std::move(text);
     model.OnEdit(accepted_text);
+    // A fresh edit supersedes any submission notice from the previous submit.
+    notice.clear();
     if (update_field) {
       SetFieldText(accepted_text);
       textfield->ClearSelection();
@@ -256,6 +274,7 @@ struct AlloyOmnibox::State final : std::enable_shared_from_this<State> {
   void RenderSuggestions() {
     suggestions_panel->RemoveAllChildViews();
     suggestion_bindings.clear();
+    notice.clear();
     const auto &suggestions = model.suggestions();
     suggestion_bindings.reserve(suggestions.size());
     for (std::size_t index = 0; index < suggestions.size(); ++index) {
@@ -270,6 +289,36 @@ struct AlloyOmnibox::State final : std::enable_shared_from_this<State> {
     }
     suggestions_panel->SetVisible(!suggestions.empty());
     RenderSelection();
+    panel->Layout();
+  }
+
+  // PLT-SHELL-24M2FIX-B: a submission that never reaches the network must not
+  // look like a dead UI. The notice reuses the suggestion strip so no new
+  // chrome surface is needed, and it registers no suggestion binding, so the
+  // shared press handler can never act on it.
+  void RenderNotice(const std::string &text) {
+    CEF_REQUIRE_UI_THREAD();
+    notice = text;
+    if (!suggestions_panel || !panel) {
+      return;
+    }
+    suggestions_panel->RemoveAllChildViews();
+    suggestion_bindings.clear();
+    if (text.empty()) {
+      suggestions_panel->SetVisible(false);
+      panel->Layout();
+      return;
+    }
+    auto notice_button = CefLabelButton::CreateLabelButton(
+        new SuggestionDelegate(weak_from_this()), text);
+    // Informational, not actionable: disabled so it cannot read as a choice,
+    // and unfocusable so Tab cannot land on it.
+    notice_button->SetEnabled(false);
+    notice_button->SetFocusable(false);
+    notice_button->SetMinimumSize(CefSize(160, kSuggestionHeight));
+    notice_button->SetAccessibleName(text);
+    suggestions_panel->AddChildView(notice_button);
+    suggestions_panel->SetVisible(true);
     panel->Layout();
   }
 
@@ -341,11 +390,13 @@ struct AlloyOmnibox::State final : std::enable_shared_from_this<State> {
       case OmniboxParseResult::kDangerous:
         submission.kind = OmniboxSubmissionKind::kBlocked;
         model.OnNavigationFailed();
+        RenderNotice(strings.blocked_notice);
         break;
       case OmniboxParseResult::kValidUrl:
         if (HasCredentials(value)) {
           submission.kind = OmniboxSubmissionKind::kBlocked;
           model.OnNavigationFailed();
+          RenderNotice(strings.blocked_notice);
         } else {
           submission.kind = OmniboxSubmissionKind::kNavigateUrl;
           submission.value =
@@ -362,6 +413,7 @@ struct AlloyOmnibox::State final : std::enable_shared_from_this<State> {
         } else {
           submission.kind = OmniboxSubmissionKind::kNoSearchProvider;
           model.OnNavigationFailed();
+          RenderNotice(strings.no_search_provider_notice);
         }
         break;
       }
@@ -424,6 +476,13 @@ struct AlloyOmnibox::State final : std::enable_shared_from_this<State> {
     committed_display = std::move(*safe);
     accepted_text = committed_display;
     SetFieldText(committed_display);
+    if (!succeeded) {
+      // PLT-SHELL-24M2FIX-B: the shell owns no error page, so a failed load is
+      // otherwise indistinguishable from an idle blank page. Rendered after the
+      // field text so nothing later clears it. A successful navigation needs no
+      // teardown here: Edit()/Submit() already superseded any earlier notice.
+      RenderNotice(strings.load_failed_notice);
+    }
     return true;
   }
 
@@ -479,6 +538,8 @@ struct AlloyOmnibox::State final : std::enable_shared_from_this<State> {
   CefRefPtr<CefPanel> suggestions_panel;
   std::vector<SuggestionBinding> suggestion_bindings;
   std::string accepted_text;
+  // PLT-SHELL-24M2FIX-B: text of the submission notice currently on screen.
+  std::string notice;
   std::string committed_display;
   std::uint64_t generation = 0;
   std::uint64_t pending_generation = 0;
@@ -530,6 +591,13 @@ bool AlloyOmnibox::SetAddress(std::string address) {
 bool AlloyOmnibox::OnNavigationFinished(bool succeeded, std::string address) {
   return state_ && state_->NavigationFinished(succeeded, std::move(address));
 }
+bool AlloyOmnibox::ShowLoadFailureNotice() {
+  if (!state_) {
+    return false;
+  }
+  state_->RenderNotice(state_->strings.load_failed_notice);
+  return !state_->strings.load_failed_notice.empty();
+}
 bool AlloyOmnibox::Shutdown() { return !state_ || state_->Shutdown(); }
 bool AlloyOmnibox::active() const noexcept { return state_ && state_->active; }
 std::uint64_t AlloyOmnibox::edit_generation() const noexcept {
@@ -549,6 +617,10 @@ OmniboxState AlloyOmnibox::state() const noexcept {
 std::string AlloyOmnibox::displayed_text() const {
   return state_ && state_->textfield ? state_->textfield->GetText().ToString()
                                      : std::string{};
+}
+
+std::string AlloyOmnibox::notice_text() const {
+  return state_ ? state_->notice : std::string{};
 }
 
 std::optional<std::string> AlloyOmnibox::SafeDisplayText(std::string address) {

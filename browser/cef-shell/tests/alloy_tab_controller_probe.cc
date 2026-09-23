@@ -378,6 +378,10 @@ private:
       std::cout << "alloy_tab_controller_windows timeout_stage=" << stage_
                 << " clicked=" << clicked_
                 << " can_close_calls=" << can_close_calls_
+                << " loaded0=" << loaded_[0] << " input_ready=" << input_ready_
+                << " late_create_closed=" << result_->late_create_closed
+                << " window_visible=" << (window_ && window_->IsVisible())
+                << " window_active=" << (window_ && window_->IsActive())
                 << " first_browser=" << static_cast<bool>(browsers_[0])
                 << std::endl;
       Finish(false, "timeout");

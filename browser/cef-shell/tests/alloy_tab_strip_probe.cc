@@ -106,12 +106,14 @@ public:
     result_->window_closed = true;
     result_->behavior_passed = passed_ && result_->real_clicks_passed &&
                                result_->capacity_passed &&
-                               result_->layout_passed && result_->icons_passed;
+                               result_->layout_passed && result_->icons_passed &&
+                               result_->decoration_passed;
     std::cout << "alloy_tab_strip_windows passed=" << result_->behavior_passed
               << " real_clicks=" << result_->real_clicks_passed
               << " capacity=" << result_->capacity_passed
               << " layout=" << result_->layout_passed
-              << " icons=" << result_->icons_passed << std::endl;
+              << " icons=" << result_->icons_passed
+              << " decoration=" << result_->decoration_passed << std::endl;
     mounted_panel_ = nullptr;
     window_ = nullptr;
     strip_.reset();
@@ -138,8 +140,15 @@ private:
     last_activated_ = tab_id;
     if (!model_.Activate(tab_id)) {
       callback_failed_ = true;
+      return;
     }
-    PostSync();
+    if (!strip_ || !strip_->Sync(model_)) {
+      callback_failed_ = true;
+      return;
+    }
+    if (window_) {
+      window_->Layout();
+    }
   }
 
   void OnCloseTab(TabId tab_id) {
@@ -222,6 +231,113 @@ private:
     return true;
   }
 
+  // PLT-SHELL-24M2FIX-C4: the native decoration draws tab corners, the tab
+  // loading indicator and the omnibox pill from AlloyTabStrip::decoration().
+  // That projection is the strip's own account of the views it mounted, so it
+  // is asserted here against those views; a mismatch is a drawing bug with no
+  // way to show up as a compile or layout error.
+  bool CheckDecoration() {
+    CEF_REQUIRE_UI_THREAD();
+    if (!strip_ || !mounted_panel_) {
+      return false;
+    }
+    const auto order = model_.ordered_tabs();
+    auto decoration = strip_->decoration();
+    if (decoration.size() != order.size()) {
+      return false;
+    }
+    std::size_t loading_count = 0;
+    for (std::size_t index = 0; index < order.size(); ++index) {
+      const auto row = mounted_panel_->GetChildViewAt(index);
+      const auto slot =
+          row && row->AsPanel() && row->AsPanel()->GetChildViewCount() > 0
+              ? row->AsPanel()->GetChildViewAt(0)
+              : nullptr;
+      CefPoint row_origin;
+      CefPoint slot_origin;
+      if (!row || !slot || !row->ConvertPointToWindow(row_origin) ||
+          !slot->ConvertPointToWindow(slot_origin)) {
+        return false;
+      }
+      const auto row_bounds = row->GetBounds();
+      const auto slot_bounds = slot->GetBounds();
+      const auto *snapshot = model_.Find(order[index]);
+      if (!snapshot) {
+        return false;
+      }
+      const auto &tab = decoration[index];
+      if (tab.bounds.x != row_origin.x || tab.bounds.y != row_origin.y ||
+          tab.bounds.width != row_bounds.width ||
+          tab.bounds.height != row_bounds.height ||
+          row_bounds.width < 96 || row_bounds.width > 240 ||
+          tab.indicator.x != slot_origin.x ||
+          tab.indicator.y != slot_origin.y ||
+          tab.indicator.width != slot_bounds.width ||
+          tab.indicator.height != slot_bounds.height ||
+          // This harness mounts the strip panel alone with flex, so the rows
+          // stretch to the panel height; the fixed 40 DIP band is asserted by
+          // the product-assembly probe instead. What holds here is the slot's
+          // reserved width and that it spans its row.
+          slot_bounds.width !=
+              crayon::browser::cef_shell::window::kTabIndicatorSlotWidthDip ||
+          slot_bounds.height != row_bounds.height ||
+          tab.active != (order[index] == model_.active_tab()) ||
+          tab.loading != snapshot->loading) {
+        std::cout << "alloy_tab_strip_windows decoration_mismatch index=" << index
+                  << " tab=" << tab.bounds.x << "," << tab.bounds.y << ","
+                  << tab.bounds.width << "x" << tab.bounds.height << " row="
+                  << row_origin.x << "," << row_origin.y << ","
+                  << row_bounds.width << "x" << row_bounds.height
+                  << " tab_slot=" << tab.indicator.x << ","
+                  << tab.indicator.y << "," << tab.indicator.width << "x"
+                  << tab.indicator.height << " slot=" << slot_origin.x << ","
+                  << slot_origin.y << "," << slot_bounds.width << "x"
+                  << slot_bounds.height << " active=" << tab.active << "/"
+                  << (order[index] == model_.active_tab())
+                  << " loading=" << tab.loading << "/" << snapshot->loading
+                  << std::endl;
+        return false;
+      }
+      if (tab.loading) {
+        ++loading_count;
+      }
+    }
+    std::cout << "alloy_tab_strip_windows decoration tabs=" << decoration.size()
+              << " row=" << decoration.front().bounds.width << "x"
+              << decoration.front().bounds.height << " slot="
+              << decoration.front().indicator.width << "x"
+              << decoration.front().indicator.height
+              << " loading=" << loading_count << std::endl;
+    // Loading is a live flag, not a construction-time constant: flip the second
+    // tab into loading and require the projection to follow, then clear it. A
+    // spinner that never starts is exactly what a stale flag would look like.
+    if (order.size() < 2) {
+      return false;
+    }
+    const auto *second = model_.Find(order[1]);
+    if (!second) {
+      return false;
+    }
+    const int second_browser = second->browser_id;
+    if (!model_.UpdateLoading(second_browser, true, false, false) ||
+        !strip_->Sync(model_)) {
+      return false;
+    }
+    decoration = strip_->decoration();
+    if (decoration.size() != order.size() || !decoration[1].loading ||
+        decoration[0].loading) {
+      return false;
+    }
+    std::cout << "alloy_tab_strip_windows decoration_loading index=1 loading="
+              << decoration[1].loading << " slot=" << decoration[1].indicator.x
+              << "," << decoration[1].indicator.y << ","
+              << decoration[1].indicator.width << "x"
+              << decoration[1].indicator.height << std::endl;
+    // Leave the model as the probe found it.
+    return model_.UpdateLoading(second_browser, false, false, false) &&
+           strip_->Sync(model_) && !strip_->decoration()[1].loading;
+  }
+
   void ScheduleCheck() {
     CefPostDelayedTask(TID_UI,
                        base::BindOnce(&AlloyTabStripProbe::Check,
@@ -292,16 +408,13 @@ private:
       }
       result_->icons_passed =
           active && active->IsEnabled() && close && add &&
-          close->GetText().empty() && add->GetText().empty() &&
-          close->GetImage(CEF_BUTTON_STATE_NORMAL) &&
-          !close->GetImage(CEF_BUTTON_STATE_NORMAL)->IsEmpty() &&
-          close->GetImage(CEF_BUTTON_STATE_NORMAL)->HasRepresentation(1.0F) &&
-          close->GetImage(CEF_BUTTON_STATE_NORMAL)->HasRepresentation(2.0F) &&
+          close->GetText().ToString() == "×" && add->GetText().empty() &&
+          !close->GetImage(CEF_BUTTON_STATE_NORMAL) &&
           add->GetImage(CEF_BUTTON_STATE_NORMAL) &&
           !add->GetImage(CEF_BUTTON_STATE_NORMAL)->IsEmpty() &&
           close->IsFocusable() && add->IsFocusable();
       if (!result_->icons_passed) {
-        Finish(false, "icon-contract");
+        Finish(false, "close-button-contract");
         return;
       }
       window_->SetSize(CefSize(320, 140));
@@ -312,8 +425,12 @@ private:
       const CefRect wide = mounted_panel_->GetBoundsInScreen();
       result_->layout_passed = narrow.width > 0 && narrow.height > 0 &&
                                wide.width > narrow.width && wide.height > 0;
-      if (!result_->layout_passed ||
-          !Click(AlloyTabStrip::kActivateCommandBase + 1)) {
+      result_->decoration_passed = CheckDecoration();
+      if (!result_->layout_passed || !result_->decoration_passed) {
+        Finish(false, "layout-or-chrome-decoration");
+        return;
+      }
+      if (!Click(AlloyTabStrip::kActivateCommandBase + 1)) {
         Finish(false, "layout-or-activate-click");
         return;
       }

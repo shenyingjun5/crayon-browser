@@ -35,6 +35,17 @@ public:
   struct Strings final {
     std::string placeholder;
     std::string accessible_name;
+    /// PLT-SHELL-24M2FIX-B: shown when a search-query submission has no
+    /// configured provider (the product ships none by design), so the input
+    /// can reach no remote service.
+    std::string no_search_provider_notice;
+    /// Shown when a submission is blocked before it can reach the network.
+    std::string blocked_notice;
+    /// Shown when a main-frame navigation finished unsuccessfully: the shell
+    /// has no error page of its own, so without this the address bar keeps the
+    /// failed URL and the page area stays blank with no explanation.
+    /// Platforms that leave it empty keep the previous silent behaviour.
+    std::string load_failed_notice;
   };
 
   struct Callbacks final {
@@ -66,6 +77,11 @@ public:
   bool Cancel();
   bool SetAddress(std::string address);
   bool OnNavigationFinished(bool succeeded, std::string address);
+  /// PLT-SHELL-24M2FIX-B: renders the load-failure notice regardless of the
+  /// model state, for loads the user did not submit from the field (link,
+  /// redirect, reload). Required because OnNavigationFinished only reports a
+  /// failure it was itself waiting on. Returns true when a notice is visible.
+  bool ShowLoadFailureNotice();
   bool Shutdown();
 
   bool active() const noexcept;
@@ -74,6 +90,8 @@ public:
   browser_omnibox::SuggestionIndex selected_suggestion() const noexcept;
   browser_omnibox::OmniboxState state() const noexcept;
   std::string displayed_text() const;
+  /// PLT-SHELL-24M2FIX-B: the submission notice currently shown, or empty.
+  std::string notice_text() const;
 
   static std::optional<std::string> SafeDisplayText(std::string address);
 

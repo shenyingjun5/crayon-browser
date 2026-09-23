@@ -101,6 +101,9 @@
 "omnibox.submit" = "送出";
 "omnibox.cancel" = "取消";
 "omnibox.navigate" = "前往";
+"omnibox.notice.no_search_provider" = "未設定搜尋引擎，無法搜尋";
+"omnibox.notice.blocked" = "基於安全考量，已封鎖此位址";
+"omnibox.notice.load_failed" = "無法載入此網頁";
 "new_tab.title" = "蠟筆瀏覽器";
 "new_tab.regular_heading" = "從一張乾淨的畫布開始";
 "new_tab.incognito_heading" = "無痕瀏覽";

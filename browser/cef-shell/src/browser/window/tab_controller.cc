@@ -24,6 +24,15 @@ double ZoomLevelForFactor(double factor) {
   return std::log(factor) / std::log(kZoomStepFactor);
 }
 
+// Certificate/SSL failures the shell must present as a security problem
+// rather than a plain network error: -107 is the invalid-certificate-chain
+// case and -200..-299 is Chromium's certificate error block. Mirrors the
+// classification the Windows shell has always applied.
+bool IsCertificateOrSslError(cef_errorcode_t error) {
+  const int value = static_cast<int>(error);
+  return value == -107 || (value <= -200 && value >= -299);
+}
+
 }  // namespace
 
 namespace {
@@ -117,8 +126,7 @@ bool WindowClient::OnBeforePopup(CefRefPtr<CefBrowser> browser,
 
 bool WindowClient::DoClose(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
-  static_cast<void>(browser);
-  return false;
+  return controller_->OnBrowserCloseRequested(browser);
 }
 
 void WindowClient::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
@@ -169,6 +177,15 @@ void WindowClient::OnLoadingStateChange(CefRefPtr<CefBrowser> browser,
   if (!isLoading) {
     media_observation_bridge_.BindCurrentMainFrame(browser);
   }
+}
+
+void WindowClient::OnLoadError(CefRefPtr<CefBrowser> browser,
+                               CefRefPtr<CefFrame> frame, ErrorCode error_code,
+                               const CefString& error_text,
+                               const CefString& failed_url) {
+  CEF_REQUIRE_UI_THREAD();
+  static_cast<void>(error_text);
+  controller_->OnLoadErrorUpdated(browser, frame, error_code, failed_url);
 }
 
 void WindowClient::OnRenderProcessTerminated(CefRefPtr<CefBrowser> browser,
@@ -457,6 +474,11 @@ void TabController::SetTabUiUpdateCallback(TabUiUpdateCallback callback) {
   tab_ui_update_callback_ = std::move(callback);
 }
 
+void TabController::SetTabLoadErrorCallback(TabLoadErrorCallback callback) {
+  CEF_REQUIRE_UI_THREAD();
+  tab_load_error_callback_ = std::move(callback);
+}
+
 bool TabController::ActivateTab(TabId tab_id) {
   CEF_REQUIRE_UI_THREAD();
   if (!model_.Activate(tab_id)) {
@@ -472,7 +494,7 @@ bool TabController::ActivateTab(TabId tab_id) {
 
 bool TabController::RequestCloseTab(TabId tab_id) {
   CEF_REQUIRE_UI_THREAD();
-  const TabSnapshot* tab = model_.Find(tab_id);
+  const TabSnapshot *tab = model_.Find(tab_id);
   if (!tab || tab->lifecycle == TabLifecycle::kClosing) {
     return false;
   }
@@ -480,8 +502,11 @@ bool TabController::RequestCloseTab(TabId tab_id) {
   if (found == browsers_.end()) {
     return false;
   }
-  model_.RequestClose(tab_id);
-  found->second->GetHost()->TryCloseBrowser();
+  // For a Views host, CEF's DoClose confirms beforeunload acceptance. Until
+  // then keep the tab usable if the user cancels the native prompt.
+  if (!browser_close_requested_callback_)
+    model_.RequestClose(tab_id);
+  found->second->GetHost()->CloseBrowser(false);
   return true;
 }
 
@@ -506,6 +531,24 @@ void TabController::NotifyTabUiUpdate(int browser_id) {
 void TabController::SetBrowserFocusedCallback(BrowserFocusedCallback callback) {
   CEF_REQUIRE_UI_THREAD();
   browser_focused_callback_ = std::move(callback);
+}
+
+void TabController::SetBrowserCloseRequestedCallback(
+    BrowserCloseRequestedCallback callback) {
+  CEF_REQUIRE_UI_THREAD();
+  browser_close_requested_callback_ = std::move(callback);
+}
+
+bool TabController::OnBrowserCloseRequested(CefRefPtr<CefBrowser> browser) {
+  CEF_REQUIRE_UI_THREAD();
+  if (!browser || !browser_close_requested_callback_ ||
+      !browser_close_requested_callback_(browser))
+    return false;
+  host_close_requests_.insert(browser->GetIdentifier());
+  const auto *tab = model_.FindByBrowser(browser->GetIdentifier());
+  if (tab)
+    model_.RequestClose(tab->id);
+  return true;
 }
 
 void TabController::SetBrowserClosingCallback(BrowserClosingCallback callback) {
@@ -746,11 +789,9 @@ void TabController::CloseActiveTab() {
   if (!browser) {
     return;
   }
-  const TabSnapshot* tab = model_.FindByBrowser(browser->GetIdentifier());
-  if (tab) {
-    model_.RequestClose(tab->id);
-  }
-  browser->GetHost()->TryCloseBrowser();
+  const TabSnapshot *tab = model_.FindByBrowser(browser->GetIdentifier());
+  if (tab)
+    static_cast<void>(RequestCloseTab(tab->id));
 }
 
 void TabController::GoBack() {
@@ -920,6 +961,7 @@ void TabController::OnBrowserClosing(CefRefPtr<CefBrowser> browser) {
   if (browser_closing_callback_) {
     browser_closing_callback_(browser);
   }
+  const bool host_consumed_close = host_close_requests_.erase(browser_id) != 0;
   model_.DetachBrowser(browser_id);
   browsers_.erase(browser_id);
   NotifyTabUiUpdate(0);
@@ -927,7 +969,10 @@ void TabController::OnBrowserClosing(CefRefPtr<CefBrowser> browser) {
     if (browsers_closed_callback_) {
       browsers_closed_callback_();
     }
-    CefQuitMessageLoop();
+    // A Views host that consumes DoClose owns the final window teardown.
+    // Keep the loop alive until its destruction callback releases shell UI.
+    if (!host_consumed_close)
+      CefQuitMessageLoop();
   }
 }
 
@@ -986,6 +1031,27 @@ void TabController::OnLoadingUpdated(CefRefPtr<CefBrowser> browser,
     }
   }
   NotifyTabUiUpdate(browser_id);
+}
+
+void TabController::OnLoadErrorUpdated(CefRefPtr<CefBrowser> browser,
+                                       CefRefPtr<CefFrame> frame,
+                                       cef_errorcode_t error_code,
+                                       const CefString& failed_url) {
+  CEF_REQUIRE_UI_THREAD();
+  // Sub-frame failures are routine (ads, trackers) and must not surface as a
+  // navigation failure for the tab.
+  if (!browser || !frame || !frame->IsMain() || !tab_load_error_callback_) {
+    return;
+  }
+  // A load the user aborted, or one a newer navigation replaced, is not a
+  // failure to explain: CEF reports ERR_ABORTED for both, and surfacing it
+  // would tell the user a page failed to load when the load was simply
+  // superseded.
+  if (error_code == ERR_ABORTED) {
+    return;
+  }
+  tab_load_error_callback_(browser->GetIdentifier(), failed_url.ToString(),
+                           IsCertificateOrSslError(error_code));
 }
 
 void TabController::OnRenderProcessGone(CefRefPtr<CefBrowser> browser) {

@@ -14,7 +14,7 @@ struct LocaleCatalogEntry {
   std::string_view zh_tw;
 };
 
-inline constexpr std::array<LocaleCatalogEntry, 255> kLocaleCatalogEntries{{
+inline constexpr std::array<LocaleCatalogEntry, 258> kLocaleCatalogEntries{{
     {"cast.selection.unavailable", "Casting is not ready in this window", "此窗口的投屏入口尚未就绪", "此視窗的投屏入口尚未就緒"},
     {"cast.selection.expired", "Selection expired. Prepare again.", "选择已过期，请重新准备", "選擇已過期，請重新準備"},
     {"cast.selection.connecting", "Connecting to device…", "正在连接设备…", "正在連線裝置…"},
@@ -118,6 +118,9 @@ inline constexpr std::array<LocaleCatalogEntry, 255> kLocaleCatalogEntries{{
     {"omnibox.submit", "Submit", "提交", "送出"},
     {"omnibox.cancel", "Cancel", "取消", "取消"},
     {"omnibox.navigate", "Navigate", "导航", "前往"},
+    {"omnibox.notice.no_search_provider", "No search engine is configured, so this cannot be searched", "未配置搜索引擎，无法搜索", "未設定搜尋引擎，無法搜尋"},
+    {"omnibox.notice.blocked", "This address is blocked for security reasons", "出于安全考虑，已阻止该地址", "基於安全考量，已封鎖此位址"},
+    {"omnibox.notice.load_failed", "This page could not be loaded", "无法载入此网页", "無法載入此網頁"},
     {"new_tab.title", "Crayon Browser", "蜡笔浏览器", "蠟筆瀏覽器"},
     {"new_tab.regular_heading", "Begin with a clean canvas", "从一张干净的画布开始", "從一張乾淨的畫布開始"},
     {"new_tab.incognito_heading", "Private browsing", "无痕浏览", "無痕瀏覽"},
