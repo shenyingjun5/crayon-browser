@@ -4,7 +4,10 @@
 #include <utility>
 
 #include "browser/window/alloy_chrome_palette.h"
+#include "browser/window/alloy_icon.h"
+#include "include/views/cef_menu_button.h"
 #include "browser/window/alloy_search_engines.h"
+#include "macos/application_menu_mac.h"
 #include "crayon/browser_localization/locale_catalog.h"
 #include "crayon/browser_privacy/privacy_defaults.h"
 #include "include/views/cef_box_layout.h"
@@ -20,10 +23,97 @@ std::string Localized(::crayon::browser::localization::AppLocale locale,
   return value ? std::string(*value) : std::string{};
 }
 
+// PLT-SHELL-24M2FIX-C7: the toolbar's trailing menu. It forwards the chosen
+// command id straight to the app, which maps it onto the same
+// ApplicationCommand handler the macOS application menu uses - the menu is a
+// second entry point to one command set, never a second implementation.
+class ToolbarMenuDelegate final : public CefMenuModelDelegate {
+ public:
+  explicit ToolbarMenuDelegate(std::function<void(int)> command)
+      : command_(std::move(command)) {}
+
+  void ExecuteCommand(CefRefPtr<CefMenuModel> /*model*/,
+                      int command_id,
+                      cef_event_flags_t /*event_flags*/) override {
+    if (command_) command_(command_id);
+  }
+
+ private:
+  std::function<void(int)> command_;
+  IMPLEMENT_REFCOUNTING(ToolbarMenuDelegate);
+};
+
+// Menu items, in order. Only commands the shell actually implements are listed:
+// an entry that opens nothing would be worse than its absence. The settings
+// page does not exist yet (no crayon:// settings surface), so "Preferences" is
+// deliberately absent and registered as the remaining part of this slice.
+constexpr int kToolbarMenuCommandIds[] = {
+    static_cast<int>(ApplicationCommand::kNewTab),
+    static_cast<int>(ApplicationCommand::kCloseTab),
+    static_cast<int>(ApplicationCommand::kReload),
+    static_cast<int>(ApplicationCommand::kBack),
+    static_cast<int>(ApplicationCommand::kForward)};
+
+constexpr const char* kToolbarMenuLabelKeys[] = {
+    "tabs.new", "tabs.close", "nav.reload", "nav.back", "nav.forward"};
+
+constexpr int kToolbarMenuButtonWidth = 36;
+// Command id of the trailing menu button itself (not of a menu item).
+constexpr int kTrailingMenuCommandId = 0x7b40;
+
+class ToolbarMenuButtonDelegate final : public CefMenuButtonDelegate {
+ public:
+  ToolbarMenuButtonDelegate(std::function<void(int)> command,
+                            std::function<std::string(const char*)> label)
+      : command_(std::move(command)), label_(std::move(label)) {}
+
+  // CefButtonDelegate declares OnButtonPressed pure; this control's action is
+  // the menu itself, so the plain press has nothing to do.
+  void OnButtonPressed(CefRefPtr<CefButton> button) override {
+    window::ReleaseAlloyIconFocus(button);
+  }
+
+  void OnMenuButtonPressed(
+      CefRefPtr<CefMenuButton> button,
+      const CefPoint& screen_point,
+      CefRefPtr<CefMenuButtonPressedLock> /*pressed_lock*/) override {
+    window::ReleaseAlloyIconFocus(button);
+    if (!button) {
+      return;
+    }
+    auto model =
+        CefMenuModel::CreateMenuModel(new ToolbarMenuDelegate(command_));
+    if (!model) {
+      return;
+    }
+    constexpr std::size_t kCount =
+        sizeof(kToolbarMenuCommandIds) / sizeof(kToolbarMenuCommandIds[0]);
+    for (std::size_t index = 0; index < kCount; ++index) {
+      model->AddItem(kToolbarMenuCommandIds[index],
+                     label_(kToolbarMenuLabelKeys[index]));
+    }
+    // Top-left anchor: the button sits at the trailing end of the toolbar, so
+    // the menu drops from its left edge and stays inside the window.
+    button->ShowMenu(model, screen_point, CEF_MENU_ANCHOR_TOPLEFT);
+  }
+
+  void OnThemeChanged(CefRefPtr<CefView> view) override {
+    view->SetBackgroundColor(window::chrome_palette::kToolbarBackground);
+  }
+
+ private:
+  std::function<void(int)> command_;
+  std::function<std::string(const char*)> label_;
+  IMPLEMENT_REFCOUNTING(ToolbarMenuButtonDelegate);
+};
+
 }  // namespace
 
 AlloyToolbarMac::AlloyToolbarMac(localization::LocaleSnapshot locale,
                                  Callbacks callbacks) {
+  // Kept for the trailing menu, which resolves its labels lazily.
+  locale_snapshot_ = locale;
+  menu_command_ = std::move(callbacks.menu_command);
   tab_strip_ = std::make_unique<window::AlloyTabStrip>(
       window::AlloyTabStrip::Strings{Localized(locale.locale, "tabs.new"),
                                      Localized(locale.locale, "tabs.close"),
@@ -228,6 +318,60 @@ bool AlloyToolbarMac::NavigateToAddress(std::string url) {
   return navigation_->Navigate(submission);
 }
 
+bool AlloyToolbarMac::EnsureTrailingMenuButton() {
+  CEF_REQUIRE_UI_THREAD();
+  if (!toolbar_) {
+    return false;
+  }
+  if (!menu_button_) {
+    // The delegate carries the locale and the callback by value, so it never
+    // dereferences this toolbar after teardown.
+    auto delegate = new ToolbarMenuButtonDelegate(
+        menu_command_, [snapshot = locale_snapshot_](const char* key) {
+          return Localized(snapshot.locale, key);
+        });
+    menu_button_ = CefMenuButton::CreateMenuButton(delegate, CefString());
+    menu_button_->SetID(kTrailingMenuCommandId);
+    menu_button_->SetFocusable(true);
+    menu_button_->SetMinimumSize(
+        CefSize(kToolbarMenuButtonWidth, window::kNavigationBarHeightDip));
+    menu_button_->SetMaximumSize(
+        CefSize(kToolbarMenuButtonWidth, window::kNavigationBarHeightDip));
+    menu_button_->SetBackgroundColor(window::chrome_palette::kToolbarBackground);
+    if (!window::ApplyAlloyIcon(menu_button_, window::AlloyIcon::kMenu,
+                                // Existing key ("菜单"): an empty label would
+                                // make ApplyAlloyIcon refuse and leave the
+                                // button unmounted.
+                                Localized(locale_snapshot_.locale,
+                                          "app.menu"))) {
+      menu_button_ = nullptr;
+      return false;
+    }
+    menu_command_ids_.assign(std::begin(kToolbarMenuCommandIds),
+                             std::end(kToolbarMenuCommandIds));
+    toolbar_->AddChildView(menu_button_);
+  }
+  // The cast surface attaches its entry to this same row and may re-attach it,
+  // so the menu button is re-appended whenever it is not already last. That is
+  // what keeps "menu trails the cast entry" true without the toolbar knowing
+  // when the cast surface runs.
+  const std::size_t count = toolbar_->GetChildViewCount();
+  if (count > 1 && !toolbar_->GetChildViewAt(count - 1)->IsSame(menu_button_)) {
+    toolbar_->RemoveChildView(menu_button_);
+    toolbar_->AddChildView(menu_button_);
+  }
+  toolbar_->Layout();
+  return true;
+}
+
+CefRefPtr<CefMenuButton> AlloyToolbarMac::menu_button() const {
+  return menu_button_;
+}
+
+std::vector<int> AlloyToolbarMac::menu_command_ids() const {
+  return menu_command_ids_;
+}
+
 bool AlloyToolbarMac::SetSearchEngine(window::SearchEngine engine) {  CEF_REQUIRE_UI_THREAD();
   if (!omnibox_) {
     return false;
@@ -267,6 +411,9 @@ void AlloyToolbarMac::Shutdown() {
   // underlying browser context in CEF's ImplManager. The window owns the
   // mounted views, so dropping our handles here cannot destroy live UI.
   bound_browser_ = nullptr;
+  menu_button_ = nullptr;
+  menu_model_ = nullptr;
+  menu_command_ = {};
   omnibox_holder_ = nullptr;
   toolbar_ = nullptr;
   if (omnibox_) {

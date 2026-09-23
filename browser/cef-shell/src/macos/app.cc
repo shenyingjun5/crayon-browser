@@ -860,7 +860,15 @@ void BrowserApp::ContinueContentHostStartup() {
               },
               // PLT-SHELL-24M2FIX-C6: the address bar's bookmark control only
               // reports the press; the store and the resulting state live here.
-              [this] { ToggleActiveBookmark(); }});
+              [this] { ToggleActiveBookmark(); },
+              // PLT-SHELL-24M2FIX-C7: the toolbar menu sends the same command
+              // ids the application menu does, so both entry points share one
+              // handler instead of growing a second command implementation.
+              [this](int command_id) {
+                static_cast<void>(
+                    ExecuteAppCommand(static_cast<macos::ApplicationCommand>(
+                        command_id)));
+              }});
       tab_controller_->SetTabUiUpdateCallback(
           [this](int browser_id, const std::string& url, bool is_loading,
                  bool can_go_back, bool can_go_forward) {
@@ -1029,6 +1037,9 @@ void BrowserApp::SyncToolbarToActiveTab() {
   // PLT-SHELL-24M2FIX-C6: the star follows the tab, not the click, so a tab
   // switch shows the new page's state without waiting for a toggle.
   static_cast<void>(RefreshBookmarkState());
+  // PLT-SHELL-24M2FIX-C7: idempotent, and re-appends the trailing menu button
+  // after whatever the cast surface mounts, so it always stays last.
+  static_cast<void>(toolbar_->EnsureTrailingMenuButton());
   if (product_host_) product_host_->RefreshTabChrome();
   BindCastForActiveTab();
   // PLT-SHELL-24M2FIX-D: the product, not a look-alike probe, reports the
@@ -1237,7 +1248,12 @@ void BrowserApp::TryAttachCastEntry() {
       });
   if (!cast_surface_->Attach(window, view, toolbar_->toolbar_panel())) {
     DetachCastSurface();
+    return;
   }
+  // PLT-SHELL-24M2FIX-C7: the cast entry was just appended to the toolbar row,
+  // so re-append the trailing menu button to keep it last (the user-facing
+  // order is: address bar, cast entry, menu).
+  static_cast<void>(toolbar_->EnsureTrailingMenuButton());
 }
 
 bool BrowserApp::ExecuteAppCommand(macos::ApplicationCommand command) {

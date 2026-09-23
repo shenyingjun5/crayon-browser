@@ -269,6 +269,10 @@ private:
       Fail("attach");
       return false;
     }
+    // PLT-SHELL-24M2FIX-C7: the app calls this right after a successful cast
+    // attach so the trailing menu stays last; the probe mirrors that call
+    // rather than relying on construction order.
+    static_cast<void>(toolbar_->EnsureTrailingMenuButton());
     surface_->BindContext(next);
     if (!controller_->BindContext(next)) {
       Fail("bind");
@@ -534,6 +538,48 @@ private:
         decoration.omnibox.height != ob.height) {
       Fail("geometry decoration omnibox rect");
       return false;
+    }
+    // PLT-SHELL-24M2FIX-C7: the trailing menu must exist and must come AFTER
+    // the cast entry, which the cast surface appends to this same row. The
+    // order is the user-visible requirement, so it is asserted on the real row
+    // rather than assumed from the order the buttons were created in.
+    const auto menu_button = toolbar_->menu_button();
+    if (!menu_button || !menu_button->IsEnabled() ||
+        !menu_button->GetImage(CEF_BUTTON_STATE_NORMAL)) {
+      Fail("trailing menu button missing");
+      return false;
+    }
+    {
+      int cast_index = -1;
+      int menu_index = -1;
+      for (std::size_t i = 0; i < toolbar_row->GetChildViewCount(); ++i) {
+        const auto child = toolbar_row->GetChildViewAt(i);
+        if (child->IsSame(menu_button)) {
+          menu_index = static_cast<int>(i);
+        } else if (child->GetID() == CastEntrySurface::kEntryId) {
+          cast_index = static_cast<int>(i);
+        }
+      }
+      const auto ids = toolbar_->menu_command_ids();
+      if (menu_index < 0 || menu_index !=
+                                static_cast<int>(toolbar_row->GetChildViewCount()) - 1) {
+        Fail("trailing menu is not last");
+        return false;
+      }
+      // Cast entry present => it must precede the menu; absent => nothing to
+      // order against. Both are accepted so the guard does not depend on media
+      // readiness.
+      if (cast_index >= 0 && cast_index > menu_index) {
+        Fail("menu precedes cast entry");
+        return false;
+      }
+      if (ids.size() != 5) {
+        Fail("trailing menu item count");
+        return false;
+      }
+      std::cout << "alloy_cast_toolbar_mac trailing_menu index=" << menu_index
+                << " cast=" << cast_index << " items=" << ids.size() << '\n';
+      std::cout.flush();
     }
     std::cout << "alloy_cast_toolbar_mac geometry content=" << vb.width << "x"
               << vb.height << " strip=0x" << std::hex

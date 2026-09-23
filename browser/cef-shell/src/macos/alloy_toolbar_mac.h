@@ -8,6 +8,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "browser/window/alloy_chrome_decoration.h"
 #include "browser/window/alloy_navigation.h"
@@ -17,6 +18,8 @@
 #include "browser/window/tab_model.h"
 #include "crayon/browser_localization/locale_snapshot.h"
 #include "include/cef_browser.h"
+#include "include/cef_menu_model.h"
+#include "include/views/cef_menu_button.h"
 #include "include/views/cef_panel.h"
 
 namespace crayon::browser::cef_shell::macos {
@@ -31,6 +34,10 @@ class AlloyToolbarMac final {
     /// PLT-SHELL-24M2FIX-C6: the address bar's bookmark control was pressed.
     /// The app owns the store, so it answers with SetBookmarked().
     std::function<void()> toggle_bookmark;
+    /// PLT-SHELL-24M2FIX-C7: a command was chosen in the toolbar's menu. The id
+    /// is the ApplicationCommand value, so the app routes it through the same
+    /// handler its application menu already uses.
+    std::function<void(int)> menu_command;
   };
 
   AlloyToolbarMac(localization::LocaleSnapshot locale, Callbacks callbacks);
@@ -52,6 +59,16 @@ class AlloyToolbarMac final {
   CefRefPtr<CefLabelButton> bookmark_button() const;
   /// Reflects the current page's bookmark state on that control.
   bool SetBookmarked(bool bookmarked);
+
+  /// PLT-SHELL-24M2FIX-C7: creates the trailing menu button if it does not
+  /// exist yet and moves it to the end of the row, so it always follows the
+  /// cast entry that the cast surface owns. Idempotent, and safe to call before
+  /// the cast entry exists (the button is then simply last).
+  bool EnsureTrailingMenuButton();
+  CefRefPtr<CefMenuButton> menu_button() const;
+  /// Command ids in the trailing menu, in order. Exposed as the menu's contract
+  /// so a probe can assert it without reaching into AppKit or popup state.
+  std::vector<int> menu_command_ids() const;
 
   bool SyncTabs(const window::TabModel& model);
 
@@ -105,6 +122,12 @@ class AlloyToolbarMac final {
   /// tall as the navigation bar and the pill would lose its shape.
   CefRefPtr<CefPanel> omnibox_holder_;
   CefRefPtr<CefBrowser> bound_browser_;
+  /// PLT-SHELL-24M2FIX-C7: the trailing application menu (⋮).
+  CefRefPtr<CefMenuButton> menu_button_;
+  CefRefPtr<CefMenuModel> menu_model_;
+  std::vector<int> menu_command_ids_;
+  localization::LocaleSnapshot locale_snapshot_;
+  std::function<void(int)> menu_command_;
   /// The engine non-URL submissions go to; see SetSearchEngine().
   window::SearchEngine search_engine_ = window::kDefaultSearchEngine;
 };
