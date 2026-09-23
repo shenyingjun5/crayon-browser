@@ -22,7 +22,8 @@
 #include "browser/new_tab/cef_new_tab_handler.h"
 #include "browser/permission/permission_store.h"
 #include "crayon/browser_localization/locale_catalog.h"
-#include "crayon/browser_preferences/preference_codec.h"
+#include "include/cef_color_ids.h"
+#include "browser/window/alloy_chrome_palette.h"
 #include <fstream>
 #include "include/base/cef_bind.h"
 #include "include/base/cef_callback.h"
@@ -167,6 +168,11 @@ struct AgentUiState final {
 namespace {
 
 constexpr char kInitialUrl[] = "crayon://newtab";
+// PLT-SHELL-24M2FIX-C11: the product new tab is the blank page. The
+// startup page is the Chromium own "on startup" setting, so the product
+// no longer keeps a new-tab URL preference.
+constexpr char kNewTabPageUrl[] = "about:blank";
+constexpr char kOriginalSettingsUrl[] = "chrome://settings";
 constexpr std::size_t kContentHostStartupChecks = 500;
 constexpr std::int64_t kContentHostTickMilliseconds = 20;
 
@@ -839,9 +845,9 @@ void BrowserApp::ContinueContentHostStartup() {
           macos::AlloyToolbarMac::Callbacks{
               [this] {
                 if (product_host_) {
-                  // PLT-SHELL-24M2FIX-C9: "+" opens the user's new-tab URL
-                  // (product default www.zknowai.com), not the built-in page.
-                  static_cast<void>(product_host_->CreateTab(NewTabUrl()));
+                  // PLT-SHELL-24M2FIX-C11: "+" opens the blank page; the
+                  // startup page comes from Chromium own settings.
+                  static_cast<void>(product_host_->CreateTab(kNewTabPageUrl));
                 }
               },
               [this](window::TabId tab_id) {
@@ -868,7 +874,22 @@ void BrowserApp::ContinueContentHostStartup() {
               // PLT-SHELL-24M2FIX-C10: the focus ring is drawn by the native
               // layer, so a focus change republishes the chrome decoration.
               [this] {
-                if (product_host_) product_host_->RefreshTabChrome();
+                // CEF paints the textfield's own 1 DIP outline with
+                // CEF_ColorTextfieldOutline, and the field's surface changes
+                // with focus - so leaving that colour at the resting value
+                // leaves a grey hairline (and a grey corner arc) visible on the
+                // lifted surface. It has to follow the state.
+                if (product_host_) {
+                  if (const CefRefPtr<CefWindow> window = product_host_->window()) {
+                    const bool focused = toolbar_ && toolbar_->omnibox_focused();
+                    window->SetThemeColor(
+                        CEF_ColorTextfieldOutline,
+                        focused ? window::chrome_palette::kOmniboxFocusedBackground
+                                : window::chrome_palette::kOmniboxBackground);
+                    window->ThemeChanged();
+                  }
+                  product_host_->RefreshTabChrome();
+                }
               },
               // PLT-SHELL-24M2FIX-C7: the toolbar menu sends the same command
               // ids the application menu does, so both entry points share one
@@ -878,6 +899,17 @@ void BrowserApp::ContinueContentHostStartup() {
                     ExecuteAppCommand(static_cast<macos::ApplicationCommand>(
                         command_id)));
               }});
+      // PLT-SHELL-24M2FIX-C14: a target=_blank link (or window.open) is
+      // cancelled by TabController::HandlePopupRequest, which queues the
+      // target and needs somebody to open the tab: ExecuteChromeCommand is
+      // Chrome-style only, so the Alloy shell is told here. The queued
+      // target is loaded by TabController::OnBrowserCreated, which is why
+      // the tab is created with the blank page.
+      tab_controller_->SetPopupRequestedCallback([this](const std::string&) {
+        if (product_host_) {
+          static_cast<void>(product_host_->CreateTab(kNewTabPageUrl));
+        }
+      });
       tab_controller_->SetTabUiUpdateCallback(
           [this](int browser_id, const std::string& url, bool is_loading,
                  bool can_go_back, bool can_go_forward) {
@@ -918,9 +950,13 @@ void BrowserApp::ContinueContentHostStartup() {
     // PLT-SHELL-24M1: the product first window is the macOS Alloy host; the
     // TabController WindowClient keeps every normalized callback surface.
     if (!product_host_) {
+      // PLT-SHELL-24M2FIX-C12: the first window is the blank page. Chromium's
+      // own "on startup" setting cannot be honoured yet: the browser process
+      // does not expose it through CefPreferenceManager (measured; see
+      // desktop-shell-roadmap 110), so that section is display-only for now.
       product_host_ = std::make_unique<macos::AlloyProductHostMac>(
           macos::AlloyProductHostMac::Dependencies{
-              tab_controller_->client(), kInitialUrl,
+              tab_controller_->client(), kNewTabPageUrl,
               product_strings_.new_tab.document_title,
               toolbar_->tab_strip_view(), toolbar_->toolbar_view(),
               // PLT-SHELL-24M2FIX-C4: the assembly owns the chrome views, so
@@ -1159,122 +1195,25 @@ void BrowserApp::ToggleActiveBookmark() {
   static_cast<void>(SaveBookmarks());
 }
 
-// PLT-SHELL-24M2FIX-C9: preferences are created on first use and loaded from
-// the profile's own data directory through the shared codec, so the on-disk
-// shape is the same one the Windows shell writes.
-bool BrowserApp::EnsurePreferences() {
-  CEF_REQUIRE_UI_THREAD();
-  if (preferences_) {
-    return true;
-  }
-  preferences_ = std::make_unique<browser_preferences::PreferenceStore>();
-  const auto context = CefRequestContext::GetGlobalContext();
-  const std::string cache =
-      context ? context->GetCachePath().ToString() : std::string{};
-  if (cache.empty()) {
-    return true;
-  }
-  std::ifstream input(cache + "/crayon-preferences.json", std::ios::binary);
-  if (!input) {
-    return true;  // First run: all keys at their defaults.
-  }
-  const std::string document((std::istreambuf_iterator<char>(input)),
-                             std::istreambuf_iterator<char>());
-  if (auto restored = browser_preferences::DeserializePreferences(document)) {
-    preferences_ = std::make_unique<browser_preferences::PreferenceStore>(
-        std::move(*restored));
-  }
-  return true;
-}
 
-bool BrowserApp::SavePreferences() {
+// PLT-SHELL-24M2FIX-C11: the product owns no settings surface of its own.
+// Chromium's own settings page is the single settings destination, so every
+// entry point loads it into the active tab. Loading it from a command (rather
+// than accepting the chrome scheme in the omnibox) keeps
+// IsAllowedNavigationUrl unchanged.
+void BrowserApp::OpenOriginalSettings() {
   CEF_REQUIRE_UI_THREAD();
-  if (!preferences_) {
-    return false;
-  }
-  const auto context = CefRequestContext::GetGlobalContext();
-  const std::string cache =
-      context ? context->GetCachePath().ToString() : std::string{};
-  if (cache.empty()) {
-    return false;
-  }
-  std::ofstream output(cache + "/crayon-preferences.json",
-                       std::ios::trunc | std::ios::binary);
-  if (!output) {
-    return false;
-  }
-  output << browser_preferences::SerializePreferences(*preferences_);
-  return output.good();
-}
-
-// The URL the new-tab ("+") action opens. An empty stored value falls back to
-// the built-in page; anything else is resolved like omnibox input, so a value
-// typed as "www.zknowai.com" becomes https://... under the privacy defaults.
-std::string BrowserApp::NewTabUrl() {
-  CEF_REQUIRE_UI_THREAD();
-  if (!EnsurePreferences()) {
-    return kInitialUrl;
-  }
-  const auto &value =
-      preferences_->Get(browser_preferences::PreferenceStore::kNewTabUrl);
-  const auto *text = std::get_if<std::string>(&value);
-  if (!text || text->empty()) {
-    return kInitialUrl;
-  }
-  if (text->find("://") != std::string::npos) {
-    return *text;
-  }
-  return browser_omnibox_provider::ResolveSchemelessUrl(
-      *text, browser_privacy::DefaultPrivacyDefaults());
-}
-
-// Writes the new-tab URL after the store's own validation. A rejected value
-// (over-long, control characters) leaves the previous one in place instead of
-// persisting something the store would refuse to load.
-bool BrowserApp::SetNewTabUrl(std::string value) {
-  CEF_REQUIRE_UI_THREAD();
-  if (!EnsurePreferences()) {
-    return false;
-  }
-  const auto not_space = [](unsigned char c) { return !std::isspace(c); };
-  value.erase(value.begin(), std::find_if(value.begin(), value.end(), not_space));
-  value.erase(std::find_if(value.rbegin(), value.rend(), not_space).base(),
-              value.end());
-  const browser_preferences::PreferenceValue candidate{value};
-  if (!browser_preferences::PreferenceStore::IsValidValueForKey(
-          browser_preferences::PreferenceStore::kNewTabUrl, candidate)) {
-    return false;
-  }
-  if (!preferences_->Set(browser_preferences::PreferenceStore::kNewTabUrl,
-                         candidate)) {
-    return false;
-  }
-  return SavePreferences();
-}
-
-void BrowserApp::ShowSettings() {
-  CEF_REQUIRE_UI_THREAD();
-  if (!EnsurePreferences()) {
+  const auto browser =
+      tab_controller_ ? tab_controller_->ActiveBrowser() : nullptr;
+  if (browser && browser->GetMainFrame()) {
+    browser->GetMainFrame()->LoadURL(kOriginalSettingsUrl);
     return;
   }
-  const auto &value =
-      preferences_->Get(browser_preferences::PreferenceStore::kNewTabUrl);
-  const auto *text = std::get_if<std::string>(&value);
-  const std::string current = text ? *text : std::string{};
-  const auto localized = [this](const char *key) {
-    const auto found =
-        ::crayon::browser::localization::LocaleCatalog(locale_snapshot_.locale)
-            .Find(key);
-    return found ? std::string(*found) : std::string{};
-  };
-  static_cast<void>(settings_panel::PresentSettingsPanel(
-      localized("settings.title"), localized("settings.new_tab_url"), current,
-      localized("settings.save"), localized("omnibox.cancel"),
-      settings_panel::PanelCallbacks{[this](std::string entered) {
-        // The panel is already gone; the value is validated and persisted here.
-        static_cast<void>(SetNewTabUrl(std::move(entered)));
-      }}));
+  if (product_host_) {
+    static_cast<void>(product_host_->CreateTab(kOriginalSettingsUrl));
+  }
 }
+
 
 void BrowserApp::DetachCastSurface() {
   if (cast_surface_) cast_surface_->Detach();
@@ -1386,7 +1325,7 @@ bool BrowserApp::ExecuteAppCommand(macos::ApplicationCommand command) {
   CEF_REQUIRE_UI_THREAD();
   switch (command) {
     case macos::ApplicationCommand::kNewTab:
-      return product_host_ && product_host_->CreateTab(NewTabUrl());
+      return product_host_ && product_host_->CreateTab(kNewTabPageUrl);
     case macos::ApplicationCommand::kCloseTab:
       if (!tab_controller_->ActiveBrowser()) {
         return false;
@@ -1396,9 +1335,10 @@ bool BrowserApp::ExecuteAppCommand(macos::ApplicationCommand command) {
     case macos::ApplicationCommand::kFocusLocation:
       return toolbar_ && toolbar_->FocusOmnibox();
     case macos::ApplicationCommand::kSettings:
-      // PLT-SHELL-24M2FIX-C9: the toolbar menu's settings entry (and the
-      // application menu's, which routes through this same handler).
-      ShowSettings();
+      // PLT-SHELL-24M2FIX-C11: the toolbar menu's settings entry (and the
+      // application menu's, which routes through this same handler) opens
+      // the Chromium own settings page.
+      OpenOriginalSettings();
       return true;
     case macos::ApplicationCommand::kReload:
       tab_controller_->Reload();

@@ -126,8 +126,8 @@ bool MigrationFromV0DropsUnknownAndInvalid() {
   return true;
 }
 
-bool StrictV1RejectsUnknownKeys() {
-  const std::string document = "CRAYON-PREFERENCES v1\n"
+bool StrictCurrentSchemaRejectsUnknownKeys() {
+  const std::string document = "CRAYON-PREFERENCES v2\n"
                                "B 7\nold_key\n1\n";
   PreferenceCodecError error = PreferenceCodecError::kIoFailure;
   CHECK(!DeserializePreferences(document, &error).has_value());
@@ -139,7 +139,7 @@ bool CorruptionMatrixFailsClosed() {
   PreferenceCodecError error = PreferenceCodecError::kIoFailure;
   CHECK(!DeserializePreferences("CRAYON-PREFERENCES\n", &error).has_value());
   CHECK(error == PreferenceCodecError::kBadHeader);
-  CHECK(!DeserializePreferences("CRAYON-PREFERENCES v2\n", &error).has_value());
+  CHECK(!DeserializePreferences("CRAYON-PREFERENCES v3\n", &error).has_value());
   CHECK(error == PreferenceCodecError::kUnsupportedVersion);
   CHECK(!DeserializePreferences("CRAYON-PREFERENCES v1\nX 1\nk\n1\n", &error)
              .has_value());
@@ -183,35 +183,33 @@ bool RestartReadbackIsIdentical() {
 
 } // namespace
 
-// PLT-SHELL-24M2FIX-C9: the new-tab URL key. Its default is the product's
-// vendor site, so a fresh install opens a real page, and the value is bounded
-// and control-character checked like every other string preference.
-bool NewTabUrlKeyDefaultsToVendorSiteAndValidates() {
-  PreferenceStore store;
-  const auto& value = store.Get(PreferenceStore::kNewTabUrl);
-  const auto* text = std::get_if<std::string>(&value);
-  CHECK(text != nullptr && *text == "www.zknowai.com");
-  CHECK(!store.IsModified(PreferenceStore::kNewTabUrl));
-  CHECK(store.Set(PreferenceStore::kNewTabUrl,
-                  PreferenceValue{std::string("example.test")}));
-  const auto* updated = std::get_if<std::string>(
-      &store.Get(PreferenceStore::kNewTabUrl));
-  CHECK(updated != nullptr && *updated == "example.test");
-  PreferenceError error = PreferenceError::kInvalidValue;
-  CHECK(!store.Set(PreferenceStore::kNewTabUrl,
-                   PreferenceValue{std::string("bad\nvalue")}, &error));
-  CHECK(error == PreferenceError::kInvalidValue);
-  CHECK(!store.Set(PreferenceStore::kNewTabUrl,
-                   PreferenceValue{std::string(1025, 'x')}, &error));
+// PLT-SHELL-24M2FIX-C11: a schema 1 profile that still carries the removed
+// new_tab_url key must migrate instead of failing the whole document, while
+// the same key at the current schema stays a strict rejection.
+bool MigrationFromV1DropsRemovedNewTabUrlKey() {
+  const std::string v1 = "CRAYON-PREFERENCES v1\n"
+                         "I 5\ntheme\n2\n"
+                         "S 11\nnew_tab_url\n8\nfoo.test\n";
+  const auto migrated = DeserializePreferences(v1);
+  CHECK(migrated.has_value());
+  CHECK(std::get<std::int64_t>(migrated->Get(PreferenceStore::kTheme)) ==
+        PreferenceStore::kThemeDark);
+  CHECK(!migrated->IsModified(PreferenceStore::kSearchProvider));
+  const std::string strict = "CRAYON-PREFERENCES v2\n"
+                             "S 11\nnew_tab_url\n8\nfoo.test\n";
+  PreferenceCodecError error = PreferenceCodecError::kIoFailure;
+  CHECK(!DeserializePreferences(strict, &error).has_value());
+  CHECK(error == PreferenceCodecError::kContentRejected);
   return true;
 }
 
 int main() {
-  if (!NewTabUrlKeyDefaultsToVendorSiteAndValidates() ||
-      !DefaultsAndSetGet() || !TypeAndKeyRejection() || !ValueValidation() ||
+  if (!DefaultsAndSetGet() || !TypeAndKeyRejection() || !ValueValidation() ||
       !ResetSemantics() || !RoundTripOnlyOverrides() ||
       !MigrationFromV0DropsUnknownAndInvalid() ||
-      !StrictV1RejectsUnknownKeys() || !CorruptionMatrixFailsClosed() ||
+      !MigrationFromV1DropsRemovedNewTabUrlKey() ||
+      !StrictCurrentSchemaRejectsUnknownKeys() ||
+      !CorruptionMatrixFailsClosed() ||
       !RestartReadbackIsIdentical()) {
     return 1;
   }

@@ -242,6 +242,12 @@ class TabController final : public CefBaseRefCounted {
     return permission_store_;
   }
   void SetChromeCommandCallback(ChromeCommandCallback callback);
+  /// PLT-SHELL-24M2FIX-C14: called when a popup (target=_blank /
+  /// window.open) was accepted and queued as a new-tab target. An
+  /// Alloy-style shell has to open that tab itself, because
+  /// CefBrowserHost::ExecuteChromeCommand is Chrome-style only.
+  using PopupRequestedCallback = std::function<void(const std::string&)>;
+  void SetPopupRequestedCallback(PopupRequestedCallback callback);
   void SetBrowserFocusedCallback(BrowserFocusedCallback callback);
   void SetBrowserClosingCallback(BrowserClosingCallback callback);
   // Returning true consumes CEF DoClose: the host releases the owned view,
@@ -419,6 +425,7 @@ class TabController final : public CefBaseRefCounted {
   /// queued with.  Bounded by the popup policy (kMaxPopupsPerWindow).
   std::deque<std::string> pending_popup_urls_;
   ChromeCommandCallback chrome_command_callback_;
+  PopupRequestedCallback popup_requested_callback_;
   BrowserFocusedCallback browser_focused_callback_;
   BrowserClosingCallback browser_closing_callback_;
   BrowserCloseRequestedCallback browser_close_requested_callback_;

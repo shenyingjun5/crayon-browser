@@ -1055,8 +1055,6 @@ if(OS_MAC)
       src/macos/agent_confirm_sheet_mac.h
       src/macos/agent_confirm_sheet_mac.mm
       src/macos/alloy_titlebar_mac.h
-      src/macos/settings_panel_mac.h
-      src/macos/settings_panel_mac.mm
       src/macos/alloy_titlebar_mac.mm
       src/browser/media_host/alloy_cast_controller.cc
       src/browser/media_host/alloy_cast_controller.h
@@ -1218,7 +1216,6 @@ if(OS_MAC)
                                 crayon::browser-new-tab
                                 crayon::browser-bookmarks
                                 crayon::browser-bookmarks-view
-                                crayon::browser-preferences
                                 crayon::browser-product-strings
                                 crayon::browser-localization
                                 crayon::browser-omnibox-core

@@ -44,17 +44,15 @@ class ToolbarMenuDelegate final : public CefMenuModelDelegate {
 };
 
 // Menu items, in order. Only commands the shell actually implements are listed:
-// an entry that opens nothing would be worse than its absence. The settings
-// page does not exist yet (no crayon:// settings surface), so "Preferences" is
-// deliberately absent and registered as the remaining part of this slice.
+// an entry that opens nothing would be worse than its absence.
 constexpr int kToolbarMenuCommandIds[] = {
     static_cast<int>(ApplicationCommand::kNewTab),
     static_cast<int>(ApplicationCommand::kCloseTab),
     static_cast<int>(ApplicationCommand::kReload),
     static_cast<int>(ApplicationCommand::kBack),
     static_cast<int>(ApplicationCommand::kForward),
-    // PLT-SHELL-24M2FIX-C9: settings is a real destination now (the native
-    // settings panel), so the entry is listed rather than left out.
+    // PLT-SHELL-24M2FIX-C11: settings opens the Chromium own settings page, so
+    // the entry stays listed and now has a real destination.
     static_cast<int>(ApplicationCommand::kSettings)};
 
 constexpr const char* kToolbarMenuLabelKeys[] = {
@@ -236,6 +234,10 @@ CefRefPtr<CefLabelButton> AlloyToolbarMac::bookmark_button() const {
 
 bool AlloyToolbarMac::SetBookmarked(bool bookmarked) {
   return omnibox_ && omnibox_->SetBookmarked(bookmarked);
+}
+
+bool AlloyToolbarMac::omnibox_focused() const {
+  return omnibox_ && omnibox_->focused();
 }
 
 bool AlloyToolbarMac::SyncTabs(const window::TabModel& model) {

@@ -32,7 +32,6 @@ PreferenceStore::Registry() {
       {kShowBookmarkBar, KeySpec{PreferenceValue{false}}},
       {kDownloadDirectory, KeySpec{PreferenceValue{std::string{}}}},
       {kSearchProvider, KeySpec{PreferenceValue{std::string{}}}},
-      {kNewTabUrl, KeySpec{PreferenceValue{std::string{"www.zknowai.com"}}}},
   };
   return registry;
 }
@@ -40,7 +39,7 @@ PreferenceStore::Registry() {
 const std::vector<std::string>& PreferenceStore::RegisteredKeys() {
   static const std::vector<std::string> keys = {
       kStartupPolicy, kTheme, kShowBookmarkBar, kDownloadDirectory,
-      kSearchProvider, kNewTabUrl,
+      kSearchProvider,
   };
   return keys;
 }

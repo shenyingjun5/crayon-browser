@@ -257,7 +257,5 @@
   "mdv.search_placeholder": "Search document",
   "mdv.search_prev": "Previous match",
   "mdv.search_next": "Next match",
-  "settings.title": "Settings",
-  "settings.new_tab_url": "New tab URL",
-  "settings.save": "Save"
+  "settings.title": "Settings"
 }

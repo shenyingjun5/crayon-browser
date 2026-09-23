@@ -464,6 +464,12 @@ bool TabController::CreateMainWindow() {
   return CreateBrowserWindow();
 }
 
+void TabController::SetPopupRequestedCallback(
+    PopupRequestedCallback callback) {
+  CEF_REQUIRE_UI_THREAD();
+  popup_requested_callback_ = std::move(callback);
+}
+
 void TabController::SetChromeCommandCallback(ChromeCommandCallback callback) {
   CEF_REQUIRE_UI_THREAD();
   chrome_command_callback_ = std::move(callback);
@@ -1086,6 +1092,15 @@ bool TabController::HandlePopupRequest(CefRefPtr<CefBrowser> browser,
     return true;  // fail closed: no new window, no new tab
   }
   pending_popup_urls_.push_back(target_url);
+  // PLT-SHELL-24M2FIX-C14: ExecuteChromeCommand only works with Chrome
+  // style, so an Alloy-style shell is told directly instead. The queued
+  // target stays in the queue: TabController::OnBrowserCreated consumes it
+  // when the tab the shell opens creates its browser, exactly like the
+  // Chrome-style path below.
+  if (popup_requested_callback_) {
+    popup_requested_callback_(target_url);
+    return true;
+  }
   static const int kNewTabCommandId = cef_id_for_command_id_name("IDC_NEW_TAB");
   if (browser && kNewTabCommandId > 0) {
     browser->GetHost()->ExecuteChromeCommand(kNewTabCommandId,

@@ -409,3 +409,17 @@ endif()
 
 
 message(STATUS "macOS CEF shell source contract passed")
+
+# PLT-SHELL-24M2FIX-C14: a target=_blank link (or window.open) is answered by
+# TabController::HandlePopupRequest, which queues the target and asks the
+# browser for IDC_NEW_TAB. On macOS only the product host can open a tab, so
+# the chrome-command callback must exist and honour the pending command;
+# without it every such click was silently dropped (no tab, no error).
+foreach(required_popup_token
+        "SetPopupRequestedCallback")
+  string(FIND "${app_source}" "${required_popup_token}" popup_token_index)
+  if(popup_token_index EQUAL -1)
+    message(FATAL_ERROR
+            "macOS shell is missing the popup/new-tab token ${required_popup_token}")
+  endif()
+endforeach()

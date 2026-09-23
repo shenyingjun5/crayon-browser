@@ -14,7 +14,7 @@ struct LocaleCatalogEntry {
   std::string_view zh_tw;
 };
 
-inline constexpr std::array<LocaleCatalogEntry, 261> kLocaleCatalogEntries{{
+inline constexpr std::array<LocaleCatalogEntry, 259> kLocaleCatalogEntries{{
     {"cast.selection.unavailable", "Casting is not ready in this window", "此窗口的投屏入口尚未就绪", "此視窗的投屏入口尚未就緒"},
     {"cast.selection.expired", "Selection expired. Prepare again.", "选择已过期，请重新准备", "選擇已過期，請重新準備"},
     {"cast.selection.connecting", "Connecting to device…", "正在连接设备…", "正在連線裝置…"},
@@ -274,8 +274,6 @@ inline constexpr std::array<LocaleCatalogEntry, 261> kLocaleCatalogEntries{{
     {"mdv.search_prev", "Previous match", "上一个匹配", "上一個符合"},
     {"mdv.search_next", "Next match", "下一个匹配", "下一個符合"},
     {"settings.title", "Settings", "设置", "設定"},
-    {"settings.new_tab_url", "New tab URL", "新标签页网址", "新分頁網址"},
-    {"settings.save", "Save", "保存", "儲存"},
 }};
 
 inline constexpr std::string_view kCatalogVersion = "desktop-localization-v1";
