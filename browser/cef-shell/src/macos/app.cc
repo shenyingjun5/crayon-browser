@@ -23,6 +23,7 @@
 #include "browser/permission/permission_store.h"
 #include "crayon/browser_localization/locale_catalog.h"
 #include "include/cef_color_ids.h"
+#include "include/cef_id_mappers.h"
 #include "browser/window/alloy_chrome_palette.h"
 #include <fstream>
 #include "include/base/cef_bind.h"
@@ -168,10 +169,6 @@ struct AgentUiState final {
 namespace {
 
 constexpr char kInitialUrl[] = "crayon://newtab";
-// PLT-SHELL-24M2FIX-C11: the product new tab is the blank page. The
-// startup page is the Chromium own "on startup" setting, so the product
-// no longer keeps a new-tab URL preference.
-constexpr char kNewTabPageUrl[] = "about:blank";
 constexpr char kOriginalSettingsUrl[] = "chrome://settings";
 constexpr std::size_t kContentHostStartupChecks = 500;
 constexpr std::int64_t kContentHostTickMilliseconds = 20;
@@ -461,18 +458,10 @@ BrowserApp::BrowserApp(
       tab_controller_(new window::TabController(
           kInitialUrl,
           [this](CefRefPtr<CefBrowser> browser) {
-            const int browser_id = browser->GetIdentifier();
-            const window::TabSnapshot* tab =
-                tab_controller_->model().FindByBrowser(browser_id);
-            // TabModel::CreateTab auto-activated the new tab: surface it.
-            if (tab && product_host_) {
-              product_host_->ShowBrowser(browser_id);
-            }
-            if (tab && toolbar_) {
-              static_cast<void>(toolbar_->AttachBrowser(tab->id, browser));
-              static_cast<void>(toolbar_->SyncTabs(tab_controller_->model()));
-              if (product_host_) product_host_->RefreshTabChrome();
-            }
+            static_cast<void>(browser);
+            // C20a: Chromium owns tab display in the Chrome-style window, so
+            // the callback carries no presentation work; cast binding still
+            // keys off the model's active tab.
             BindCastForActiveTab();
           },
           std::string(kInitialUrl), permission_store_.get())) {}
@@ -577,6 +566,13 @@ void BrowserApp::RequestProductQuit(bool force_close_browsers) {
   // earlier leaves live CEF objects and the agent-host serve thread behind,
   // which CHECK-fails inside CefShutdown.
   StopBackgroundServices();
+  // The standalone settings window is outside the tab model; park the quit
+  // until its OnBeforeClose releases it, then resume with the tab model.
+  if (settings_browser_ && settings_browser_->IsValid()) {
+    settings_quit_pending_ = true;
+    settings_browser_->GetHost()->CloseBrowser(force_close_browsers);
+    return;
+  }
   tab_controller_->CloseAllBrowsers(force_close_browsers);
 }
 
@@ -800,21 +796,16 @@ void BrowserApp::OnContextInitialized() {
           }
         }
       });
-  tab_controller_->SetBrowserCloseRequestedCallback(
-      [this](CefRefPtr<CefBrowser> browser) {
-        if (!product_host_ || !browser ||
-            !product_host_->browser_view(browser->GetIdentifier()))
-          return false;
-        if (active_browser_id_ == browser->GetIdentifier())
-          DetachCastSurface();
-        return product_host_->HandleBrowserClose(browser);
-      });
+  // C20a: browser close is Chromium's own in the Chrome-style window. The
+  // shell registers no close-requested hook — WindowClient::DoClose returns
+  // false and CEF tears the browser down with its window, then the quit
+  // funnel runs from OnBeforeClose/OnWindowDestroyed.
   tab_controller_->SetBrowserFocusedCallback(
       [this](CefRefPtr<CefBrowser>) { SyncToolbarToActiveTab(); });
   tab_controller_->SetBrowserClosingCallback(
       [this](CefRefPtr<CefBrowser> browser) {
-        if (product_host_)
-          product_host_->NotifyBrowserClosed(browser->GetIdentifier());
+        // C20a: view release is Chromium's own in the Chrome-style window;
+        // only the cast-binding state needs the closing notification.
         if (active_browser_id_ == browser->GetIdentifier()) {
           DetachCastSurface();
           active_browser_id_ = 0;
@@ -837,156 +828,16 @@ void BrowserApp::OnContextInitialized() {
 void BrowserApp::ContinueContentHostStartup() {
   CEF_REQUIRE_UI_THREAD();
   if (content_host_->healthy() && media_host_->healthy()) {
-    // PLT-SHELL-24M2: the product toolbar assembly (tab strip + navigation +
-    // omnibox) shares the Alloy window with the TabController WindowClient.
-    if (!toolbar_) {
-      toolbar_ = std::make_unique<macos::AlloyToolbarMac>(
-          locale_snapshot_,
-          macos::AlloyToolbarMac::Callbacks{
-              [this] {
-                if (product_host_) {
-                  // PLT-SHELL-24M2FIX-C11: "+" opens the blank page; the
-                  // startup page comes from Chromium own settings.
-                  static_cast<void>(product_host_->CreateTab(kNewTabPageUrl));
-                }
-              },
-              [this](window::TabId tab_id) {
-                if (tab_controller_->ActivateTab(tab_id)) {
-                  SyncToolbarToActiveTab();
-                }
-              },
-              [this](window::TabId tab_id) {
-                static_cast<void>(tab_controller_->RequestCloseTab(tab_id));
-              },
-              [this](window::TabId tab_id) {
-                const window::TabSnapshot* tab =
-                    tab_controller_->model().Find(tab_id);
-                if (!tab) {
-                  return std::string{};
-                }
-                // PLT-SHELL-24M2UIP-b: prefer the page title; the URL stays
-                // as the fallback until the first title change arrives.
-                return !tab->title.empty() ? tab->title : tab->url;
-              },
-              // PLT-SHELL-24M2FIX-C6: the address bar's bookmark control only
-              // reports the press; the store and the resulting state live here.
-              [this] { ToggleActiveBookmark(); },
-              // PLT-SHELL-24M2FIX-C10: the focus ring is drawn by the native
-              // layer, so a focus change republishes the chrome decoration.
-              [this] {
-                // CEF paints the textfield's own 1 DIP outline with
-                // CEF_ColorTextfieldOutline, and the field's surface changes
-                // with focus - so leaving that colour at the resting value
-                // leaves a grey hairline (and a grey corner arc) visible on the
-                // lifted surface. It has to follow the state.
-                if (product_host_) {
-                  if (const CefRefPtr<CefWindow> window = product_host_->window()) {
-                    const bool focused = toolbar_ && toolbar_->omnibox_focused();
-                    window->SetThemeColor(
-                        CEF_ColorTextfieldOutline,
-                        focused ? window::chrome_palette::kOmniboxFocusedBackground
-                                : window::chrome_palette::kOmniboxBackground);
-                    window->ThemeChanged();
-                  }
-                  product_host_->RefreshTabChrome();
-                }
-              },
-              // PLT-SHELL-24M2FIX-C7: the toolbar menu sends the same command
-              // ids the application menu does, so both entry points share one
-              // handler instead of growing a second command implementation.
-              [this](int command_id) {
-                static_cast<void>(
-                    ExecuteAppCommand(static_cast<macos::ApplicationCommand>(
-                        command_id)));
-              }});
-      // PLT-SHELL-24M2FIX-C14: a target=_blank link (or window.open) is
-      // cancelled by TabController::HandlePopupRequest, which queues the
-      // target and needs somebody to open the tab: ExecuteChromeCommand is
-      // Chrome-style only, so the Alloy shell is told here. The queued
-      // target is loaded by TabController::OnBrowserCreated, which is why
-      // the tab is created with the blank page.
-      tab_controller_->SetPopupRequestedCallback([this](const std::string&) {
-        if (product_host_) {
-          static_cast<void>(product_host_->CreateTab(kNewTabPageUrl));
-        }
-      });
-      tab_controller_->SetTabUiUpdateCallback(
-          [this](int browser_id, const std::string& url, bool is_loading,
-                 bool can_go_back, bool can_go_forward) {
-            if (!toolbar_) {
-              return;
-            }
-            static_cast<void>(toolbar_->OnTabUiUpdate(
-                browser_id, url, is_loading, can_go_back, can_go_forward));
-            if (browser_id == 0) {
-              SyncToolbarToActiveTab();
-            } else {
-              static_cast<void>(toolbar_->SyncTabs(tab_controller_->model()));
-              if (product_host_) product_host_->RefreshTabChrome();
-            }
-            // PLT-SHELL-24M2FIX-D: capture the view tree at every navigation
-            // state change, which is when "which tab is actually on screen"
-            // stops matching "which tab just loaded".
-            if (product_host_) {
-              product_host_->DumpDiagnostics("tab-ui-update");
-            }
-          });
-      // PLT-SHELL-24M2FIX-B: the macOS shell has no built-in-content observer
-      // for load errors, so register the platform-neutral TabController
-      // projection; otherwise a failed navigation leaves the toolbar in its
-      // loading presentation with a blank page and no explanation.
-      tab_controller_->SetTabLoadErrorCallback(
-          [this](int browser_id, std::string url, bool certificate_error) {
-            if (!toolbar_) {
-              return;
-            }
-            static_cast<void>(toolbar_->OnTabLoadError(
-                browser_id, url, certificate_error));
-          });
-    }
+    // C20a (roadmap §114): the product main window is CEF's own Chrome-style
+    // window (native tab strip/toolbar/close/popups/chrome:// pages). The
+    // shell registers no chrome surfaces of its own; the cast action button
+    // mounts as a titlebar accessory in C20c (CastChromeMac).
     // AGT-12Cc2r: start the CAAP agent host (UDS endpoint) once both
     // helper hosts are healthy. Callbacks marshal onto this UI thread.
     StartAgentHost();
-    // PLT-SHELL-24M1: the product first window is the macOS Alloy host; the
-    // TabController WindowClient keeps every normalized callback surface.
-    if (!product_host_) {
-      // PLT-SHELL-24M2FIX-C12: the first window is the blank page. Chromium's
-      // own "on startup" setting cannot be honoured yet: the browser process
-      // does not expose it through CefPreferenceManager (measured; see
-      // desktop-shell-roadmap 110), so that section is display-only for now.
-      product_host_ = std::make_unique<macos::AlloyProductHostMac>(
-          macos::AlloyProductHostMac::Dependencies{
-              tab_controller_->client(), kNewTabPageUrl,
-              product_strings_.new_tab.document_title,
-              toolbar_->tab_strip_view(), toolbar_->toolbar_view(),
-              // PLT-SHELL-24M2FIX-C4: the assembly owns the chrome views, so
-              // it is the only place that can answer where the tab corners,
-              // tab loading indicator and omnibox pill are. The host decides
-              // when to ask (window creation, every layout pass).
-              [this] {
-                return toolbar_ ? toolbar_->decoration()
-                                : window::ChromeDecoration{};
-              }},
-          macos::AlloyProductHostMac::Callbacks{
-              // window_destroyed: the window is gone, but any browser that
-              // has not delivered OnBeforeClose yet must still be closed
-              // through the quit funnel — a direct CefQuitMessageLoop here
-              // exits the loop with live CEF objects behind.
-              [this] { RequestProductQuit(true); },
-              [this] { SyncToolbarToActiveTab(); },
-              [this] { DetachCastSurface(); },
-              [this] {
-                if (cast_surface_) cast_surface_->LayoutChanged();
-              },
-              [this](const CefKeyEvent& event) {
-                return cast_surface_ && cast_surface_->HandleKeyEvent(event);
-              },
-              [this](int command_id) {
-                return cast_surface_ &&
-                       cast_surface_->HandleAccelerator(command_id);
-              }});
-    }
-    if (!product_host_->Start()) {
+    // The initial page is the built-in new tab; new tabs created through
+    // Chromium's own UI are adopted by TabController.
+    if (!tab_controller_->CreateMainWindow()) {
       // The window never existed, so this is a pure service-teardown exit;
       // the funnel stops the chain and quits with no browsers left.
       RequestProductQuit(true);
@@ -1066,32 +917,10 @@ CefRefPtr<CefClient> BrowserApp::GetDefaultClient() {
 
 void BrowserApp::SyncToolbarToActiveTab() {
   CEF_REQUIRE_UI_THREAD();
-  if (!toolbar_) {
-    return;
-  }
-  if (CefRefPtr<CefBrowser> browser = tab_controller_->ActiveBrowser()) {
-    const window::TabSnapshot* tab =
-        tab_controller_->model().FindByBrowser(browser->GetIdentifier());
-    if (tab) {
-      // Browsing remains usable even while the media host is unavailable.
-      if (product_host_) product_host_->ShowBrowser(browser->GetIdentifier());
-      static_cast<void>(toolbar_->AttachBrowser(tab->id, browser));
-    }
-  }
-  static_cast<void>(toolbar_->SyncTabs(tab_controller_->model()));
-  // PLT-SHELL-24M2FIX-C6: the star follows the tab, not the click, so a tab
-  // switch shows the new page's state without waiting for a toggle.
-  static_cast<void>(RefreshBookmarkState());
-  // PLT-SHELL-24M2FIX-C7: idempotent, and re-appends the trailing menu button
-  // after whatever the cast surface mounts, so it always stays last.
-  static_cast<void>(toolbar_->EnsureTrailingMenuButton());
-  if (product_host_) product_host_->RefreshTabChrome();
+  // C20a: Chromium owns tab presentation in the Chrome-style window, so the
+  // Alloy toolbar/bookmark sync is gone. What remains event-driven here is
+  // the cast business binding; the content tick re-runs it periodically.
   BindCastForActiveTab();
-  // PLT-SHELL-24M2FIX-D: the product, not a look-alike probe, reports the
-  // view tree at the moment the toolbar is bound to the active tab.
-  if (product_host_) {
-    product_host_->DumpDiagnostics("sync-toolbar");
-  }
 }
 
 // PLT-SHELL-24M2FIX-C6: the bookmark store is created on first use and loaded
@@ -1113,8 +942,11 @@ bool BrowserApp::EnsureBookmarks() {
           [this](const std::string& url) {
             return toolbar_ && toolbar_->NavigateToAddress(url);
           },
-          [this](const std::string& url) {
-            return product_host_ && product_host_->CreateTab(url);
+          [](const std::string& url) {
+            // C20a: the Chrome-style window has no product bookmark bar;
+            // the store stays available for later product surfaces.
+            static_cast<void>(url);
+            return false;
           }});
   const auto context = CefRequestContext::GetGlobalContext();
   const std::string cache =
@@ -1196,11 +1028,50 @@ void BrowserApp::ToggleActiveBookmark() {
 }
 
 
+// PLT-SHELL-24M2FIX-C11: chrome:// WebUI renders only in Chrome runtime
+// style; an Alloy browser refuses the navigation silently (measured on the
+// product 2026-09-23: the command ran, LoadURL returned, the page stayed
+// unchanged). The settings window is therefore a standalone Chrome-style
+// browser with its own minimal client — deliberately outside the
+// TabController tab model (no tab strip entry, no cast/snapshot/media
+// observation, no agent surface): chrome://settings is read-only UI.
+class SettingsWindowClient final : public CefClient,
+                                   public CefLifeSpanHandler {
+ public:
+  explicit SettingsWindowClient(BrowserApp* app) : app_(app) {}
+
+  CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
+
+  void OnAfterCreated(CefRefPtr<CefBrowser> browser) override {
+    CEF_REQUIRE_UI_THREAD();
+    if (app_ && browser) {
+      app_->settings_browser_ = browser;
+    }
+  }
+  void OnBeforeClose(CefRefPtr<CefBrowser> browser) override {
+    CEF_REQUIRE_UI_THREAD();
+    static_cast<void>(browser);
+    if (app_) {
+      app_->OnSettingsBrowserClosed();
+    }
+    app_ = nullptr;
+  }
+
+ private:
+  BrowserApp* app_;
+
+  IMPLEMENT_REFCOUNTING(SettingsWindowClient);
+  DISALLOW_COPY_AND_ASSIGN(SettingsWindowClient);
+};
+
 // PLT-SHELL-24M2FIX-C11: the product owns no settings surface of its own.
 // Chromium's own settings page is the single settings destination, so every
-// entry point loads it into the active tab. Loading it from a command (rather
-// than accepting the chrome scheme in the omnibox) keeps
-// IsAllowedNavigationUrl unchanged.
+// entry point opens it in the standalone Chrome-style window. Loading it
+// from a command (rather than accepting the chrome scheme in the omnibox)
+// keeps IsAllowedNavigationUrl unchanged.
+// C20a: chrome:// pages render natively in the Chrome-style window, so
+// settings load into the active tab. The standalone Chrome-style window
+// (SettingsWindowClient) remains the fallback when no tab exists.
 void BrowserApp::OpenOriginalSettings() {
   CEF_REQUIRE_UI_THREAD();
   const auto browser =
@@ -1209,8 +1080,32 @@ void BrowserApp::OpenOriginalSettings() {
     browser->GetMainFrame()->LoadURL(kOriginalSettingsUrl);
     return;
   }
-  if (product_host_) {
-    static_cast<void>(product_host_->CreateTab(kOriginalSettingsUrl));
+  if (settings_browser_ && settings_browser_->IsValid()) {
+    // One settings window: a repeated command must not stack windows.
+    return;
+  }
+  settings_client_ = new SettingsWindowClient(this);
+  CefWindowInfo window_info;
+  window_info.runtime_style = CEF_RUNTIME_STYLE_CHROME;
+  CefBrowserSettings browser_settings;
+  if (!CefBrowserHost::CreateBrowser(window_info, settings_client_,
+                                     kOriginalSettingsUrl, browser_settings,
+                                     nullptr, nullptr)) {
+    settings_client_ = nullptr;
+  }
+}
+
+void BrowserApp::OnSettingsBrowserClosed() {
+  CEF_REQUIRE_UI_THREAD();
+  settings_browser_ = nullptr;
+  settings_client_ = nullptr;
+  // A quit that arrived while the window was open resumes here: the message
+  // loop may only quit once no browser is left (CefShutdown CHECKs it).
+  if (settings_quit_pending_) {
+    settings_quit_pending_ = false;
+    if (tab_controller_) {
+      tab_controller_->CloseAllBrowsers(true);
+    }
   }
 }
 
@@ -1231,7 +1126,10 @@ void BrowserApp::ResetCastContext() {
 
 void BrowserApp::BindCastForActiveTab() {
   CEF_REQUIRE_UI_THREAD();
-  if (!product_host_ || !toolbar_ || !media_host_->healthy()) return;
+  // C20a: media observation advance (business) stays event-driven; the
+  // visual entry/surface binding is retired with the Alloy chrome until the
+  // C20c cast action button provides a new mount.
+  if (cast_surface_ || !media_host_->healthy()) return;
   const auto browser = tab_controller_->ActiveBrowser();
   if (!browser) return;
   const auto* tab =
@@ -1239,9 +1137,7 @@ void BrowserApp::BindCastForActiveTab() {
   if (!tab || !tab->navigation_generation) return;
   const auto generation =
       media_generations_.find(static_cast<std::uint32_t>(tab->id));
-  const auto view = product_host_->browser_view(browser->GetIdentifier());
-  const auto window = product_host_->window();
-  if (generation == media_generations_.end() || !view || !window) return;
+  if (generation == media_generations_.end()) return;
   if (active_browser_id_ != browser->GetIdentifier()) {
     // CloseTab retires the previous observation generation. Renew via the
     // existing Browser observation owner on activation, never synthesize it.
@@ -1268,64 +1164,31 @@ void BrowserApp::BindCastForActiveTab() {
             catalog.Find("cast.selection.device_fallback").value_or("")),
         MonotonicMilliseconds);
   }
-  const browser_cast_view::CastViewContext context{
-      cast_browser_session_, "default", static_cast<std::uint32_t>(tab->id),
-      tab->navigation_generation, generation->second};
-  // One attempt per identity: readiness is checked above; a rejected bind must
-  // not repeatedly close/advance the runtime tab on each 20ms tick.
-  if (cast_binding_attempt_ && *cast_binding_attempt_ == context) return;
-  DetachCastSurface();
-  cast_binding_attempt_ = context;
-  active_browser_id_ = browser->GetIdentifier();
-  // PLT-SHELL-24M2UIP-a: the entry surface is attached at assembly time and
-  // persists here; only the context binds once media data is available.
-  TryAttachCastEntry();
-  if (!cast_surface_) return;
-  cast_surface_->BindContext(context);
-  cast_context_bound_ = cast_controller_->BindContext(context);
-  if (!cast_context_bound_) DetachCastSurface();
 }
 
 void BrowserApp::TryAttachCastEntry() {
   CEF_REQUIRE_UI_THREAD();
-  if (cast_surface_ || !product_host_ || !toolbar_ || !media_host_ ||
-      !tab_controller_) {
-    return;
-  }
-  const auto browser = tab_controller_->ActiveBrowser();
-  if (!browser) {
-    return;
-  }
-  const auto window = product_host_->window();
-  const auto view = product_host_->browser_view(browser->GetIdentifier());
-  if (!window || !view) {
-    return;
-  }
-  // Permanent toolbar fixture: attaches with the first browser view — long
-  // before any media observation — and stays disabled (grey) via the
-  // presentation (no context => EntryEnabled() == false) until a real MHV2
-  // context binds in BindCastForActiveTab.
-  cast_surface_ = std::make_unique<CastEntrySurface>(
-      locale_snapshot_, MonotonicMilliseconds, [this](auto intent) {
-        if (cast_controller_ && media_host_->healthy() &&
-            media_host_->cast_state_epoch() == media_host_cast_epoch_)
-          static_cast<void>(cast_controller_->HandleIntent(intent));
-      });
-  if (!cast_surface_->Attach(window, view, toolbar_->toolbar_panel())) {
-    DetachCastSurface();
-    return;
-  }
-  // PLT-SHELL-24M2FIX-C7: the cast entry was just appended to the toolbar row,
-  // so re-append the trailing menu button to keep it last (the user-facing
-  // order is: address bar, cast entry, menu).
-  static_cast<void>(toolbar_->EnsureTrailingMenuButton());
+  // C20a: the Alloy cast entry fixture is retired with the Alloy chrome;
+  // the cast action button returns as a titlebar accessory (CastChromeMac)
+  // in C20c (roadmap §114).
 }
 
 bool BrowserApp::ExecuteAppCommand(macos::ApplicationCommand command) {
   CEF_REQUIRE_UI_THREAD();
   switch (command) {
-    case macos::ApplicationCommand::kNewTab:
-      return product_host_ && product_host_->CreateTab(kNewTabPageUrl);
+    case macos::ApplicationCommand::kNewTab: {
+      // C20a: tabs are Chromium's own in the Chrome-style window; the app
+      // menu's new-tab entry rides the native IDC_NEW_TAB command.
+      const auto browser = tab_controller_->ActiveBrowser();
+      static const int kNewTabCommandId =
+          cef_id_for_command_id_name("IDC_NEW_TAB");
+      if (!browser || kNewTabCommandId <= 0) {
+        return false;
+      }
+      browser->GetHost()->ExecuteChromeCommand(kNewTabCommandId,
+                                               CEF_WOD_NEW_FOREGROUND_TAB);
+      return true;
+    }
     case macos::ApplicationCommand::kCloseTab:
       if (!tab_controller_->ActiveBrowser()) {
         return false;

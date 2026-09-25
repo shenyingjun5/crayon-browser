@@ -18,16 +18,14 @@ foreach(required_host_file
 endforeach()
 file(READ "${alloy_host_root}/app.cc" app_source_for_host)
 foreach(required_host_token
-        "AlloyProductHostMac"
-        "product_host_"
-        "AlloyToolbarMac"
-        "toolbar_"
-        "SetTabUiUpdateCallback"
+        "CreateMainWindow"
+        "SetBrowserFocusedCallback"
+        "SetBrowserClosingCallback"
         "ExecuteAppCommand"
         )
   string(FIND "${app_source_for_host}" "${required_host_token}" host_token_index)
   if(host_token_index EQUAL -1)
-    message(FATAL_ERROR "macOS app is missing Alloy host token ${required_host_token}")
+    message(FATAL_ERROR "macOS app is missing product host token ${required_host_token}")
   endif()
 endforeach()
 set(macos_resource_root "${CRAYON_CEF_SHELL_SOURCE}/resources/macos")
@@ -114,8 +112,12 @@ endif()
 # strings via LocaleCatalog, so no resolved cast strings cross the assembly.
 # The cast drains have a single consumer (the controller): app must never
 # call DrainCast directly.
+# C20a (roadmap §114): the Chrome-style switch retired the Alloy cast entry
+# fixture in the assembly; the button returns via CastChromeMac in C20c, so
+# the CastEntrySurface token requirement is dropped here (file remains for
+# the Alloy probes until C20b removes it).
 foreach(required_cast_token
-        "AlloyCastController" "CastEntrySurface"
+        "AlloyCastController"
         "BindCastForActiveTab" "ResetCastContext"
         "DetachCastSurface" "cast_binding_attempt_"
         "SetMediaObservationLifecycleCallback")
@@ -131,12 +133,11 @@ if(NOT app_drain_cast_index EQUAL -1)
 endif()
 
 foreach(required_host_token
-        "AlloyProductHostMac"
-        "product_host_"
+        "CreateMainWindow"
         )
   string(FIND "${app_source}" "${required_host_token}" host_token_index)
   if(host_token_index EQUAL -1)
-    message(FATAL_ERROR "macOS app is missing Alloy host token ${required_host_token}")
+    message(FATAL_ERROR "macOS app is missing product host token ${required_host_token}")
   endif()
 endforeach()
 
@@ -410,16 +411,10 @@ endif()
 
 message(STATUS "macOS CEF shell source contract passed")
 
-# PLT-SHELL-24M2FIX-C14: a target=_blank link (or window.open) is answered by
-# TabController::HandlePopupRequest, which queues the target and asks the
-# browser for IDC_NEW_TAB. On macOS only the product host can open a tab, so
-# the chrome-command callback must exist and honour the pending command;
-# without it every such click was silently dropped (no tab, no error).
-foreach(required_popup_token
-        "SetPopupRequestedCallback")
-  string(FIND "${app_source}" "${required_popup_token}" popup_token_index)
-  if(popup_token_index EQUAL -1)
-    message(FATAL_ERROR
-            "macOS shell is missing the popup/new-tab token ${required_popup_token}")
-  endif()
-endforeach()
+# PLT-SHELL-24M2FIX-C14 / C20a: a target=_blank link (or window.open) is
+# answered by TabController::HandlePopupRequest (policy + pending queue). In
+# the Alloy assembly the shell had to open the tab itself
+# (SetPopupRequestedCallback); since the C20a Chrome-style switch the queued
+# target is opened by Chromium's own IDC_NEW_TAB fallback inside
+# HandlePopupRequest, so app.cc carries no popup token any more. The policy
+# surface is guarded by the platform-neutral tab controller tests.

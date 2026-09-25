@@ -39,6 +39,10 @@ class TrustedInputMonitor;
 // before the agent-host bridge member so the gate outlives teardown.
 struct AgentUiState;
 
+// Owns the standalone Chrome-style chrome://settings window. TU-local to
+// app.cc; needs friend access to park the browser ref on the app.
+class SettingsWindowClient;
+
 class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
  public:
   explicit BrowserApp(
@@ -81,6 +85,10 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   // TabController's last OnBeforeClose — never with CEF objects still
   // alive, which is the CefShutdown CHECK-crash shape.
   void RequestProductQuit(bool force_close_browsers);
+  // UI-thread notification from SettingsWindowClient: the standalone
+  // settings window delivered OnBeforeClose. Releases the client refs and
+  // resumes a quit that was parked on this window.
+  void OnSettingsBrowserClosed();
 
  private:
   void ContinueContentHostStartup();
@@ -124,6 +132,8 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   void OnAgentClientConnectedForUi(const std::string& client,
                                    const std::string& capabilities);
 
+  friend class SettingsWindowClient;
+
   const CefRefPtr<branding::AboutBrowserResources> about_resources_;
   const ::crayon::browser::localization::LocaleSnapshot locale_snapshot_;
   const ::crayon::browser::product_strings::ProductStrings product_strings_;
@@ -141,7 +151,12 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   std::uint64_t cast_browser_session_ = 0;
   bool cast_context_bound_ = false;
   std::unique_ptr<macos::TrustedInputMonitor> trusted_input_monitor_;
-  std::unique_ptr<macos::AlloyProductHostMac> product_host_;
+  // C20a (roadmap §114): the product main window is CEF's own Chrome-style
+  // window (CefBrowserHost::CreateBrowser with CHROME runtime style, via
+  // TabController::CreateMainWindow). Chromium owns the tab strip, toolbar,
+  // window controls, popups and chrome:// pages; the shell owns no chrome
+  // surfaces. The cast action button mounts as a titlebar accessory
+  // (CastChromeMac) in C20c.
   std::unique_ptr<macos::AlloyToolbarMac> toolbar_;
   /// PLT-SHELL-24M2FIX-C6: bookmark store behind the address bar's control.
   /// Created on first use, so a shell that never bookmarks never touches disk.
@@ -156,6 +171,12 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   std::size_t content_host_start_checks_ = 0;
   bool content_host_tick_active_ = false;
   bool background_services_stopped_ = false;
+  // Standalone Chrome-style settings window (outside the tab model). The
+  // client outlives the window until OnBeforeClose releases both refs; a
+  // quit arriving while the window is open parks on settings_quit_pending_.
+  CefRefPtr<SettingsWindowClient> settings_client_;
+  CefRefPtr<CefBrowser> settings_browser_;
+  bool settings_quit_pending_ = false;
   bool media_host_was_healthy_ = false;
   std::uint64_t media_host_cast_epoch_ = 0;
   int active_browser_id_ = 0;
