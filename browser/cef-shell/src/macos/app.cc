@@ -220,6 +220,33 @@ page_markdown::PageMarkdownStrings BuildPageMarkdownStrings(
       strings.copy_failed_status, strings.save_cancelled_status};
 }
 
+// C20c: shared product strings → AppKit cast button/picker strings. The
+// titlebar accessory renders these directly (UTF-8).
+macos::CastChromeStrings BuildCastChromeStrings(
+    const ::crayon::browser::product_strings::CastStrings& strings) {
+  return macos::CastChromeStrings{
+      strings.button_select,     strings.button_stop,
+      strings.picker_title,      strings.picker_empty,
+      strings.picker_select,     strings.picker_refresh,
+      strings.picker_cancel,     strings.cast_code_label,
+      strings.cast_code_connect, strings.cast_code_failed,
+      strings.playback_pause,    strings.playback_resume,
+      strings.playback_seek,     strings.playback_seconds,
+      strings.playback_failed,   strings.rejected,
+      strings.rejected_no_route, strings.rejected_drm,
+      strings.retry};
+}
+
+bool CastChromeStringsComplete(const macos::CastChromeStrings& strings) {
+  return !strings.button_select.empty() && !strings.button_stop.empty() &&
+         !strings.picker_title.empty() && !strings.picker_select.empty() &&
+         !strings.picker_refresh.empty() && !strings.picker_cancel.empty() &&
+         !strings.cast_code_label.empty() &&
+         !strings.cast_code_connect.empty() &&
+         !strings.cast_code_failed.empty() &&
+         !strings.playback_pause.empty() && !strings.rejected.empty();
+}
+
 // Serve-thread trampoline helpers and the UI-thread runner for the CAAP
 // agent host. The constants and AgentUiState live at the enclosing
 // namespace scope (see app.h); everything here is TU-local.
@@ -454,14 +481,48 @@ BrowserApp::BrowserApp(
       content_host_(std::make_unique<macos::ContentHostAdapter>()),
       media_host_(std::make_unique<media_host::MediaHostAdapter>(
           std::make_unique<macos::MediaHostProcess>())),
+      cast_shell_(std::make_unique<media_host::CastShellController>(
+          media_host::CastCommandPort{
+              [this](media_host::media_host_ipc::DiscoveryAction action) {
+                return media_host_->RequestDiscovery(action);
+              },
+              [this](std::optional<std::uint64_t> revision,
+                     std::uint16_t offset) {
+                return media_host_->RequestDevicePage(revision, offset);
+              },
+              [this](std::uint64_t candidate, std::string device,
+                     bool handoff) {
+                return media_host_->RequestStartCast(
+                    candidate, std::move(device), handoff);
+              },
+              [this](std::uint64_t generation) {
+                return media_host_->RequestStopCast(generation);
+              },
+              [this](std::string cast_code) {
+                return media_host_->RequestResolveCastCode(
+                    std::move(cast_code));
+              },
+              [this](std::uint64_t generation,
+                     media_host::media_host_ipc::CastControlAction action,
+                     std::optional<std::uint64_t> position) {
+                return media_host_->RequestControlCast(generation, action,
+                                                       position);
+              }})),
+      cast_chrome_strings_(BuildCastChromeStrings(product_strings_.cast)),
       trusted_input_monitor_(std::make_unique<macos::TrustedInputMonitor>()),
       tab_controller_(new window::TabController(
           kInitialUrl,
           [this](CefRefPtr<CefBrowser> browser) {
-            static_cast<void>(browser);
-            // C20a: Chromium owns tab display in the Chrome-style window, so
-            // the callback carries no presentation work; cast binding still
-            // keys off the model's active tab.
+            // C20c: the titlebar cast button mounts per browser; Chromium
+            // owns the tab display itself. Model-driven cast binding still
+            // keys off the active tab.
+            if (cast_chrome_ && browser) {
+              const int browser_id = browser->GetIdentifier();
+              static_cast<void>(cast_chrome_->AttachWindow(
+                  browser_id, browser->GetHost()->GetWindowHandle()));
+              cast_chrome_->SetActiveWindow(browser_id);
+              RenderCastChrome();
+            }
             BindCastForActiveTab();
           },
           std::string(kInitialUrl), permission_store_.get())) {}
@@ -553,10 +614,37 @@ void BrowserApp::StopBackgroundServices() {
     page_markdown_preview_->Stop();
   }
   ResetCastContext();
+  // C20c: the cast shell owns in-flight cast commands; stop it before the
+  // media host pipe goes away, then drop the titlebar surfaces.
+  if (cast_shell_) cast_shell_->Shutdown();
+  if (cast_chrome_) cast_chrome_->Close();
   if (toolbar_) toolbar_->Shutdown();
   ShutdownAgentHost();
   content_host_->Stop();
   media_host_->Stop();
+}
+
+// C20c: projects the shell controller's closed presentation onto the
+// titlebar cast button/picker. No-op when nothing changed — the AppKit
+// accessory rebuild is not free and the tick runs at 20 ms.
+void BrowserApp::RenderCastChrome() {
+  CEF_REQUIRE_UI_THREAD();
+  if (!cast_chrome_ || !cast_shell_) {
+    return;
+  }
+  const auto presentation = cast_shell_->presentation();
+  if (rendered_cast_presentation_ &&
+      *rendered_cast_presentation_ == presentation) {
+    return;
+  }
+  rendered_cast_presentation_ = presentation;
+  cast_chrome_->Render(
+      cast_shell_->coordinator(),
+      macos::CastChromePresentation{presentation.cast_code_pending,
+                                    presentation.cast_code_failed,
+                                    presentation.control_pending,
+                                    presentation.control_failed,
+                                    presentation.playback_paused});
 }
 
 void BrowserApp::RequestProductQuit(bool force_close_browsers) {
@@ -778,6 +866,7 @@ void BrowserApp::OnContextInitialized() {
   tab_controller_->SetMediaObservationLifecycleCallback(
       [this](std::uint32_t tab_id, std::uint64_t navigation_id,
              std::uint32_t generation, bool closed) {
+        const bool active = tab_controller_->model().active_tab() == tab_id;
         if (closed) {
           media_generations_.erase(tab_id);
           if (cast_binding_attempt_ &&
@@ -786,10 +875,12 @@ void BrowserApp::OnContextInitialized() {
           } else {
             static_cast<void>(media_host_->CloseTab(tab_id, generation));
           }
+          if (active && cast_shell_) cast_shell_->OnPageClosed();
         } else {
           media_generations_[tab_id] = generation;
           if (tab_controller_->model().active_tab() == tab_id) {
             BindCastForActiveTab();
+            if (cast_shell_) cast_shell_->OnNavigation();
           } else {
             static_cast<void>(media_host_->AdvanceNavigation(
                 tab_id, navigation_id, generation));
@@ -801,9 +892,27 @@ void BrowserApp::OnContextInitialized() {
   // false and CEF tears the browser down with its window, then the quit
   // funnel runs from OnBeforeClose/OnWindowDestroyed.
   tab_controller_->SetBrowserFocusedCallback(
-      [this](CefRefPtr<CefBrowser>) { SyncToolbarToActiveTab(); });
+      [this](CefRefPtr<CefBrowser> browser) {
+        // C20c: a Chrome-style tab switch surfaces as the incoming tab's
+        // focus; re-point the titlebar cast button at it.
+        if (cast_chrome_ && browser) {
+          const int browser_id = browser->GetIdentifier();
+          if (active_browser_id_ != 0 && active_browser_id_ != browser_id &&
+              cast_shell_) {
+            cast_shell_->OnNavigation();
+          }
+          static_cast<void>(cast_chrome_->AttachWindow(
+              browser_id, browser->GetHost()->GetWindowHandle()));
+          cast_chrome_->SetActiveWindow(browser_id);
+          RenderCastChrome();
+        }
+        SyncToolbarToActiveTab();
+      });
   tab_controller_->SetBrowserClosingCallback(
       [this](CefRefPtr<CefBrowser> browser) {
+        if (cast_chrome_) {
+          cast_chrome_->DetachWindow(browser->GetIdentifier());
+        }
         // C20a: view release is Chromium's own in the Chrome-style window;
         // only the cast-binding state needs the closing notification.
         if (active_browser_id_ == browser->GetIdentifier()) {
@@ -835,6 +944,53 @@ void BrowserApp::ContinueContentHostStartup() {
     // AGT-12Cc2r: start the CAAP agent host (UDS endpoint) once both
     // helper hosts are healthy. Callbacks marshal onto this UI thread.
     StartAgentHost();
+    // C20c: the titlebar cast button + picker. Actions run through the
+    // shell controller; every completion re-renders from its closed state.
+    if (!cast_chrome_ && CastChromeStringsComplete(cast_chrome_strings_)) {
+      cast_chrome_ = std::make_unique<macos::CastChromeMac>(
+          cast_chrome_strings_,
+          macos::CastChromeCallbacks{
+              [this] {
+                const bool ok =
+                    cast_shell_ && cast_shell_->ActivateCastButton();
+                RenderCastChrome();
+                return ok;
+              },
+              [this] {
+                const bool ok =
+                    cast_shell_ && cast_shell_->RefreshReceivers();
+                RenderCastChrome();
+                return ok;
+              },
+              [this] {
+                if (cast_shell_) cast_shell_->CancelReceiverPicker();
+                RenderCastChrome();
+              },
+              [this](const std::string& device_id) {
+                const bool ok =
+                    cast_shell_ && cast_shell_->SelectReceiver(device_id);
+                RenderCastChrome();
+                return ok;
+              },
+              [this](std::string cast_code) {
+                const bool ok =
+                    cast_shell_ &&
+                    cast_shell_->ConnectCastCode(std::move(cast_code));
+                RenderCastChrome();
+                return ok;
+              },
+              [this](bool paused) {
+                const bool ok = cast_shell_ && cast_shell_->SetPaused(paused);
+                RenderCastChrome();
+                return ok;
+              },
+              [this](std::uint64_t seconds) {
+                const bool ok =
+                    cast_shell_ && cast_shell_->SeekSession(seconds);
+                RenderCastChrome();
+                return ok;
+              }});
+    }
     // The initial page is the built-in new tab; new tabs created through
     // Chromium's own UI are adopted by TabController.
     if (!tab_controller_->CreateMainWindow()) {
@@ -881,7 +1037,13 @@ void BrowserApp::ContentHostTick() {
   page_markdown_preview_->Tick(content_host_->Drain(64),
                                content_host_->healthy());
   static_cast<void>(media_host_->Drain(64));
-  static_cast<void>(media_host_->DrainPlanning(64));
+  // C20c: cast command replies and planning events feed the shell
+  // controller; the titlebar button/picker re-renders on state changes.
+  if (cast_shell_) {
+    cast_shell_->ConsumeCast(media_host_->DrainCast(64));
+    cast_shell_->ConsumePlanning(media_host_->DrainPlanning(64));
+    RenderCastChrome();
+  }
   const bool media_healthy = media_host_->healthy();
   const std::uint64_t cast_epoch = media_host_->cast_state_epoch();
   if ((!media_healthy && media_host_was_healthy_) ||

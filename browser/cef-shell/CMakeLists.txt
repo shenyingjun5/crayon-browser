@@ -1058,8 +1058,11 @@ if(OS_MAC)
       src/macos/alloy_titlebar_mac.mm
       src/browser/media_host/alloy_cast_controller.cc
       src/browser/media_host/alloy_cast_controller.h
+      src/browser/media_host/cast_shell_controller.cc
+      src/browser/media_host/cast_shell_controller.h
       src/browser/media_host/cast_entry_surface.cc
       src/browser/media_host/cast_entry_surface.h
+      src/macos/cast_chrome_mac.mm
       src/macos/content_host_adapter_mac.cc
       src/macos/content_host_adapter_mac.h
       src/macos/content_host_process_mac.cc

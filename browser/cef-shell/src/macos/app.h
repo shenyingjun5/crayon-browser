@@ -13,6 +13,7 @@
 #include "browser/mdv/cef_mdv_entries.h"
 #include "browser/media_host/alloy_cast_controller.h"
 #include "browser/media_host/cast_entry_surface.h"
+#include "browser/media_host/cast_shell_controller.h"
 #include "browser/media_host/media_host_adapter.h"
 #include "browser/page_markdown/cef_page_markdown_preview.h"
 #include "browser/permission/permission_store.h"
@@ -24,6 +25,7 @@
 #include "macos/agent_host_bridge_mac.h"
 #include "macos/alloy_product_host_mac.h"
 #include "macos/alloy_toolbar_mac.h"
+#include "macos/cast_chrome_mac.h"
 #include "browser/window/alloy_bookmarks.h"
 #include "macos/application_menu_mac.h"
 #include "macos/content_host_adapter_mac.h"
@@ -89,6 +91,9 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   // settings window delivered OnBeforeClose. Releases the client refs and
   // resumes a quit that was parked on this window.
   void OnSettingsBrowserClosed();
+  // C20c: renders the titlebar cast button/picker from the shell
+  // controller's closed presentation state; skipped when unchanged.
+  void RenderCastChrome();
 
  private:
   void ContinueContentHostStartup();
@@ -146,6 +151,13 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   std::unique_ptr<media_host::MediaHostAdapter> media_host_;
   std::unique_ptr<media_host::AlloyCastController> cast_controller_;
   std::unique_ptr<CastEntrySurface> cast_surface_;
+  // C20c (roadmap §114): Chrome-style cast action button + picker. The
+  // shell controller owns the closed presentation state; the AppKit
+  // accessory only renders it and forwards intents.
+  std::unique_ptr<media_host::CastShellController> cast_shell_;
+  std::unique_ptr<macos::CastChromeMac> cast_chrome_;
+  macos::CastChromeStrings cast_chrome_strings_;
+  std::optional<media_host::CastShellPresentation> rendered_cast_presentation_;
   std::map<std::uint32_t, std::uint32_t> media_generations_;
   std::optional<browser_cast_view::CastViewContext> cast_binding_attempt_;
   std::uint64_t cast_browser_session_ = 0;

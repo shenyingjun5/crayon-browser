@@ -126,12 +126,18 @@ foreach(required_cast_token
     message(FATAL_ERROR "macOS app is missing Cast wiring ${required_cast_token}")
   endif()
 endforeach()
-string(FIND "${app_source}" "DrainCast" app_drain_cast_index)
-if(NOT app_drain_cast_index EQUAL -1)
-  message(FATAL_ERROR
-          "macOS app must not consume cast drains directly (unique consumer is AlloyCastController)")
-endif()
-
+# C20c: the cast drains have a single consumer chain — the app funnels
+# media-host replies/planning into CastShellController, which owns the
+# closed presentation state rendered by the CastChromeMac accessory. Both
+# ends of that funnel must exist together.
+foreach(required_shell_token
+        "CastShellController" "ConsumeCast" "ConsumePlanning"
+        "DrainCast" "DrainPlanning" "RenderCastChrome")
+  string(FIND "${app_source}" "${required_shell_token}" shell_token_index)
+  if(shell_token_index EQUAL -1)
+    message(FATAL_ERROR "macOS app is missing cast shell funnel token ${required_shell_token}")
+  endif()
+endforeach()
 foreach(required_host_token
         "CreateMainWindow"
         )
