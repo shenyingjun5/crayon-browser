@@ -1494,3 +1494,46 @@ Code Review：按 v0.9 独立检查唯一 owner、同步 callback reentrancy、t
   1. **Windows 侧未动**：`src/windows/app.cc` 仍走旧的 Chrome-命令路径 + `ObserveChromeCommand`。若 Windows 产品同样运行于 Alloy style，则存在同一缺陷（弹窗点击无反应），需另立任务在 Windows 上核实并统一（建议共用本次的 `SetPopupRequestedCallback`）。
   2. 本轮仍未验证真机鼠标点击链路（本机不能合成键鼠）；上述证据来自**同一条代码路径的程序化驱动**。
   3. 弹窗策略仍按既有 `PopupPolicy` 收敛（无手势/队列满/标签满即拒绝），本次未改策略，只补上了"被接受之后必须有人开标签"。
+
+## 113. PLT-SHELL-24M2FIX-C15 完成记录（2026-09-24，修复「关闭按钮关不掉」+ 落地「⋮ → 原版 Chromium 设置窗口」；补 C14 真鼠标实证）
+
+- 触发：用户实机反馈三问题：①「关闭按钮关不了」②「网页里链接点击没反应（不开 Tab 也不进入）」③「⋮ 要进原版 Chromium 设置」。
+- 用户实测实例核实：用户运行的是 **20:41 启动的旧二进制**（C14 修复 21:44 才构建），问题②属旧版现象——已在修复版上用真鼠标复验通过（见下）。
+- 问题①真因（产品内临时埋点 + 关闭链路逐帧日志取证，均已撤除）：
+  - `CastEntrySurface`（24M2UIP-a 的常驻投屏入口）`Attach` 时把第一个标签的 `CefBrowserView` 存进 `State::browser_view`（`CefRefPtr` 持有）。
+  - 红按钮 → `CefWindowDelegate::CanClose` → `CanCloseWindow` 对每个浏览器 `CloseBrowser(false)` → `WindowClient::DoClose` 返回 **true**（CEF 语义：应用接管，必须自行完成关闭，否则浏览器滞留"半关闭态"——cef_life_span_handler.h 明文）。
+  - 应用侧仅 `RemoveChildView` + 释放自身引用；被 cast 表面持有的 view **无法销毁** → 该浏览器 `OnBeforeClose` 永不送达 → `Impl::views` 的 null 槽位永不消除 → `views.empty()` 永假 → `window->Close()` 永不执行。实测：`DoClose id=1/2 → ReleaseBrowserView id=1/2 → OnBrowserClosing id=2`（id=1 缺席）→ `CompleteBrowserClose id=2 views=2` 后静止，窗口留存（`mounted=0` 白窗）。
+  - 旧逻辑只在 `active_browser_id_ == 关闭浏览器` 时才 `DetachCastSurface()`，且 `active_browser_id_` 是 cast 绑定态（无媒体时为 0），正常使用中关闭**必然**踩中。
+- 修复①：`CastEntrySurface::HoldsBrowserView(int)`（Attach 时捕获 browser id，Detach 清零）+ `app.cc` 浏览器关闭请求回调：凡被表面持有的 view 在关闭即 `DetachCastSurface()`（tick 会对存活活动视图自动重挂）。
+- 修复③（用户方向已定：要原版 Chromium 设置）：`OpenOriginalSettings()` 改为 `SettingsWindowClient` + `CefBrowserHost::CreateBrowser(window_info.runtime_style = CEF_RUNTIME_STYLE_CHROME, "chrome://settings")` **独立 Chrome-style 窗口**——这是 Alloy 主窗里唯一能渲染 WebUI 设置的方式（§111 结论不变）。设置窗口在 TabController 模型之外（无标签条目、无快照/媒体/agent 面）；重复命令不堆叠（`settings_browser_` 存活即复用）；`RequestProductQuit` 遇设置窗口开着则挂起 `settings_quit_pending_`，其 `OnBeforeClose → OnSettingsBrowserClosed` 再续退出漏斗（CefShutdown 要求无存活浏览器）。
+- 问题②复验（补 §112 风险 2 的真鼠标证据，推翻"本机不能合成键鼠"）：CGEvent 真实鼠标点击（ AX click 对 CEF 网页内容无效，会得到 `missing value`，此前"点了没反应"的判断须以真实事件为准）：`target=_blank` 点击 → `RenderWidgetHostViewCocoa` 收 mouseDown → `OnBeforePopup(gesture=1) → HandlePopupRequest(kOpenInNewTab) → OnBrowserCreated(pending_popup=1) → 新标签加载目标 URL`。附带发现：非 key 窗口的首次点击只激活窗口不进页面（`acceptsFirstMouse` 语义），双击中第一下作废，非缺陷。
+- 验证（全部真机实机，macOS arm64 Debug，2026-09-24 00:00-00:40）：`crayon_browser` 构建 exit 0（含签名）；定向回归 `macos_cef_shell_source_contract` / `preferences_contract` / `tab_strip_contract` / `advanced_tab_strip_contract` / `cast_selection` / `cast_feature_view` / `cast_ui_coordinator` / `browser_new_tab_contract` / `alloy_cast_controller_mac` / `cast_shell_controller_mac` / `cast_chrome_mac` / `cast_toolbar_host_probe` / `alloy_cast_bridge_mac` / `alloy_cast_overlay_mac` **14/14 PASS**；`alloy_tab_controller_mac` 失败为**环境性**（HEAD 干净工作区同样失败：`timeout_stage=0 clicked=0 window_active=0`，harness 窗口抢不到前台），与本改动无关；repo-guard passed。产品实测：① 双标签 + 设置窗口打开状态下点红按钮 → 主窗销毁、设置窗随退出漏斗关闭、**进程整体退出且 stderr 无 CHECK/abort**；单标签场景同样通过；② 真实点击 `target=_blank` 链接 → 新标签加载目标页；③ ⋮ → 设置 → 独立"设置 - Chromium"窗口（chrome://settings，完整原版设置 UI）；连点两次只开一个。临时埋点（`[DIAG]` fprintf ×11 处：app.cc/tab_controller.cc/alloy_product_host_mac.cc/main_mac.mm）**全部撤除**，tab_controller.cc 与 HEAD 逐字节一致。
+- 未覆盖与风险（如实）：
+  1. 设置窗口当前为产品 Profile 的全局 request context，其中触发的下载/权限请求未接产品策略面（chrome://settings 本身只读配置，风险低）。
+  2. `alloy_tab_controller_mac` 的窗口激活超时在无头/多窗环境会继续偶发，需要给 harness 一个可注入的"激活等待"或 `test-mode` 出口（另立任务）。
+  3. 关闭链仍依赖"每浏览器 `DoClose → ReleaseBrowserView`"的自管拆解；任何**新的** `CefRefPtr<CefBrowserView>` 长持有点都会复发同类卡死，建议后续给 `views` 的 null 槽位加看门狗诊断（另立任务）。
+
+## 114. C20 立项（2026-09-24 用户决策：全产品切回 CEF Chrome Style + 内置投屏 Action + 能力全部下沉 Rust Core）
+
+- 用户决策原文要点：浏览器统一改回 **CEF Chrome Style**；投屏按钮用**内置 Extension Action** 形态；Extension/按钮只负责「当前页面是谁 / 用户点了投屏 / 显示设备 Popup」，视频识别、网络候选、DLNA、蜡笔协议、播放列表、自动下一集、Agent Runtime 全部归 **Rust Core**；按钮前端与 Rust Core 之间走**本机鉴权 WebSocket/IPC Bridge**；Popup 目标形态 = 设备列表 + 发现视频 + 立即投屏。
+- 动机（从 C5–C15 的修复史看成立）：Alloy 自绘 chrome 是持续缺陷源（空白新标签、可见性翻转、关闭链卡死、popup 静默丢弃、装饰层/拖拽区/坐标问题）。Chrome Style 下这些全部回归 Chromium 原生：原生标签条/地址栏/关闭/popup/`chrome://settings`（C13 的"Alloy 下设置不可行"结论只约束 Alloy，切 Chrome Style 后天然解除）。
+- **可行性取证（CEF 150 二进制分发，头文件实证，2026-09-24）**：
+  - `include/cef_command_handler.h`：`IsChromeToolbarButtonVisible(cef_chrome_toolbar_button_type_t)` 只覆盖 Chromium 内建按钮（CAST/DOWNLOAD/SEND_TAB_TO_SELF/SIDE_PANEL/MEDIA/TAB_SEARCH/BATTERY_SAVER/AVATAR），**无自定义/extension action 按钮位**；`include/` 下无 `cef_extension*.h` ⇒ 二进制 CEF **不支持真正的 Chrome 扩展按钮**。
+  - 替代路径（选定）：`CefWindow::AddOverlayView(view, cef_docking_mode_t, can_activate)`，`CEF_DOCKING_MODE_TOP_RIGHT` 把产品自有 action 按钮停靠在 Chrome 工具栏扩展图标区视觉位置；Popup 用停靠视图自身的锚定面板（现 cast picker 已是同形态 CEF views 组件）。⇒ 「内置 Extension Action」在产品内是**自绘 action（CEF views overlay）**，不引入 Chromium 源码构建。
+  - Chrome Style 主窗：`CefBrowserViewDelegate::GetChromeToolbarType → CEF_CTT_NORMAL` + window/browser runtime style 均 CHROME；`TabController::OnBrowserCreated` 已有"采纳 Chrome UI 创建的标签"路径（C14 时代建立），C14 的 `SetPopupRequestedCallback` 在 Chrome style 下回退分支 `ExecuteChromeCommand(IDC_NEW_TAB)` 原生有效。
+- 架构边界（与现有规则对齐）：Rust Core 能力收敛到既有 crates（media_host 观测/规划、cast-adapter 唯一 Cast-SDK 通道、agent-host FFI）；浏览器壳只保留 action 按钮 + popup UI + 隐私红线（页面数据经既有 trusted-input/snapshot 通道，不新增旁路）。Bridge 复用 agent-host 模式（UDS + 会话级 grant + capability 白名单），不发明第二套鉴权。
+- 原子任务分解（每任务独立验收）：
+  - **T1 `C20a` Chrome Style 产品主窗原型**：新 `ChromeStyleProductHostMac`（CHROME + CTT_NORMAL 单 BrowserView 顶层窗），装配切换；验收=原生关闭按钮关窗退出、target=_blank 原生成签、`⋮ → chrome://settings` 原生加载、crayon://newtab 与本地 Markdown 正常。
+  - **T2 `C20b` Alloy chrome 下线**：删除 alloy_titlebar/alloy_toolbar/decoration/drag-region/EnforceActiveVisible/cast-entry-fixture 等自绘面及其测试守卫（纯删除，行为变化已由 C20a 承接）。
+  - **T3 `C20c` 投屏 Action 按钮**：AddOverlayView 停靠按钮（状态：空闲/发现视频/已连接），点击打开 Popup。
+  - **T4 `C20d` 投屏 Popup**：设备列表（发现/连接态）+ 当前页发现视频（清晰度列表）+ 立即投屏；数据全部来自 Rust Core 查询。
+  - **T5 `C20e` 本机鉴权 Bridge**：按钮/Popup ⇄ Rust Core 的 UDS/WebSocket 会话（复用 agent-host grant 语义：capability 白名单、短期 grant、审计）。
+  - **T6 `C20f` Rust Core 能力面**：视频识别/网络候选/播放列表/自动下一集作为 Bridge 可查询能力收口（DLNA/蜡笔协议继续走 cast-adapter）。
+- 风险与不做项：不做 Chromium 源码构建；不实现 Chrome 扩展系统（CEF 无此能力）；Windows 侧同步切换在 macOS 验收后另立任务；Alloy 期间积累的 C15 关闭链修复随 T2 一并退役（保留在 git 历史可回溯）。
+
+### 114.1 C20a 完成记录（2026-09-25，Chrome Style 主窗切换完成并真机验证）
+
+- 装配：`ContinueContentHostStartup` 改为 `tab_controller_->CreateMainWindow()`（`CefBrowserHost::CreateBrowser`，`window_info.runtime_style = CEF_RUNTIME_STYLE_CHROME`，初始页 crayon://newtab）；`product_host_`/Alloy 工具栏装配/`SetPopupRequestedCallback`/`SetTabUiUpdateCallback`/cast entry fixture（`TryAttachCastEntry` 置空）全部退出装配；`BindCastForActiveTab` 保留业务半段（观测代际推进 + controller 建立），视觉绑定退役；App 菜单 kNewTab 改走原生 `IDC_NEW_TAB`；`OpenOriginalSettings` 改为活动标签直载 `chrome://settings`（SettingsWindowClient 独立窗保留为无标签兜底）。
+- **关键技术发现（决定装配路线）**：手动 CefWindow 装配 Chrome-style BrowserView（`GetChromeToolbarType=CEF_CTT_NORMAL` + `GetChromeToolbar()` 按 cefclient `AddControls` 手动挂载）在本机实测**工具栏视图存在（442x46）但不上屏**（AX 树只有网页组，无 chrome UI 元素）——二进制 CEF 下这条路线不成熟。改为 CEF **自建窗口**（`CreateBrowser` 空窗口信息）后完整 chrome UI（标签条/地址栏/⋮）原生呈现。C20c 的投屏按钮因此采用 `CastChromeMac`（标题栏 accessory，Windows 同款形态），不走 Views overlay。
+- 真机证据（macOS arm64 Debug，2026-09-25）：crayon://newtab 内置页正常渲染（Alloy 时代的空白新标签缺陷在此路径不存在）；同页链接原生导航 ✓；`target=_blank` 点击原生开新标签 ✓；地址栏直载 `chrome://settings` 完整呈现 ✓；红按钮关闭 → 进程整体退出、stderr 0 CHECK/abort ✓。构建 exit 0（含签名）；`macos_cef_shell_source_contract`（守卫已随装配更新：CreateMainWindow/CastEntrySurface 退役/C14 popup token 移除）+ 定向 14 项回归 **14/14 PASS**。
+- 遗留：投屏按钮（C20c）未上线——当前窗口无投屏入口，属预期中间态；Alloy 文件仍在树中（C20b 删除）；AppKit 菜单的设置/新建等入口走 ExecuteAppCommand 已适配新路径。
