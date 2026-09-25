@@ -57,6 +57,11 @@ public:
   bool HandleKeyEvent(const CefKeyEvent &event);
   // Forward CefWindowDelegate::OnAccelerator before other window commands.
   bool HandleAccelerator(int command_id);
+  // True while this surface is attached and still holds the browser view of
+  // |browser_id|. A retained view cannot be destroyed by CEF, which leaves
+  // that browser half-closed (DoClose returned true) — the host must Detach
+  // before releasing it.
+  bool HoldsBrowserView(int browser_id) const;
   // Host accessibility/focus routing over this surface's own active controls.
   // Does not inspect the BrowserView/Chromium private view tree.
   CefRefPtr<CefView> GetView(int view_id) const;

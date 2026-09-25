@@ -128,6 +128,10 @@ struct CastEntrySurface::State final : std::enable_shared_from_this<State> {
   CastSelectionPresentation presentation;
   CefRefPtr<CefWindow> window;
   CefRefPtr<CefBrowserView> browser_view;
+  // Captured at Attach: once CEF starts closing the view's browser the view
+  // can no longer answer GetBrowser(), but the surface still holds the view
+  // and must report it so the host can Detach before releasing it.
+  int attached_browser_id = 0;
   CefRefPtr<CefPanel> toolbar;
   CefRefPtr<CefLabelButton> entry;
   CefRefPtr<CefPanel> panel, list_content;
@@ -612,6 +616,7 @@ struct CastEntrySurface::State final : std::enable_shared_from_this<State> {
     entry = nullptr;
     toolbar = nullptr;
     browser_view = nullptr;
+    attached_browser_id = 0;
     window = nullptr;
     presentation.Clear();
   }
@@ -638,6 +643,9 @@ bool CastEntrySurface::Attach(CefRefPtr<CefWindow> window,
     return false;
   s->window = window;
   s->browser_view = browser_view;
+  s->attached_browser_id =
+      browser_view->GetBrowser() ? browser_view->GetBrowser()->GetIdentifier()
+                                 : 0;
   s->toolbar = toolbar;
   s->entry = s->Button(s->String("cast.feature.idle"),
                        s->presentation.Intent(CastIntentKind::kOpen), kEntryId,
@@ -768,6 +776,12 @@ CefRefPtr<CefView> CastEntrySurface::GetView(int view_id) const {
 void CastEntrySurface::Detach() {
   CEF_REQUIRE_UI_THREAD();
   state_->Detach();
+}
+
+bool CastEntrySurface::HoldsBrowserView(int browser_id) const {
+  CEF_REQUIRE_UI_THREAD();
+  return browser_id != 0 && !state_->detached &&
+         state_->attached_browser_id == browser_id;
 }
 
 } // namespace crayon::browser::cef_shell
