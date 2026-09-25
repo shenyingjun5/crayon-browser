@@ -1537,3 +1537,11 @@ Code Review：按 v0.9 独立检查唯一 owner、同步 callback reentrancy、t
 - **关键技术发现（决定装配路线）**：手动 CefWindow 装配 Chrome-style BrowserView（`GetChromeToolbarType=CEF_CTT_NORMAL` + `GetChromeToolbar()` 按 cefclient `AddControls` 手动挂载）在本机实测**工具栏视图存在（442x46）但不上屏**（AX 树只有网页组，无 chrome UI 元素）——二进制 CEF 下这条路线不成熟。改为 CEF **自建窗口**（`CreateBrowser` 空窗口信息）后完整 chrome UI（标签条/地址栏/⋮）原生呈现。C20c 的投屏按钮因此采用 `CastChromeMac`（标题栏 accessory，Windows 同款形态），不走 Views overlay。
 - 真机证据（macOS arm64 Debug，2026-09-25）：crayon://newtab 内置页正常渲染（Alloy 时代的空白新标签缺陷在此路径不存在）；同页链接原生导航 ✓；`target=_blank` 点击原生开新标签 ✓；地址栏直载 `chrome://settings` 完整呈现 ✓；红按钮关闭 → 进程整体退出、stderr 0 CHECK/abort ✓。构建 exit 0（含签名）；`macos_cef_shell_source_contract`（守卫已随装配更新：CreateMainWindow/CastEntrySurface 退役/C14 popup token 移除）+ 定向 14 项回归 **14/14 PASS**。
 - 遗留：投屏按钮（C20c）未上线——当前窗口无投屏入口，属预期中间态；Alloy 文件仍在树中（C20b 删除）；AppKit 菜单的设置/新建等入口走 ExecuteAppCommand 已适配新路径。
+
+### 114.2 C20c 完成记录（2026-09-26，投屏 Action 按钮接入 CastShellController + CastChromeMac）
+
+- 装配：BrowserApp 持有 CastShellController（CastCommandPort 绑定 media_host 六个 Request* 命令口）与 CastChromeMac（标题栏 accessory）；浏览器创建/聚焦时 AttachWindow+SetActiveWindow、关闭时 DetachWindow；StopBackgroundServices 按 cast_shell Shutdown → cast_chrome Close → media_host Stop 顺序收口。
+- 排水：ContentHostTick 每帧 DrainCast→ConsumeCast、DrainPlanning→ConsumePlanning；RenderCastChrome 仅在呈现态变化时重建 accessory（20ms tick 幂等）。字符串经 BuildCastChromeStrings 从共享 CastStrings 装配（19 键全量映射），缺关键键则不创建按钮。
+- 契约：原「app 禁止 DrainCast」条款在 C20c 反转——改为漏斗两端 token 同查（CastShellController/ConsumeCast/ConsumePlanning/DrainCast/DrainPlanning/RenderCastChrome）。
+- 验证：构建 exit 0（含签名）；定向 14 项回归 14/14 PASS。
+- 未覆盖与风险（如实）：按钮可见性由 Rust Core 候选规划（kCandidate→kEligible）驱动，本地静态 mp4 观察窗内未触发候选，端到端「按钮显现→Popup 设备/视频列表」需 C20f 视频识别收口后用真实视频页验证；本机无 DLNA 设备，实投与播放控制未验证；无设备时点击按钮的拒绝路径（rejected_no_route）依赖同一候选前置，同样待 C20f。
