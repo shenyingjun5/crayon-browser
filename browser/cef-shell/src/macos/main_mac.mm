@@ -1,5 +1,6 @@
 #import <Cocoa/Cocoa.h>
 
+#include <cstdlib>
 #include <functional>
 #include <string>
 #include <array>
@@ -129,6 +130,13 @@ int main(int argc, char* argv[]) {
             crayon::browser::cef_shell::process::ReadMacPreferredUiLanguages());
 
     CefSettings settings;
+    // Test-isolation hook: an env-specified root_cache_path lets a test
+    // instance run next to the user's session without contending for the
+    // ProcessSingleton lock on the default profile. Not a product feature.
+    if (const char* isolated_root =
+            std::getenv("CRAYON_CEF_ROOT_CACHE_PATH")) {
+      CefString(&settings.root_cache_path) = std::string(isolated_root);
+    }
 #if !defined(CEF_USE_SANDBOX)
     settings.no_sandbox = true;
 #endif

@@ -1551,6 +1551,8 @@ Code Review：按 v0.9 独立检查唯一 owner、同步 callback reentrancy、t
   - C. 维持 standard：站内仅开放编码（VP9/AV1）可播；投屏路径不受编解码影响（识别+URL 交接收端播放），但站内浏览体验受限。
 - 附注：B 站免费内容不依赖 Widevine；付费/高码率内容需 Widevine CDM（Google 单独许可，CEF 支持外挂 CDM），即使选 A/B 该限制仍在，需另行决策。
 - 任务（结论后）：换/接入构建产物、SHA 锁定与来源审计记录、真机 B 站播放回归、更新 cef-distribution.md 与本节状态。
+- **工程侧执行记录（2026-09-26/27，用户选定路线 A 自建后）**：全链路已跑通——源码同步（CEF 7871 @ 8042e43，与官方包同源）→ `GN_DEFINES` 专有编解码 → standard 发行包（SHA-256 `b398baf1…066093`）→ 壳经 `--cef-root` 消费 → 隔离实例端到端实测 **H264=probably / AAC=probably / VP9=probably**。四个 Xcode 27 SDK 适配点、1 个本地 seatbelt 补丁、构建脚本与产物哈希已全部登记至 `docs/current/cef-distribution.md`（本地自建专有 codec 构建节）。仓库新增测试隔离开关 `CRAYON_CEF_ROOT_CACHE_PATH`（main_mac.mm，env 指定 root_cache_path，供并行实例测试）。
+- 遗留：① Debug CEF 构建补齐（日常 Debug 壳用，过夜任务）；② 专利许可（Via LA AVC/AAC 池）与对外分发门禁——公司法律流程，未启动前产物不外发；③ Widevine CDM（付费/高码率内容）另行决策；④ `use_apple_linker` 构建曾出现一次 sessions 后端 CHECK 崩溃，lld 重建后未复现，继续观察。
 
 ### 114.2 C20c 完成记录（2026-09-26，投屏 Action 按钮接入 CastShellController + CastChromeMac）
 
