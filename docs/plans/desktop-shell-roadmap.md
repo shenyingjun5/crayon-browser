@@ -1538,6 +1538,20 @@ Code Review：按 v0.9 独立检查唯一 owner、同步 callback reentrancy、t
 - 真机证据（macOS arm64 Debug，2026-09-25）：crayon://newtab 内置页正常渲染（Alloy 时代的空白新标签缺陷在此路径不存在）；同页链接原生导航 ✓；`target=_blank` 点击原生开新标签 ✓；地址栏直载 `chrome://settings` 完整呈现 ✓；红按钮关闭 → 进程整体退出、stderr 0 CHECK/abort ✓。构建 exit 0（含签名）；`macos_cef_shell_source_contract`（守卫已随装配更新：CreateMainWindow/CastEntrySurface 退役/C14 popup token 移除）+ 定向 14 项回归 **14/14 PASS**。
 - 遗留：投屏按钮（C20c）未上线——当前窗口无投屏入口，属预期中间态；Alloy 文件仍在树中（C20b 删除）；AppKit 菜单的设置/新建等入口走 ExecuteAppCommand 已适配新路径。
 
+## 115. C20g 立项（2026-09-26，BLOCKED 待法律结论：专有编解码 CEF 构建——真实视频站播放的前提）
+
+- 用户实机反馈：产品内打开 B 站（bangumi 播放页）页面正常，播放器报「发生了错误/不支持 HTML5 播放器」。
+- 根因（三证据闭环，非回归 bug）：
+  1. `cmake/cef/CefDistribution.cmake`：`CRAYON_CEF_DISTRIBUTION "standard"`，来源 `cef-builds.spotifycdn.com` 官方标准包——**不含 H.264/AAC 专有编解码器**（官方从不分发专有编解码构建）。
+  2. `docs/current/cef-distribution.md`：明文锁定「不修改构建参数启用 H.264/AAC、不捆绑 Widevine；任何变更必须先经过独立法律结论、依赖 Roadmap 和发布门禁」。
+  3. 真机现象与缺码症状一致：站点加载正常（UA/网络无碍，壳未改 UA），仅播放器判定失败；壳内无 UA 覆盖代码（grep 证实）。
+- 待决策选项（用户/公司决策，本任务在结论前 BLOCKED）：
+  - A. 自建 CEF（`ffmpeg_branding=Chrome`）：供应链可控可审计；需 Chromium 构建链与 ~小时级构建，分发需公司完成 H.264/AAC 专利许可（如 Via LA）。
+  - B. 第三方预构建专有包：接入最快；须过 AGENTS 依赖审查（来源/许可证/维护/哈希锁定），许可义务同 A。
+  - C. 维持 standard：站内仅开放编码（VP9/AV1）可播；投屏路径不受编解码影响（识别+URL 交接收端播放），但站内浏览体验受限。
+- 附注：B 站免费内容不依赖 Widevine；付费/高码率内容需 Widevine CDM（Google 单独许可，CEF 支持外挂 CDM），即使选 A/B 该限制仍在，需另行决策。
+- 任务（结论后）：换/接入构建产物、SHA 锁定与来源审计记录、真机 B 站播放回归、更新 cef-distribution.md 与本节状态。
+
 ### 114.2 C20c 完成记录（2026-09-26，投屏 Action 按钮接入 CastShellController + CastChromeMac）
 
 - 装配：BrowserApp 持有 CastShellController（CastCommandPort 绑定 media_host 六个 Request* 命令口）与 CastChromeMac（标题栏 accessory）；浏览器创建/聚焦时 AttachWindow+SetActiveWindow、关闭时 DetachWindow；StopBackgroundServices 按 cast_shell Shutdown → cast_chrome Close → media_host Stop 顺序收口。
@@ -1545,3 +1559,13 @@ Code Review：按 v0.9 独立检查唯一 owner、同步 callback reentrancy、t
 - 契约：原「app 禁止 DrainCast」条款在 C20c 反转——改为漏斗两端 token 同查（CastShellController/ConsumeCast/ConsumePlanning/DrainCast/DrainPlanning/RenderCastChrome）。
 - 验证：构建 exit 0（含签名）；定向 14 项回归 14/14 PASS。
 - 未覆盖与风险（如实）：按钮可见性由 Rust Core 候选规划（kCandidate→kEligible）驱动，本地静态 mp4 观察窗内未触发候选，端到端「按钮显现→Popup 设备/视频列表」需 C20f 视频识别收口后用真实视频页验证；本机无 DLNA 设备，实投与播放控制未验证；无设备时点击按钮的拒绝路径（rejected_no_route）依赖同一候选前置，同样待 C20f。
+
+### 114.3 C20c-u2 完成记录（2026-09-26，投屏按钮常驻缺省 + 地址栏右侧定位）
+
+- 用户需求：投屏按钮做成「内置 Extension Action」的缺省形态——常驻显示、灰/亮状态由受审投屏用例驱动、缺省钉在地址栏右侧（Chrome 扩展图标钉选位）。
+- 位置证据（真机排查，如实）： accessory 已挂载但从不渲染——Chrome-style 自建窗口无 AppKit 标题栏容器（lldb 证据：`titlebarAccessoryViewControllers` 为空/不渲染，`addChildWindow` 计数正常）； `CefBrowserView::GetForBrowser` 在 Chrome runtime 下返回 null，§114 取证的 `AddOverlayView + CEF_DOCKING_MODE_TOP_RIGHT` 路线在产品实际装配中拿不到 `CefWindow`，不可用； Chromium chrome toolbar 为二进制内建，无法插入自定义按钮。综合结论：地址栏右侧的产品自有按钮只能以 **非激活子 NSPanel**（`addChildWindow:NSWindowAbove` + `NSWindowStyleMaskNonactivatingPanel`）钉在 chrome 行 trailing cluster（头像+⋮）左侧实现，随窗口 resize 通知重定位。
+- 首挂不可见根因（修复）：accessory/panel 初始 `button.hidden=YES`，而 `RenderCastChrome` 仅在 presentation 变化时重渲染；无候选时 presentation 恒定 ⇒ 按钮永不显示。改为挂载即灰态可见（`hidden=NO, enabled=NO`，tooltip 用新增 `cast.button.idle`），点亮相位仍全部由受审漏斗驱动，符合 BUX-01「状态只来自受审投屏用例」。
+- 三语文案：`CastStrings/CastChromeStrings` 新增 `button_idle`（catalog 键 `cast.button.idle`，简中「当前页面没有可投视频」/繁中/英文），locale 生成物与 generator 键数断言同步（259→260）。
+- 实现：`cast_chrome_mac.mm` 以 child `NSPanel`（`NSFloatingWindowLevel`、clear 背景、non-activating）替代 titlebar accessory 挂载，`PositionPanel` 按 chrome 行几何（trailing inset 118 dip、omnibox 行高 76 dip）钉位并随 `NSWindowDidResizeNotification` 重排；`Render()` 改为活动窗口常驻显示（`hidden=!active`），`kHidden/kDisabled` 灰态，`kEligible/kCasting` 亮态；`cast_chrome_mac_test.mm` 断言同步为常驻灰态契约。
+- 验证：Debug 构建含签名 exit 0；定向回归 cast_chrome_mac/cast_shell_controller_mac/browser_product_strings_contract/localization_generator_contract/browser_localization_contract 5/5 PASS；`scripts/check.sh fast`（guard/format/brand-assets/formal-workspace/legacy-unit 58 tests）PASS；真机 Debug 冷启动截图证明按钮缺省出现在地址栏右侧、书签星标左侧、与地址栏同行且为灰态。
+- 未覆盖与风险（如实）：点击亮起→Popup 设备列表的端到端仍依赖 C20f 真实视频候选；窗口 full-screen/多屏 DPI 与 `NSWindowDidMoveNotification` 之外的定位漂移未覆盖；Windows 侧仍为 Alloy toolbar entry，Chrome-style 迁移到 Windows 后需同形态对齐；`right_inset=118/row_height=76` 为当前 chrome 度量的经验常量，Chromium 升级改变 chrome 几何时需复验。
