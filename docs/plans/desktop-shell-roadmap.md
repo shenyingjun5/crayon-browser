@@ -1564,6 +1564,16 @@ Code Review：按 v0.9 独立检查唯一 owner、同步 callback reentrancy、t
 
 ### 114.3 C20c-u2 完成记录（2026-09-26，投屏按钮常驻缺省 + 地址栏右侧定位）
 
+### 114.4 C20b 完成记录（2026-09-27，Alloy 时代产物清除——macOS 侧）
+
+- 删除（mac 独占，Windows 消费的共享组件全部保留）：`alloy_product_host_mac`、`alloy_toolbar_mac`、`alloy_titlebar_mac`、`alloy_cast_overlay_mac`、`alloy_cast_toolbar_mac_probe`、`cast_toolbar_host_probe` 六组源文件；`app.{h,cc}` 中 toolbar_/cast_surface_/cast_controller_/cast_binding_attempt_/cast_browser_session_/cast_context_bound_/bookmarks 全套机制与 SyncToolbarToActiveTab/BindCastForActiveTab/TryAttachCastEntry/DetachCastSurface/ResetCastContext/书签四方法；产品书签接线退役（原生星标接管，见 §103 遗留登记）。
+- 保留（Windows 产品/集成测试仍消费，随 Windows C20 迁移收口）：cast_entry_surface、alloy_cast_controller、chrome_location_bar（三者经 AX/引用盘点确认无 mac 产品引用方，win 集成目标显式编译使用）。
+- 契约：macos_source_contract 移除 Alloy host 文件清单与 AlloyCastController/BindCastForActiveTab/DetachCastSurface/cast_binding_attempt_ token 守卫；保留 cast 漏斗两端 token 与媒体观察生命周期守卫。
+- **过程事故与根因（必须记住）**：清理后产品启动即 SIGSEGV——我在 media lifecycle 回调 active 分支新增的 `AdvanceMediaObservationNavigation` 调用与 bridge 形成**无限递归**（AdvanceNavigation → BindCurrentMainFrame → 同步触发该回调 → 再 Advance…，栈溢出，崩溃栈双 AdvanceNavigation/双 BindCurrentMainFrame 帧可证）。旧代码的 `BindCastForActiveTab` 有 browser-id 守卫（同浏览器直接 return）天然切环，且该推进本就由 `OnLoadingUpdated` 逐导航驱动——新增调用是冗余的。**教训：在同步回调链上调用会反向触发同一回调链的方法前，必须先证明环被既有守卫切断。**
+- 排障记录：构建通过但启动即死，初判被三处误导（AX 窗口枚举被锁屏/前台抢占阻断报 0 窗口；"allocator multiple times" 警告为无害双拷贝路径，与崩溃无关；退出码 139 才暴露是段错误非正常退出）。最终以崩溃报告 .ips 栈定位。
+- 验证：全量构建 exit 0；`-L macos` **32/32 PASS**（注意：验证实例未杀会抢占 AX 前台致 4 个交互探针假失败，杀掉后全绿——探针失败先查前台占用再查代码）；Release 壳实机存活 30s+ 渲染树完整。
+- 遗留：无（本任务纯删除，行为由 C20a/c 既有路径承接）。
+
 - 用户需求：投屏按钮做成「内置 Extension Action」的缺省形态——常驻显示、灰/亮状态由受审投屏用例驱动、缺省钉在地址栏右侧（Chrome 扩展图标钉选位）。
 - 位置证据（真机排查，如实）： accessory 已挂载但从不渲染——Chrome-style 自建窗口无 AppKit 标题栏容器（lldb 证据：`titlebarAccessoryViewControllers` 为空/不渲染，`addChildWindow` 计数正常）； `CefBrowserView::GetForBrowser` 在 Chrome runtime 下返回 null，§114 取证的 `AddOverlayView + CEF_DOCKING_MODE_TOP_RIGHT` 路线在产品实际装配中拿不到 `CefWindow`，不可用； Chromium chrome toolbar 为二进制内建，无法插入自定义按钮。综合结论：地址栏右侧的产品自有按钮只能以 **非激活子 NSPanel**（`addChildWindow:NSWindowAbove` + `NSWindowStyleMaskNonactivatingPanel`）钉在 chrome 行 trailing cluster（头像+⋮）左侧实现，随窗口 resize 通知重定位。
 - 首挂不可见根因（修复）：accessory/panel 初始 `button.hidden=YES`，而 `RenderCastChrome` 仅在 presentation 变化时重渲染；无候选时 presentation 恒定 ⇒ 按钮永不显示。改为挂载即灰态可见（`hidden=NO, enabled=NO`，tooltip 用新增 `cast.button.idle`），点亮相位仍全部由受审漏斗驱动，符合 BUX-01「状态只来自受审投屏用例」。

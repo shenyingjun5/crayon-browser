@@ -11,8 +11,6 @@
 #include "browser/branding/about_browser.h"
 #include "browser/mdv/cef_mdv_editing.h"
 #include "browser/mdv/cef_mdv_entries.h"
-#include "browser/media_host/alloy_cast_controller.h"
-#include "browser/media_host/cast_entry_surface.h"
 #include "browser/media_host/cast_shell_controller.h"
 #include "browser/media_host/media_host_adapter.h"
 #include "browser/page_markdown/cef_page_markdown_preview.h"
@@ -23,10 +21,7 @@
 #include "crayon/browser_product_strings/product_strings.h"
 #include "include/cef_app.h"
 #include "macos/agent_host_bridge_mac.h"
-#include "macos/alloy_product_host_mac.h"
-#include "macos/alloy_toolbar_mac.h"
 #include "macos/cast_chrome_mac.h"
-#include "browser/window/alloy_bookmarks.h"
 #include "macos/application_menu_mac.h"
 #include "macos/content_host_adapter_mac.h"
 
@@ -100,26 +95,11 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   void ScheduleContentHostTick();
   void ContentHostTick();
   void ConsumeMediaObservations();
-  void SyncToolbarToActiveTab();
-  void BindCastForActiveTab();
-  // PLT-SHELL-24M2FIX-C6: bookmark store behind the address bar control.
-  // EnsureBookmarks creates and loads it on first use; RefreshBookmarkState
-  // reflects the active tab on the control; ToggleActiveBookmark adds or
-  // removes the active page and persists the store.
-  // PLT-SHELL-24M2FIX-C11: settings are Chromium's own page. The product keeps
-  // no settings surface of its own, so every entry point (the toolbar menu and
-  // the application menu's Preferences item) loads chrome://settings into the
-  // active tab. The product's new-tab page is the blank page.
+  // PLT-SHELL-24M2FIX-C11 / C20a: settings are Chromium's own page; every
+  // entry point (the application menu's Preferences item, ⋮ menu) opens it in
+  // the active tab of the Chrome-style window. The product keeps no settings
+  // surface of its own.
   void OpenOriginalSettings();
-  bool EnsureBookmarks();
-  bool RefreshBookmarkState();
-  void ToggleActiveBookmark();
-  bool SaveBookmarks();
-  // PLT-SHELL-24M2UIP-a: attaches the permanent cast entry as soon as the
-  // first browser view exists, independent of media readiness.
-  void TryAttachCastEntry();
-  void DetachCastSurface();
-  void ResetCastContext();
   // AGT-12Cc2r: agent-host callback plumbing. The state member is
   // declared before agent_host_ so it outlives the bridge teardown.
   void StartAgentHost();
@@ -149,8 +129,6 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   std::unique_ptr<permission::PermissionStore> permission_store_;
   std::unique_ptr<macos::ContentHostAdapter> content_host_;
   std::unique_ptr<media_host::MediaHostAdapter> media_host_;
-  std::unique_ptr<media_host::AlloyCastController> cast_controller_;
-  std::unique_ptr<CastEntrySurface> cast_surface_;
   // C20c (roadmap §114): Chrome-style cast action button + picker. The
   // shell controller owns the closed presentation state; the AppKit
   // accessory only renders it and forwards intents.
@@ -159,9 +137,6 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   macos::CastChromeStrings cast_chrome_strings_;
   std::optional<media_host::CastShellPresentation> rendered_cast_presentation_;
   std::map<std::uint32_t, std::uint32_t> media_generations_;
-  std::optional<browser_cast_view::CastViewContext> cast_binding_attempt_;
-  std::uint64_t cast_browser_session_ = 0;
-  bool cast_context_bound_ = false;
   std::unique_ptr<macos::TrustedInputMonitor> trusted_input_monitor_;
   // C20a (roadmap §114): the product main window is CEF's own Chrome-style
   // window (CefBrowserHost::CreateBrowser with CHROME runtime style, via
@@ -169,10 +144,6 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   // window controls, popups and chrome:// pages; the shell owns no chrome
   // surfaces. The cast action button mounts as a titlebar accessory
   // (CastChromeMac) in C20c.
-  std::unique_ptr<macos::AlloyToolbarMac> toolbar_;
-  /// PLT-SHELL-24M2FIX-C6: bookmark store behind the address bar's control.
-  /// Created on first use, so a shell that never bookmarks never touches disk.
-  std::unique_ptr<window::AlloyBookmarks> bookmarks_;
   // AGT-12Cc2r: serve-thread → UI-thread marshaling state for the agent
   // host. Declared before agent_host_ so the gate outlives bridge stop().
   std::unique_ptr<AgentUiState> agent_ui_state_;
@@ -189,8 +160,8 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   CefRefPtr<SettingsWindowClient> settings_client_;
   CefRefPtr<CefBrowser> settings_browser_;
   bool settings_quit_pending_ = false;
-  bool media_host_was_healthy_ = false;
-  std::uint64_t media_host_cast_epoch_ = 0;
+  // Last focused browser id: detects a Chrome-style tab switch so the cast
+  // shell resets per-page state once per navigation, not per repeated focus.
   int active_browser_id_ = 0;
 
   IMPLEMENT_REFCOUNTING(BrowserApp);

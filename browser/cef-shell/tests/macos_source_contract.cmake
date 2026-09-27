@@ -4,19 +4,9 @@ if(NOT DEFINED CRAYON_CEF_SHELL_SOURCE OR
 endif()
 
 set(macos_source_root "${CRAYON_CEF_SHELL_SOURCE}/src/macos")
-# PLT-SHELL-24M1: the macOS Alloy production host must exist and be wired
-# into the product app.
-set(alloy_host_root "${CRAYON_CEF_SHELL_SOURCE}/src/macos")
-foreach(required_host_file
-        "${alloy_host_root}/alloy_product_host_mac.h"
-        "${alloy_host_root}/alloy_product_host_mac.cc"
-        "${alloy_host_root}/alloy_toolbar_mac.h"
-        "${alloy_host_root}/alloy_toolbar_mac.cc")
-  if(NOT EXISTS "${required_host_file}")
-    message(FATAL_ERROR "macOS Alloy product host is missing: ${required_host_file}")
-  endif()
-endforeach()
-file(READ "${alloy_host_root}/app.cc" app_source_for_host)
+# C20b (roadmap §114): the macOS Alloy production host was deleted with the
+# Chrome-style switch; the product window is TabController::CreateMainWindow.
+file(READ "${macos_source_root}/app.cc" app_source_for_host)
 foreach(required_host_token
         "CreateMainWindow"
         "SetBrowserFocusedCallback"
@@ -106,20 +96,11 @@ if(NOT initial_url_count EQUAL 1)
   message(FATAL_ERROR "macOS shell must contain exactly one crayon://newtab URL")
 endif()
 
-# PLT-SHELL-24M2CAST: the product cast chain is AlloyCastController +
-# CastEntrySurface (toolbar-only entry, real MHV2 projections). The app
-# assembly binds/resets per-tab cast contexts; the surface localizes its own
-# strings via LocaleCatalog, so no resolved cast strings cross the assembly.
-# The cast drains have a single consumer (the controller): app must never
-# call DrainCast directly.
-# C20a (roadmap §114): the Chrome-style switch retired the Alloy cast entry
-# fixture in the assembly; the button returns via CastChromeMac in C20c, so
-# the CastEntrySurface token requirement is dropped here (file remains for
-# the Alloy probes until C20b removes it).
+# C20b (roadmap §114): the Alloy cast chain (AlloyCastController +
+# CastEntrySurface + per-tab bind/reset in the assembly) is retired on macOS;
+# the product cast funnel is CastShellController + CastChromeMac (guarded
+# below). Media observation lifecycle wiring stays product-critical.
 foreach(required_cast_token
-        "AlloyCastController"
-        "BindCastForActiveTab" "ResetCastContext"
-        "DetachCastSurface" "cast_binding_attempt_"
         "SetMediaObservationLifecycleCallback")
   string(FIND "${app_source}" "${required_cast_token}" token_index)
   if(token_index EQUAL -1)

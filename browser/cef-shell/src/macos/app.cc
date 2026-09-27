@@ -525,7 +525,6 @@ BrowserApp::BrowserApp(
               cast_chrome_->SetActiveWindow(browser_id);
               RenderCastChrome();
             }
-            BindCastForActiveTab();
           },
           std::string(kInitialUrl), permission_store_.get())) {}
 
@@ -601,6 +600,7 @@ void BrowserApp::ShutdownAgentHost() {
 
 void BrowserApp::StopBackgroundServices() {
   CEF_REQUIRE_UI_THREAD();
+
   if (background_services_stopped_) {
     return;
   }
@@ -615,12 +615,10 @@ void BrowserApp::StopBackgroundServices() {
   if (page_markdown_preview_) {
     page_markdown_preview_->Stop();
   }
-  ResetCastContext();
   // C20c: the cast shell owns in-flight cast commands; stop it before the
   // media host pipe goes away, then drop the titlebar surfaces.
   if (cast_shell_) cast_shell_->Shutdown();
   if (cast_chrome_) cast_chrome_->Close();
-  if (toolbar_) toolbar_->Shutdown();
   ShutdownAgentHost();
   content_host_->Stop();
   media_host_->Stop();
@@ -651,6 +649,7 @@ void BrowserApp::RenderCastChrome() {
 
 void BrowserApp::RequestProductQuit(bool force_close_browsers) {
   CEF_REQUIRE_UI_THREAD();
+
   // Quit may only reach the message loop from TabController's last
   // OnBeforeClose (browsers-closed callback already ran above) — quitting
   // earlier leaves live CEF objects and the agent-host serve thread behind,
@@ -871,17 +870,15 @@ void BrowserApp::OnContextInitialized() {
         const bool active = tab_controller_->model().active_tab() == tab_id;
         if (closed) {
           media_generations_.erase(tab_id);
-          if (cast_binding_attempt_ &&
-              cast_binding_attempt_->tab_id == tab_id) {
-            ResetCastContext();
-          } else {
-            static_cast<void>(media_host_->CloseTab(tab_id, generation));
-          }
+          static_cast<void>(media_host_->CloseTab(tab_id, generation));
           if (active && cast_shell_) cast_shell_->OnPageClosed();
         } else {
           media_generations_[tab_id] = generation;
           if (tab_controller_->model().active_tab() == tab_id) {
-            BindCastForActiveTab();
+            // C20b: the observation owner's navigation advance is already
+            // driven per-navigation from OnLoadingUpdated; calling it here
+            // re-entered the bridge (AdvanceNavigation → BindCurrentMainFrame
+            // → this callback → …) and overflowed the stack.
             if (cast_shell_) cast_shell_->OnNavigation();
           } else {
             static_cast<void>(media_host_->AdvanceNavigation(
@@ -908,17 +905,14 @@ void BrowserApp::OnContextInitialized() {
           cast_chrome_->SetActiveWindow(browser_id);
           RenderCastChrome();
         }
-        SyncToolbarToActiveTab();
       });
   tab_controller_->SetBrowserClosingCallback(
       [this](CefRefPtr<CefBrowser> browser) {
         if (cast_chrome_) {
           cast_chrome_->DetachWindow(browser->GetIdentifier());
         }
-        // C20a: view release is Chromium's own in the Chrome-style window;
-        // only the cast-binding state needs the closing notification.
+        // C20a: view release is Chromium's own in the Chrome-style window.
         if (active_browser_id_ == browser->GetIdentifier()) {
-          DetachCastSurface();
           active_browser_id_ = 0;
         }
       });
@@ -1032,10 +1026,7 @@ void BrowserApp::ContentHostTick() {
   content_host_->Consume(tab_controller_->DrainPageSnapshots(16));
   ConsumeMediaObservations();
   content_host_->Tick();
-  if (cast_controller_ && cast_context_bound_)
-    cast_controller_->Tick();
-  else
-    media_host_->Tick();
+  media_host_->Tick();
   page_markdown_preview_->Tick(content_host_->Drain(64),
                                content_host_->healthy());
   static_cast<void>(media_host_->Drain(64));
@@ -1046,19 +1037,6 @@ void BrowserApp::ContentHostTick() {
     cast_shell_->ConsumePlanning(media_host_->DrainPlanning(64));
     RenderCastChrome();
   }
-  const bool media_healthy = media_host_->healthy();
-  const std::uint64_t cast_epoch = media_host_->cast_state_epoch();
-  if ((!media_healthy && media_host_was_healthy_) ||
-      (cast_controller_ && cast_epoch != media_host_cast_epoch_)) {
-    ResetCastContext();
-  }
-  media_host_was_healthy_ = media_healthy;
-  media_host_cast_epoch_ = cast_epoch;
-  // PLT-SHELL-24M2UIP-a: the entry re-attaches (grey) whenever teardown
-  // paths cleared it, independent of media readiness.
-  TryAttachCastEntry();
-  if (media_healthy) BindCastForActiveTab();
-  if (cast_surface_) cast_surface_->Tick();
   ScheduleContentHostTick();
 }
 
@@ -1078,119 +1056,6 @@ void BrowserApp::ConsumeMediaObservations() {
 CefRefPtr<CefClient> BrowserApp::GetDefaultClient() {
   return tab_controller_->client();
 }
-
-void BrowserApp::SyncToolbarToActiveTab() {
-  CEF_REQUIRE_UI_THREAD();
-  // C20a: Chromium owns tab presentation in the Chrome-style window, so the
-  // Alloy toolbar/bookmark sync is gone. What remains event-driven here is
-  // the cast business binding; the content tick re-runs it periodically.
-  BindCastForActiveTab();
-}
-
-// PLT-SHELL-24M2FIX-C6: the bookmark store is created on first use and loaded
-// from the profile's own data directory. A missing file is the first run, not a
-// failure, so the load result is deliberately ignored; a failed create does
-// leave the control inert rather than pretending the page was saved.
-bool BrowserApp::EnsureBookmarks() {
-  CEF_REQUIRE_UI_THREAD();
-  if (bookmarks_) {
-    return true;
-  }
-  const auto profile = browser_engine::ProfileId::TryCreate("crayon-default");
-  if (!profile) {
-    return false;
-  }
-  bookmarks_ = std::make_unique<window::AlloyBookmarks>(
-      *profile,
-      window::AlloyBookmarks::Callbacks{
-          [this](const std::string& url) {
-            return toolbar_ && toolbar_->NavigateToAddress(url);
-          },
-          [](const std::string& url) {
-            // C20a: the Chrome-style window has no product bookmark bar;
-            // the store stays available for later product surfaces.
-            static_cast<void>(url);
-            return false;
-          }});
-  const auto context = CefRequestContext::GetGlobalContext();
-  const std::string cache =
-      context ? context->GetCachePath().ToString() : std::string{};
-  if (!cache.empty()) {
-    static_cast<void>(
-        bookmarks_->LoadFromFile(cache + "/crayon-bookmarks.json"));
-  }
-  return true;
-}
-
-bool BrowserApp::SaveBookmarks() {
-  CEF_REQUIRE_UI_THREAD();
-  if (!bookmarks_) {
-    return false;
-  }
-  const auto context = CefRequestContext::GetGlobalContext();
-  const std::string cache =
-      context ? context->GetCachePath().ToString() : std::string{};
-  if (cache.empty()) {
-    return false;
-  }
-  return bookmarks_->SaveToFile(cache + "/crayon-bookmarks.json");
-}
-
-// Reflects the active page's bookmark state on the address bar control.
-bool BrowserApp::RefreshBookmarkState() {
-  CEF_REQUIRE_UI_THREAD();
-  if (!toolbar_ || !tab_controller_ || !EnsureBookmarks()) {
-    return false;
-  }
-  const CefRefPtr<CefBrowser> browser = tab_controller_->ActiveBrowser();
-  if (!browser) {
-    return false;
-  }
-  const window::TabSnapshot* tab =
-      tab_controller_->model().FindByBrowser(browser->GetIdentifier());
-  // An empty or non-http(s) page cannot be bookmarked, so the control reports
-  // "not saved" instead of keeping a stale filled state.
-  if (!tab || tab->url.empty() ||
-      !browser_bookmarks::BookmarkStore::IsValidUrl(tab->url)) {
-    return toolbar_->SetBookmarked(false);
-  }
-  if (!bookmarks_->RefreshForUrl(tab->url)) {
-    return false;
-  }
-  return toolbar_->SetBookmarked(bookmarks_->bar().current_page_starred());
-}
-
-void BrowserApp::ToggleActiveBookmark() {
-  CEF_REQUIRE_UI_THREAD();
-  if (!toolbar_ || !tab_controller_ || !EnsureBookmarks()) {
-    return;
-  }
-  const CefRefPtr<CefBrowser> browser = tab_controller_->ActiveBrowser();
-  if (!browser) {
-    return;
-  }
-  const window::TabSnapshot* tab =
-      tab_controller_->model().FindByBrowser(browser->GetIdentifier());
-  if (!tab || tab->url.empty() ||
-      !browser_bookmarks::BookmarkStore::IsValidUrl(tab->url)) {
-    return;
-  }
-  const std::string url = tab->url;
-  const std::string title = tab->title.empty() ? tab->url : tab->title;
-  if (!bookmarks_->RefreshForUrl(url)) {
-    return;
-  }
-  if (const auto existing = bookmarks_->bar().current_page_bookmark()) {
-    static_cast<void>(bookmarks_->Remove(*existing));
-  } else {
-    static_cast<void>(bookmarks_->AddCurrentPage(title, url));
-  }
-  // Re-read the store rather than assuming the write: Remove() can refuse, and
-  // the control must then keep showing the state the store actually holds.
-  static_cast<void>(RefreshBookmarkState());
-  static_cast<void>(SaveBookmarks());
-}
-
 
 // PLT-SHELL-24M2FIX-C11: chrome:// WebUI renders only in Chrome runtime
 // style; an Alloy browser refuses the navigation silently (measured on the
@@ -1274,69 +1139,6 @@ void BrowserApp::OnSettingsBrowserClosed() {
 }
 
 
-void BrowserApp::DetachCastSurface() {
-  if (cast_surface_) cast_surface_->Detach();
-  cast_surface_.reset();
-}
-
-void BrowserApp::ResetCastContext() {
-  DetachCastSurface();
-  if (cast_controller_) cast_controller_->Shutdown();
-  cast_controller_.reset();
-  cast_binding_attempt_.reset();
-  cast_context_bound_ = false;
-  active_browser_id_ = 0;
-}
-
-void BrowserApp::BindCastForActiveTab() {
-  CEF_REQUIRE_UI_THREAD();
-  // C20a: media observation advance (business) stays event-driven; the
-  // visual entry/surface binding is retired with the Alloy chrome until the
-  // C20c cast action button provides a new mount.
-  if (cast_surface_ || !media_host_->healthy()) return;
-  const auto browser = tab_controller_->ActiveBrowser();
-  if (!browser) return;
-  const auto* tab =
-      tab_controller_->model().FindByBrowser(browser->GetIdentifier());
-  if (!tab || !tab->navigation_generation) return;
-  const auto generation =
-      media_generations_.find(static_cast<std::uint32_t>(tab->id));
-  if (generation == media_generations_.end()) return;
-  if (active_browser_id_ != browser->GetIdentifier()) {
-    // CloseTab retires the previous observation generation. Renew via the
-    // existing Browser observation owner on activation, never synthesize it.
-    active_browser_id_ = browser->GetIdentifier();
-    tab_controller_->client()->AdvanceMediaObservationNavigation(
-        browser, static_cast<std::uint32_t>(tab->id),
-        tab->navigation_generation);
-    return;  // The synchronous lifecycle callback performs the bind once.
-  }
-  if (!cast_controller_) {
-    cast_browser_session_ = MonotonicMilliseconds();
-    media_host_cast_epoch_ = media_host_->cast_state_epoch();
-    media_host_was_healthy_ = true;
-    const localization::LocaleCatalog catalog(locale_snapshot_.locale);
-    cast_controller_ = std::make_unique<media_host::AlloyCastController>(
-        media_host_.get(),
-        [this](auto snapshot) {
-          if (cast_surface_ && media_host_->healthy() &&
-              media_host_->cast_state_epoch() == media_host_cast_epoch_)
-            static_cast<void>(cast_surface_->Apply(std::move(snapshot)));
-        },
-        std::string(catalog.Find("cast.selection.video_fallback").value_or("")),
-        std::string(
-            catalog.Find("cast.selection.device_fallback").value_or("")),
-        MonotonicMilliseconds);
-  }
-}
-
-void BrowserApp::TryAttachCastEntry() {
-  CEF_REQUIRE_UI_THREAD();
-  // C20a: the Alloy cast entry fixture is retired with the Alloy chrome;
-  // the cast action button returns as a titlebar accessory (CastChromeMac)
-  // in C20c (roadmap §114).
-}
-
 bool BrowserApp::ExecuteAppCommand(macos::ApplicationCommand command) {
   CEF_REQUIRE_UI_THREAD();
   switch (command) {
@@ -1360,7 +1162,9 @@ bool BrowserApp::ExecuteAppCommand(macos::ApplicationCommand command) {
       tab_controller_->CloseActiveTab();
       return true;
     case macos::ApplicationCommand::kFocusLocation:
-      return toolbar_ && toolbar_->FocusOmnibox();
+      // C20b: the Alloy omnibox is gone; the Chrome-style window keeps its
+      // own location-bar focus (IDC_FOCUS_LOCATION rides the native path).
+      return false;
     case macos::ApplicationCommand::kSettings:
       // PLT-SHELL-24M2FIX-C11: the toolbar menu's settings entry (and the
       // application menu's, which routes through this same handler) opens

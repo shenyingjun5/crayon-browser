@@ -7,11 +7,7 @@ SET_CEF_TARGET_OUT_DIR()
 
 set(crayon_location_bar_sources
     src/browser/window/alloy_icon.cc
-    src/browser/window/alloy_icon.h
-    src/browser/window/chrome_location_bar.cc
-    src/browser/window/chrome_location_bar.h
-    src/browser/media_host/cast_entry_surface.cc
-    src/browser/media_host/cast_entry_surface.h)
+    src/browser/window/alloy_icon.h)
 
 if(OS_WINDOWS)
   if(NOT USE_SANDBOX)
@@ -54,8 +50,6 @@ if(OS_WINDOWS)
       src/browser/media_host/media_host_adapter.cc
       src/browser/media_host/media_host_adapter.h
       src/browser/media_host/media_host_transport.h
-      src/browser/media_host/alloy_cast_controller.cc
-      src/browser/media_host/alloy_cast_controller.h
       src/browser/media_host/cast_shell_controller.cc
       src/browser/media_host/cast_shell_controller.h
       src/browser/page_markdown/cef_page_markdown_preview.cc
@@ -363,23 +357,6 @@ if(OS_WINDOWS)
     add_test(NAME media_host_adapter_win COMMAND crayon_media_host_adapter_win_test)
     set_tests_properties(media_host_process_win media_host_adapter_win
                          PROPERTIES LABELS "cef;shell;windows;cast")
-
-    add_executable(
-      crayon_alloy_cast_controller_win_test
-      tests/alloy_cast_controller_test.cc
-      src/browser/media_host/alloy_cast_controller.cc
-      src/browser/media_host/media_host_adapter.cc)
-    target_compile_features(crayon_alloy_cast_controller_win_test PRIVATE cxx_std_17)
-    target_include_directories(crayon_alloy_cast_controller_win_test
-                               PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
-    target_link_libraries(
-      crayon_alloy_cast_controller_win_test
-      PRIVATE crayon::browser-cast-view crayon::cef-shell-core-client
-              crayon::cef-shell-ipc)
-    add_test(NAME alloy_cast_controller_win
-             COMMAND crayon_alloy_cast_controller_win_test)
-    set_tests_properties(alloy_cast_controller_win
-                         PROPERTIES LABELS "cef;shell;windows;cast;alloy")
 
     add_executable(
       crayon_alloy_cast_overlay_win_test
@@ -1046,22 +1023,18 @@ if(OS_MAC)
       src/browser/window/alloy_navigation.h
       src/macos/alloy_session_restore_mac.h
       src/macos/alloy_session_restore_mac.cc
-      src/macos/alloy_product_host_mac.h
-      src/macos/alloy_product_host_mac.cc
-      src/macos/alloy_toolbar_mac.h
-      src/macos/alloy_toolbar_mac.cc
+      src/browser/window/chrome_location_bar.cc
+      src/browser/window/chrome_location_bar.h
+      src/browser/media_host/cast_entry_surface.cc
+      src/browser/media_host/cast_entry_surface.h
+      src/browser/media_host/alloy_cast_controller.cc
+      src/browser/media_host/alloy_cast_controller.h
       src/macos/app.cc
       src/macos/app.h
       src/macos/agent_confirm_sheet_mac.h
       src/macos/agent_confirm_sheet_mac.mm
-      src/macos/alloy_titlebar_mac.h
-      src/macos/alloy_titlebar_mac.mm
-      src/browser/media_host/alloy_cast_controller.cc
-      src/browser/media_host/alloy_cast_controller.h
       src/browser/media_host/cast_shell_controller.cc
       src/browser/media_host/cast_shell_controller.h
-      src/browser/media_host/cast_entry_surface.cc
-      src/browser/media_host/cast_entry_surface.h
       src/macos/cast_chrome_mac.mm
       src/macos/content_host_adapter_mac.cc
       src/macos/content_host_adapter_mac.h
@@ -1197,7 +1170,6 @@ if(OS_MAC)
                               src/macos/page_markdown_platform_mac.mm
                               src/macos/trusted_input_monitor_mac.mm
                               src/macos/agent_confirm_sheet_mac.mm
-                              src/macos/alloy_titlebar_mac.mm
                               PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
   # AGT-12Cc2: bridging declarations for the Rust FFI surface.
   set(crayon_agent_host_include_dir
@@ -1613,12 +1585,6 @@ if(CRAYON_BUILD_TESTS)
       crayon_page_snapshot_cef_integration_test MACOSX_BUNDLE
       ${crayon_location_bar_sources}
       tests/page_snapshot_cef_integration_mac.mm
-      src/macos/alloy_product_host_mac.cc
-      src/macos/alloy_titlebar_mac.mm
-      src/macos/alloy_titlebar_mac.h
-      src/macos/alloy_toolbar_mac.cc
-      tests/alloy_cast_toolbar_mac_probe.cc
-      tests/alloy_cast_toolbar_mac_probe.h
       tests/alloy_security_probe.cc
       tests/alloy_security_probe.h
       src/browser/window/alloy_site_controls.cc
@@ -1677,7 +1643,6 @@ if(CRAYON_BUILD_TESTS)
       src/browser/window/alloy_content_view_host.cc
       tests/alloy_tab_strip_probe.cc
       src/browser/window/alloy_tab_strip.cc
-      tests/cast_toolbar_host_probe.cc
       tests/cast_entry_surface_probe.cc
       tests/alloy_cast_bridge_probe.cc
       tests/alloy_cast_bridge_probe.h
@@ -1685,9 +1650,6 @@ if(CRAYON_BUILD_TESTS)
       src/browser/media_host/alloy_cast_controller.h
       src/browser/media_host/cast_entry_surface.cc
       src/browser/media_host/cast_entry_surface.h
-      src/macos/alloy_cast_overlay_mac.mm
-      src/macos/alloy_cast_overlay_mac.h
-      tests/alloy_cast_overlay_mac_probe.mm
       tests/alloy_locale_matrix_mac_probe.mm
       tests/alloy_locale_matrix_mac_probe.h
       tests/media_observation_cef_message_checks.cc
@@ -1726,13 +1688,10 @@ if(CRAYON_BUILD_TESTS)
                  MACOSX_BUNDLE_BUNDLE_VERSION "1")
     set_source_files_properties(
       tests/page_snapshot_cef_integration_mac.mm
-      src/macos/alloy_titlebar_mac.mm
       src/macos/cast_chrome_mac.mm
       src/macos/trusted_input_monitor_mac.mm
       src/macos/application_menu_mac.mm
       tests/alloy_interactions_mac_probe.mm
-      src/macos/alloy_cast_overlay_mac.mm
-      tests/alloy_cast_overlay_mac_probe.mm
       tests/alloy_locale_matrix_mac_probe.mm
       PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
     target_include_directories(crayon_page_snapshot_cef_integration_test
@@ -1827,9 +1786,6 @@ if(CRAYON_BUILD_TESTS)
     set_tests_properties(page_snapshot_cef_integration
                          PROPERTIES LABELS "cef;shell;content;integration"
                                     TIMEOUT 240)
-    add_test(NAME cast_toolbar_host_probe
-             COMMAND crayon_page_snapshot_cef_integration_test
-             --cast-toolbar-host-probe)
     add_test(NAME alloy_omnibox_mac
              COMMAND crayon_page_snapshot_cef_integration_test --alloy-omnibox-probe)
     set_tests_properties(alloy_omnibox_mac PROPERTIES TIMEOUT 30 LABELS "cef;shell;macos")
@@ -1862,13 +1818,6 @@ if(CRAYON_BUILD_TESTS)
     set_tests_properties(
       alloy_page_markdown_mac
       PROPERTIES LABELS "cef;shell;macos;alloy;content;mdv;integration"
-                 TIMEOUT 240)
-    add_test(NAME alloy_cast_overlay_mac
-             COMMAND crayon_page_snapshot_cef_integration_test
-                     --alloy-cast-overlay-probe)
-    set_tests_properties(
-      alloy_cast_overlay_mac
-      PROPERTIES LABELS "cef;shell;macos;alloy;cast;integration"
                  TIMEOUT 240)
     foreach(crayon_loc_tag IN ITEMS zh-CN en-US zh-TW)
       string(REPLACE "-" "" crayon_loc_suffix "${crayon_loc_tag}")
@@ -1924,15 +1873,6 @@ if(CRAYON_BUILD_TESTS)
              --cast-entry-surface-probe)
     set_tests_properties(cast_entry_surface_probe PROPERTIES TIMEOUT 30
                          LABELS "integration;cef;cast")
-    set_tests_properties(cast_toolbar_host_probe
-                         PROPERTIES LABELS "cef;shell;cast;integration"
-                 TIMEOUT 30)
-    add_test(NAME cast_toolbar_close_probe
-             COMMAND crayon_page_snapshot_cef_integration_test
-                     --cast-toolbar-close-probe)
-    set_tests_properties(cast_toolbar_close_probe
-                         PROPERTIES LABELS "cef;shell;cast;integration"
-                                    TIMEOUT 30)
   endif()
 
   add_executable(

@@ -80,6 +80,7 @@ enum class ExitCode : int {
 }
 
 - (void)tryToTerminateApplication {
+
   // Quit funnels through BrowserApp so the background service chain stops
   // before the message loop exits; force=false keeps beforeunload dialogs
   // on the user-facing menu path.

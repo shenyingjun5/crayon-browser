@@ -70,6 +70,7 @@ WindowClient::WindowClient(TabController* controller,
 
 void WindowClient::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
+
   controller_->OnBrowserCreated(browser);
 #if defined(_WIN32)
   if (controller_->model().active_tab().has_value()) {
@@ -126,11 +127,13 @@ bool WindowClient::OnBeforePopup(CefRefPtr<CefBrowser> browser,
 
 bool WindowClient::DoClose(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
+
   return controller_->OnBrowserCloseRequested(browser);
 }
 
 void WindowClient::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
+
   // PLT-SHELL-24M1: WasHidden is windowless-only in the Alloy runtime and
   // DCHECK-aborts for windowed browsers; the closing window's visibility is
   // owned by the platform, so the hide notification is skipped here.
@@ -500,6 +503,7 @@ bool TabController::ActivateTab(TabId tab_id) {
 
 bool TabController::RequestCloseTab(TabId tab_id) {
   CEF_REQUIRE_UI_THREAD();
+
   const TabSnapshot *tab = model_.Find(tab_id);
   if (!tab || tab->lifecycle == TabLifecycle::kClosing) {
     return false;

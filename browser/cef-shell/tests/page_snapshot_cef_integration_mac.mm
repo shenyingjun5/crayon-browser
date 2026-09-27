@@ -18,8 +18,6 @@
 
 #include "alloy_builtin_content_probe.h"
 #include "alloy_cast_bridge_probe.h"
-#include "alloy_cast_overlay_mac_probe.h"
-#include "alloy_cast_toolbar_mac_probe.h"
 #include "alloy_content_view_host_probe.h"
 #include "alloy_interactions_mac_probe.h"
 #include "alloy_locale_matrix_mac_probe.h"
@@ -36,7 +34,6 @@
 #include "browser/media_host/media_host_adapter.h"
 #include "browser/window/tab_controller.h"
 #include "cast_entry_surface_probe.h"
-#include "cast_toolbar_host_probe.h"
 #include "include/base/cef_callback.h"
 #include "include/cef_app.h"
 #include "include/cef_application_mac.h"
@@ -1030,8 +1027,6 @@ int main(int argc, char *argv[]) {
       argc == 3 && std::string(argv[2]) == "alloy-page-markdown";
   const bool cast_bridge_probe =
       argc == 3 && std::string(argv[2]) == "alloy-cast-bridge";
-  const bool cast_overlay_probe =
-      argc == 2 && std::string(argv[1]) == "--alloy-cast-overlay-probe";
   const bool loc_matrix_probe =
       argc == 3 && std::string(argv[2]).rfind("alloy-loc-", 0) == 0;
   const bool navigation_probe =
@@ -1050,17 +1045,11 @@ int main(int argc, char *argv[]) {
       argc == 2 && std::string(argv[1]) == "--alloy-content-view-host-probe";
   const bool tab_strip_probe =
       argc == 2 && std::string(argv[1]) == "--alloy-tab-strip-probe";
-  const bool cast_mac_probe = argc == 2 && std::string(argv[1]) == "--alloy-cast-toolbar-mac-probe";
   const bool entry_probe =
       argc == 2 && std::string(argv[1]) == "--cast-entry-surface-probe";
-  const bool toolbar_close_probe =
-      argc == 2 && std::string(argv[1]) == "--cast-toolbar-close-probe";
-  const bool toolbar_probe =
-      toolbar_close_probe ||
-      (argc == 2 && std::string(argv[1]) == "--cast-toolbar-host-probe");
-  if (argc != 3 && !cast_mac_probe && !toolbar_probe && !entry_probe && !tab_strip_probe &&
+  if (argc != 3 && !entry_probe && !tab_strip_probe &&
       !content_view_probe && !omnibox_probe && !interactions_probe && !builtins_probe &&
-      !cast_overlay_probe && !loc_matrix_probe)
+      !loc_matrix_probe)
     return 2;
   CefScopedLibraryLoader library_loader;
   if (!library_loader.LoadInMain())
@@ -1109,8 +1098,6 @@ int main(int argc, char *argv[]) {
       }
       CefSetDataDirectoryForTests(ceftests_files.string());
     }
-    auto cast_mac_result = std::make_shared<AlloyCastToolbarMacProbeResult>();
-    auto toolbar_result = std::make_shared<CastToolbarHostProbeResult>();
     auto entry_result = std::make_shared<CastEntrySurfaceProbeResult>();
     auto tab_strip_result = std::make_shared<AlloyTabStripProbeResult>();
     auto content_view_result = std::make_shared<AlloyContentViewHostProbeResult>();
@@ -1124,8 +1111,6 @@ int main(int argc, char *argv[]) {
         std::make_shared<AlloyPageMarkdownProbeResult>();
     auto cast_bridge_result =
         std::make_shared<AlloyCastBridgeProbeResult>();
-    auto cast_overlay_result =
-        std::make_shared<AlloyCastOverlayMacProbeResult>();
     auto locale_matrix_result =
         std::make_shared<AlloyLocaleMatrixMacProbeResult>();
     auto navigation_result = std::make_shared<AlloyNavigationProbeResult>();
@@ -1136,9 +1121,7 @@ int main(int argc, char *argv[]) {
         std::make_shared<AlloyWindowCoordinatorProbeResult>();
     CefRefPtr<SnapshotFixtureApp> snapshot_app;
     CefRefPtr<CefApp> app;
-    if (cast_mac_probe) {
-      app = CreateAlloyCastToolbarMacProbe(cast_mac_result);
-    } else if (omnibox_probe) {
+    if (omnibox_probe) {
       app = CreateAlloyOmniboxProbe(omnibox_result);
     } else if (interactions_probe) {
       app = CreateAlloyInteractionsMacProbe(interactions_result);
@@ -1148,8 +1131,6 @@ int main(int argc, char *argv[]) {
       app = CreateAlloyPageMarkdownProbe(argv[1], page_markdown_result);
     } else if (cast_bridge_probe) {
       app = CreateAlloyCastBridgeProbe(cast_bridge_result);
-    } else if (cast_overlay_probe) {
-      app = CreateAlloyCastOverlayMacProbe(cast_overlay_result);
     } else if (loc_matrix_probe) {
       app = CreateAlloyLocaleMatrixMacProbe(
           std::string(argv[2]).substr(sizeof("alloy-loc-") - 1),
@@ -1172,8 +1153,6 @@ int main(int argc, char *argv[]) {
       app = CreateAlloyTabStripProbe(tab_strip_result);
     } else if (entry_probe) {
       app = CreateCastEntrySurfaceProbe(entry_result);
-    } else if (toolbar_probe) {
-      app = CreateCastToolbarHostProbe(toolbar_result, toolbar_close_probe);
     } else {
       snapshot_app = new SnapshotFixtureApp(argv[1], argv[2]);
       app = snapshot_app;
@@ -1184,14 +1163,8 @@ int main(int argc, char *argv[]) {
     [NSApp finishLaunching];
     [NSApp activateIgnoringOtherApps:YES];
     CefRunMessageLoop();
-    if (cast_mac_probe) {
-      const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-      while (!cast_mac_result->closed && std::chrono::steady_clock::now() < deadline)
-        CefDoMessageLoopWork();
-    }
     const bool passed =
-        cast_mac_probe  ? cast_mac_result->passed && cast_mac_result->closed
-        : omnibox_probe ? omnibox_result->behavior_passed && omnibox_result->window_closed
+        omnibox_probe ? omnibox_result->behavior_passed && omnibox_result->window_closed
         : interactions_probe
             ? interactions_result->attach_passed && interactions_result->native_menu_passed &&
                   interactions_result->context_passed && interactions_result->drag_passed &&
@@ -1212,12 +1185,6 @@ int main(int argc, char *argv[]) {
                   cast_bridge_result->reason_passed && cast_bridge_result->session_passed &&
                   cast_bridge_result->accessibility_passed && cast_bridge_result->browser_closed &&
                   cast_bridge_result->window_closed
-        : cast_overlay_probe
-            ? cast_overlay_result->placement_passed && cast_overlay_result->click_passed &&
-                  cast_overlay_result->expiry_passed && cast_overlay_result->unsupported_passed &&
-                  cast_overlay_result->duplicate_passed && cast_overlay_result->picker_passed &&
-                  cast_overlay_result->detach_passed && cast_overlay_result->browser_closed &&
-                  cast_overlay_result->window_closed
         : loc_matrix_probe
             ? locale_matrix_result->new_tab_passed && locale_matrix_result->browser_closed &&
                   locale_matrix_result->window_closed
@@ -1257,16 +1224,13 @@ int main(int argc, char *argv[]) {
         : tab_strip_probe ? tab_strip_result->behavior_passed && tab_strip_result->window_closed
         : entry_probe     ? entry_result->behavior_passed && entry_result->browser_closed &&
                             entry_result->window_closed
-        : toolbar_probe ? toolbar_result->layout_passed && toolbar_result->browser_closed &&
-                              toolbar_result->window_closed &&
-                              (!toolbar_close_probe || toolbar_result->cancellation_verified)
                         : snapshot_app->passed();
-    if (cast_mac_probe || profile_context_probe || security_probe || page_tools_probe ||
-        interactions_probe || builtins_probe || page_markdown_probe || cast_overlay_probe ||
+    if (profile_context_probe || security_probe || page_tools_probe ||
+        interactions_probe || builtins_probe || page_markdown_probe ||
         loc_matrix_probe)
       app = nullptr;
-    if (cast_mac_probe || interactions_probe || builtins_probe || page_markdown_probe ||
-        cast_overlay_probe || loc_matrix_probe) {
+    if (interactions_probe || builtins_probe || page_markdown_probe ||
+        loc_matrix_probe) {
       // CEF-150 macOS teardown race: CefShutdown blocks indefinitely on an
       // already-exited helper child (unreaped zombie, waitpid ECHILD); the
       // race reproduces with a bare window+browser probe, so it is not
