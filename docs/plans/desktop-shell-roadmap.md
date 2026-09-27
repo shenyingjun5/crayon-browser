@@ -1566,6 +1566,13 @@ Code Review：按 v0.9 独立检查唯一 owner、同步 callback reentrancy、t
 
 ### 114.4 C20b 完成记录（2026-09-27，Alloy 时代产物清除——macOS 侧）
 
+### 114.5 C20f 调查入口（2026-09-27，下一会话从这里继续）
+
+- 候选判定链（已核实的代码路径）：渲染器观察事实 → `WindowClient` 观察桥 → app `ConsumeMediaObservations` → `media_host_->Consume(facts)` → IPC → **Rust helper（`crates/crayon-media-host`）** → `crates/crayon-app-runtime/src/media_host_runtime.rs` 的 `MediaPlanningRuntime`（MHV1 兼容 planner + inspector）→ `CandidateReply` → app 适配器 `media_host_adapter.cc:698` 转 `MediaPlanningEvent::kCandidate` → `cast_shell_->ConsumePlanning` → coordinator 点亮按钮。
+- C20f 待查：① planner 的 fact→candidate 判据（`MediaPlanningRuntime` + inspector，MHV1 兼容口径——B 站 DASH/HLS 流是否落在判据内）；② B 站页面实际送达的 facts 内容（渲染器 media observer + network observer 的产出，用隔离实例 + 事实日志取证）；③ 两者的差距即修复点。
+- 验证方式：C20b 后按钮常驻（灰色）,候选点亮后转可用——真实视频页 + 无需人工点击即可由状态判定。
+- 注意：mac 测试套件中 4 个 AX 驱动探针（omnibox/builtin/page_tools/tab_controller）在**有其他实例抢占前台时会假失败**——先杀实例再跑。
+
 - 删除（mac 独占，Windows 消费的共享组件全部保留）：`alloy_product_host_mac`、`alloy_toolbar_mac`、`alloy_titlebar_mac`、`alloy_cast_overlay_mac`、`alloy_cast_toolbar_mac_probe`、`cast_toolbar_host_probe` 六组源文件；`app.{h,cc}` 中 toolbar_/cast_surface_/cast_controller_/cast_binding_attempt_/cast_browser_session_/cast_context_bound_/bookmarks 全套机制与 SyncToolbarToActiveTab/BindCastForActiveTab/TryAttachCastEntry/DetachCastSurface/ResetCastContext/书签四方法；产品书签接线退役（原生星标接管，见 §103 遗留登记）。
 - 保留（Windows 产品/集成测试仍消费，随 Windows C20 迁移收口）：cast_entry_surface、alloy_cast_controller、chrome_location_bar（三者经 AX/引用盘点确认无 mac 产品引用方，win 集成目标显式编译使用）。
 - 契约：macos_source_contract 移除 Alloy host 文件清单与 AlloyCastController/BindCastForActiveTab/DetachCastSurface/cast_binding_attempt_ token 守卫；保留 cast 漏斗两端 token 与媒体观察生命周期守卫。
