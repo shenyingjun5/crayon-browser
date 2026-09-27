@@ -43,7 +43,8 @@ NSString* Text(const std::string& value) {
 
 struct Surface final {
   NSWindow* window = nil;
-  NSTitlebarAccessoryViewController* accessory = nil;
+  NSPanel* panel = nil;
+  id resize_observer = nil;
   NSButton* button = nil;
   CrayonCastButtonTarget* target = nil;
   NSAlert* alert = nil;
@@ -77,6 +78,34 @@ struct State final {
   int active_browser_id = 0;
   bool closed = false;
 };
+
+namespace {
+
+// Pins the child panel to the right end of the TAB STRIP row of the CEF
+// Chrome-style window. Measured via AX on the product (2026-09-27): the
+// omnibox row's trailing cluster (page actions 1433+, bookmark star 1465,
+// avatar 1510, main menu 1546 on a 1200pt window) fills that row entirely,
+// so a panel there would sit under the safety/shield button. The tab strip
+// row right of the "+" button is empty at any window size and independent of
+// omnibox width, which makes it the only overlap-free slot.
+void PositionPanel(Surface* surface) {
+  if (!surface || !surface->window || !surface->panel)
+    return;
+  const NSRect parent = surface->window.frame;
+  const CGFloat content_width = surface->panel.contentView.frame.size.width;
+  // Panel right edge 64 dip in from the window's right edge; vertically
+  // centered in the 41-dip tab strip row (panel is 32 dip tall).
+  const CGFloat right_inset = 64.0f;
+  const CGFloat bottom_offset = 37.0f;
+  NSRect frame = surface->panel.frame;
+  frame.origin.x = parent.origin.x + parent.size.width - right_inset -
+                   content_width;
+  frame.origin.y = parent.origin.y + parent.size.height - bottom_offset;
+  frame.size = surface->panel.contentView.frame.size;
+  [surface->panel setFrame:frame display:YES];
+}
+
+}  // namespace
 
 void UpdatePicker(Surface* surface, const CastChromeStrings& strings) {
   if (!surface || !surface->receiver_popup)
@@ -293,11 +322,14 @@ void UpdatePlayback(Surface* surface, const State& state, bool active) {
   surface->control_status.accessibilityLabel =
       surface->control_status.stringValue;
   surface->control_status.hidden = !rejected && (!casting || !failed);
-  [surface->accessory.view
-      setFrameSize:NSMakeSize(
-                       casting || rejected ? kPlaybackWidth : kCompactWidth,
-                       rejected || (casting && failed) ? kControlHeight * 2
-                                                       : kControlHeight)];
+  const CGFloat content_width =
+      casting || rejected ? kPlaybackWidth : kCompactWidth;
+  const CGFloat content_height =
+      rejected || (casting && failed) ? kControlHeight * 2 : kControlHeight;
+  [[surface->panel contentView]
+      setFrameSize:NSMakeSize(content_width, content_height)];
+  [surface->panel setContentSize:NSMakeSize(content_width, content_height)];
+  PositionPanel(surface);
   if (!casting) {
     surface->seconds.stringValue = @"";
     surface->seek_failed = false;
@@ -412,8 +444,22 @@ bool CastChromeMac::AttachWindow(int browser_id, void* native_view) {
 
   Surface surface;
   surface.window = window;
-  surface.accessory = [[NSTitlebarAccessoryViewController alloc] init];
-  surface.accessory.layoutAttribute = NSLayoutAttributeRight;
+  // C20c-u2: the Chrome-style window renders no AppKit titlebar (Chromium
+  // owns the whole chrome area), so the entry is a non-activating child
+  // panel pinned next to the omnibox's trailing controls instead of a
+  // titlebar accessory.
+  NSPanel* panel = [[NSPanel alloc]
+      initWithContentRect:NSMakeRect(0, 0, kCompactWidth, kControlHeight)
+                styleMask:NSWindowStyleMaskBorderless |
+                          NSWindowStyleMaskNonactivatingPanel
+                  backing:NSBackingStoreBuffered
+                    defer:NO];
+  panel.level = NSFloatingWindowLevel;
+  panel.hasShadow = NO;
+  panel.releasedWhenClosed = NO;
+  panel.backgroundColor = [NSColor clearColor];
+  panel.ignoresMouseEvents = NO;
+  surface.panel = panel;
   NSView* container = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 40, 32)];
   surface.button = [[NSButton alloc] initWithFrame:NSMakeRect(4, 0, 32, 32)];
   surface.button.bezelStyle = NSBezelStyleTexturedRounded;
@@ -422,9 +468,12 @@ bool CastChromeMac::AttachWindow(int browser_id, void* native_view) {
   if (!image)
     return false;
   surface.button.image = image;
-  surface.button.toolTip = Text(impl_->state->strings.button_select);
-  surface.button.accessibilityLabel = Text(impl_->state->strings.button_select);
-  surface.button.hidden = YES;
+  // Pinned product entry: mount visible and gray. The audited funnel only
+  // ever lights it up; the first Render reasserts the real state.
+  surface.button.toolTip = Text(impl_->state->strings.button_idle);
+  surface.button.accessibilityLabel = Text(impl_->state->strings.button_idle);
+  surface.button.hidden = NO;
+  surface.button.enabled = NO;
   surface.target = [[CrayonCastButtonTarget alloc] init];
   std::shared_ptr<State> state = impl_->state;
   surface.target.action = ^{
@@ -447,9 +496,21 @@ bool CastChromeMac::AttachWindow(int browser_id, void* native_view) {
   surface.button.target = surface.target;
   surface.button.action = @selector(invoke:);
   [container addSubview:surface.button];
-  surface.accessory.view = container;
+  panel.contentView = container;
   AddPlaybackControls(state, browser_id, &surface, container);
-  [window addTitlebarAccessoryViewController:surface.accessory];
+  [window addChildWindow:panel ordered:NSWindowAbove];
+  surface.resize_observer = [[NSNotificationCenter defaultCenter]
+      addObserverForName:NSWindowDidResizeNotification
+                  object:window
+                   queue:nil
+              usingBlock:^(NSNotification* note) {
+                if (state->closed)
+                  return;
+                auto found = state->surfaces.find(browser_id);
+                if (found != state->surfaces.end())
+                  PositionPanel(&found->second);
+              }];
+  PositionPanel(&surface);
   impl_->state->surfaces.emplace(browser_id, std::move(surface));
   return true;
 }
@@ -467,13 +528,14 @@ void CastChromeMac::DetachWindow(int browser_id) {
   found->second.pause.target = nil;
   found->second.seek.target = nil;
   found->second.seconds.target = nil;
-  if (found->second.window && found->second.accessory) {
-    const NSUInteger index =
-        [found->second.window.titlebarAccessoryViewControllers
-            indexOfObject:found->second.accessory];
-    if (index != NSNotFound) {
-      [found->second.window removeTitlebarAccessoryViewControllerAtIndex:index];
-    }
+  if (found->second.resize_observer) {
+    [[NSNotificationCenter defaultCenter]
+        removeObserver:found->second.resize_observer];
+    found->second.resize_observer = nil;
+  }
+  if (found->second.window && found->second.panel) {
+    [found->second.window removeChildWindow:found->second.panel];
+    [found->second.panel orderOut:nil];
   }
   impl_->state->surfaces.erase(found);
   if (impl_->state->active_browser_id == browser_id)
@@ -508,16 +570,21 @@ void CastChromeMac::Render(
     surface.reject_reason = coordinator.feature().reject_reason();
     surface.presentation = presentation;
     surface.receivers = coordinator.receivers();
-    surface.button.hidden =
-        !active || surface.state == CastButtonState::kHidden;
+    // The cast entry is a pinned product action: it stays mounted on the
+    // active window and only its lit/gray state comes from the audited cast
+    // funnel. Hidden states stay on non-active windows.
+    surface.button.hidden = !active;
     surface.button.enabled =
         active && (surface.state == CastButtonState::kEligible ||
                    surface.state == CastButtonState::kCasting);
     const bool casting = surface.state == CastButtonState::kCasting;
+    const bool idle = surface.state == CastButtonState::kHidden ||
+                      surface.state == CastButtonState::kDisabled;
     surface.button.toolTip = Text(
         casting ? impl_->state->strings.button_stop
                 : (surface.rejected ? impl_->state->strings.retry
-                                    : impl_->state->strings.button_select));
+                    : idle ? impl_->state->strings.button_idle
+                           : impl_->state->strings.button_select));
     surface.button.accessibilityLabel = surface.button.toolTip;
     UpdatePlayback(&surface, *impl_->state, active);
     if (surface.state != CastButtonState::kSelecting)

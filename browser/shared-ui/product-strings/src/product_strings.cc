@@ -115,7 +115,8 @@ std::optional<ProductStrings> BuildProductStrings(
                   Required(catalog, "cast.rejected", &complete),
                   Required(catalog, "cast.rejected.no_route", &complete),
                   Required(catalog, "cast.rejected.drm", &complete),
-                  Required(catalog, "cast.retry", &complete)}};
+                  Required(catalog, "cast.retry", &complete),
+                  Required(catalog, "cast.button.idle", &complete)}};
   if (!complete || !ProductStringsAreComplete(strings)) {
     return std::nullopt;
   }
@@ -174,7 +175,8 @@ bool ProductStringsAreComplete(const ProductStrings& strings) noexcept {
          present(cast.playback_resume) && present(cast.playback_seek) &&
          present(cast.playback_seconds) && present(cast.playback_failed) &&
          present(cast.rejected) && present(cast.rejected_no_route) &&
-         present(cast.rejected_drm) && present(cast.retry);
+         present(cast.rejected_drm) && present(cast.retry) &&
+         present(cast.button_idle);
 }
 
 }  // namespace crayon::browser::product_strings

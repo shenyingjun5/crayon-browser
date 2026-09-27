@@ -28,11 +28,19 @@ void DrainAppKit() {
       runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.02]];
 }
 
-NSButton* CastButton(NSWindow* window) {
-  if (window.titlebarAccessoryViewControllers.count != 1)
+NSView* CastContainer(NSWindow* window) {
+  // C20c-u2: the entry mounts as a non-activating child panel, not a
+  // titlebar accessory.
+  NSArray<NSWindow*>* children = window.childWindows;
+  if (children.count != 1) {
     return nil;
-  NSView* container = window.titlebarAccessoryViewControllers[0].view;
-  return container.subviews.count >= 1
+  }
+  return children[0].contentView;
+}
+
+NSButton* CastButton(NSWindow* window) {
+  NSView* container = CastContainer(window);
+  return container && container.subviews.count >= 1
              ? static_cast<NSButton*>(container.subviews[0])
              : nil;
 }
@@ -101,7 +109,8 @@ bool RunChromeContract() {
                         "No devices", "Cast", "Refresh", "Cancel", "Cast code",
                         "Connect code", "Code failed", "Pause", "Resume",
                         "Seek", "Seconds", "Control failed", "Cast rejected",
-                        "No cast route", "DRM protected", "Retry cast"},
+                        "No cast route", "DRM protected", "Retry cast",
+                        "No video to cast"},
       CastChromeCallbacks{[&coordinator] {
                             if (coordinator.active_session_generation())
                               return coordinator.RequestStop().has_value();
@@ -137,11 +146,15 @@ bool RunChromeContract() {
 
   CHECK_CHROME(chrome.AttachWindow(1, (__bridge void*)first.contentView));
   CHECK_CHROME(chrome.AttachWindow(1, (__bridge void*)first.contentView));
-  CHECK_CHROME(first.titlebarAccessoryViewControllers.count == 1);
+  CHECK_CHROME(first.childWindows.count == 1);
   chrome.SetActiveWindow(1);
   chrome.Render(coordinator);
   NSButton* first_button = CastButton(first);
-  CHECK_CHROME(first_button && first_button.hidden);
+  // Pinned product entry: always mounted on the active window, gray without
+  // an audited candidate.
+  CHECK_CHROME(first_button && !first_button.hidden &&
+               !first_button.enabled);
+  CHECK_CHROME([first_button.toolTip isEqualToString:@"No video to cast"]);
 
   coordinator.SetPageActive(true);
   coordinator.SetMediaPresent(true);
@@ -221,7 +234,7 @@ bool RunChromeContract() {
   CHECK_CHROME(coordinator.ApplyPolicyOutcome(cast::PolicyOutcome::kReject,
                                               cast::RejectReason::kNoRoute));
   chrome.Render(coordinator);
-  NSView* rejected_controls = first.titlebarAccessoryViewControllers[0].view;
+  NSView* rejected_controls = CastContainer(first);
   NSTextField* rejected_status = FindInput(rejected_controls, @"No cast route");
   CHECK_CHROME(rejected_status && !rejected_status.hidden);
   CHECK_CHROME([first_button.accessibilityLabel isEqualToString:@"Retry cast"]);
@@ -262,7 +275,8 @@ bool RunChromeContract() {
   chrome.DetachWindow(2);
   coordinator.SetPageActive(false);
   chrome.Render(coordinator);
-  CHECK_CHROME(rejected_status.hidden && first_button.hidden);
+  CHECK_CHROME(rejected_status.hidden && !first_button.hidden &&
+               !first_button.enabled);
   coordinator.SetPageActive(true);
   coordinator.SetMediaPresent(true);
   coordinator.SetBrowserVerifiedEligible(true);
@@ -272,7 +286,7 @@ bool RunChromeContract() {
   CHECK_CHROME(coordinator.NotifySessionStarted(9));
   chrome.Render(coordinator);
   CHECK_CHROME([first_button.toolTip isEqualToString:@"Stop casting"]);
-  NSView* controls = first.titlebarAccessoryViewControllers[0].view;
+  NSView* controls = CastContainer(first);
   NSButton* pause = FindButton(controls, @"Pause");
   NSButton* seek = FindButton(controls, @"Seek");
   NSTextField* seconds = FindInput(controls, @"Seconds");
@@ -319,7 +333,7 @@ bool RunChromeContract() {
   CHECK_CHROME(CastButton(second) && !CastButton(second).hidden &&
                !CastButton(second).enabled);
   chrome.DetachWindow(2);
-  CHECK_CHROME(second.titlebarAccessoryViewControllers.count == 0);
+  CHECK_CHROME(second.childWindows.count == 0);
   CHECK_CHROME(coordinator.NotifySessionEnded(9));
   // A stopped session deliberately loses eligibility. Model the next
   // Browser-verified playback before opening a fresh picker.
@@ -337,7 +351,7 @@ bool RunChromeContract() {
   CHECK_CHROME(code_calls == 3 && !connect.enabled);
   chrome.Close();
   DrainAppKit();
-  CHECK_CHROME(first.titlebarAccessoryViewControllers.count == 0);
+  CHECK_CHROME(first.childWindows.count == 0);
   CHECK_CHROME(first.attachedSheet == nil && cancels == 1);
   [pause performClick:nil];
   [connect performClick:nil];
@@ -390,7 +404,8 @@ bool RunCodeLookupWithController() {
                         "No devices", "Start casting", "Refresh", "Cancel",
                         "Cast code", "Find device", "Code failed", "Pause",
                         "Resume", "Seek", "Seconds", "Control failed",
-                        "Cast rejected", "No route", "DRM protected", "Retry"},
+                        "Cast rejected", "No route", "DRM protected", "Retry",
+                        "No video to cast"},
                        std::move(callbacks));
   CHECK_CHROME(chrome.AttachWindow(3, (__bridge void *)window.contentView));
   chrome.SetActiveWindow(3);

@@ -37,6 +37,7 @@
 #include "macos/page_markdown_platform_mac.h"
 #include "macos/trusted_input_monitor_mac.h"
 
+
 namespace crayon::browser::cef_shell {
 
 // --- AGT-12Cc2r: agent-host callback plumbing ---------------------------
@@ -234,7 +235,7 @@ macos::CastChromeStrings BuildCastChromeStrings(
       strings.playback_seek,     strings.playback_seconds,
       strings.playback_failed,   strings.rejected,
       strings.rejected_no_route, strings.rejected_drm,
-      strings.retry};
+      strings.retry,             strings.button_idle};
 }
 
 bool CastChromeStringsComplete(const macos::CastChromeStrings& strings) {
@@ -244,7 +245,8 @@ bool CastChromeStringsComplete(const macos::CastChromeStrings& strings) {
          !strings.cast_code_label.empty() &&
          !strings.cast_code_connect.empty() &&
          !strings.cast_code_failed.empty() &&
-         !strings.playback_pause.empty() && !strings.rejected.empty();
+         !strings.playback_pause.empty() && !strings.rejected.empty() &&
+         !strings.button_idle.empty();
 }
 
 // Serve-thread trampoline helpers and the UI-thread runner for the CAAP

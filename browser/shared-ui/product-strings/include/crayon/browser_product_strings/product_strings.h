@@ -39,6 +39,7 @@ struct CastStrings final {
   std::string rejected_no_route;
   std::string rejected_drm;
   std::string retry;
+  std::string button_idle;
 };
 
 struct ProductStrings final {
