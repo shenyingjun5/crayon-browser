@@ -37,6 +37,9 @@ public:
   bool Remove(std::uint32_t tab_id, std::uint64_t navigation_id,
               std::uint32_t element_id, std::uint64_t source_epoch);
   void NoteUserInput(std::uint32_t tab_id, std::uint64_t navigation_id);
+  // Plan A: re-baseline gates for every player on this navigation so an
+  // explicit cast-button press overrides the BR-005 autoplay denial.
+  void NoteCastIntent(std::uint32_t tab_id, std::uint64_t navigation_id);
   void SetActiveTab(std::uint32_t tab_id);
   void ForgetTab(std::uint32_t tab_id);
 

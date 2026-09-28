@@ -136,6 +136,19 @@ void CefObservationBridge::NoteTrustedUserInput(CefRefPtr<CefBrowser> browser) {
   input_proof_.NoteUserInput(found->second.tab_id, found->second.navigation_id);
 }
 
+void CefObservationBridge::NoteCastIntent(CefRefPtr<CefBrowser> browser) {
+  CEF_REQUIRE_UI_THREAD();
+  if (!browser) {
+    return;
+  }
+  const auto found = bindings_.find(browser->GetIdentifier());
+  if (found == bindings_.end()) {
+    return;
+  }
+  input_proof_.NoteCastIntent(found->second.tab_id,
+                              found->second.navigation_id);
+}
+
 bool CefObservationBridge::OnProcessMessageReceived(
     CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
     CefProcessId source_process, CefRefPtr<CefProcessMessage> message) {

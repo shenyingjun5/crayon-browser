@@ -104,6 +104,16 @@ ProofResult PlayerInputProof::Observe(std::uint32_t tab_id,
   return found->gate.Evaluate(tab_id, sample.navigation_id);
 }
 
+void PlayerInputProof::NoteCastIntent(std::uint32_t tab_id,
+                                      std::uint64_t navigation_id) {
+  for (auto &player : players_) {
+    if (player.tab_id == tab_id &&
+        player.navigation_id == navigation_id) {
+      player.gate.NoteCastIntent(tab_id, navigation_id);
+    }
+  }
+}
+
 std::optional<PlayerReference>
 PlayerInputProof::Reference(std::uint32_t tab_id, std::uint64_t navigation_id,
                             std::uint32_t element_id) const {

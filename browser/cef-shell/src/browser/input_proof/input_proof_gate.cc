@@ -45,6 +45,20 @@ void InputProofGate::NotePlaybackSuspended(std::uint32_t tab,
   }
 }
 
+void InputProofGate::NoteCastIntent(std::uint32_t tab,
+                                    std::uint64_t navigation_id) {
+  // Plan A (roadmap §114 C20f): an explicit cast-button press is the
+  // strongest user-intent signal the shell has. Re-baseline the progress
+  // reference so autoplay that was already running when the user arrived
+  // stops denying (BR-005). Real progress after the press is still required
+  // (>= kMinProgressSeconds) — a frozen frame never qualifies.
+  if (has_progress_ && last_progress_tab_ == tab &&
+      last_progress_navigation_ == navigation_id) {
+    input_baseline_seconds_ = last_progress_seconds_;
+    progressing_at_input_ = false;
+  }
+}
+
 void InputProofGate::SetActiveTab(std::uint32_t tab) {
   active_tab_ = tab;
 }

@@ -49,6 +49,9 @@ class CefObservationBridge final {
   void CloseBrowser(CefRefPtr<CefBrowser> browser, std::uint32_t tab_id);
   void SetActiveTab(std::uint32_t tab_id);
   void NoteTrustedUserInput(CefRefPtr<CefBrowser> browser);
+  // Plan A: the cast-button press re-baselines the autoplay denial for the
+  // players bound to this browser's current navigation.
+  void NoteCastIntent(CefRefPtr<CefBrowser> browser);
 
   bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
                                 CefRefPtr<CefFrame> frame,

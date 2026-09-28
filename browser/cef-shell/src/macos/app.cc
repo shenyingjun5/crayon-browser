@@ -947,6 +947,11 @@ void BrowserApp::ContinueContentHostStartup() {
           cast_chrome_strings_,
           macos::CastChromeCallbacks{
               [this] {
+                // Plan A (roadmap §114 C20f): the cast-button press is the
+                // strongest user-intent signal. Bank it first so autoplay
+                // that was already running stops denying eligibility; real
+                // playback progress after the press still gates the cast.
+                tab_controller_->NoteCastIntentForActiveTab();
                 const bool ok =
                     cast_shell_ && cast_shell_->ActivateCastButton();
                 RenderCastChrome();
@@ -1051,6 +1056,14 @@ void BrowserApp::ConsumeMediaObservations() {
         std::move(event), std::move(*page_url), MonotonicMilliseconds()});
   }
   media_host_->Consume(std::move(facts));
+  // C20c/f: a verified-media event is the browser-verified playback proof
+  // the cast shell needs before its button may light up.
+  for (const auto &fact : facts) {
+    if (fact.observation.source == ::crayon::cef_shell::gateway::EventSource::kMedia) {
+      cast_shell_->OnBrowserVerifiedMedia();
+      break;
+    }
+  }
 }
 
 CefRefPtr<CefClient> BrowserApp::GetDefaultClient() {

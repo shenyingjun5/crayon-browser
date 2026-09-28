@@ -233,7 +233,7 @@ class SnapshotFixtureApp final : public CefApp,
                           "Pause", "Resume", "Seek", "Seconds",
                           "Control failed", "Cast rejected", "No cast route",
                           "DRM protected", "Retry cast",
-                          "No video to cast"},
+                          "Click to enable casting"},
         CastChromeCallbacks{
             [this] { return cast_shell_->ActivateCastButton(); },
             [this] { return cast_shell_->RefreshReceivers(); },

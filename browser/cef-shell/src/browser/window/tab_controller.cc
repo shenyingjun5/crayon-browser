@@ -302,6 +302,10 @@ void WindowClient::NoteTrustedUserInput(CefRefPtr<CefBrowser> browser) {
   media_observation_bridge_.NoteTrustedUserInput(browser);
 }
 
+void WindowClient::NoteCastIntent(CefRefPtr<CefBrowser> browser) {
+  media_observation_bridge_.NoteCastIntent(browser);
+}
+
 std::vector<::crayon::cef_shell::gateway::GatewayEvent>
 WindowClient::DrainMediaObservations(std::size_t max_events) {
   return media_observation_bridge_.Drain(max_events);
@@ -754,6 +758,11 @@ TabController::media_observation_diagnostics() const {
 void TabController::NoteTrustedUserInputForActiveTab() {
   CEF_REQUIRE_UI_THREAD();
   client_->NoteTrustedUserInput(ActiveBrowser());
+}
+
+void TabController::NoteCastIntentForActiveTab() {
+  CEF_REQUIRE_UI_THREAD();
+  client_->NoteCastIntent(ActiveBrowser());
 }
 
 std::optional<browser_engine::SnapshotRequestId>

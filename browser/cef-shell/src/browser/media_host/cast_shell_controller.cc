@@ -122,6 +122,11 @@ void CastShellController::ConsumeCast(
 bool CastShellController::ActivateCastButton() {
   if (shutdown_) return false;
   if (coordinator_.active_session_generation()) return StopSession();
+  // Plan A: without a browser-verified candidate the press is banked as
+  // cast intent (the app re-baselines the input proof); the button lights
+  // up as soon as real playback progress confirms, and the next press
+  // opens the picker.
+  if (!current_candidate_) return false;
   if (!coordinator_.OpenPicker()) return false;
   if (!RequestFirstDevicePage(media_host_ipc::DiscoveryAction::kStart)) {
     coordinator_.CancelPicker();

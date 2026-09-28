@@ -570,13 +570,12 @@ void CastChromeMac::Render(
     surface.reject_reason = coordinator.feature().reject_reason();
     surface.presentation = presentation;
     surface.receivers = coordinator.receivers();
-    // The cast entry is a pinned product action: it stays mounted on the
-    // active window and only its lit/gray state comes from the audited cast
-    // funnel. Hidden states stay on non-active windows.
+    // The cast entry is a pinned product action: it stays mounted, visible
+    // and clickable on the active window. In the gray state a press banks
+    // cast intent (Plan A) instead of opening the picker; the lit/gray
+    // distinction comes from the audited cast funnel.
     surface.button.hidden = !active;
-    surface.button.enabled =
-        active && (surface.state == CastButtonState::kEligible ||
-                   surface.state == CastButtonState::kCasting);
+    surface.button.enabled = active;
     const bool casting = surface.state == CastButtonState::kCasting;
     const bool idle = surface.state == CastButtonState::kHidden ||
                       surface.state == CastButtonState::kDisabled;

@@ -44,6 +44,9 @@ class InputProofGate final {
   /// Records a trusted user input (click/key) on `tab`/`navigation_id`.
   /// Snapshots whether playback was already progressing at that moment.
   void NoteUserInput(std::uint32_t tab, std::uint64_t navigation_id);
+  // Plan A: the cast-button press re-baselines the BR-005 autoplay denial;
+  // progress after the press still gates eligibility.
+  void NoteCastIntent(std::uint32_t tab, std::uint64_t navigation_id);
 
   /// Records a browser-verified playback sample for a tab; the advance
   /// versus the previous sample marks trusted progression.

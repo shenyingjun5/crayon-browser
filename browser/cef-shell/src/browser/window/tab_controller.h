@@ -152,6 +152,7 @@ class WindowClient final : public CefClient,
                                     std::uint32_t tab_id);
   void SetActiveMediaObservationTab(std::uint32_t tab_id);
   void NoteTrustedUserInput(CefRefPtr<CefBrowser> browser);
+  void NoteCastIntent(CefRefPtr<CefBrowser> browser);
   std::vector<::crayon::cef_shell::gateway::GatewayEvent>
   DrainMediaObservations(std::size_t max_events);
   observation::MediaObservationDiagnostics media_observation_diagnostics()
@@ -365,6 +366,9 @@ class TabController final : public CefBaseRefCounted {
   observation::MediaObservationDiagnostics media_observation_diagnostics()
       const;
   void NoteTrustedUserInputForActiveTab();
+  // Plan A: the cast-button press re-baselines the autoplay denial on the
+  // active tab's players.
+  void NoteCastIntentForActiveTab();
 
   std::optional<browser_engine::SnapshotRequestId> StartPageSnapshot(
       CefRefPtr<CefBrowser> browser,

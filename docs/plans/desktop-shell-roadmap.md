@@ -1572,6 +1572,13 @@ Code Review：按 v0.9 独立检查唯一 owner、同步 callback reentrancy、t
 - C20f 待查：① planner 的 fact→candidate 判据（`MediaPlanningRuntime` + inspector，MHV1 兼容口径——B 站 DASH/HLS 流是否落在判据内）；② B 站页面实际送达的 facts 内容（渲染器 media observer + network observer 的产出，用隔离实例 + 事实日志取证）；③ 两者的差距即修复点。
 - 验证方式：C20b 后按钮常驻（灰色）,候选点亮后转可用——真实视频页 + 无需人工点击即可由状态判定。
 - 注意：mac 测试套件中 4 个 AX 驱动探针（omnibox/builtin/page_tools/tab_controller）在**有其他实例抢占前台时会假失败**——先杀实例再跑。
+- **方案 A 实现完成（2026-09-27，用户选定）**：自动播放与用户点击并存导致的 BR-005 拒绝（`progressing_at_input_`）新增豁免通道——投屏按钮按下本身即最强用户意图信号：
+  - `InputProofGate::NoteCastIntent(tab, nav)`：重置进度基线并清除 `progressing_at_input_`（按 press 后的真实进度 ≥0.05s 仍照常门控，静止画面不合格）。
+  - 注入链：CastChromeMac activate 回调 → `TabController::NoteCastIntentForActiveTab` → `WindowClient::NoteCastIntent` → 观察桥 → `PlayerInputProof::NoteCastIntent`（对该导航全部播放器生效）。
+  - 按钮语义：活动窗口恒可点击；灰态按下 = 存入 cast 意图（`CastShellController::ActivateCastButton` 无候选即返回，不开空 picker），按钮点亮后再次按下开设备列表。tooltip `cast.button.idle` 文案改为「点击授权投屏此页面」（键数不变 260）。
+  - 补 C20b 断线：`ConsumeMediaObservations` 中 kMedia 事件驱动 `cast_shell_->OnBrowserVerifiedMedia()`（C20b 清理时该调用随 BindCastForActiveTab 一并丢失，会导致按钮永不点亮）。
+  - 契约：macos_source_contract 漏斗 token 增加 `NoteCastIntentForActiveTab`。
+- 验证：全量构建 exit 0；`-L macos` 32/32 PASS（cast_chrome_mac 断言迁移到 Plan A 语义：灰态可点击、tooltip 文案、双窗口激活态）。真实视频站端到端（B 站点亮→选设备）仍待解锁屏幕人工复看。
 
 - 删除（mac 独占，Windows 消费的共享组件全部保留）：`alloy_product_host_mac`、`alloy_toolbar_mac`、`alloy_titlebar_mac`、`alloy_cast_overlay_mac`、`alloy_cast_toolbar_mac_probe`、`cast_toolbar_host_probe` 六组源文件；`app.{h,cc}` 中 toolbar_/cast_surface_/cast_controller_/cast_binding_attempt_/cast_browser_session_/cast_context_bound_/bookmarks 全套机制与 SyncToolbarToActiveTab/BindCastForActiveTab/TryAttachCastEntry/DetachCastSurface/ResetCastContext/书签四方法；产品书签接线退役（原生星标接管，见 §103 遗留登记）。
 - 保留（Windows 产品/集成测试仍消费，随 Windows C20 迁移收口）：cast_entry_surface、alloy_cast_controller、chrome_location_bar（三者经 AX/引用盘点确认无 mac 产品引用方，win 集成目标显式编译使用）。

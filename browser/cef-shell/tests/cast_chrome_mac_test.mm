@@ -110,7 +110,7 @@ bool RunChromeContract() {
                         "Connect code", "Code failed", "Pause", "Resume",
                         "Seek", "Seconds", "Control failed", "Cast rejected",
                         "No cast route", "DRM protected", "Retry cast",
-                        "No video to cast"},
+                        "Click to enable casting"},
       CastChromeCallbacks{[&coordinator] {
                             if (coordinator.active_session_generation())
                               return coordinator.RequestStop().has_value();
@@ -150,11 +150,12 @@ bool RunChromeContract() {
   chrome.SetActiveWindow(1);
   chrome.Render(coordinator);
   NSButton* first_button = CastButton(first);
-  // Pinned product entry: always mounted on the active window, gray without
-  // an audited candidate.
-  CHECK_CHROME(first_button && !first_button.hidden &&
-               !first_button.enabled);
-  CHECK_CHROME([first_button.toolTip isEqualToString:@"No video to cast"]);
+  // Pinned product entry: always mounted and clickable on the active
+  // window; gray until an audited candidate exists (Plan A: the press
+  // itself banks cast intent).
+  CHECK_CHROME(first_button && !first_button.hidden && first_button.enabled);
+  CHECK_CHROME([first_button.toolTip
+      isEqualToString:@"Click to enable casting"]);
 
   coordinator.SetPageActive(true);
   coordinator.SetMediaPresent(true);
@@ -276,7 +277,7 @@ bool RunChromeContract() {
   coordinator.SetPageActive(false);
   chrome.Render(coordinator);
   CHECK_CHROME(rejected_status.hidden && !first_button.hidden &&
-               !first_button.enabled);
+               first_button.enabled);
   coordinator.SetPageActive(true);
   coordinator.SetMediaPresent(true);
   coordinator.SetBrowserVerifiedEligible(true);
@@ -330,8 +331,10 @@ bool RunChromeContract() {
   chrome.SetActiveWindow(2);
   chrome.Render(coordinator);
   CHECK_CHROME(first_button.hidden);
+  // Plan A: clickable on the active window regardless of candidate state —
+  // the press banks cast intent when no verified candidate exists yet.
   CHECK_CHROME(CastButton(second) && !CastButton(second).hidden &&
-               !CastButton(second).enabled);
+               CastButton(second).enabled);
   chrome.DetachWindow(2);
   CHECK_CHROME(second.childWindows.count == 0);
   CHECK_CHROME(coordinator.NotifySessionEnded(9));
@@ -405,7 +408,7 @@ bool RunCodeLookupWithController() {
                         "Cast code", "Find device", "Code failed", "Pause",
                         "Resume", "Seek", "Seconds", "Control failed",
                         "Cast rejected", "No route", "DRM protected", "Retry",
-                        "No video to cast"},
+                        "Click to enable casting"},
                        std::move(callbacks));
   CHECK_CHROME(chrome.AttachWindow(3, (__bridge void *)window.contentView));
   chrome.SetActiveWindow(3);
