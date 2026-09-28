@@ -31,7 +31,7 @@ using browser_cast_view::ReceiverOption;
 using browser_chrome::CastButtonState;
 namespace wire = ::crayon::cef_shell::ipc::media_host;
 
-constexpr CGFloat kCompactWidth = 40;
+constexpr CGFloat kCompactWidth = 26;
 constexpr CGFloat kPlaybackWidth = 300;
 constexpr CGFloat kControlHeight = 32;
 
@@ -81,22 +81,21 @@ struct State final {
 
 namespace {
 
-// Pins the child panel to the right end of the TAB STRIP row of the CEF
-// Chrome-style window. Measured via AX on the product (2026-09-27): the
-// omnibox row's trailing cluster (page actions 1433+, bookmark star 1465,
-// avatar 1510, main menu 1546 on a 1200pt window) fills that row entirely,
-// so a panel there would sit under the safety/shield button. The tab strip
-// row right of the "+" button is empty at any window size and independent of
-// omnibox width, which makes it the only overlap-free slot.
+// Pins the child panel to the extension-action slot of the CEF Chrome-style
+// window: in the omnibox row, after the address pill, before the avatar —
+// where Chromium puts extension actions. The trailing cluster (avatar 34 +
+// main menu 34 + edge margin ≈ 78 dip) is right-anchored and constant at any
+// window width (AX-measured on the product, 2026-09-27); the panel hugs its
+// left edge. The compact icon is 24x24 (Chromium page-action size) and
+// overlaps only the omnibox pill's rounded right cap padding, never the
+// bookmark star or avatar glyph.
 void PositionPanel(Surface* surface) {
   if (!surface || !surface->window || !surface->panel)
     return;
   const NSRect parent = surface->window.frame;
   const CGFloat content_width = surface->panel.contentView.frame.size.width;
-  // Panel right edge 64 dip in from the window's right edge; vertically
-  // centered in the 41-dip tab strip row (panel is 32 dip tall).
-  const CGFloat right_inset = 64.0f;
-  const CGFloat bottom_offset = 37.0f;
+  const CGFloat right_inset = 77.0f;
+  const CGFloat bottom_offset = 79.0f;
   NSRect frame = surface->panel.frame;
   frame.origin.x = parent.origin.x + parent.size.width - right_inset -
                    content_width;
@@ -460,8 +459,10 @@ bool CastChromeMac::AttachWindow(int browser_id, void* native_view) {
   panel.backgroundColor = [NSColor clearColor];
   panel.ignoresMouseEvents = NO;
   surface.panel = panel;
-  NSView* container = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 40, 32)];
-  surface.button = [[NSButton alloc] initWithFrame:NSMakeRect(4, 0, 32, 32)];
+  NSView* container = [[NSView alloc] initWithFrame:NSMakeRect(
+                          0, 0, kCompactWidth, kControlHeight)];
+  surface.button = [[NSButton alloc] initWithFrame:NSMakeRect(
+                        2, 5, 22, 22)];
   surface.button.bezelStyle = NSBezelStyleTexturedRounded;
   surface.button.imagePosition = NSImageOnly;
   NSImage* image = CastImage();

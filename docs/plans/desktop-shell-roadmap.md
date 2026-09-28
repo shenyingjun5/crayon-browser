@@ -1572,6 +1572,7 @@ Code Review：按 v0.9 独立检查唯一 owner、同步 callback reentrancy、t
 - C20f 待查：① planner 的 fact→candidate 判据（`MediaPlanningRuntime` + inspector，MHV1 兼容口径——B 站 DASH/HLS 流是否落在判据内）；② B 站页面实际送达的 facts 内容（渲染器 media observer + network observer 的产出，用隔离实例 + 事实日志取证）；③ 两者的差距即修复点。
 - 验证方式：C20b 后按钮常驻（灰色）,候选点亮后转可用——真实视频页 + 无需人工点击即可由状态判定。
 - 注意：mac 测试套件中 4 个 AX 驱动探针（omnibox/builtin/page_tools/tab_controller）在**有其他实例抢占前台时会假失败**——先杀实例再跑。
+- **面板重定位到插件位（2026-09-28，用户要求：网址输入后、头像前，类似扩展图标位置）**：面板从标签条行移回 omnibox 行——星标（右锚定 -97dip）与头像按钮（-76dip）之间 21dip 恒定间隙。紧凑尺寸 40→26（图标 22×22，介于 page-action 24 与间隙之间），`right_inset=77`/`bottom_offset=79`。AX 实测（1273pt 窗）：面板 1364,85,26×32，星标 1346-1370、头像 1391 起——零覆盖星标/头像字形。ZCode 前台时截图法不可用（窗口被盖），以 AX 枚举为准。
 - **方案 A 实现完成（2026-09-27，用户选定）**：自动播放与用户点击并存导致的 BR-005 拒绝（`progressing_at_input_`）新增豁免通道——投屏按钮按下本身即最强用户意图信号：
   - `InputProofGate::NoteCastIntent(tab, nav)`：重置进度基线并清除 `progressing_at_input_`（按 press 后的真实进度 ≥0.05s 仍照常门控，静止画面不合格）。
   - 注入链：CastChromeMac activate 回调 → `TabController::NoteCastIntentForActiveTab` → `WindowClient::NoteCastIntent` → 观察桥 → `PlayerInputProof::NoteCastIntent`（对该导航全部播放器生效）。
