@@ -60,6 +60,9 @@ class CastChromeMac final {
   ~CastChromeMac();
 
   bool AttachWindow(int browser_id, void* native_view);
+  // ARGB (0xAARRGGBB) toolbar background; the compact mask is painted with
+  // it so the omnibox pill visually ends before the cast button.
+  void SetToolbarColor(std::uint32_t argb);
   void DetachWindow(int browser_id);
   void SetActiveWindow(int browser_id);
   void Render(const browser_cast_view::CastUiCoordinator& coordinator,

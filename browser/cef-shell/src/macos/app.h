@@ -86,6 +86,9 @@ class BrowserApp final : public CefApp, public CefBrowserProcessHandler {
   // settings window delivered OnBeforeClose. Releases the client refs and
   // resumes a quit that was parked on this window.
   void OnSettingsBrowserClosed();
+  // Resolves the Chrome toolbar's live background color for the cast
+  // compact mask (theme/dark-mode aware).
+  void UpdateCastToolbarColor();
   // C20c: renders the titlebar cast button/picker from the shell
   // controller's closed presentation state; skipped when unchanged.
   void RenderCastChrome();

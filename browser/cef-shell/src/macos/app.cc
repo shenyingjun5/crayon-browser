@@ -23,6 +23,7 @@
 #include "browser/permission/permission_store.h"
 #include "crayon/browser_localization/locale_catalog.h"
 #include "include/cef_color_ids.h"
+#include "include/views/cef_browser_view.h"
 #include "include/cef_id_mappers.h"
 #include "browser/window/alloy_chrome_palette.h"
 #include <fstream>
@@ -627,11 +628,27 @@ void BrowserApp::StopBackgroundServices() {
 // C20c: projects the shell controller's closed presentation onto the
 // titlebar cast button/picker. No-op when nothing changed — the AppKit
 // accessory rebuild is not free and the tick runs at 20 ms.
+void BrowserApp::UpdateCastToolbarColor() {
+  // The compact mask paints with the live toolbar background so the omnibox
+  // pill visually ends before the cast button; theme switches re-resolve it.
+  const auto browser = tab_controller_ ? tab_controller_->ActiveBrowser()
+                                       : nullptr;
+  const CefRefPtr<CefBrowserView> view =
+      browser ? CefBrowserView::GetForBrowser(browser) : nullptr;
+  const CefRefPtr<CefView> toolbar = view ? view->GetChromeToolbar() : nullptr;
+  if (!toolbar) {
+    return;
+  }
+  cast_chrome_->SetToolbarColor(
+      static_cast<std::uint32_t>(toolbar->GetThemeColor(CEF_ColorToolbar)));
+}
+
 void BrowserApp::RenderCastChrome() {
   CEF_REQUIRE_UI_THREAD();
   if (!cast_chrome_ || !cast_shell_) {
     return;
   }
+  UpdateCastToolbarColor();
   const auto presentation = cast_shell_->presentation();
   if (rendered_cast_presentation_ &&
       *rendered_cast_presentation_ == presentation) {

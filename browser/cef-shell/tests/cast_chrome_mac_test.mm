@@ -40,9 +40,11 @@ NSView* CastContainer(NSWindow* window) {
 
 NSButton* CastButton(NSWindow* window) {
   NSView* container = CastContainer(window);
-  return container && container.subviews.count >= 1
-             ? static_cast<NSButton*>(container.subviews[0])
-             : nil;
+  if (!container) return nil;
+  for (NSView* sub in container.subviews)
+    if ([sub isKindOfClass:[NSButton class]])
+      return static_cast<NSButton*>(sub);
+  return nil;
 }
 
 NSButton* FindButton(NSView* view, NSString* title) {

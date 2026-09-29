@@ -2,6 +2,9 @@
 
 #import <AppKit/AppKit.h>
 
+#include "include/wrapper/cef_helpers.h"
+#import <QuartzCore/QuartzCore.h>
+
 #include <charconv>
 #include <map>
 #include <memory>
@@ -31,7 +34,11 @@ using browser_cast_view::ReceiverOption;
 using browser_chrome::CastButtonState;
 namespace wire = ::crayon::cef_shell::ipc::media_host;
 
-constexpr CGFloat kCompactWidth = 26;
+constexpr CGFloat kCompactWidth = 24;
+// The compact panel is a full-row mask painted in the toolbar
+// background: it erases the omnibox pill's trailing blank cap so the
+// cast button sits in a real gap, not on top of the pill.
+constexpr CGFloat kCompactHeight = 38;
 constexpr CGFloat kPlaybackWidth = 300;
 constexpr CGFloat kControlHeight = 32;
 
@@ -45,6 +52,7 @@ struct Surface final {
   NSWindow* window = nil;
   NSPanel* panel = nil;
   id resize_observer = nil;
+  NSView* mask = nil;
   NSButton* button = nil;
   CrayonCastButtonTarget* target = nil;
   NSAlert* alert = nil;
@@ -58,6 +66,7 @@ struct Surface final {
   NSTextField* control_status = nil;
   CrayonCastButtonTarget* pause_target = nil;
   CrayonCastButtonTarget* seek_target = nil;
+  std::uint32_t toolbar_argb = 0xFFFFFFFF;
   std::vector<ReceiverOption> receivers;
   CastButtonState state = CastButtonState::kHidden;
   CastChromePresentation presentation;
@@ -77,6 +86,7 @@ struct State final {
   std::map<int, Surface> surfaces;
   int active_browser_id = 0;
   bool closed = false;
+  std::uint32_t toolbar_argb = 0xFFFFFFFF;
 };
 
 namespace {
@@ -94,7 +104,7 @@ void PositionPanel(Surface* surface) {
     return;
   const NSRect parent = surface->window.frame;
   const CGFloat content_width = surface->panel.contentView.frame.size.width;
-  const CGFloat right_inset = 77.0f;
+  const CGFloat right_inset = 76.0f;
   const CGFloat bottom_offset = 79.0f;
   NSRect frame = surface->panel.frame;
   frame.origin.x = parent.origin.x + parent.size.width - right_inset -
@@ -328,6 +338,9 @@ void UpdatePlayback(Surface* surface, const State& state, bool active) {
   [[surface->panel contentView]
       setFrameSize:NSMakeSize(content_width, content_height)];
   [surface->panel setContentSize:NSMakeSize(content_width, content_height)];
+  if (surface->mask)
+    surface->mask.frame = NSMakeRect(content_width - kCompactWidth, 0,
+                                     kCompactWidth, kCompactHeight);
   PositionPanel(surface);
   if (!casting) {
     surface->seconds.stringValue = @"";
@@ -408,7 +421,10 @@ NSImage* CastImage() {
                                                    ofType:@"svg"];
   NSImage* image = path ? [[NSImage alloc] initWithContentsOfFile:path] : nil;
   [image setTemplate:YES];
-  image.size = NSMakeSize(20, 20);
+  // 16 dip glyph: Chromium page-action visible size. The button hit area is
+  // larger, so the glyph sits centered in the gap between the address pill
+  // and the avatar without covering either.
+  image.size = NSMakeSize(16, 16);
   return image;
 }
 
@@ -448,7 +464,7 @@ bool CastChromeMac::AttachWindow(int browser_id, void* native_view) {
   // panel pinned next to the omnibox's trailing controls instead of a
   // titlebar accessory.
   NSPanel* panel = [[NSPanel alloc]
-      initWithContentRect:NSMakeRect(0, 0, kCompactWidth, kControlHeight)
+      initWithContentRect:NSMakeRect(0, 0, kCompactWidth, kCompactHeight)
                 styleMask:NSWindowStyleMaskBorderless |
                           NSWindowStyleMaskNonactivatingPanel
                   backing:NSBackingStoreBuffered
@@ -461,12 +477,27 @@ bool CastChromeMac::AttachWindow(int browser_id, void* native_view) {
   panel.hasShadow = NO;
   panel.releasedWhenClosed = NO;
   panel.backgroundColor = [NSColor clearColor];
+  // The container doubles as the mask: painted with the live toolbar
+  // background color (SetToolbarColor) it erases the omnibox pill's trailing
+  // blank cap, so the cast button sits in a real gap. Rounded left corners
+  // make the cut look like the pill's own end.
   panel.ignoresMouseEvents = NO;
   surface.panel = panel;
   NSView* container = [[NSView alloc] initWithFrame:NSMakeRect(
-                          0, 0, kCompactWidth, kControlHeight)];
+                          0, 0, kCompactWidth, kCompactHeight)];
+  // The mask paints the toolbar background over the omnibox pill's trailing
+  // blank cap (24 dip wide, pinned to the panel's right edge at any content
+  // width), so the cast button sits in a real gap. Rounded left corners make
+  // the cut look like the pill's own end. The color comes live from
+  // CefView::GetThemeColor(CEF_ColorToolbar) via SetToolbarColor.
+  NSView* mask = [[NSView alloc] initWithFrame:NSMakeRect(
+                      0, 0, kCompactWidth, kCompactHeight)];
+  mask.wantsLayer = YES;
+  mask.layer.backgroundColor = [[NSColor whiteColor] CGColor];
+  surface.mask = mask;
+  [container addSubview:mask];
   surface.button = [[NSButton alloc] initWithFrame:NSMakeRect(
-                        2, 5, 22, 22)];
+                        0, 7, 24, 24)];
   surface.button.bezelStyle = NSBezelStyleTexturedRounded;
   surface.button.imagePosition = NSImageOnly;
   NSImage* image = CastImage();
@@ -533,6 +564,7 @@ void CastChromeMac::DetachWindow(int browser_id) {
   found->second.pause.target = nil;
   found->second.seek.target = nil;
   found->second.seconds.target = nil;
+  found->second.mask = nil;
   if (found->second.resize_observer) {
     [[NSNotificationCenter defaultCenter]
         removeObserver:found->second.resize_observer];
@@ -595,6 +627,23 @@ void CastChromeMac::Render(
       ClosePicker(&surface);
     else if (surface.presenting)
       UpdatePicker(&surface, impl_->state->strings);
+  }
+}
+
+void CastChromeMac::SetToolbarColor(std::uint32_t argb) {
+  // No thread assertion here: the unit test target links no libcef. The only
+  // production caller (RenderCastChrome) runs on the UI thread.
+  impl_->state->toolbar_argb = argb;
+  const CGFloat red = ((argb >> 16) & 0xFF) / 255.0;
+  const CGFloat green = ((argb >> 8) & 0xFF) / 255.0;
+  const CGFloat blue = (argb & 0xFF) / 255.0;
+  const CGFloat alpha = ((argb >> 24) & 0xFF) / 255.0;
+  NSColor* color = [NSColor colorWithSRGBRed:red green:green blue:blue
+                                       alpha:alpha];
+  for (auto& [browser_id, surface] : impl_->state->surfaces) {
+    static_cast<void>(browser_id);
+    if (surface.mask && surface.mask.layer)
+      surface.mask.layer.backgroundColor = color.CGColor;
   }
 }
 
