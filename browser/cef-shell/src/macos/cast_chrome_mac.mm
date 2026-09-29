@@ -453,7 +453,11 @@ bool CastChromeMac::AttachWindow(int browser_id, void* native_view) {
                           NSWindowStyleMaskNonactivatingPanel
                   backing:NSBackingStoreBuffered
                     defer:NO];
-  panel.level = NSFloatingWindowLevel;
+  // Same level as the parent window: the child ordering keeps the panel
+  // above its own window, while other apps' windows still cover it when the
+  // browser goes to the background (a floating level would leak the icon
+  // over unrelated frontmost apps).
+  panel.level = window.level;
   panel.hasShadow = NO;
   panel.releasedWhenClosed = NO;
   panel.backgroundColor = [NSColor clearColor];
